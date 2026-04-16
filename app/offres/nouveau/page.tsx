@@ -387,6 +387,21 @@ export default function JardinConfortV7() {
     if (raw) setDraftSavedAt("Brouillon local trouvé");
   }, [formType, offerNumber]);
 
+  // ── Forcer LTR sur l'éditeur contentEditable au montage ──
+  useEffect(() => {
+    const el = remarksEditorRef.current;
+    if (!el) return;
+    el.style.direction = "ltr";
+    el.style.textAlign = "left";
+    el.setAttribute("dir", "ltr");
+    // Observer pour maintenir LTR si le navigateur le réinitialise
+    const obs = new MutationObserver(() => {
+      if (el.style.direction !== "ltr") el.style.direction = "ltr";
+    });
+    obs.observe(el, { attributes: true, attributeFilter: ["style"] });
+    return () => obs.disconnect();
+  }, []);
+
   return (
     <div className={`jc-page${darkMode ? "" : " light-mode"}`}>
 
@@ -838,7 +853,15 @@ export default function JardinConfortV7() {
                           <td>
                             <div className="jc-price-cell">
                               <div className="jc-price-row">
-                                <input className="jc-cell-input jc-price-input no-spin" type="number" step="0.01" value={line.unitPrice} onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value || 0) })} />
+                                <input
+                                  className="jc-cell-input jc-price-input no-spin"
+                                  type="number" step="0.01"
+                                  placeholder="0"
+                                  value={line.unitPrice === 0 ? "" : line.unitPrice}
+                                  onFocus={(e) => { if (line.unitPrice === 0) updateLine(line.id, { unitPrice: 0 }); }}
+                                  onBlur={(e) => { if (e.target.value === "") updateLine(line.id, { unitPrice: 0 }); }}
+                                  onChange={(e) => updateLine(line.id, { unitPrice: e.target.value === "" ? 0 : Number(e.target.value) })}
+                                />
                                 <button
                                   className={`jc-discount-toggle${openDiscountLines.has(line.id) ? " active" : ""}${(line.lineDiscount || 0) > 0 ? " has-value" : ""}`}
                                   title="Remise sur cette ligne"
@@ -914,17 +937,50 @@ export default function JardinConfortV7() {
             <div className="jc-section-title">Informations complémentaires</div>
             <div className="jc-field">
               <label>Remarques <span className="jc-label-hint">(visibles sur le document)</span></label>
-              {/* Textarea simple — direction LTR garantie */}
-              <textarea
-                className="jc-remarks-textarea"
-                rows={5}
-                dir="ltr"
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Notes pour le client, conditions spéciales…"
-              />
-              {/* Print */}
-              <div className="printOnly jc-remarks-print">{remarks}</div>
+              <div className="jc-editor-wrap screenOnly">
+                <div className="jc-editor-toolbar">
+                  <button type="button" className="jc-editor-btn" title="Gras"
+                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("bold"); }}>
+                    <strong>G</strong>
+                  </button>
+                  <button type="button" className="jc-editor-btn" title="Italique"
+                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("italic"); }}>
+                    <em>I</em>
+                  </button>
+                  <button type="button" className="jc-editor-btn" title="Souligné"
+                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("underline"); }}>
+                    <u>U</u>
+                  </button>
+                  <div className="jc-editor-sep" />
+                  <button type="button" className="jc-editor-btn" title="Texte rouge"
+                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("foreColor", false, "#ef4444"); }}>
+                    <strong style={{color:"#ef4444"}}>R</strong>
+                  </button>
+                  <button type="button" className="jc-editor-btn" title="Texte orange"
+                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("foreColor", false, "#f59e0b"); }}>
+                    <strong style={{color:"#f59e0b"}}>O</strong>
+                  </button>
+                  <button type="button" className="jc-editor-btn" title="Effacer format"
+                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("removeFormat"); }}>
+                    ✕ fmt
+                  </button>
+                </div>
+                <div
+                  ref={remarksEditorRef}
+                  className="jc-editor-content"
+                  contentEditable
+                  suppressContentEditableWarning
+                  dir="ltr"
+                  onInput={(e) => {
+                    const el = e.currentTarget;
+                    el.style.direction = "ltr";
+                    el.style.textAlign = "left";
+                    setRemarks(el.innerHTML);
+                  }}
+                  dangerouslySetInnerHTML={{ __html: remarks }}
+                />
+              </div>
+              <div className="printOnly jc-remarks-print" dangerouslySetInnerHTML={{ __html: remarks }} />
             </div>
 
             {/* Notes internes — screenOnly, jamais imprimées */}
@@ -1878,12 +1934,12 @@ export default function JardinConfortV7() {
 
         /* ── FOND BLEUTÉ SECTION TABLEAU ── */
         .jc-card.jc-lines-card {
-          background: rgba(30, 58, 138, 0.08);
-          border-color: rgba(59, 130, 246, 0.15);
+          background: rgba(59, 130, 246, 0.04);
+          border-color: rgba(59, 130, 246, 0.18);
         }
         .light-mode .jc-card.jc-lines-card {
-          background: rgba(219, 234, 254, 0.4);
-          border-color: rgba(59, 130, 246, 0.2);
+          background: rgba(219, 234, 254, 0.55);
+          border-color: rgba(59, 130, 246, 0.25);
         }
 
         /* ── CROIX SUPPRESSION IMAGE LIGNE ── */
