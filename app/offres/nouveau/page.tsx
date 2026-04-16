@@ -57,6 +57,10 @@ type DraftSnapshot = {
   telephone2: string;
   email: string;
   livrDiff: boolean;
+  livrSociete: string;
+  livrNom: string;
+  livrPrenom: string;
+  livrTel: string;
   livrRue: string;
   livrNumero: string;
   livrNpa: string;
@@ -66,7 +70,6 @@ type DraftSnapshot = {
   discountPercent: string;
   remarks: string;
   notesInternes: string;
-  conditionsGenerales: string;
   leadTime: string;
   manualRounding: string; // stocké pour compatibilité
   enabledServices: Record<string, boolean>;
@@ -95,7 +98,8 @@ const STATUS_CONFIG: Record<OfferStatus, { color: string; bg: string; border: st
 };
 
 function formatMoney(value: number) {
-  const formatted = new Intl.NumberFormat("fr-CH", {
+  // Format suisse avec points : CHF 1'234.90
+  const formatted = new Intl.NumberFormat("de-CH", {
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(value);
   return `CHF ${formatted}`;
@@ -167,6 +171,10 @@ export default function JardinConfortV7() {
 
   // Adresse de livraison (si différente)
   const [livrDiff, setLivrDiff]       = useState(false);
+  const [livrSociete, setLivrSociete] = useState("");
+  const [livrNom, setLivrNom]         = useState("");
+  const [livrPrenom, setLivrPrenom]   = useState("");
+  const [livrTel, setLivrTel]         = useState("");
   const [livrRue, setLivrRue]         = useState("");
   const [livrNumero, setLivrNumero]   = useState("");
   const [livrNpa, setLivrNpa]         = useState("");
@@ -194,12 +202,12 @@ export default function JardinConfortV7() {
   const [remarks, setRemarks]           = useState("");
   const [notesInternes, setNotesInternes] = useState("");
   const [ambianceImages, setAmbianceImages] = useState<{id: string; dataUrl: string; legende: string}[]>([]);
-  const [conditionsGenerales, setConditionsGenerales] = useState(
-    "Les prix indiqués sont en CHF. Validité de l'offre : 30 jours. Livraison selon disponibilité. Le paiement doit être effectué selon les modalités convenues. Jardin-Confort SA se réserve le droit de modifier les prix en cas de variation des cours."
-  );
   const [leadTime, setLeadTime]         = useState("25-30 jours");
   // arrondi : toujours stocké comme string, toujours <= 0
   const [roundingStr, setRoundingStr]   = useState("");
+  // Autocomplétion adresse via geo.admin.ch
+  const [addrSuggestions, setAddrSuggestions] = useState<{label: string; zip?: string; city?: string}[]>([]);
+  const [addrQuery, setAddrQuery] = useState("");
   const [enabledServices, setEnabledServices] = useState<Record<string, boolean>>(initialEnabledServices);
   const [servicePrices, setServicePrices]     = useState<Record<string, string>>(initialServicePrices);
 
@@ -217,6 +225,44 @@ export default function JardinConfortV7() {
 
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const remarksEditorRef = useRef<HTMLDivElement | null>(null);
+  const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Autocomplétion adresse suisse via geo.admin.ch (gratuit, sans clé) ──
+  async function fetchAddressSuggestions(query: string) {
+    if (query.length < 3) { setAddrSuggestions([]); return; }
+    try {
+      const res = await fetch(
+        `https://api3.geo.admin.ch/rest/services/api/SearchServer?searchText=${encodeURIComponent(query)}&type=locations&sr=4326&limit=6&lang=fr`
+      );
+      const json = await res.json();
+      const results = (json.results || []).map((r: { attrs: { label: string; zip?: number; city?: string } }) => ({
+        label: r.attrs.label.replace(/<[^>]+>/g, ""),
+        zip: r.attrs.zip ? String(r.attrs.zip) : undefined,
+        city: r.attrs.city,
+      }));
+      setAddrSuggestions(results);
+    } catch { setAddrSuggestions([]); }
+  }
+
+  function onRueChange(val: string) {
+    setRue(val);
+    setAddrQuery(val);
+    if (addrDebounceRef.current) clearTimeout(addrDebounceRef.current);
+    addrDebounceRef.current = setTimeout(() => fetchAddressSuggestions(val), 300);
+  }
+
+  function applyAddrSuggestion(s: { label: string; zip?: string; city?: string }) {
+    // Extraire rue et numéro de la suggestion
+    const parts = s.label.split(",");
+    const streetPart = (parts[0] || "").trim();
+    const match = streetPart.match(/^(.*?)\s+(\d+\w*)$/);
+    if (match) { setRue(match[1].trim()); setNumero(match[2]); }
+    else setRue(streetPart);
+    if (s.zip) setNpa(s.zip.slice(0, 4));
+    if (s.city) setVille(s.city);
+    setAddrSuggestions([]);
+    setAddrQuery("");
+  }
   const customerNumber = useMemo(() => generateCustomerNumber(email), [email]);
 
   // ── Recherche Shopify avec debounce 250ms + AbortController ──
@@ -263,13 +309,14 @@ export default function JardinConfortV7() {
     return Number(discount || 0);
   }, [discount, discountPercent, subTotal]);
 
-  const serviceTotal = useMemo(() =>
-    serviceOptions.reduce((s, srv) => {
+  const serviceTotal = useMemo(() => {
+    const fixed = serviceOptions.reduce((s, srv) => {
       if (!enabledServices[srv.code]) return s;
       return s + Number(servicePrices[srv.code] || 0);
-    }, 0),
-    [enabledServices, servicePrices]
-  );
+    }, 0);
+    const custom = enabledServices["custom"] ? Number(servicePrices["custom"] || 0) : 0;
+    return fixed + custom;
+  }, [enabledServices, servicePrices]);
 
   const totalAfterDiscount = subTotal - discountValue;
   const totalPlusServices  = totalAfterDiscount + serviceTotal;
@@ -353,7 +400,7 @@ export default function JardinConfortV7() {
   }
 
   function makeSnapshot(): DraftSnapshot {
-    return { formType, clientType, paymentMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrRue, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, conditionsGenerales, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
+    return { formType, clientType, paymentMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
   function saveDraftLocal() {
@@ -371,11 +418,12 @@ export default function JardinConfortV7() {
     setSociete(s.societe); setNom(s.nom); setPrenom(s.prenom);
     setRue(s.rue); setNumero(s.numero); setNpa(s.npa); setVille(s.ville);
     setTelephone1(s.telephone1); setTelephone2(s.telephone2); setEmail(s.email);
-    setLivrDiff(s.livrDiff || false); setLivrRue(s.livrRue || "");
+    setLivrDiff(s.livrDiff || false); setLivrSociete(s.livrSociete || "");
+    setLivrNom(s.livrNom || ""); setLivrPrenom(s.livrPrenom || "");
+    setLivrTel(s.livrTel || ""); setLivrRue(s.livrRue || "");
     setLivrNumero(s.livrNumero || ""); setLivrNpa(s.livrNpa || ""); setLivrVille(s.livrVille || "");
     setLines(cloneLines(s.lines)); setDiscount(s.discount); setDiscountPercent(s.discountPercent || "0");
     setRemarks(s.remarks); setNotesInternes(s.notesInternes || "");
-    setConditionsGenerales(s.conditionsGenerales || "");
     setLeadTime(s.leadTime); setRoundingStr(s.manualRounding || "");
     setEnabledServices({ ...initialEnabledServices, ...s.enabledServices });
     setServicePrices({ ...initialServicePrices, ...s.servicePrices });
@@ -387,7 +435,8 @@ export default function JardinConfortV7() {
     setOfferStatus("En cours"); setDate(todayForInput()); setOfferNumber(generateOfferNumber());
     setReference(""); setSociete(""); setNom(""); setPrenom(""); setRue(""); setNumero(""); setNpa(""); setVille("");
     setTelephone1(""); setTelephone2(""); setEmail("");
-    setLivrDiff(false); setLivrRue(""); setLivrNumero(""); setLivrNpa(""); setLivrVille("");
+    setLivrDiff(false); setLivrSociete(""); setLivrNom(""); setLivrPrenom("");
+    setLivrTel(""); setLivrRue(""); setLivrNumero(""); setLivrNpa(""); setLivrVille("");
     setLines([]); setDiscount("0");
     setDiscountPercent("0"); setRemarks(""); setNotesInternes(""); setAmbianceImages([]);
     setLeadTime("25-30 jours"); setRoundingStr("");
@@ -497,7 +546,7 @@ export default function JardinConfortV7() {
               </div>
               <div className="jc-field jc-field-grow">
                 <label>Référence client</label>
-                <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Ex: Bon de commande, Ref. interne…" />
+                <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Ex: Terrasse côté sud" />
               </div>
             </div>
           </div>
@@ -570,9 +619,23 @@ export default function JardinConfortV7() {
             </div>
           </div>
           <div className="jc-grid jc-g-addr mt12">
-            <div className="jc-field">
+            <div className="jc-field" style={{position:"relative"}}>
               <label>Rue</label>
-              <input value={rue} onChange={(e) => setRue(e.target.value)} placeholder="Chemin des Roses" />
+              <input
+                value={rue}
+                onChange={(e) => onRueChange(e.target.value)}
+                placeholder="Commencez à taper…"
+                autoComplete="off"
+              />
+              {addrSuggestions.length > 0 && (
+                <div className="jc-addr-dropdown">
+                  {addrSuggestions.map((s, i) => (
+                    <div key={i} className="jc-addr-item" onClick={() => applyAddrSuggestion(s)}>
+                      {s.label}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="jc-field">
               <label>No</label>
@@ -617,30 +680,68 @@ export default function JardinConfortV7() {
             <label className="jc-check-label">
               <input type="checkbox" checked={livrDiff} onChange={(e) => {
                 setLivrDiff(e.target.checked);
-                if (e.target.checked && !livrRue) {
-                  setLivrRue(rue); setLivrNumero(numero); setLivrNpa(npa); setLivrVille(ville);
+                if (e.target.checked) {
+                  // Copier adresse facturation par défaut
+                  setLivrSociete(societe); setLivrNom(nom); setLivrPrenom(prenom);
+                  setLivrTel(telephone1); setLivrRue(rue); setLivrNumero(numero);
+                  setLivrNpa(npa); setLivrVille(ville);
                 }
               }} />
               <span>Adresse de livraison différente de l'adresse de facturation</span>
             </label>
           </div>
           {livrDiff && (
-            <div className="jc-grid jc-g-addr mt12">
-              <div className="jc-field">
-                <label>Rue livraison</label>
-                <input value={livrRue} onChange={(e) => setLivrRue(e.target.value)} placeholder="Rue de la livraison" />
+            <div className="mt12">
+              <div className="jc-livr-header">
+                <span className="jc-muted-sm">📦 Adresse de livraison</span>
+                <button className="jc-btn jc-btn-ghost" style={{fontSize:11, padding:"4px 10px"}}
+                  onClick={() => {
+                    setLivrSociete(societe); setLivrNom(nom); setLivrPrenom(prenom);
+                    setLivrTel(telephone1); setLivrRue(rue); setLivrNumero(numero);
+                    setLivrNpa(npa); setLivrVille(ville);
+                  }}>
+                  📋 Copier adresse facturation
+                </button>
               </div>
-              <div className="jc-field">
-                <label>No</label>
-                <input value={livrNumero} onChange={(e) => setLivrNumero(e.target.value)} placeholder="12" />
+              <div className="jc-grid jc-g1 mt12">
+                <div className="jc-field">
+                  <label>Société livraison</label>
+                  <input value={livrSociete} onChange={(e) => setLivrSociete(e.target.value)} placeholder="Société (optionnel)" />
+                </div>
               </div>
-              <div className="jc-field">
-                <label>NPA</label>
-                <input inputMode="numeric" maxLength={4} value={livrNpa} onChange={(e) => setLivrNpa(sanitizeNpa(e.target.value))} placeholder="1000" />
+              <div className="jc-grid jc-g2 mt12">
+                <div className="jc-field">
+                  <label>Nom livraison</label>
+                  <input value={livrNom} onChange={(e) => setLivrNom(e.target.value)} placeholder="Dupont" />
+                </div>
+                <div className="jc-field">
+                  <label>Prénom</label>
+                  <input value={livrPrenom} onChange={(e) => setLivrPrenom(e.target.value)} placeholder="Jean" />
+                </div>
               </div>
-              <div className="jc-field">
-                <label>Ville livraison</label>
-                <input value={livrVille} onChange={(e) => setLivrVille(e.target.value)} placeholder="Genève" />
+              <div className="jc-grid jc-g-addr mt12">
+                <div className="jc-field">
+                  <label>Rue livraison</label>
+                  <input value={livrRue} onChange={(e) => setLivrRue(e.target.value)} placeholder="Rue de la livraison" />
+                </div>
+                <div className="jc-field">
+                  <label>No</label>
+                  <input value={livrNumero} onChange={(e) => setLivrNumero(e.target.value)} placeholder="12" />
+                </div>
+                <div className="jc-field">
+                  <label>NPA</label>
+                  <input inputMode="numeric" maxLength={4} value={livrNpa} onChange={(e) => setLivrNpa(sanitizeNpa(e.target.value))} placeholder="1000" />
+                </div>
+                <div className="jc-field">
+                  <label>Ville livraison</label>
+                  <input value={livrVille} onChange={(e) => setLivrVille(e.target.value)} placeholder="Genève" />
+                </div>
+              </div>
+              <div className="jc-grid jc-g2 mt12">
+                <div className="jc-field">
+                  <label>Téléphone livraison</label>
+                  <input placeholder="+41 79 000 00 00" value={livrTel} onChange={(e) => setLivrTel(normalizeSwissPhone(e.target.value))} />
+                </div>
               </div>
             </div>
           )}
@@ -714,7 +815,7 @@ export default function JardinConfortV7() {
                       const isFlash = flashProductId === item.id;
                       const stockOk = item.stock !== null && item.stock > 2;
                       const stockLow = item.stock !== null && item.stock > 0 && item.stock <= 2;
-                      const stockZero = item.stock !== null && item.stock === 0;
+                      const stockZero = item.stock !== null && item.stock < 1;
 
                       return (
                         <div key={item.id} className={`jc-shopify-tile${isFlash ? " jc-product-flash" : ""}`} style={{position:"relative"}}>
@@ -762,7 +863,7 @@ export default function JardinConfortV7() {
                             </div>
                             <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-open-link">Ouvrir sur la boutique ↗</a>
                             {/* Délai de livraison basé sur les tags */}
-                            {item.stock === 0 && item.delaiLivraison && (
+                            {item.stock !== null && item.stock < 1 && item.delaiLivraison && (
                               <div className="jc-shopify-delai">{item.delaiLivraison}</div>
                             )}
                           </div>
@@ -1060,11 +1161,33 @@ export default function JardinConfortV7() {
                   </div>
                 </div>
               ))}
-            </div>
-
-            <div className="jc-section-title mt20">Conditions générales</div>
-            <div className="jc-field">
-              <textarea rows={4} value={conditionsGenerales} onChange={(e) => setConditionsGenerales(e.target.value)} />
+              {/* Service vierge à la volée */}
+              <div className="jc-service-row jc-service-custom-row">
+                <div className="jc-check-label">
+                  <input
+                    type="checkbox"
+                    checked={enabledServices["custom"] || false}
+                    onChange={(e) => setEnabledServices((c) => ({ ...c, custom: e.target.checked }))}
+                  />
+                  <input
+                    className="jc-service-custom-label"
+                    placeholder="Service personnalisé…"
+                    value={servicePrices["custom_label"] || ""}
+                    onChange={(e) => setServicePrices((c) => ({ ...c, custom_label: e.target.value }))}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+                <div className="jc-service-price-wrap" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    className="jc-service-price no-spin"
+                    type="number" step="1" placeholder="0"
+                    value={servicePrices["custom"] || ""}
+                    disabled={!enabledServices["custom"]}
+                    onChange={(e) => setServicePrices((c) => ({ ...c, custom: e.target.value }))}
+                  />
+                  <span className="jc-muted-sm">CHF</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1285,7 +1408,6 @@ export default function JardinConfortV7() {
               <div className="jc-sign-sub">Signature &amp; date</div>
             </div>
           </div>
-          {conditionsGenerales && <div className="jc-cgs">{conditionsGenerales}</div>}
         </section>
 
       </div>{/* end sheet */}
@@ -1883,6 +2005,38 @@ export default function JardinConfortV7() {
 
         /* Adresse livraison */
         .jc-livr-toggle { padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: rgba(255,255,255,0.02); }
+        .jc-livr-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+
+        /* ── AUTOCOMPLÉTION ADRESSE ── */
+        .jc-addr-dropdown {
+          position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+          background: var(--card); border: 1px solid var(--border-2);
+          border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+          max-height: 220px; overflow-y: auto; margin-top: 2px;
+        }
+        .jc-addr-item {
+          padding: 9px 12px; font-size: 13px; cursor: pointer;
+          border-bottom: 1px solid var(--border);
+          transition: background 0.1s;
+        }
+        .jc-addr-item:last-child { border-bottom: 0; }
+        .jc-addr-item:hover { background: rgba(59,130,246,0.1); color: var(--accent); }
+
+        /* ── SERVICE VIERGE ── */
+        .jc-service-custom-row { border-style: dashed !important; }
+        .jc-service-custom-label {
+          width: 100% !important;
+          background: transparent !important;
+          border: 0 !important;
+          border-bottom: 1px solid var(--border-2) !important;
+          border-radius: 0 !important;
+          padding: 4px 0 !important;
+          font-size: 13px;
+          color: var(--text);
+          outline: none !important;
+          box-shadow: none !important;
+        }
+        .jc-service-custom-label:focus { border-color: var(--accent) !important; }
         .jc-stock-zero { color: var(--danger); font-weight: 700; font-size: 12px; }
         .jc-stock-cmd { color: #f59e0b; font-weight: 700; font-size: 12px; }
 
