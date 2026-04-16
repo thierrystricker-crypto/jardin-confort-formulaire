@@ -1,20 +1,27 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
-type PaymentMode = "Paiement d'avance à la commande" | "Acompte de 50% à la commande" | "Paiement à 30 jours";
+type PaymentMode =
+  | "Paiement d'avance à la commande"
+  | "Acompte de 50% à la commande"
+  | "Paiement à 30 jours";
 type OfferStatus = "En cours" | "Envoyée" | "Acceptée" | "Refusée";
 
-type Product = {
+// Type retourné par l'API /api/shopify-search
+type ShopifyItem = {
   id: string;
   sku: string;
-  title: string;
-  variant: string;
-  image: string;
-  price: number;
-  stock: number;
+  variant: string;   // "Titre produit / Variante"
+  price: string;     // "949.00"
+  stock: number | null;
+  productUrl: string;
+  variantImage: string;
+  image1: string;
+  image2: string;
+  image3: string;
 };
 
 type QuoteLine = {
@@ -49,67 +56,33 @@ type DraftSnapshot = {
   discount: string;
   discountPercent: string;
   remarks: string;
+  notesInternes: string;
   conditionsGenerales: string;
   leadTime: string;
-  manualRounding: string;
+  manualRounding: string; // stocké pour compatibilité
   enabledServices: Record<string, boolean>;
   servicePrices: Record<string, string>;
-  applyTva: boolean;
 };
 
-const demoProducts: Product[] = [
-  {
-    id: "p1",
-    sku: "410182",
-    title: "Fermob Luxembourg Chaise",
-    variant: "Cactus 82",
-    image: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=500&q=80",
-    price: 245,
-    stock: 4,
-  },
-  {
-    id: "p2",
-    sku: "B33410",
-    title: "Biohort StyleBox 140",
-    variant: "Argent métallique",
-    image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=500&q=80",
-    price: 949,
-    stock: 2,
-  },
-  {
-    id: "p3",
-    sku: "67073",
-    title: "Panier pour coffre",
-    variant: "Type D pour StyleBox",
-    image: "https://images.unsplash.com/photo-1517705008128-361805f42e86?auto=format&fit=crop&w=500&q=80",
-    price: 65,
-    stock: 8,
-  },
-  {
-    id: "p4",
-    sku: "LFM5169",
-    title: "Lafuma Rclip Monochrom Relax",
-    variant: "Erdbraun / Titanium",
-    image: "https://images.unsplash.com/photo-1491921125492-f0b9c835b699?auto=format&fit=crop&w=500&q=80",
-    price: 170,
-    stock: 0,
-  },
-];
-
+// ── Services selon le document Jardin-Confort ──
 const serviceOptions = [
-  { code: "montage", label: "Montage / Installation", defaultPrice: 144 },
-  { code: "livraison", label: "Livraison à domicile", defaultPrice: 59 },
-  { code: "poste", label: "Envoi par colis Poste", defaultPrice: 25 },
+  { code: "montage",       label: "Frais de montage",                                    defaultPrice: 0   },
+  { code: "poste",         label: "Livraison des colis par La Poste",                    defaultPrice: 0   },
+  { code: "trottoir",      label: "Livraison colis franco trottoir par transporteur",    defaultPrice: 60  },
+  { code: "etage",         label: "Livraison « à l'étage » et déballage des articles",  defaultPrice: 80  },
+  { code: "etage_montage", label: "Livraison « à l'étage », déballage et montage",      defaultPrice: 120 },
+  { code: "reprise",       label: "Reprise et recyclage des anciens meubles",            defaultPrice: 60  },
 ];
 
-const TVA_RATE = 0.077; // 7.7% Suisse
-const STORAGE_KEY = "jc-offre-v5-draft";
+// TVA Suisse 2024 : 8.1%
+const TVA_RATE = 0.081;
+const STORAGE_KEY = "jc-offre-v15-draft";
 
-const STATUS_CONFIG: Record<OfferStatus, { color: string; bg: string; icon: string }> = {
-  "En cours":  { color: "#f59e0b", bg: "rgba(245,158,11,0.13)",  icon: "✏️" },
-  "Envoyée":   { color: "#3da3ff", bg: "rgba(61,163,255,0.13)",  icon: "📤" },
-  "Acceptée":  { color: "#4ade80", bg: "rgba(74,222,128,0.13)",  icon: "✅" },
-  "Refusée":   { color: "#ef4444", bg: "rgba(239,68,68,0.13)",   icon: "❌" },
+const STATUS_CONFIG: Record<OfferStatus, { color: string; bg: string; border: string }> = {
+  "En cours": { color: "#f59e0b", bg: "rgba(245,158,11,0.15)",  border: "rgba(245,158,11,0.4)"  },
+  "Envoyée":  { color: "#60a5fa", bg: "rgba(96,165,250,0.15)",  border: "rgba(96,165,250,0.4)"  },
+  "Acceptée": { color: "#4ade80", bg: "rgba(74,222,128,0.15)",  border: "rgba(74,222,128,0.4)"  },
+  "Refusée":  { color: "#f87171", bg: "rgba(248,113,113,0.15)", border: "rgba(248,113,113,0.4)" },
 };
 
 function formatMoney(value: number) {
@@ -119,9 +92,7 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
-function todayForInput() {
-  return new Date().toISOString().slice(0, 10);
-}
+function todayForInput() { return new Date().toISOString().slice(0, 10); }
 
 function generateOfferNumber() {
   const now = new Date();
@@ -134,109 +105,124 @@ function generateOfferNumber() {
 function generateCustomerNumber(email: string) {
   if (!email.trim()) return "";
   let hash = 0;
-  for (let i = 0; i < email.length; i++) {
-    hash = (hash * 31 + email.charCodeAt(i)) % 100000;
-  }
+  for (let i = 0; i < email.length; i++) hash = (hash * 31 + email.charCodeAt(i)) % 100000;
   return `CL-${String(hash).padStart(5, "0")}`;
 }
 
 function normalizeSwissPhone(raw: string) {
   const digits = raw.replace(/[^\d]/g, "");
   if (!digits) return "";
-  let normalized = digits;
-  if (normalized.startsWith("0041")) normalized = "41" + normalized.slice(4);
-  else if (normalized.startsWith("0")) normalized = "41" + normalized.slice(1);
-  else if (!normalized.startsWith("41")) normalized = "41" + normalized;
-  const trimmed = normalized.slice(0, 11);
-  const parts = [
-    "+" + trimmed.slice(0, 2),
-    trimmed.slice(2, 4),
-    trimmed.slice(4, 7),
-    trimmed.slice(7, 9),
-    trimmed.slice(9, 11),
-  ];
-  return parts.filter(Boolean).join(" ");
+  let n = digits;
+  if (n.startsWith("0041")) n = "41" + n.slice(4);
+  else if (n.startsWith("0")) n = "41" + n.slice(1);
+  else if (!n.startsWith("41")) n = "41" + n;
+  const t = n.slice(0, 11);
+  return ["+" + t.slice(0, 2), t.slice(2, 4), t.slice(4, 7), t.slice(7, 9), t.slice(9, 11)].filter(Boolean).join(" ");
 }
 
-function sanitizeNpa(value: string) {
-  return value.replace(/[^\d]/g, "").slice(0, 4);
-}
+function sanitizeNpa(v: string) { return v.replace(/[^\d]/g, "").slice(0, 4); }
 
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ""));
+    r.onerror = reject;
+    r.readAsDataURL(file);
   });
 }
 
-function cloneLines(lines: QuoteLine[]) {
-  return lines.map((line) => ({ ...line }));
-}
+function cloneLines(lines: QuoteLine[]) { return lines.map((l) => ({ ...l })); }
 
-export default function JardinConfortV5() {
-  const [formType, setFormType] = useState<FormType>("Offre");
-  const [clientType, setClientType] = useState<ClientType>("Privé (prix TTC)");
+const initialEnabledServices = Object.fromEntries(serviceOptions.map((s) => [s.code, false]));
+const initialServicePrices   = Object.fromEntries(serviceOptions.map((s) => [s.code, String(s.defaultPrice)]));
+
+export default function JardinConfortV7() {
+  const [formType, setFormType]       = useState<FormType>("Offre");
+  const [clientType, setClientType]   = useState<ClientType>("Privé (prix TTC)");
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("Paiement d'avance à la commande");
   const [offerStatus, setOfferStatus] = useState<OfferStatus>("En cours");
-  const [date, setDate] = useState(todayForInput());
-  const [commercial, setCommercial] = useState("Brice Chappé");
+  const [date, setDate]               = useState(todayForInput());
+  const [commercial, setCommercial]   = useState("Brice Chappé");
   const [offerNumber, setOfferNumber] = useState(() => generateOfferNumber());
 
-  const [societe, setSociete] = useState("");
-  const [nom, setNom] = useState("");
-  const [prenom, setPrenom] = useState("");
-  const [rue, setRue] = useState("");
-  const [numero, setNumero] = useState("");
-  const [npa, setNpa] = useState("");
-  const [ville, setVille] = useState("");
-  const [telephone1, setTelephone1] = useState("");
-  const [telephone2, setTelephone2] = useState("");
-  const [email, setEmail] = useState("");
+  const [societe, setSociete]         = useState("");
+  const [nom, setNom]                 = useState("");
+  const [prenom, setPrenom]           = useState("");
+  const [rue, setRue]                 = useState("");
+  const [numero, setNumero]           = useState("");
+  const [npa, setNpa]                 = useState("");
+  const [ville, setVille]             = useState("");
+  const [telephone1, setTelephone1]   = useState("");
+  const [telephone2, setTelephone2]   = useState("");
+  const [email, setEmail]             = useState("");
 
-  const [search, setSearch] = useState("");
-  const [lines, setLines] = useState<QuoteLine[]>([
-    { id: "line-1", type: "product", image: demoProducts[1].image, sku: "B33410", title: "Biohort StyleBox 140 - Argent métallique", unitPrice: 949, qty: 1 },
-    { id: "line-2", type: "product", image: demoProducts[2].image, sku: "67073", title: "Panier pour coffre - Type D pour StyleBox", unitPrice: 65, qty: 1 },
-  ]);
+  const [search, setSearch]           = useState("");
+  // ── Moteur de recherche Shopify réel ──
+  const [shopifyItems, setShopifyItems]     = useState<ShopifyItem[]>([]);
+  const [shopifyLoading, setShopifyLoading] = useState(false);
+  const [shopifyError, setShopifyError]     = useState("");
 
-  const [customSku, setCustomSku] = useState("");
-  const [customTitle, setCustomTitle] = useState("");
-  const [customPrice, setCustomPrice] = useState("");
-  const [customQty, setCustomQty] = useState("1");
-  const [customImage, setCustomImage] = useState("");
+  const [lines, setLines]             = useState<QuoteLine[]>([]);
 
-  const [discount, setDiscount] = useState("0");
+  const [customSku, setCustomSku]       = useState("");
+  const [customTitle, setCustomTitle]   = useState("");
+  const [customPrice, setCustomPrice]   = useState("");
+  const [customQty, setCustomQty]       = useState("1");
+  const [customImage, setCustomImage]   = useState("");
+  const [discount, setDiscount]         = useState("0");
   const [discountPercent, setDiscountPercent] = useState("0");
-  const [applyTva, setApplyTva] = useState(false);
-  const [remarks, setRemarks] = useState("");
+  const [remarks, setRemarks]           = useState("");
+  const [notesInternes, setNotesInternes] = useState("");
+  const [ambianceImages, setAmbianceImages] = useState<{id: string; dataUrl: string; legende: string}[]>([]);
   const [conditionsGenerales, setConditionsGenerales] = useState(
     "Les prix indiqués sont en CHF. Validité de l'offre : 30 jours. Livraison selon disponibilité. Le paiement doit être effectué selon les modalités convenues. Jardin-Confort SA se réserve le droit de modifier les prix en cas de variation des cours."
   );
-  const [leadTime, setLeadTime] = useState("25-30 jours");
-  const [manualRounding, setManualRounding] = useState("0");
-  const [enabledServices, setEnabledServices] = useState<Record<string, boolean>>({ montage: false, livraison: false, poste: false });
-  const [servicePrices, setServicePrices] = useState<Record<string, string>>({ montage: "144", livraison: "59", poste: "25" });
+  const [leadTime, setLeadTime]         = useState("25-30 jours");
+  // arrondi : toujours stocké comme string, toujours <= 0
+  const [roundingStr, setRoundingStr]   = useState("");
+  const [enabledServices, setEnabledServices] = useState<Record<string, boolean>>(initialEnabledServices);
+  const [servicePrices, setServicePrices]     = useState<Record<string, string>>(initialServicePrices);
 
-  const [undoSnapshot, setUndoSnapshot] = useState<QuoteLine[] | null>(null);
-  const [draftSavedAt, setDraftSavedAt] = useState("");
-  const [draggedLineId, setDraggedLineId] = useState<string | null>(null);
+  const [undoSnapshot, setUndoSnapshot]     = useState<QuoteLine[] | null>(null);
+  const [draftSavedAt, setDraftSavedAt]     = useState("");
+  const [draggedLineId, setDraggedLineId]   = useState<string | null>(null);
   const [justAddedLineId, setJustAddedLineId] = useState<string | null>(null);
+  const [flashProductId, setFlashProductId] = useState<string | null>(null);
+  const [draggedAmbianceId, setDraggedAmbianceId] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [activeTab, setActiveTab] = useState<"shopify" | "custom">("shopify");
+  const [activeTab, setActiveTab]           = useState<"shopify" | "custom">("shopify");
+  const [darkMode, setDarkMode]             = useState(true);
 
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const customerNumber = useMemo(() => generateCustomerNumber(email), [email]);
 
-  const filteredProducts = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    if (!q) return demoProducts;
-    return demoProducts.filter((p) =>
-      p.sku.toLowerCase().includes(q) ||
-      p.title.toLowerCase().includes(q) ||
-      p.variant.toLowerCase().includes(q)
-    );
+  // ── Recherche Shopify avec debounce 250ms + AbortController ──
+  useEffect(() => {
+    const trimmed = search.trim();
+    if (!trimmed) {
+      setShopifyItems([]);
+      setShopifyError("");
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        setShopifyLoading(true);
+        setShopifyError("");
+        const res = await fetch(`/api/shopify-search?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Erreur de recherche");
+        setShopifyItems(json.items || []);
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          setShopifyError((err as Error).message || "Erreur inconnue");
+          setShopifyItems([]);
+        }
+      } finally {
+        setShopifyLoading(false);
+      }
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [search]);
 
   const subTotal = useMemo(() => lines.reduce((s, l) => s + l.qty * l.unitPrice, 0), [lines]);
@@ -247,32 +233,59 @@ export default function JardinConfortV5() {
     return Number(discount || 0);
   }, [discount, discountPercent, subTotal]);
 
-  const serviceTotal = useMemo(() => serviceOptions.reduce((s, srv) => {
-    if (!enabledServices[srv.code]) return s;
-    return s + Number(servicePrices[srv.code] || 0);
-  }, 0), [enabledServices, servicePrices]);
+  const serviceTotal = useMemo(() =>
+    serviceOptions.reduce((s, srv) => {
+      if (!enabledServices[srv.code]) return s;
+      return s + Number(servicePrices[srv.code] || 0);
+    }, 0),
+    [enabledServices, servicePrices]
+  );
 
   const totalAfterDiscount = subTotal - discountValue;
-  const totalBeforeTva = totalAfterDiscount + serviceTotal;
-  const tvaAmount = applyTva ? totalBeforeTva * TVA_RATE : 0;
-  const finalTotalBeforeRounding = totalBeforeTva + tvaAmount;
-  const finalTotal = finalTotalBeforeRounding + Number(manualRounding || 0);
+  const totalPlusServices  = totalAfterDiscount + serviceTotal;
+
+  // Arrondi : toujours négatif ou zéro
+  const roundingValue = Math.min(0, Number(roundingStr) || 0);
+  const totalAfterRounding = totalPlusServices + roundingValue;
+
+  // ── TVA calculée DEPUIS LE TOTAL FINAL (après arrondi) ──
+  const isPrivateTTC = clientType === "Privé (prix TTC)";
+
+  // Privé TTC  : TVA incluse dans le prix → extraction
+  // Pro HT     : TVA à ajouter
+  const tvaAmount = isPrivateTTC
+    ? totalAfterRounding - totalAfterRounding / (1 + TVA_RATE)
+    : totalAfterRounding * TVA_RATE;
+
+  const finalTotal = isPrivateTTC
+    ? totalAfterRounding               // TTC déjà inclus
+    : totalAfterRounding + tvaAmount;  // HT + TVA
 
   const missingRequired = { nom: !nom.trim(), ville: !ville.trim(), email: !email.trim() };
   const isFormValid = !missingRequired.nom && !missingRequired.ville && !missingRequired.email;
-  const statusCfg = STATUS_CONFIG[offerStatus];
 
+  // ── helpers ──
   function captureUndo() { setUndoSnapshot(cloneLines(lines)); }
   function highlightAdded(id: string) {
     setJustAddedLineId(id);
     window.setTimeout(() => setJustAddedLineId((c) => (c === id ? null : c)), 1400);
   }
 
-  function addProduct(product: Product) {
+  function addShopifyItem(item: ShopifyItem) {
     captureUndo();
-    const id = `${product.id}-${Date.now()}`;
-    setLines((c) => [...c, { id, type: "product", image: product.image, sku: product.sku, title: `${product.title} / ${product.variant}`, unitPrice: product.price, qty: 1 }]);
+    const id = `shopify-${Date.now()}`;
+    setLines((c) => [...c, {
+      id,
+      type: "product",
+      image: item.variantImage,
+      sku: item.sku,
+      title: item.variant,
+      unitPrice: parseFloat(item.price) || 0,
+      qty: 1,
+    }]);
     highlightAdded(id);
+    setFlashProductId(item.id);
+    window.setTimeout(() => setFlashProductId((c) => c === item.id ? null : c), 900);
   }
 
   function addCustomLine() {
@@ -307,7 +320,7 @@ export default function JardinConfortV5() {
   }
 
   function makeSnapshot(): DraftSnapshot {
-    return { formType, clientType, paymentMode, offerStatus, date, commercial, offerNumber, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, lines: cloneLines(lines), discount, discountPercent, remarks, conditionsGenerales, leadTime, manualRounding, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices }, applyTva };
+    return { formType, clientType, paymentMode, offerStatus, date, commercial, offerNumber, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, conditionsGenerales, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
   function saveDraftLocal() {
@@ -325,10 +338,11 @@ export default function JardinConfortV5() {
     setRue(s.rue); setNumero(s.numero); setNpa(s.npa); setVille(s.ville);
     setTelephone1(s.telephone1); setTelephone2(s.telephone2); setEmail(s.email);
     setLines(cloneLines(s.lines)); setDiscount(s.discount); setDiscountPercent(s.discountPercent || "0");
-    setRemarks(s.remarks); setConditionsGenerales(s.conditionsGenerales || "");
-    setLeadTime(s.leadTime); setManualRounding(s.manualRounding);
-    setEnabledServices({ ...s.enabledServices }); setServicePrices({ ...s.servicePrices });
-    setApplyTva(s.applyTva || false);
+    setRemarks(s.remarks); setNotesInternes(s.notesInternes || "");
+    setConditionsGenerales(s.conditionsGenerales || "");
+    setLeadTime(s.leadTime); setRoundingStr(s.manualRounding || "");
+    setEnabledServices({ ...initialEnabledServices, ...s.enabledServices });
+    setServicePrices({ ...initialServicePrices, ...s.servicePrices });
     setDraftSavedAt(new Date().toLocaleString("fr-CH"));
   }
 
@@ -337,19 +351,14 @@ export default function JardinConfortV5() {
     setOfferStatus("En cours"); setDate(todayForInput()); setOfferNumber(generateOfferNumber());
     setSociete(""); setNom(""); setPrenom(""); setRue(""); setNumero(""); setNpa(""); setVille("");
     setTelephone1(""); setTelephone2(""); setEmail(""); setLines([]); setDiscount("0");
-    setDiscountPercent("0"); setRemarks(""); setLeadTime("25-30 jours"); setManualRounding("0");
-    setEnabledServices({ montage: false, livraison: false, poste: false }); setApplyTva(false);
+    setDiscountPercent("0"); setRemarks(""); setNotesInternes(""); setAmbianceImages([]);
+    setLeadTime("25-30 jours"); setRoundingStr("");
+    setEnabledServices({ ...initialEnabledServices }); setServicePrices({ ...initialServicePrices });
     setUndoSnapshot(null); setShowResetConfirm(false);
   }
 
-  async function onCustomImageChange(file?: File | null) {
-    if (!file) return;
-    setCustomImage(await readFileAsDataUrl(file));
-  }
-  async function onLineImageChange(id: string, file?: File | null) {
-    if (!file) return;
-    updateLine(id, { image: await readFileAsDataUrl(file) });
-  }
+  async function onCustomImageChange(file?: File | null) { if (!file) return; setCustomImage(await readFileAsDataUrl(file)); }
+  async function onLineImageChange(id: string, file?: File | null) { if (!file) return; updateLine(id, { image: await readFileAsDataUrl(file) }); }
   async function onLineImageDrop(id: string, event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     const file = event.dataTransfer.files?.[0];
@@ -363,79 +372,98 @@ export default function JardinConfortV5() {
   }, [formType, offerNumber]);
 
   return (
-    <div className="page">
-      {/* ─── TOP BAR ─── */}
-      <div className="screenOnly topbar">
-        <div className="topbarLeft">
-          <div className="logoArea">
-            <span className="logoMark">🌿</span>
-            <div>
-              <div className="eyebrow">Système de gestion</div>
-              <h1>Offre &amp; Commande</h1>
-            </div>
+    <div className={`jc-page${darkMode ? "" : " light-mode"}`}>
+
+      {/* ── TOP BAR ── */}
+      <header className="jc-topbar screenOnly">
+        <div className="jc-topbar-left">
+          {/* Logo Jardin-Confort avec coins arrondis comme le dashboard */}
+          <div className="jc-logo-wrap">
+            <img
+              src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/picto_jardin_confort_apple_low.png?v=1775944940"
+              alt="Jardin-Confort"
+              className="jc-logo-img"
+            />
+          </div>
+          <div>
+            <div className="jc-eyebrow">Jardin-Confort · Formulaire</div>
+            <h1 className="jc-title">Nouvelle {formType}</h1>
           </div>
         </div>
-        <div className="toolbar">
+        <div className="jc-toolbar">
+          <button className="jc-btn jc-btn-ghost" onClick={() => setDarkMode((d) => !d)}>
+            {darkMode ? "☀️ Mode clair" : "🌙 Mode sombre"}
+          </button>
           {showResetConfirm ? (
             <>
-              <span className="warnText" style={{ fontSize: 13, alignSelf: "center" }}>Effacer tout ?</span>
-              <button className="dangerBtn" onClick={resetForm}>Confirmer</button>
-              <button className="secondaryBtn" onClick={() => setShowResetConfirm(false)}>Annuler</button>
+              <span className="jc-warn-inline">Effacer tout ?</span>
+              <button className="jc-btn jc-btn-danger" onClick={resetForm}>Confirmer</button>
+              <button className="jc-btn jc-btn-ghost" onClick={() => setShowResetConfirm(false)}>Annuler</button>
             </>
           ) : (
-            <button className="secondaryBtn" onClick={() => setShowResetConfirm(true)}>🔄 Nouvelle offre</button>
+            <button className="jc-btn jc-btn-ghost" onClick={() => setShowResetConfirm(true)}>🔄 Nouvelle offre</button>
           )}
-          <button className="secondaryBtn" onClick={loadDraftLocal}>📂 Charger</button>
-          <button className="secondaryBtn" onClick={saveDraftLocal}>💾 Sauvegarder</button>
-          <button className="secondaryBtn" disabled={!undoSnapshot} onClick={undoLastChange}>↩ Undo</button>
-          <button className="primaryBtn" onClick={() => window.print()}>🖨 Imprimer</button>
+          <button className="jc-btn jc-btn-ghost" onClick={loadDraftLocal}>📂 Charger</button>
+          <button className="jc-btn jc-btn-ghost" onClick={saveDraftLocal}>💾 Sauvegarder</button>
+          <button className="jc-btn jc-btn-ghost" disabled={!undoSnapshot} onClick={undoLastChange}>↩ Undo</button>
+          <button className="jc-btn jc-btn-primary" onClick={() => window.print()}>🖨 Imprimer</button>
         </div>
+      </header>
+
+      {/* ── BOUTONS NAVIGATION FLOTTANTS ── */}
+      <div className="jc-scroll-btns screenOnly">
+        <button className="jc-scroll-btn" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} title="Haut de page">⬆</button>
+        <button className="jc-scroll-btn" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} title="Bas de page">⬇</button>
       </div>
 
-      <div className="sheet">
+      <div className="jc-sheet">
 
-        {/* ─── HEADER CARD ─── */}
-        <section className="headerCard">
-          <div className="headerLeft">
-            <div className="brandBlock">
-              <div className="brand">JARDIN-CONFORT</div>
-              <div className="brandSub">Rue de l'Industrie 12 · 1422 Grandson · +41 24 445 00 00</div>
+        {/* ── HEADER CARD ── */}
+        <section className="jc-card jc-header-card">
+          <div className="jc-header-left">
+            <div>
+              <div className="jc-brand">JARDIN-CONFORT</div>
+              <div className="jc-brand-sub">Route de Lavaux 425 · 1095 Lutry · +41 21 791 36 71</div>
             </div>
-            <div className="docMeta">
-              <div className="fieldGroup small">
+            <div className="jc-doc-meta">
+              <div className="jc-field">
                 <label>Type de document</label>
                 <select value={formType} onChange={(e) => setFormType(e.target.value as FormType)}>
                   <option>Offre</option>
                   <option>Commande</option>
                 </select>
               </div>
-              <div className="fieldGroup small">
+              <div className="jc-field">
                 <label>Date</label>
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
               </div>
-              <div className="fieldGroup">
+              <div className="jc-field jc-field-grow">
                 <label>Numéro</label>
                 <input value={offerNumber} onChange={(e) => setOfferNumber(e.target.value)} />
               </div>
             </div>
           </div>
 
-          <div className="headerRight">
-            <div className="fieldGroup">
+          <div className="jc-header-right">
+            <div className="jc-field">
               <label>Commercial</label>
               <select value={commercial} onChange={(e) => setCommercial(e.target.value)}>
                 <option>Brice Chappé</option>
+                <option>Alejandro Gallegos</option>
+                <option>Fabian Coquoz</option>
                 <option>Michel Gédéon</option>
+                <option>Sabrina Striberni</option>
+                <option>Thierry Stricker</option>
               </select>
             </div>
-            <div className="fieldGroup">
+            <div className="jc-field">
               <label>Type de client</label>
               <select value={clientType} onChange={(e) => setClientType(e.target.value as ClientType)}>
                 <option>Privé (prix TTC)</option>
                 <option>Pro (prix HT)</option>
               </select>
             </div>
-            <div className="fieldGroup">
+            <div className="jc-field">
               <label>Mode de paiement</label>
               <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as PaymentMode)}>
                 <option>Paiement d'avance à la commande</option>
@@ -443,232 +471,305 @@ export default function JardinConfortV5() {
                 <option>Paiement à 30 jours</option>
               </select>
             </div>
-            {/* STATUT — NOUVEAU */}
-            <div className="fieldGroup screenOnly">
-              <label>Statut de l'offre</label>
-              <div className="statusRow">
-                {(["En cours","Envoyée","Acceptée","Refusée"] as OfferStatus[]).map((s) => (
+            <div className="jc-field screenOnly">
+              <label>Statut</label>
+              <div className="jc-status-row">
+                {(["En cours", "Envoyée", "Acceptée", "Refusée"] as OfferStatus[]).map((s) => (
                   <button
                     key={s}
-                    className={`statusChip ${offerStatus === s ? "statusActive" : ""}`}
-                    style={offerStatus === s ? { background: STATUS_CONFIG[s].bg, color: STATUS_CONFIG[s].color, borderColor: STATUS_CONFIG[s].color } : {}}
+                    className={`jc-status-chip ${offerStatus === s ? "active" : ""}`}
+                    style={offerStatus === s ? { background: STATUS_CONFIG[s].bg, color: STATUS_CONFIG[s].color, borderColor: STATUS_CONFIG[s].border } : {}}
                     onClick={() => setOfferStatus(s)}
-                  >
-                    {STATUS_CONFIG[s].icon} {s}
-                  </button>
+                  >{s}</button>
                 ))}
               </div>
             </div>
           </div>
         </section>
 
-        {/* ─── COORDONNÉES CLIENT ─── */}
-        <section className="card">
-          <div className="sectionTitle">👤 Coordonnées client</div>
-          <div className="grid grid-1">
-            <div className="fieldGroup">
+        {/* ── COORDONNÉES ── */}
+        <section className="jc-card">
+          <div className="jc-section-title">Coordonnées client</div>
+          <div className="jc-grid jc-g1">
+            <div className="jc-field">
               <label>Société</label>
               <input value={societe} onChange={(e) => setSociete(e.target.value)} placeholder="Nom de l'entreprise (optionnel)" />
             </div>
           </div>
-          <div className="grid grid-2" style={{ marginTop: 12 }}>
-            <div className="fieldGroup">
+          <div className="jc-grid jc-g2 mt12">
+            <div className="jc-field">
               <label>Nom *</label>
-              <input className={missingRequired.nom ? "requiredError" : ""} value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Dupont" />
+              <input className={missingRequired.nom ? "jc-error" : ""} value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Dupont" />
             </div>
-            <div className="fieldGroup">
+            <div className="jc-field">
               <label>Prénom</label>
               <input value={prenom} onChange={(e) => setPrenom(e.target.value)} placeholder="Jean" />
             </div>
           </div>
-          <div className="grid grid-address" style={{ marginTop: 12 }}>
-            <div className="fieldGroup">
+          <div className="jc-grid jc-g-addr mt12">
+            <div className="jc-field">
               <label>Rue</label>
               <input value={rue} onChange={(e) => setRue(e.target.value)} placeholder="Chemin des Roses" />
             </div>
-            <div className="fieldGroup fieldNumber">
+            <div className="jc-field">
               <label>No</label>
               <input value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="12" />
             </div>
-            <div className="fieldGroup fieldNpa">
+            <div className="jc-field">
               <label>NPA</label>
               <input inputMode="numeric" maxLength={4} value={npa} onChange={(e) => setNpa(sanitizeNpa(e.target.value))} placeholder="1000" />
             </div>
-            <div className="fieldGroup">
+            <div className="jc-field">
               <label>Ville *</label>
-              <input className={missingRequired.ville ? "requiredError" : ""} value={ville} onChange={(e) => setVille(e.target.value)} placeholder="Lausanne" />
+              <input className={missingRequired.ville ? "jc-error" : ""} value={ville} onChange={(e) => setVille(e.target.value)} placeholder="Lausanne" />
             </div>
           </div>
-          <div className="grid grid-3" style={{ marginTop: 12 }}>
-            <div className="fieldGroup">
-              <label>Téléphone principal</label>
+          <div className="jc-grid jc-g3 mt12">
+            <div className="jc-field">
+              <label>Téléphone 1</label>
               <input placeholder="+41 79 000 00 00" value={telephone1} onChange={(e) => setTelephone1(normalizeSwissPhone(e.target.value))} />
             </div>
-            <div className="fieldGroup">
-              <label>Téléphone secondaire</label>
+            <div className="jc-field">
+              <label>Téléphone 2</label>
               <input placeholder="+41 79 000 00 00" value={telephone2} onChange={(e) => setTelephone2(normalizeSwissPhone(e.target.value))} />
             </div>
-            <div className="fieldGroup">
+            <div className="jc-field">
               <label>Email *</label>
-              <input className={missingRequired.email ? "requiredError" : ""} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jean.dupont@exemple.ch" />
+              <input className={missingRequired.email ? "jc-error" : ""} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jean@exemple.ch" />
             </div>
           </div>
-          <div className="grid grid-2" style={{ marginTop: 12 }}>
-            <div className="fieldGroup">
+          <div className="jc-grid jc-g2 mt12">
+            <div className="jc-field">
               <label>N° client (auto via email)</label>
-              <input value={customerNumber} readOnly style={{ opacity: 0.7 }} />
+              <input value={customerNumber} readOnly />
             </div>
-            <div className="fieldGroup">
+            <div className="jc-field">
               <label>Délai de livraison</label>
               <input value={leadTime} onChange={(e) => setLeadTime(e.target.value)} />
             </div>
           </div>
-          <div className="validationRow">
-            <span className={isFormValid ? "okText" : "warnText"}>
-              {isFormValid ? "✅ Champs obligatoires remplis." : "⚠️ Champs manquants : Nom, Ville, Email."}
+          <div className="jc-validation-row">
+            <span className={isFormValid ? "jc-ok" : "jc-warn"}>
+              {isFormValid ? "✓ Champs obligatoires remplis" : "⚠ Champs manquants : Nom, Ville, Email"}
             </span>
-            {draftSavedAt && <span className="draftInfo">💾 Brouillon : {draftSavedAt}</span>}
+            {draftSavedAt && <span className="jc-muted-sm">💾 {draftSavedAt}</span>}
           </div>
         </section>
 
-        {/* ─── RECHERCHE / AJOUT D'ARTICLES ─── */}
-        <section className="card">
-          <div className="sectionTitle">🛒 Ajouter des articles</div>
-          <div className="tabRow screenOnly">
-            <button className={`tabBtn ${activeTab === "shopify" ? "tabActive" : ""}`} onClick={() => setActiveTab("shopify")}>
-              🏪 Catalogue Shopify
-            </button>
-            <button className={`tabBtn ${activeTab === "custom" ? "tabActive" : ""}`} onClick={() => setActiveTab("custom")}>
-              ✏️ Article à la volée
-            </button>
+        {/* ── AJOUT ARTICLES ── */}
+        <section className="jc-card">
+          <div className="jc-section-title">Ajouter des articles</div>
+          <div className="jc-tabs screenOnly">
+            <button className={`jc-tab ${activeTab === "shopify" ? "jc-tab-active" : ""}`} onClick={() => setActiveTab("shopify")}>Catalogue Shopify</button>
+            <button className={`jc-tab ${activeTab === "custom" ? "jc-tab-active" : ""}`} onClick={() => setActiveTab("custom")}>Article à la volée</button>
           </div>
 
           {activeTab === "shopify" && (
             <>
-              <div className="searchBar">
-                <input placeholder="🔍 Rechercher par SKU, titre ou variante…" value={search} onChange={(e) => setSearch(e.target.value)} />
-              </div>
-              <div className="productGrid">
-                {filteredProducts.map((product) => (
-                  <div key={product.id} className="productTile">
-                    <img src={product.image} alt={product.title} />
-                    <div className="productTileBody">
-                      <div className="productSku">SKU {product.sku}</div>
-                      <div className="productTitle">{product.title}</div>
-                      <div className="productVariant">{product.variant}</div>
-                      <div className="productMeta stackedMeta">
-                        <span className="priceTag">{formatMoney(product.price)}</span>
-                        <span className={product.stock > 0 ? "stockOk" : "stockLow"}>
-                          {product.stock > 0 ? `✓ Stock : ${product.stock}` : "✗ Hors stock"}
-                        </span>
-                      </div>
-                    </div>
-                    <button className="addBtn" onClick={() => addProduct(product)}>+ Ajouter</button>
-                  </div>
-                ))}
-                {filteredProducts.length === 0 && (
-                  <div className="emptySearch">Aucun article trouvé pour « {search} »</div>
+              <div className="jc-shopify-search-bar">
+                <input
+                  className="jc-search-input"
+                  placeholder="🔍 Rechercher par SKU, titre ou variante sur Shopify…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  autoComplete="off"
+                />
+                {search && (
+                  <button className="jc-btn jc-btn-ghost jc-search-clear" onClick={() => { setSearch(""); setShopifyItems([]); }}>✕</button>
                 )}
+              </div>
+
+              {/* État vide / loading / erreur */}
+              {!search.trim() && (
+                <div className="jc-shopify-hint">Tapez un SKU, un nom de produit ou une variante pour chercher dans Jardin-Confort.ch</div>
+              )}
+              {shopifyLoading && (
+                <div className="jc-shopify-loading">
+                  <div className="jc-spinner" /> Recherche en cours sur Shopify…
+                </div>
+              )}
+              {shopifyError && (
+                <div className="jc-shopify-error">⚠ {shopifyError}</div>
+              )}
+              {!shopifyLoading && search.trim() && shopifyItems.length === 0 && !shopifyError && (
+                <div className="jc-shopify-hint">Aucun résultat pour « {search} »</div>
+              )}
+
+              {/* Résultats */}
+              <div className="jc-shopify-results">
+                {shopifyItems.map((item) => {
+                  const isFlash = flashProductId === item.id;
+                  const stockOk = item.stock !== null && item.stock > 2;
+                  const stockLow = item.stock !== null && item.stock > 0 && item.stock <= 2;
+                  const stockZero = item.stock !== null && item.stock === 0;
+
+                  return (
+                    <div key={item.id} className={`jc-shopify-tile${isFlash ? " jc-product-flash" : ""}`}>
+                      {/* Images ×4 carrées */}
+                      <div className="jc-shopify-imgs">
+                        {[item.variantImage, item.image1, item.image2, item.image3].map((src, i) => (
+                          src ? (
+                            <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="jc-shopify-img-link">
+                              <div className="jc-shopify-img-box">
+                                <img src={src} alt="" />
+                                {i === 0 && isFlash && <div className="jc-product-flash-overlay">✓</div>}
+                              </div>
+                            </a>
+                          ) : (
+                            <div key={i} className="jc-shopify-img-box jc-shopify-img-empty" />
+                          )
+                        ))}
+                      </div>
+
+                      {/* Infos */}
+                      <div className="jc-shopify-meta">
+                        <div className="jc-shopify-variant">{item.variant}</div>
+                        <div className="jc-shopify-row">
+                          <span className="jc-shopify-label">SKU</span>
+                          <span className="jc-shopify-val">{item.sku || "—"}</span>
+                        </div>
+                        <div className="jc-shopify-row">
+                          <span className="jc-shopify-label">Prix</span>
+                          <span className="jc-shopify-price">CHF {item.price}</span>
+                        </div>
+                        <div className="jc-shopify-row">
+                          <span className="jc-shopify-label">Stock</span>
+                          {item.stock === null ? (
+                            <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-stock-link">
+                              Vérifier ↗
+                            </a>
+                          ) : (
+                            <span className={stockOk ? "jc-stock-ok" : stockLow ? "jc-stock-low" : "jc-stock-zero"}>
+                              {stockZero ? "Hors stock" : `${item.stock} pce${item.stock > 1 ? "s" : ""}`}
+                            </span>
+                          )}
+                        </div>
+                        <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-open-link">
+                          Ouvrir sur la boutique ↗
+                        </a>
+                      </div>
+
+                      {/* Bouton ajouter */}
+                      <button className="jc-add-btn" onClick={() => addShopifyItem(item)}>
+                        + Ajouter
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
 
           {activeTab === "custom" && (
             <div>
-              <div className="grid grid-custom-v2">
-                <div className="fieldGroup fieldSkuShort">
+              <div className="jc-grid jc-g-custom mt12">
+                <div className="jc-field">
                   <label>SKU libre</label>
                   <input value={customSku} onChange={(e) => setCustomSku(e.target.value)} placeholder="ART-001" />
                 </div>
-                <div className="fieldGroup fieldTitleLarge">
+                <div className="jc-field">
                   <label>Titre / Description *</label>
-                  <input value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} placeholder="Ex: Parasol Sunbrella Ø 3m Taupe…" />
+                  <input value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} placeholder="Ex: Parasol Sunbrella Ø 3m…" />
                 </div>
-                <div className="fieldGroup">
-                  <label>Prix unitaire (CHF)</label>
-                  <input className="noSpinner" type="number" step="0.01" value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} placeholder="0.00" />
+                <div className="jc-field">
+                  <label>Prix unitaire CHF</label>
+                  <input className="no-spin" type="number" step="0.01" value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} placeholder="0.00" />
                 </div>
-                <div className="fieldGroup">
+                <div className="jc-field">
                   <label>Qté</label>
                   <input type="number" min="1" step="1" value={customQty} onChange={(e) => setCustomQty(String(Math.max(1, parseInt(e.target.value || "1", 10))))} />
                 </div>
-                <div className="fieldGroup">
-                  <label>Image (fichier ou URL)</label>
+                <div className="jc-field">
+                  <label>Image</label>
                   <input ref={customImageInputRef} type="file" accept="image/*" onChange={(e) => onCustomImageChange(e.target.files?.[0])} />
                 </div>
-                <div className="fieldGroup alignEnd">
-                  <button className="primaryBtn wide" onClick={addCustomLine}>+ Ajouter la ligne</button>
+                <div className="jc-field jc-align-end">
+                  <button className="jc-btn jc-btn-primary jc-btn-wide" onClick={addCustomLine}>+ Ajouter</button>
                 </div>
               </div>
               {customImage && (
-                <div className="customPreview">
+                <div className="jc-custom-preview">
                   <img src={customImage} alt="Aperçu" />
-                  <button className="trashBtn" onClick={() => { setCustomImage(""); if (customImageInputRef.current) customImageInputRef.current.value = ""; }}>🗑</button>
+                  <button className="jc-trash-btn" onClick={() => { setCustomImage(""); if (customImageInputRef.current) customImageInputRef.current.value = ""; }}>🗑</button>
                 </div>
               )}
             </div>
           )}
         </section>
 
-        {/* ─── TABLEAU DES LIGNES ─── */}
-        <section className="card">
-          <div className="sectionTitleRow">
-            <div className="sectionTitle">📋 Lignes de l'offre</div>
-            <span className="lineCount screenOnly">{lines.length} article{lines.length !== 1 ? "s" : ""}</span>
+        {/* ── TABLEAU ── */}
+        <section className="jc-card">
+          <div className="jc-section-title-row">
+            <div className="jc-section-title">Lignes de l'offre</div>
+            <span className="jc-badge screenOnly">{lines.length} article{lines.length !== 1 ? "s" : ""}</span>
           </div>
-          <div className="dragHint screenOnly">⬆⬇ Glisser-déposer pour réordonner les lignes</div>
-          <div className="tableWrap">
-            <table className="quoteTable">
+          <p className="jc-drag-hint screenOnly">⬆⬇ Glisser-déposer pour réordonner</p>
+          <div className="jc-table-wrap">
+            <table className="jc-table">
               <thead>
                 <tr>
                   <th style={{ width: 32 }}>#</th>
-                  <th style={{ width: 80 }}>Img</th>
-                  <th style={{ width: 60 }}>Qté</th>
-                  <th className="skuCol">SKU</th>
-                  <th className="titleCol">Désignation</th>
-                  <th className="unitCol">Prix/pce</th>
-                  <th className="totalCol">Total</th>
-                  <th className="actionCol screenOnly"></th>
+                  <th style={{ width: 82 }}>Img</th>
+                  <th style={{ width: 72 }}>Qté</th>
+                  <th style={{ width: 130 }}>SKU</th>
+                  <th>Désignation</th>
+                  <th style={{ width: 120 }}>Prix/pce</th>
+                  <th style={{ width: 140 }}>Total</th>
+                  <th style={{ width: 90 }} className="screenOnly"></th>
                 </tr>
               </thead>
               <tbody>
                 {lines.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="emptyTable">Aucun article ajouté. Utilisez la section ci-dessus.</td>
-                  </tr>
+                  <tr><td colSpan={8} className="jc-empty-row">Aucun article — utilisez la section ci-dessus</td></tr>
                 )}
-                {lines.map((line, index) => (
+                {lines.map((line, idx) => (
                   <tr
                     key={line.id}
                     draggable
                     onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", line.id); setDraggedLineId(line.id); }}
-                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
-                    onDrop={(e) => { e.preventDefault(); const fromId = e.dataTransfer.getData("text/plain") || draggedLineId; if (fromId) reorderLines(fromId, line.id); setDraggedLineId(null); }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => { e.preventDefault(); const from = e.dataTransfer.getData("text/plain") || draggedLineId; if (from) reorderLines(from, line.id); setDraggedLineId(null); }}
                     onDragEnd={() => setDraggedLineId(null)}
-                    className={`${index % 2 === 0 ? "rowDark" : "rowLight"} ${draggedLineId === line.id ? "draggingRow" : ""} ${justAddedLineId === line.id ? "justAddedRow" : ""}`}
+                    className={[idx % 2 === 0 ? "tr-even" : "tr-odd", draggedLineId === line.id ? "tr-dragging" : "", justAddedLineId === line.id ? "tr-added" : ""].join(" ")}
                   >
-                    <td className="lineNum">{index + 1}</td>
-                    <td className="imageCell">
-                      <div className="lineImageBox" onDragOver={(e) => e.preventDefault()} onDrop={(e) => onLineImageDrop(line.id, e)}>
-                        {line.image ? <img src={line.image} alt={line.title} /> : <span>📷</span>}
+                    <td className="td-num">{idx + 1}</td>
+                    <td className="td-img-cell">
+                      <label className="jc-line-img-label screenOnly" title="Changer l'image">
+                        <div className="jc-line-img" onDragOver={(e) => e.preventDefault()} onDrop={(e) => onLineImageDrop(line.id, e)}>
+                          {line.image ? <img src={line.image} alt="" /> : <span className="jc-line-img-placeholder">📷</span>}
+                          <div className="jc-line-img-overlay">✎</div>
+                        </div>
+                        <input type="file" accept="image/*" style={{display:"none"}} onChange={(e) => onLineImageChange(line.id, e.target.files?.[0])} />
+                      </label>
+                      {/* Print : image seule sans bouton */}
+                      <div className="printOnly jc-line-img">
+                        {line.image ? <img src={line.image} alt="" /> : null}
                       </div>
-                      <input className="screenOnly lineImageInput" type="file" accept="image/*" onChange={(e) => onLineImageChange(line.id, e.target.files?.[0])} />
                     </td>
-                    <td>
-                      <input className="qtyInput" type="number" min="1" step="1" value={line.qty} onChange={(e) => updateLine(line.id, { qty: Math.max(1, parseInt(e.target.value || "1", 10)) })} />
-                    </td>
-                    <td className="skuCol">
-                      <input className="cellInput" value={line.sku} onChange={(e) => updateLine(line.id, { sku: e.target.value })} />
-                    </td>
-                    <td className="titleCol">
-                      <input className="cellInput titleInput" value={line.title} onChange={(e) => updateLine(line.id, { title: e.target.value })} />
-                    </td>
-                    <td className="unitCol">
-                      <input className="cellInput number noSpinner unitPriceInput" type="number" step="0.01" value={line.unitPrice} onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value || 0) })} />
-                    </td>
-                    <td className="money totalCol">{formatMoney(line.qty * line.unitPrice)}</td>
-                    <td className="actionCol screenOnly">
-                      <button className="trashBtn" onClick={() => removeLine(line.id)} title="Supprimer">🗑</button>
+                    <td style={{ paddingRight: 16 }}><input className="jc-qty-input no-spin" type="number" min="1" value={line.qty} onChange={(e) => updateLine(line.id, { qty: Math.max(1, parseInt(e.target.value || "1", 10)) })} /></td>
+                    <td style={{ paddingLeft: 12 }}><input className="jc-cell-input jc-sku-input" value={line.sku} onChange={(e) => updateLine(line.id, { sku: e.target.value })} /></td>
+                    <td><input className="jc-cell-input jc-title-input" value={line.title} onChange={(e) => updateLine(line.id, { title: e.target.value })} /></td>
+                    <td><input className="jc-cell-input jc-price-input no-spin" type="number" step="0.01" value={line.unitPrice} onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value || 0) })} /></td>
+                    <td className="td-money">{formatMoney(line.qty * line.unitPrice)}</td>
+                    <td className="screenOnly">
+                      <div className="jc-action-btns">
+                        <button
+                          className="jc-dup-btn"
+                          title="Dupliquer la ligne"
+                          onClick={() => {
+                            captureUndo();
+                            const newId = `dup-${Date.now()}`;
+                            setLines((c) => {
+                              const idx2 = c.findIndex((l) => l.id === line.id);
+                              const clone2 = [...c];
+                              clone2.splice(idx2 + 1, 0, { ...line, id: newId });
+                              return clone2;
+                            });
+                            highlightAdded(newId);
+                          }}
+                        >⧉</button>
+                        <button className="jc-trash-btn" onClick={() => removeLine(line.id)}>🗑</button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -677,358 +778,1062 @@ export default function JardinConfortV5() {
           </div>
         </section>
 
-        {/* ─── TOTAUX + INFOS COMPLÉMENTAIRES ─── */}
-        <section className="grid totalsGrid">
-          {/* Infos + Services */}
-          <div className="card">
-            <div className="sectionTitle">📝 Informations complémentaires</div>
-            <div className="fieldGroup">
-              <label>Remarques (visibles sur le document)</label>
-              <textarea rows={4} value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Notes pour le client, conditions spéciales, commentaires…" />
+        {/* ── TOTAUX + INFOS ── */}
+        <section className="jc-grid jc-totals-grid">
+
+          {/* Colonne gauche : infos + services */}
+          <div className="jc-card">
+            <div className="jc-section-title">Informations complémentaires</div>
+            <div className="jc-field">
+              <label>Remarques <span className="jc-label-hint">(visibles sur le document)</span></label>
+              {/* Mini-toolbar éditeur */}
+              <div className="jc-editor-wrap screenOnly">
+                <div className="jc-editor-toolbar">
+                  <button type="button" className="jc-editor-btn" title="Gras" onMouseDown={(e) => { e.preventDefault(); document.execCommand("bold"); }}>
+                    <strong>G</strong>
+                  </button>
+                  <button type="button" className="jc-editor-btn" title="Italique" onMouseDown={(e) => { e.preventDefault(); document.execCommand("italic"); }}>
+                    <em>I</em>
+                  </button>
+                  <button type="button" className="jc-editor-btn" title="Souligné" onMouseDown={(e) => { e.preventDefault(); document.execCommand("underline"); }}>
+                    <u>U</u>
+                  </button>
+                  <div className="jc-editor-sep" />
+                  <button type="button" className="jc-editor-btn jc-editor-btn-red" title="Texte rouge" onMouseDown={(e) => { e.preventDefault(); document.execCommand("foreColor", false, "#ef4444"); }}>
+                    <strong style={{color:"#ef4444"}}>R</strong>
+                  </button>
+                  <button type="button" className="jc-editor-btn jc-editor-btn-orange" title="Texte orange" onMouseDown={(e) => { e.preventDefault(); document.execCommand("foreColor", false, "#f59e0b"); }}>
+                    <strong style={{color:"#f59e0b"}}>O</strong>
+                  </button>
+                  <button type="button" className="jc-editor-btn" title="Couleur normale" onMouseDown={(e) => { e.preventDefault(); document.execCommand("removeFormat"); }}>
+                    ✕ fmt
+                  </button>
+                </div>
+                <div
+                  className="jc-editor-content"
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={(e) => setRemarks((e.target as HTMLDivElement).innerHTML)}
+                  dangerouslySetInnerHTML={{ __html: remarks }}
+                />
+              </div>
+              {/* Print : afficher le HTML des remarques */}
+              <div className="printOnly jc-remarks-print" dangerouslySetInnerHTML={{ __html: remarks }} />
             </div>
 
-            <div className="sectionTitle smallTop">🔧 Services optionnels</div>
-            <div className="serviceList">
-              {serviceOptions.map((service) => (
-                <div className="serviceRow" key={service.code}>
-                  <label className="checkRow">
-                    <input type="checkbox" checked={enabledServices[service.code]} onChange={(e) => setEnabledServices((c) => ({ ...c, [service.code]: e.target.checked }))} />
-                    <span>{service.label}</span>
-                  </label>
-                  <div className="servicePriceWrap">
+            {/* Notes internes — screenOnly, jamais imprimées */}
+            <div className="jc-field mt12 screenOnly">
+              <label>
+                <span className="jc-internal-badge">🔒 Interne</span>
+                Notes internes <span className="jc-label-hint">(non visibles par le client, non imprimées)</span>
+              </label>
+              <textarea
+                className="jc-internal-textarea"
+                rows={3}
+                value={notesInternes}
+                onChange={(e) => setNotesInternes(e.target.value)}
+                placeholder="Remarques internes, suivi, rappels pour l'équipe…"
+              />
+            </div>
+
+            <div className="jc-section-title mt20">Services optionnels</div>
+            <div className="jc-service-list">
+              {serviceOptions.map((srv) => (
+                <div className="jc-service-row" key={srv.code}>
+                  <label className="jc-check-label">
                     <input
-                      className="servicePrice noSpinner"
-                      type="number" step="0.01"
-                      value={servicePrices[service.code]}
-                      onChange={(e) => setServicePrices((c) => ({ ...c, [service.code]: e.target.value }))}
-                      disabled={!enabledServices[service.code]}
+                      type="checkbox"
+                      checked={enabledServices[srv.code]}
+                      onChange={(e) => setEnabledServices((c) => ({ ...c, [srv.code]: e.target.checked }))}
                     />
-                    <span className="currency">CHF</span>
+                    <span>{srv.label}</span>
+                  </label>
+                  <div className="jc-service-price-wrap">
+                    <input
+                      className="jc-service-price no-spin"
+                      type="number"
+                      step="1"
+                      placeholder="0"
+                      value={servicePrices[srv.code]}
+                      disabled={!enabledServices[srv.code]}
+                      onChange={(e) => setServicePrices((c) => ({ ...c, [srv.code]: e.target.value }))}
+                    />
+                    <span className="jc-muted-sm">CHF</span>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="sectionTitle smallTop">📄 Conditions générales</div>
-            <div className="fieldGroup">
+            <div className="jc-section-title mt20">Conditions générales</div>
+            <div className="jc-field">
               <textarea rows={4} value={conditionsGenerales} onChange={(e) => setConditionsGenerales(e.target.value)} />
             </div>
           </div>
 
-          {/* Totaux */}
-          <div className="card totalCard">
-            <div className="sectionTitle">💰 Récapitulatif</div>
+          {/* Colonne droite : totaux */}
+          <div className="jc-card jc-total-card">
+            <div className="jc-section-title">Récapitulatif</div>
 
-            <div className="totalRow">
+            {/* Badge type client */}
+            <div
+              className="jc-client-badge"
+              style={{
+                background:   isPrivateTTC ? "rgba(96,165,250,0.1)"   : "rgba(74,222,128,0.1)",
+                borderColor:  isPrivateTTC ? "rgba(96,165,250,0.25)"  : "rgba(74,222,128,0.25)",
+                color:        isPrivateTTC ? "#60a5fa"                 : "#4ade80",
+              }}
+            >
+              {isPrivateTTC ? "🏠 Client Privé — Prix TTC (TVA incluse)" : "🏢 Client Pro — Prix HT (TVA à ajouter)"}
+            </div>
+
+            <div className="jc-total-row">
               <span>Sous-total articles</span>
               <strong>{formatMoney(subTotal)}</strong>
             </div>
 
-            <div className="totalRow discountRow">
-              <span>Rabais (CHF)</span>
-              <input className="discountInput noSpinner" type="number" step="0.01" value={discount}
-                onChange={(e) => { setDiscount(e.target.value); setDiscountPercent("0"); }} />
+            <div className="jc-total-row">
+              <span>Rabais CHF</span>
+              <input
+                className="jc-discount-input no-spin"
+                type="number" step="0.01"
+                placeholder="0"
+                value={discount === "0" ? "" : discount}
+                onFocus={(e) => { if (discount === "0") setDiscount(""); }}
+                onBlur={(e) => { if (!e.target.value) { setDiscount("0"); } }}
+                onChange={(e) => { setDiscount(e.target.value || "0"); setDiscountPercent("0"); }}
+              />
             </div>
-            <div className="totalRow discountRow">
-              <span>Rabais (%)</span>
-              <input className="discountInput noSpinner" type="number" step="0.5" min="0" max="100" value={discountPercent}
-                onChange={(e) => { setDiscountPercent(e.target.value); setDiscount("0"); }} />
+            <div className="jc-total-row">
+              <span>Rabais %</span>
+              <input
+                className="jc-discount-input no-spin"
+                type="number" step="0.5" min="0" max="100"
+                placeholder="0"
+                value={discountPercent === "0" ? "" : discountPercent}
+                onFocus={(e) => { if (discountPercent === "0") setDiscountPercent(""); }}
+                onBlur={(e) => { if (!e.target.value) { setDiscountPercent("0"); } }}
+                onChange={(e) => { setDiscountPercent(e.target.value || "0"); setDiscount("0"); }}
+              />
             </div>
             {discountValue > 0 && (
-              <div className="totalRow">
-                <span>Montant du rabais</span>
-                <strong className="discountAmt">- {formatMoney(discountValue)}</strong>
+              <div className="jc-total-row">
+                <span>Montant rabais</span>
+                <strong className="jc-discount-amt">− {formatMoney(discountValue)}</strong>
               </div>
             )}
 
-            <div className="totalRow">
+            <div className="jc-total-row">
               <span>Total après rabais</span>
               <strong>{formatMoney(totalAfterDiscount)}</strong>
             </div>
 
             {serviceTotal > 0 && (
-              <div className="totalRow">
+              <div className="jc-total-row">
                 <span>Services</span>
                 <strong>{formatMoney(serviceTotal)}</strong>
               </div>
             )}
 
-            {/* TVA — NOUVEAU */}
-            <div className="totalRow tvaRow">
-              <label className="checkRow">
-                <input type="checkbox" checked={applyTva} onChange={(e) => setApplyTva(e.target.checked)} />
-                <span>TVA 7.7% (CHF)</span>
-              </label>
-              {applyTva && <strong>{formatMoney(tvaAmount)}</strong>}
+            {/* Arrondi : valeur libre, peut être négative */}
+            <div className="jc-total-row">
+              <div>
+                <span>Arrondi</span>
+                <div className="jc-arrondi-hint">soustrait du total</div>
+              </div>
+              <input
+                className="jc-discount-input no-spin"
+                type="number"
+                step="0.05"
+                placeholder="0"
+                value={roundingStr}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  // Forcer toujours négatif ou vide
+                  if (raw === "" || raw === "-") { setRoundingStr(raw); return; }
+                  const n = parseFloat(raw);
+                  if (isNaN(n)) { setRoundingStr(""); return; }
+                  setRoundingStr(n > 0 ? String(-n) : raw);
+                }}
+              />
             </div>
 
-            <div className="totalRow">
-              <span>Arrondi manuel</span>
-              <input className="discountInput noSpinner" type="number" step="0.05" value={manualRounding}
-                onChange={(e) => setManualRounding(e.target.value)} />
-            </div>
+            {roundingValue !== 0 && (
+              <div className="jc-total-row">
+                <span>Sous-total arrondi</span>
+                <strong>{formatMoney(totalAfterRounding)}</strong>
+              </div>
+            )}
 
-            <div className="grandTotal">
-              <span>TOTAL {clientType === "Privé (prix TTC)" ? "TTC" : "HT"}</span>
+            {/* TVA calculée depuis totalAfterRounding */}
+            {isPrivateTTC ? (
+              <div className="jc-total-row jc-tva-row">
+                <span className="jc-tva-label">TVA 8.1% incluse</span>
+                <span className="jc-tva-incl">{formatMoney(tvaAmount)}</span>
+              </div>
+            ) : (
+              <div className="jc-total-row jc-tva-row jc-tva-add">
+                <span className="jc-tva-label">+ TVA 8.1%</span>
+                <strong className="jc-tva-add-amt">{formatMoney(tvaAmount)}</strong>
+              </div>
+            )}
+
+            <div className="jc-grand-total">
+              <span>TOTAL {isPrivateTTC ? "TTC" : "HT + TVA"}</span>
               <strong>{formatMoney(finalTotal)}</strong>
             </div>
 
-            <div className="paymentBadge">
-              <span>💳 {paymentMode}</span>
-            </div>
-            <div className="leadBadge">
-              <span>🚚 Délai : {leadTime}</span>
-            </div>
+            <div className="jc-info-badge">💳 {paymentMode}</div>
+            <div className="jc-info-badge">🚚 Délai : {leadTime}</div>
           </div>
         </section>
 
-        {/* ─── SIGNATURE PRINT (caché à l'écran) ─── */}
-        <section className="card printOnly signatureBlock">
-          <div className="signatureGrid">
-            <div>
-              <div className="signLabel">Jardin-Confort — {commercial}</div>
-              <div className="signLine"></div>
-              <div className="signSub">Signature &amp; tampon</div>
-            </div>
-            <div>
-              <div className="signLabel">Client — {nom} {prenom}</div>
-              <div className="signLine"></div>
-              <div className="signSub">Signature &amp; date</div>
-            </div>
+        {/* ── IMAGES D'AMBIANCE ── */}
+        <section className="jc-card">
+          <div className="jc-section-title-row">
+            <div className="jc-section-title">🖼 Images d'ambiance <span className="jc-label-hint" style={{textTransform:"none", letterSpacing:0}}>(page 2 de l'offre)</span></div>
+            <label className="jc-btn jc-btn-ghost screenOnly" style={{cursor:"pointer"}}>
+              + Ajouter une image
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                style={{display:"none"}}
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files || []);
+                  const newImgs = await Promise.all(files.map(async (f) => ({
+                    id: `amb-${Date.now()}-${Math.random()}`,
+                    dataUrl: await readFileAsDataUrl(f),
+                    legende: "",
+                  })));
+                  setAmbianceImages((c) => [...c, ...newImgs]);
+                  e.target.value = "";
+                }}
+              />
+            </label>
           </div>
-          {conditionsGenerales && (
-            <div className="cgsBlock">
-              <strong>Conditions générales :</strong> {conditionsGenerales}
-            </div>
+
+          {ambianceImages.length === 0 && (
+            <label className="jc-ambiance-empty screenOnly" style={{cursor:"pointer"}}>
+              <input type="file" accept="image/*" multiple style={{display:"none"}}
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files || []);
+                  const newImgs = await Promise.all(files.map(async (f) => ({
+                    id: `amb-${Date.now()}-${Math.random()}`,
+                    dataUrl: await readFileAsDataUrl(f),
+                    legende: "",
+                  })));
+                  setAmbianceImages((c) => [...c, ...newImgs]);
+                  e.target.value = "";
+                }}
+              />
+              📁 Aucune image — cliquez ici ou sur « + Ajouter une image » pour illustrer l'offre
+            </label>
           )}
+
+          <div className="jc-ambiance-grid">
+            {ambianceImages.map((img) => (
+              <div
+                key={img.id}
+                className={`jc-ambiance-tile${draggedAmbianceId === img.id ? " jc-ambiance-dragging" : ""}`}
+                draggable
+                onDragStart={() => setDraggedAmbianceId(img.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  if (!draggedAmbianceId || draggedAmbianceId === img.id) { setDraggedAmbianceId(null); return; }
+                  setAmbianceImages((c) => {
+                    const fi = c.findIndex((i) => i.id === draggedAmbianceId);
+                    const ti = c.findIndex((i) => i.id === img.id);
+                    if (fi < 0 || ti < 0) return c;
+                    const clone = [...c];
+                    const [moved] = clone.splice(fi, 1);
+                    clone.splice(ti, 0, moved);
+                    return clone;
+                  });
+                  setDraggedAmbianceId(null);
+                }}
+                onDragEnd={() => setDraggedAmbianceId(null)}
+              >
+                <div className="jc-ambiance-img-wrap">
+                  <img src={img.dataUrl} alt={img.legende || "Ambiance"} />
+                  <button
+                    className="jc-ambiance-remove screenOnly"
+                    onClick={() => setAmbianceImages((c) => c.filter((i) => i.id !== img.id))}
+                    title="Supprimer"
+                  >✕</button>
+                  <div className="jc-ambiance-drag-hint screenOnly">⠿</div>
+                </div>
+                <input
+                  className="jc-ambiance-legende"
+                  placeholder="Légende (optionnel)…"
+                  value={img.legende}
+                  onChange={(e) => setAmbianceImages((c) => c.map((i) => i.id === img.id ? { ...i, legende: e.target.value } : i))}
+                />
+              </div>
+            ))}
+          </div>
         </section>
 
-      </div>
+        {/* ── SIGNATURE print only ── */}
+        <section className="jc-card printOnly jc-sign-block">
+          <div className="jc-sign-grid">
+            <div>
+              <div className="jc-sign-label">Jardin-Confort — {commercial}</div>
+              <div className="jc-sign-line"></div>
+              <div className="jc-sign-sub">Signature &amp; tampon</div>
+            </div>
+            <div>
+              <div className="jc-sign-label">Client — {nom} {prenom}</div>
+              <div className="jc-sign-line"></div>
+              <div className="jc-sign-sub">Signature &amp; date</div>
+            </div>
+          </div>
+          {conditionsGenerales && <div className="jc-cgs">{conditionsGenerales}</div>}
+        </section>
+
+      </div>{/* end sheet */}
 
       <style jsx global>{`
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
         :root {
-          --bg: #0f1318;
-          --panel: #161c24;
-          --panel-2: #1b2230;
-          --border: #28344a;
-          --text: #e8edf5;
-          --muted: #8a97ad;
-          --accent: #2f9e52;
-          --accent-hover: #27874a;
-          --accent-light: rgba(47,158,82,0.12);
-          --accent-2: #1a6b37;
-          --ok: #4ade80;
-          --warn: #f59e0b;
-          --danger: #ef4444;
-          --sheet-text: #111827;
-          --radius: 14px;
+          --bg:          #1f2125;
+          --card:        #2a2d31;
+          --card-2:      #34383d;
+          --border:      rgba(255,255,255,0.08);
+          --border-2:    rgba(255,255,255,0.12);
+          --text:        #f4f4f5;
+          --text-muted:  #a1a1aa;
+          --text-dim:    #71717a;
+          --accent:      #3b82f6;
+          --accent-h:    #2563eb;
+          --ok:          #4ade80;
+          --warn:        #f59e0b;
+          --danger:      #f87171;
+          --radius-sm:   8px;
+          --radius:      12px;
+          --radius-xl:   16px;
         }
-        * { box-sizing: border-box; }
-        html, body { margin:0; padding:0; background: #0d1117; color: var(--text); font-family: 'DM Sans', 'Segoe UI', Arial, sans-serif; }
-        body { min-height: 100vh; }
-        .page { padding: 20px; }
 
-        /* TOP BAR */
-        .topbar { display:flex; justify-content:space-between; align-items:center; gap:20px; margin-bottom:22px; flex-wrap:wrap; }
-        .topbarLeft { display:flex; align-items:center; gap:16px; }
-        .logoArea { display:flex; align-items:center; gap:14px; }
-        .logoMark { font-size:32px; }
-        .eyebrow { color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:.1em; font-weight:700; }
-        h1 { margin:2px 0 0 0; font-size:26px; font-weight:800; line-height:1.1; }
-        .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
+        html, body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          font-size: 14px;
+          line-height: 1.5;
+          -webkit-font-smoothing: antialiased;
+          min-height: 100vh;
+        }
 
-        /* SHEET */
-        .sheet { display:flex; flex-direction:column; gap:16px; max-width:1560px; margin:0 auto; }
+        .jc-page {
+          padding: 24px;
+          background: var(--bg);
+          min-height: 100vh;
+          transition: background 0.25s, color 0.25s;
+        }
 
-        /* CARDS */
-        .card, .headerCard {
-          background: var(--panel);
+        /* ── MODE CLAIR — tons adoucis, pas de blanc pur ── */
+        .light-mode {
+          --bg:         #e8eaed;
+          --card:       #f2f3f5;
+          --card-2:     #e8eaed;
+          --border:     rgba(0,0,0,0.1);
+          --border-2:   rgba(0,0,0,0.16);
+          --text:       #1a1d23;
+          --text-muted: #52576b;
+          --text-dim:   #8a90a0;
+        }
+        /* Forcer la couleur de TOUS les textes en mode clair */
+        .light-mode,
+        .light-mode .jc-card,
+        .light-mode .jc-total-card,
+        .light-mode .jc-total-row,
+        .light-mode .jc-total-row span,
+        .light-mode .jc-total-row strong,
+        .light-mode .jc-grand-total,
+        .light-mode .jc-grand-total span,
+        .light-mode .jc-grand-total strong,
+        .light-mode .jc-section-title,
+        .light-mode .jc-check-label,
+        .light-mode .jc-check-label span,
+        .light-mode .jc-tva-label,
+        .light-mode .jc-brand,
+        .light-mode .jc-product-title,
+        .light-mode .td-money,
+        .light-mode .jc-price-tag { color: #111827; }
+        .light-mode .jc-brand-sub,
+        .light-mode .jc-product-sku,
+        .light-mode .jc-product-variant,
+        .light-mode .jc-tva-incl,
+        .light-mode .jc-arrondi-hint,
+        .light-mode .jc-drag-hint,
+        .light-mode .jc-section-title { color: #6b7280; }
+        .light-mode .jc-discount-amt { color: #16a34a; }
+        .light-mode .jc-tva-add-amt  { color: #d97706; }
+        .light-mode input, .light-mode select, .light-mode textarea {
+          background: #f9fafb !important;
+          color: #111827 !important;
+          border-color: rgba(0,0,0,0.15) !important;
+        }
+        .light-mode input:focus, .light-mode select:focus, .light-mode textarea:focus {
+          border-color: var(--accent) !important;
+        }
+        .light-mode .jc-btn-ghost { background: #e5e7eb; color: #111827; border-color: rgba(0,0,0,0.12); }
+        .light-mode .jc-btn-ghost:hover { background: #d1d5db; }
+        .light-mode .tr-even td { background: rgba(0,0,0,0.02); }
+        .light-mode .tr-odd  td { background: rgba(0,0,0,0.04); }
+        .light-mode .jc-table td,
+        .light-mode .jc-table tr td:first-child,
+        .light-mode .jc-table tr td:last-child { border-color: rgba(0,0,0,0.07); }
+        .light-mode .jc-product-tile { background: #f9fafb; border-color: rgba(0,0,0,0.08); }
+        .light-mode .jc-service-row  { background: rgba(0,0,0,0.025); border-color: rgba(0,0,0,0.08); }
+        .light-mode .jc-total-row { border-color: rgba(0,0,0,0.07); }
+        .light-mode .jc-info-badge { background: #f3f4f6; border-color: rgba(0,0,0,0.1); color: #6b7280; }
+        .light-mode .jc-cell-input { background: rgba(0,0,0,0.04) !important; color: #111827 !important; }
+        .light-mode .jc-line-img { background: #f3f4f6; border-color: rgba(0,0,0,0.12); }
+        .light-mode .jc-badge { background: #e5e7eb; color: #6b7280; }
+        .light-mode .jc-add-btn { background: rgba(59,130,246,0.08); color: #2563eb; }
+        .light-mode .jc-trash-btn { background: rgba(239,68,68,0.08); color: #dc2626; }
+        .light-mode .jc-tabs { border-color: rgba(0,0,0,0.1); }
+        .light-mode .jc-tab { color: #6b7280; }
+        .light-mode .jc-tab:hover { color: #111827; }
+        .light-mode .jc-status-chip { color: #6b7280; border-color: rgba(0,0,0,0.12); }
+        .light-mode .jc-validation-row { border-color: rgba(0,0,0,0.08); }
+        .light-mode .td-num { color: #9ca3af; }
+
+        /* ── TOP BAR ── */
+        .jc-topbar {
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 16px; flex-wrap: wrap; margin-bottom: 24px;
+        }
+        .jc-topbar-left { display: flex; align-items: center; gap: 14px; }
+
+        /* Logo avec coins arrondis identique au dashboard */
+        .jc-logo-wrap {
+          width: 48px; height: 48px;
+          border-radius: 12px;
+          overflow: hidden;
+          background: var(--card-2);
+          border: 1px solid var(--border-2);
+          flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .jc-logo-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+        .jc-eyebrow { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+        h1.jc-title { font-size: 22px; font-weight: 700; color: var(--text); }
+        .jc-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .jc-warn-inline { font-size: 13px; color: var(--warn); }
+
+        /* ── BUTTONS — style dashboard ── */
+        .jc-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          border: 1px solid var(--border-2);
+          border-radius: var(--radius-xl);
+          padding: 8px 14px;
+          font-size: 13px; font-weight: 600;
+          cursor: pointer; transition: all 0.15s; white-space: nowrap;
+        }
+        .jc-btn-ghost { background: var(--card-2); color: var(--text); }
+        .jc-btn-ghost:hover { background: #3d4147; }
+        .jc-btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+        .jc-btn-primary { background: var(--accent); color: white; border-color: var(--accent); border-radius: var(--radius-xl); }
+        .jc-btn-primary:hover { background: var(--accent-h); }
+        .jc-btn-danger { background: rgba(248,113,113,0.15); color: var(--danger); border-color: rgba(248,113,113,0.3); }
+        .jc-btn-wide { width: 100%; justify-content: center; }
+
+        /* ── SHEET ── */
+        .jc-sheet { display: flex; flex-direction: column; gap: 16px; max-width: 1600px; margin: 0 auto; }
+
+        /* ── CARDS ── */
+        .jc-card {
+          background: var(--card);
           border: 1px solid var(--border);
-          border-radius: 18px;
-          padding: 20px 22px;
-          box-shadow: 0 4px 24px rgba(0,0,0,.25);
+          border-radius: var(--radius-xl);
+          padding: 20px 24px;
         }
-        .headerCard { display:grid; grid-template-columns:1.2fr 1fr; gap:20px; }
-        .headerLeft, .headerRight { display:flex; flex-direction:column; gap:14px; }
-        .brandBlock { }
-        .brand { font-size:26px; font-weight:900; letter-spacing:.04em; color:white; }
-        .brandSub { font-size:12px; color:var(--muted); margin-top:3px; }
-        .docMeta { display:grid; grid-template-columns:200px 180px 1fr; gap:12px; }
 
-        /* SECTION TITLE */
-        .sectionTitle { font-size:16px; font-weight:800; margin-bottom:14px; display:flex; align-items:center; gap:6px; }
-        .sectionTitle.smallTop { margin-top:20px; }
-        .sectionTitleRow { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-        .lineCount { font-size:13px; color:var(--muted); background:var(--panel-2); border-radius:20px; padding:3px 12px; }
+        /* ── HEADER CARD ── */
+        .jc-header-card { display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; }
+        .jc-header-left, .jc-header-right { display: flex; flex-direction: column; gap: 16px; }
+        .jc-brand { font-size: 24px; font-weight: 900; letter-spacing: 0.02em; color: var(--text); font-family: 'Arial Black', 'Arial Bold', Arial, sans-serif; }
+        .jc-brand-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .jc-doc-meta { display: grid; grid-template-columns: 180px 160px 1fr; gap: 10px; }
+        .jc-field-grow { flex: 1; }
 
-        /* STATUS CHIPS */
-        .statusRow { display:flex; gap:8px; flex-wrap:wrap; }
-        .statusChip { border:1px solid var(--border); background:transparent; color:var(--muted); border-radius:30px; padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer; transition:all .18s; }
-        .statusChip:hover { border-color:var(--accent); color:var(--accent); }
-        .statusActive { font-weight:800 !important; }
+        /* ── STATUS CHIPS ── */
+        .jc-status-row { display: flex; gap: 6px; flex-wrap: wrap; }
+        .jc-status-chip {
+          border: 1px solid var(--border-2); background: transparent; color: var(--text-muted);
+          border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 600;
+          cursor: pointer; transition: all 0.15s;
+        }
+        .jc-status-chip:hover { color: var(--text); }
+        .jc-status-chip.active { font-weight: 700; }
 
-        /* TABS */
-        .tabRow { display:flex; gap:0; margin-bottom:18px; border-radius:12px; overflow:hidden; border:1px solid var(--border); width:fit-content; }
-        .tabBtn { border:0; background:transparent; color:var(--muted); padding:10px 20px; font-size:14px; font-weight:600; cursor:pointer; transition:all .15s; }
-        .tabActive { background:var(--accent-light); color:var(--accent); }
+        /* ── SECTION TITLES ── */
+        .jc-section-title {
+          font-size: 12px; font-weight: 700; color: var(--text-muted);
+          text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 14px;
+        }
+        .jc-section-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .jc-badge {
+          font-size: 12px; color: var(--text-muted);
+          background: var(--card-2); border: 1px solid var(--border);
+          border-radius: 20px; padding: 2px 10px;
+        }
+        .mt12 { margin-top: 12px; }
+        .mt20 { margin-top: 20px; }
 
-        /* GRIDS */
-        .grid { display:grid; gap:12px; }
-        .grid-1 { grid-template-columns:1fr; }
-        .grid-2 { grid-template-columns:repeat(2,minmax(0,1fr)); }
-        .grid-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
-        .grid-address { grid-template-columns:1.6fr .5fr .5fr 1fr; }
-        .grid-custom-v2 { grid-template-columns:130px 2fr 150px 90px 220px 180px; align-items:end; }
+        /* ── GRIDS ── */
+        .jc-grid { display: grid; gap: 10px; }
+        .jc-g1 { grid-template-columns: 1fr; }
+        .jc-g2 { grid-template-columns: 1fr 1fr; }
+        .jc-g3 { grid-template-columns: 1fr 1fr 1fr; }
+        .jc-g-addr { grid-template-columns: 1.8fr 0.5fr 0.5fr 1fr; }
+        .jc-g-custom { grid-template-columns: 120px 2fr 140px 80px 1fr 160px; align-items: end; }
+        .jc-totals-grid { grid-template-columns: 1.3fr 0.7fr; align-items: start; }
 
-        /* FIELDS */
-        .fieldGroup { display:flex; flex-direction:column; gap:6px; }
-        .fieldGroup.small { max-width:240px; }
-        .fieldGroup label { font-size:12px; color:var(--muted); font-weight:600; padding-left:2px; text-transform:uppercase; letter-spacing:.05em; }
-        input, select, textarea, button { font:inherit; }
+        /* ── FIELDS ── */
+        .jc-field { display: flex; flex-direction: column; gap: 5px; }
+        .jc-field label {
+          font-size: 11px; font-weight: 600; color: var(--text-muted);
+          text-transform: uppercase; letter-spacing: 0.06em;
+        }
+        input, select, textarea, button { font: inherit; }
         input, select, textarea {
-          width:100%; border-radius:10px; border:1px solid var(--border);
-          background:var(--panel-2); color:var(--text);
-          padding:11px 14px; outline:none; transition:border-color .15s, box-shadow .15s;
+          width: 100%; background: var(--card-2);
+          border: 1px solid var(--border-2);
+          border-radius: var(--radius);
+          color: var(--text); padding: 9px 12px;
+          outline: none;
+          -webkit-tap-highlight-color: transparent;
+          transition: border-color 0.15s, box-shadow 0.15s;
         }
-        input:focus, select:focus, textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(47,158,82,.14); }
-        textarea { resize:vertical; }
-        input[readonly] { opacity:.6; cursor:default; }
-        .noSpinner::-webkit-outer-spin-button, .noSpinner::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
-        .noSpinner { -moz-appearance:textfield; }
-        .requiredError { border-color:rgba(239,68,68,.9) !important; box-shadow:0 0 0 3px rgba(239,68,68,.12) !important; }
-        .validationRow { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--border); }
-        .okText { color:var(--ok); font-size:13px; font-weight:700; }
-        .warnText { color:var(--warn); font-size:13px; font-weight:700; }
-        .draftInfo { color:var(--muted); font-size:13px; }
-        .alignEnd { justify-content:flex-end; }
-
-        /* BUTTONS */
-        .primaryBtn, .secondaryBtn, .trashBtn, .addBtn, .dangerBtn {
-          border:0; border-radius:10px; padding:11px 16px; cursor:pointer;
-          transition:transform .12s ease, opacity .15s ease, box-shadow .15s;
-          font-weight:700; font-size:14px;
+        /* Placeholder plus visible mais clairement pas une vraie valeur */
+        input::placeholder, textarea::placeholder {
+          color: var(--text-muted);
+          opacity: 0.60;
+          font-style: italic;
         }
-        .primaryBtn:hover, .secondaryBtn:hover, .addBtn:hover { transform:translateY(-1px); }
-        .primaryBtn { background:linear-gradient(160deg,var(--accent),var(--accent-2)); color:#fff; }
-        .secondaryBtn { background:#1f2a38; color:var(--text); border:1px solid var(--border); }
-        .secondaryBtn:disabled { opacity:.4; cursor:not-allowed; transform:none; }
-        .dangerBtn { background:rgba(239,68,68,.18); color:#fca5a5; border:1px solid rgba(239,68,68,.3); }
-        .trashBtn { width:38px; height:38px; padding:0; display:inline-flex; align-items:center; justify-content:center; background:rgba(239,68,68,.12); color:#fca5a5; font-size:15px; border-radius:9px; }
-        .addBtn { background:var(--accent-light); color:var(--accent); border:1px solid rgba(47,158,82,.3); width:100%; }
-        .wide { width:100%; }
-
-        /* SEARCH */
-        .searchBar { margin-bottom:14px; }
-        .searchBar input { font-size:16px; padding:14px 16px; }
-
-        /* PRODUCT GRID */
-        .productGrid { display:grid; gap:14px; grid-template-columns:repeat(4,minmax(0,1fr)); }
-        .productTile { display:flex; flex-direction:column; gap:10px; border:1px solid var(--border); background:var(--panel-2); border-radius:14px; padding:12px; transition:border-color .15s; }
-        .productTile:hover { border-color:rgba(47,158,82,.4); }
-        .productTile img { width:100%; aspect-ratio:1.3/1; object-fit:cover; border-radius:10px; border:1px solid rgba(255,255,255,.07); }
-        .productTileBody { display:flex; flex-direction:column; gap:5px; flex:1; }
-        .productSku { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
-        .productTitle { font-size:14px; font-weight:700; line-height:1.3; }
-        .productVariant { color:var(--muted); font-size:13px; }
-        .productMeta { display:flex; flex-direction:column; gap:3px; font-size:13px; margin-top:auto; padding-top:6px; }
-        .priceTag { font-weight:800; color:white; font-size:15px; }
-        .stockOk { color:var(--ok); font-weight:700; font-size:12px; }
-        .stockLow { color:var(--warn); font-weight:700; font-size:12px; }
-        .emptySearch { color:var(--muted); padding:20px; text-align:center; grid-column:1/-1; }
-
-        /* CUSTOM PREVIEW */
-        .customPreview { display:flex; align-items:center; gap:12px; margin-top:14px; }
-        .customPreview img { width:100px; height:100px; object-fit:cover; border-radius:12px; border:1px solid var(--border); }
-
-        /* TABLE */
-        .dragHint { color:var(--muted); font-size:12px; margin-bottom:10px; }
-        .tableWrap { overflow-x:auto; }
-        .quoteTable { width:100%; border-collapse:separate; border-spacing:0 6px; min-width:1100px; table-layout:fixed; }
-        .quoteTable th { text-align:left; font-size:11px; color:var(--muted); font-weight:700; padding:0 8px 6px; text-transform:uppercase; letter-spacing:.06em; }
-        .quoteTable td { padding:9px 8px; vertical-align:middle; border-top:1px solid rgba(255,255,255,.06); border-bottom:1px solid rgba(255,255,255,.06); }
-        .quoteTable tr td:first-child { border-left:1px solid rgba(255,255,255,.06); border-top-left-radius:10px; border-bottom-left-radius:10px; }
-        .quoteTable tr td:last-child { border-right:1px solid rgba(255,255,255,.06); border-top-right-radius:10px; border-bottom-right-radius:10px; }
-        .quoteTable tbody tr { cursor:grab; }
-        .draggingRow td { opacity:.4; }
-        .justAddedRow td { animation:addedPulse 1.2s ease; }
-        @keyframes addedPulse {
-          0% { box-shadow:inset 0 0 0 9999px rgba(47,158,82,.25); }
-          100% { box-shadow:inset 0 0 0 9999px rgba(47,158,82,0); }
+        /* Empêcher le flash blanc des selects sur Chrome/Edge */
+        select { color-scheme: dark; }
+        .light-mode select { color-scheme: light; }
+        .light-mode input::placeholder, .light-mode textarea::placeholder {
+          color: #6b7280;
+          opacity: 0.75;
         }
-        .rowDark td { background:rgba(255,255,255,.02); }
-        .rowLight td { background:rgba(255,255,255,.04); }
-        .lineNum { color:var(--muted); font-size:12px; text-align:center; font-weight:700; }
-        .lineImageBox { width:64px; height:64px; border-radius:10px; border:1px dashed rgba(255,255,255,.14); display:flex; align-items:center; justify-content:center; overflow:hidden; background:rgba(255,255,255,.02); color:var(--muted); font-size:18px; }
-        .lineImageBox img { width:100%; height:100%; object-fit:cover; }
-        .lineImageInput { margin-top:6px; font-size:11px; padding:6px; max-width:150px; }
-        .cellInput, .qtyInput { border-radius:8px; padding:9px 10px; background:rgba(255,255,255,.03); }
-        .qtyInput { width:70px; }
-        .skuCol { width:110px; }
-        .titleCol { width:34%; }
-        .titleInput { width:100%; }
-        .unitCol { width:110px; }
-        .unitPriceInput { width:90px; margin-left:auto; }
-        .totalCol { width:140px; text-align:right; white-space:nowrap; }
-        .actionCol { width:50px; text-align:center; }
-        .number, .money { text-align:right; }
-        .emptyTable { text-align:center; color:var(--muted); padding:28px; font-style:italic; }
-        .imageCell { width:110px; }
+        input:focus, select:focus, textarea:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+        input[readonly] { opacity: 0.55; cursor: default; }
+        textarea { resize: vertical; }
+        .no-spin::-webkit-outer-spin-button,
+        .no-spin::-webkit-inner-spin-button { -webkit-appearance: none; }
+        .no-spin { -moz-appearance: textfield; }
+        .jc-error { border-color: rgba(248,113,113,0.8) !important; box-shadow: 0 0 0 3px rgba(248,113,113,0.12) !important; }
 
-        /* TOTALS */
-        .totalsGrid { grid-template-columns:1.2fr .8fr; align-items:start; }
-        .serviceList { display:flex; flex-direction:column; gap:10px; }
-        .serviceRow { display:grid; grid-template-columns:1fr 160px; gap:12px; align-items:center; }
-        .servicePriceWrap { display:flex; align-items:center; gap:6px; }
-        .servicePriceWrap .currency { font-size:12px; color:var(--muted); white-space:nowrap; }
-        .servicePrice { text-align:right; }
-        .checkRow { display:flex; align-items:center; gap:10px; color:var(--text); cursor:pointer; }
-        .checkRow input { width:16px; height:16px; }
-        .discountInput { text-align:right; width:120px; }
-        .totalCard { position:sticky; top:12px; }
-        .totalRow, .grandTotal { display:flex; justify-content:space-between; align-items:center; gap:14px; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.07); }
-        .discountRow input { width:110px; }
-        .discountAmt { color:var(--ok); }
-        .tvaRow label { cursor:pointer; }
-        .grandTotal { margin-top:6px; padding-top:14px; font-size:20px; font-weight:900; border-bottom:0; color:white; }
-        .paymentBadge, .leadBadge { margin-top:10px; padding:10px 14px; border-radius:10px; background:rgba(255,255,255,.04); border:1px solid var(--border); font-size:13px; color:var(--muted); }
+        /* ── VALIDATION ── */
+        .jc-validation-row {
+          display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+          margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
+        }
+        .jc-ok   { font-size: 13px; font-weight: 600; color: var(--ok); }
+        .jc-warn { font-size: 13px; font-weight: 600; color: var(--warn); }
+        .jc-muted-sm { font-size: 12px; color: var(--text-muted); }
 
-        /* SIGNATURE BLOCK */
-        .signatureBlock { margin-top:8px; }
-        .signatureGrid { display:grid; grid-template-columns:1fr 1fr; gap:40px; }
-        .signLabel { font-size:13px; font-weight:700; color:#374151; margin-bottom:40px; }
-        .signLine { border-bottom:1.5px solid #9ca3af; margin-bottom:6px; }
-        .signSub { font-size:11px; color:#9ca3af; }
-        .cgsBlock { margin-top:20px; padding-top:14px; border-top:1px solid #e5e7eb; font-size:11px; color:#6b7280; line-height:1.6; }
+        /* ── TABS ── */
+        .jc-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+        .jc-tab {
+          background: transparent; border: 0;
+          border-bottom: 2px solid transparent; color: var(--text-muted);
+          padding: 8px 18px; font-size: 13px; font-weight: 600;
+          cursor: pointer; margin-bottom: -1px; transition: all 0.15s;
+        }
+        .jc-tab:hover { color: var(--text); }
+        .jc-tab-active { color: var(--accent) !important; border-bottom-color: var(--accent) !important; }
 
-        /* PRINT */
-        .printOnly { display:none; }
+        /* ── SEARCH ── */
+        .jc-search-input { width: 100%; font-size: 14px; padding: 11px 14px; margin-bottom: 16px; border-radius: var(--radius); }
+
+        /* ── PRODUCT GRID — images carrées ── */
+        .jc-product-grid { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .jc-product-tile {
+          display: flex; flex-direction: column; gap: 10px;
+          background: var(--card-2); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: 10px; transition: border-color 0.15s;
+        }
+        .jc-product-tile:hover { border-color: var(--border-2); }
+        .jc-product-img-wrap {
+          width: 100%; aspect-ratio: 1/1;
+          border-radius: var(--radius-sm); overflow: hidden;
+          background: var(--card); border: 1px solid var(--border); flex-shrink: 0;
+        }
+        .jc-product-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .jc-product-body { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+        .jc-product-sku { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
+        .jc-product-title { font-size: 13px; font-weight: 700; line-height: 1.3; }
+        .jc-product-variant { font-size: 12px; color: var(--text-muted); }
+        .jc-product-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 6px; }
+        .jc-price-tag { font-weight: 800; font-size: 14px; }
+        .jc-stock-ok  { font-size: 11px; font-weight: 600; color: var(--ok); }
+        .jc-stock-low { font-size: 11px; font-weight: 600; color: var(--warn); }
+        .jc-add-btn {
+          width: 100%;
+          background: rgba(59,130,246,0.1); color: var(--accent);
+          border: 1px solid rgba(59,130,246,0.2);
+          border-radius: var(--radius-sm);
+          padding: 8px; font-size: 13px; font-weight: 700;
+          cursor: pointer; transition: all 0.15s;
+        }
+        .jc-add-btn:hover { background: rgba(59,130,246,0.2); }
+        .jc-empty-search { color: var(--text-muted); padding: 24px; text-align: center; grid-column: 1/-1; font-style: italic; }
+        .jc-custom-preview { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+        .jc-custom-preview img { width: 90px; height: 90px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+        .jc-align-end { justify-content: flex-end; }
+
+        /* ── TABLE ── */
+        .jc-drag-hint { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+        .jc-table-wrap { overflow-x: auto; }
+        .jc-table { width: 100%; border-collapse: separate; border-spacing: 0 5px; min-width: 900px; table-layout: fixed; }
+        .jc-table thead th {
+          text-align: left; font-size: 11px; font-weight: 700; color: var(--text-muted);
+          text-transform: uppercase; letter-spacing: 0.06em; padding: 0 8px 8px;
+        }
+        .jc-table td {
+          padding: 8px; vertical-align: middle;
+          border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+        }
+        .jc-table tr td:first-child { border-left: 1px solid var(--border); border-top-left-radius: var(--radius-sm); border-bottom-left-radius: var(--radius-sm); }
+        .jc-table tr td:last-child  { border-right: 1px solid var(--border); border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
+        .jc-table tbody tr { cursor: grab; }
+        .tr-even td { background: rgba(255,255,255,0.02); }
+        .tr-odd  td { background: rgba(255,255,255,0.04); }
+        /* Ligne en cours de drag : très visible en bleu */
+        .tr-dragging td {
+          background: rgba(59,130,246,0.25) !important;
+          border-color: rgba(59,130,246,0.6) !important;
+          opacity: 1 !important;
+          box-shadow: inset 0 0 0 2px rgba(59,130,246,0.5);
+        }
+        .tr-added td { animation: rowAdded 1.2s ease; }
+        @keyframes rowAdded {
+          0%   { box-shadow: inset 0 0 0 9999px rgba(59,130,246,0.2); }
+          100% { box-shadow: inset 0 0 0 9999px rgba(59,130,246,0); }
+        }
+        .td-num   { color: var(--text-dim); font-size: 12px; text-align: center; font-weight: 700; }
+        .td-money { text-align: right; font-weight: 700; font-size: 13px; white-space: nowrap; }
+        .jc-line-img {
+          width: 58px; height: 58px; border-radius: var(--radius-sm);
+          border: 1px dashed var(--border-2); overflow: hidden;
+          display: flex; align-items: center; justify-content: center;
+          background: var(--card-2); color: var(--text-dim);
+        }
+        .jc-line-img img { width: 100%; height: 100%; object-fit: cover; }
+        .jc-img-file-input { font-size: 11px; padding: 4px; margin-top: 4px; max-width: 140px; }
+        .jc-qty-input { width: 64px; text-align: center; }
+        .jc-cell-input { border-radius: 6px; padding: 8px; background: rgba(255,255,255,0.03); }
+        .jc-title-input { width: 100%; }
+        .jc-price-input { width: 90px; text-align: right; }
+        .jc-empty-row { text-align: center; color: var(--text-dim); padding: 24px; font-style: italic; }
+
+        /* ── SERVICES ── */
+        .jc-service-list { display: flex; flex-direction: column; gap: 10px; }
+        .jc-service-row {
+          display: grid; grid-template-columns: 1fr auto;
+          gap: 12px; align-items: center;
+          padding: 8px 10px;
+          border-radius: var(--radius-sm);
+          background: rgba(255,255,255,0.02);
+          border: 1px solid var(--border);
+          transition: border-color 0.15s;
+        }
+        .jc-service-row:has(input[type="checkbox"]:checked) {
+          border-color: rgba(59,130,246,0.35);
+          background: rgba(59,130,246,0.05);
+        }
+        .jc-service-price-wrap { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+        .jc-service-price { width: 80px; text-align: right; }
+        .jc-service-free { font-size: 12px; color: var(--text-dim); font-style: italic; }
+        .jc-check-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; }
+        .jc-check-label input { width: 15px; height: 15px; flex-shrink: 0; }
+
+        /* ── TOTALS ── */
+        .jc-total-card { position: sticky; top: 12px; }
+        .jc-client-badge {
+          display: block; font-size: 12px; font-weight: 700;
+          padding: 8px 12px; border-radius: var(--radius-sm);
+          border: 1px solid; margin-bottom: 14px;
+        }
+        .jc-total-row {
+          display: flex; justify-content: space-between; align-items: center;
+          gap: 10px; padding: 8px 0;
+          border-bottom: 1px solid var(--border); font-size: 13px;
+        }
+        .jc-discount-input { width: 100px; text-align: right; }
+        .jc-discount-amt { color: var(--ok); }
+        .jc-arrondi-hint { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+        .jc-tva-row { padding: 8px 6px; border-radius: 4px; background: rgba(255,255,255,0.02); }
+        .jc-tva-label { font-size: 12px; font-weight: 700; }
+        .jc-tva-incl { font-size: 12px; color: var(--text-muted); font-style: italic; }
+        .jc-tva-add-amt { color: var(--warn); }
+        .jc-grand-total {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 14px 0 8px; font-size: 20px; font-weight: 900; color: var(--text);
+        }
+        .jc-info-badge {
+          margin-top: 8px; padding: 8px 12px;
+          border-radius: var(--radius-sm);
+          background: var(--card-2); border: 1px solid var(--border);
+          font-size: 12px; color: var(--text-muted);
+        }
+
+        /* ── TRASH ── */
+        .jc-trash-btn {
+          width: 34px; height: 34px;
+          display: inline-flex; align-items: center; justify-content: center;
+          background: rgba(248,113,113,0.1); color: var(--danger);
+          border: 1px solid rgba(248,113,113,0.2);
+          border-radius: var(--radius-sm); font-size: 14px; cursor: pointer; transition: all 0.15s;
+        }
+        .jc-trash-btn:hover { background: rgba(248,113,113,0.2); }
+
+        /* ── SIGNATURE ── */
+        .jc-sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+        .jc-sign-label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 44px; }
+        .jc-sign-line { border-bottom: 1.5px solid #9ca3af; margin-bottom: 6px; }
+        .jc-sign-sub { font-size: 11px; color: #9ca3af; }
+        .jc-cgs { margin-top: 18px; padding-top: 14px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #6b7280; line-height: 1.6; }
+
+        /* ── NOTES INTERNES ── */
+        .jc-label-hint { font-size: 10px; color: var(--text-dim); font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 4px; }
+        .jc-internal-badge {
+          display: inline-block;
+          font-size: 10px; font-weight: 700;
+          background: rgba(245,158,11,0.15);
+          color: #f59e0b;
+          border: 1px solid rgba(245,158,11,0.3);
+          border-radius: 4px;
+          padding: 1px 6px;
+          margin-right: 6px;
+        }
+        .jc-internal-textarea {
+          border-color: rgba(245,158,11,0.25) !important;
+          background: rgba(245,158,11,0.04) !important;
+        }
+        .jc-internal-textarea:focus {
+          border-color: rgba(245,158,11,0.6) !important;
+          box-shadow: 0 0 0 3px rgba(245,158,11,0.1) !important;
+        }
+
+        /* ── IMAGES D'AMBIANCE ── */
+        .jc-ambiance-empty {
+          display: block;
+          color: var(--text-dim); font-style: italic; font-size: 13px;
+          padding: 28px; text-align: center;
+          border: 2px dashed var(--border-2);
+          border-radius: var(--radius);
+          transition: border-color 0.15s, background 0.15s;
+          width: 100%;
+        }
+        .jc-ambiance-empty:hover {
+          border-color: var(--accent);
+          background: rgba(59,130,246,0.04);
+          color: var(--accent);
+        }
+        .jc-ambiance-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 16px;
+          margin-top: 14px;
+        }
+        .jc-ambiance-tile {
+          display: flex; flex-direction: column; gap: 8px;
+        }
+        .jc-ambiance-img-wrap {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 4/3;
+          border-radius: var(--radius);
+          overflow: hidden;
+          border: 1px solid var(--border-2);
+          background: var(--card-2);
+        }
+        .jc-ambiance-img-wrap img {
+          width: 100%; height: 100%;
+          object-fit: cover; display: block;
+        }
+        .jc-ambiance-remove {
+          position: absolute; top: 8px; right: 8px;
+          width: 28px; height: 28px;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(0,0,0,0.6); color: white;
+          border: 0; border-radius: 50%;
+          font-size: 13px; cursor: pointer;
+          transition: background 0.15s;
+        }
+        .jc-ambiance-remove:hover { background: rgba(239,68,68,0.85); }
+        .jc-ambiance-legende {
+          font-size: 12px !important;
+          padding: 7px 10px !important;
+          border-radius: var(--radius-sm) !important;
+          text-align: center;
+        }
+
+        /* ── MOTEUR SHOPIFY ── */
+        .jc-shopify-search-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+        .jc-search-clear { padding: 8px 12px !important; flex-shrink: 0; }
+        .jc-shopify-hint { color: var(--text-dim); font-style: italic; font-size: 13px; padding: 16px 0; }
+        .jc-shopify-loading {
+          display: flex; align-items: center; gap: 10px;
+          color: var(--text-muted); font-size: 13px; padding: 12px 0;
+        }
+        .jc-spinner {
+          width: 16px; height: 16px;
+          border: 2px solid var(--border-2);
+          border-top-color: var(--accent);
+          border-radius: 50%;
+          animation: spin 0.7s linear infinite;
+          flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .jc-shopify-error {
+          padding: 10px 14px; border-radius: var(--radius-sm);
+          background: rgba(248,113,113,0.1);
+          border: 1px solid rgba(248,113,113,0.25);
+          color: var(--danger); font-size: 13px; margin-bottom: 12px;
+        }
+
+        /* Grille résultats — layout horizontal comme votre page de recherche */
+        .jc-shopify-results { display: flex; flex-direction: column; gap: 10px; }
+        .jc-shopify-tile {
+          display: grid;
+          grid-template-columns: 240px 1fr auto;
+          gap: 14px;
+          align-items: center;
+          background: var(--card-2);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          padding: 12px;
+          transition: border-color 0.15s, box-shadow 0.2s;
+        }
+        .jc-shopify-tile:hover { border-color: var(--border-2); }
+        .jc-product-flash { border-color: #4ade80 !important; box-shadow: 0 0 0 2px rgba(74,222,128,0.3) !important; }
+
+        /* 4 images carrées */
+        .jc-shopify-imgs {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 5px;
+        }
+        .jc-shopify-img-link { display: block; }
+        .jc-shopify-img-box {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 1/1;
+          border-radius: var(--radius-sm);
+          overflow: hidden;
+          border: 1px solid var(--border);
+          background: var(--card);
+        }
+        .jc-shopify-img-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .jc-shopify-img-empty { opacity: 0.25; }
+
+        /* Infos */
+        .jc-shopify-meta { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+        .jc-shopify-variant { font-size: 14px; font-weight: 700; line-height: 1.3; margin-bottom: 4px; }
+        .jc-shopify-row { display: grid; grid-template-columns: 52px 1fr; gap: 8px; font-size: 13px; align-items: center; }
+        .jc-shopify-label { color: var(--text-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+        .jc-shopify-val { color: var(--text); }
+        .jc-shopify-price { font-weight: 800; font-size: 14px; }
+        .jc-shopify-stock-link { color: var(--accent); font-size: 12px; font-weight: 700; text-decoration: underline; }
+        .jc-shopify-open-link { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        .jc-shopify-open-link:hover { color: var(--accent); }
+        .jc-stock-zero { color: var(--danger); font-weight: 700; font-size: 13px; }
+
+        /* Responsive Shopify */
+        @media (max-width: 900px) {
+          .jc-shopify-tile { grid-template-columns: 1fr; }
+          .jc-shopify-imgs { grid-template-columns: repeat(4, 60px); }
+        }
+
+        /* ── BOUTONS NAVIGATION FLOTTANTS ── */
+        .jc-scroll-btns {
+          position: fixed;
+          right: 18px;
+          top: 50%;
+          transform: translateY(-50%);
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          z-index: 100;
+        }
+        .jc-scroll-btn {
+          width: 40px; height: 40px;
+          border-radius: 50%;
+          border: 1px solid var(--border-2);
+          background: var(--card-2);
+          color: var(--text);
+          font-size: 16px;
+          cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+          transition: all 0.15s;
+        }
+        .jc-scroll-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+        /* ── BOUTON DUPLIQUER ── */
+        .jc-action-btns { display: flex; gap: 6px; align-items: center; }
+        .jc-dup-btn {
+          width: 34px; height: 34px;
+          display: inline-flex; align-items: center; justify-content: center;
+          background: rgba(96,165,250,0.1);
+          color: #60a5fa;
+          border: 1px solid rgba(96,165,250,0.25);
+          border-radius: var(--radius-sm);
+          font-size: 16px; cursor: pointer;
+          transition: all 0.15s;
+        }
+        .jc-dup-btn:hover { background: rgba(96,165,250,0.22); }
+
+        /* ── SKU ÉLARGI ── */
+        .jc-sku-input { min-width: 100%; }
+
+        /* ── MINI-ÉDITEUR REMARQUES ── */
+        .jc-editor-wrap {
+          border: 1px solid var(--border-2);
+          border-radius: var(--radius);
+          overflow: hidden;
+        }
+        .jc-editor-toolbar {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          padding: 6px 8px;
+          background: var(--card-2);
+          border-bottom: 1px solid var(--border);
+        }
+        .jc-editor-btn {
+          background: transparent;
+          border: 1px solid transparent;
+          border-radius: 6px;
+          color: var(--text-muted);
+          padding: 4px 8px;
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 0.12s;
+          width: auto;
+          min-width: 30px;
+        }
+        .jc-editor-btn:hover { background: var(--border); color: var(--text); border-color: var(--border-2); }
+        .jc-editor-sep { width: 1px; height: 18px; background: var(--border-2); margin: 0 4px; }
+        .jc-editor-content {
+          min-height: 90px;
+          padding: 10px 12px;
+          background: var(--card-2);
+          color: var(--text);
+          font-size: 14px;
+          line-height: 1.6;
+          outline: none;
+        }
+        .jc-editor-content:focus { background: var(--card-2); }
+        .jc-editor-content:empty::before {
+          content: "Notes pour le client, conditions spéciales…";
+          color: var(--text-muted);
+          opacity: 0.6;
+          font-style: italic;
+          pointer-events: none;
+        }
+        .jc-remarks-print {
+          font-size: 13px;
+          line-height: 1.6;
+          padding: 8px 0;
+          color: #111;
+        }
+        .light-mode .jc-editor-content { color: #111827; }
+        .light-mode .jc-editor-toolbar { background: #e8eaed; border-color: rgba(0,0,0,0.1); }
+        .light-mode .jc-editor-btn { color: #52576b; }
+        .light-mode .jc-editor-btn:hover { background: rgba(0,0,0,0.08); color: #111827; }
+
+        /* ── VIGNETTE IMAGE LIGNE — améliorée ── */
+        .td-img-cell { width: 82px; vertical-align: middle; }
+        .jc-line-img-label { display: block; cursor: pointer; position: relative; }
+        .jc-line-img {
+          width: 72px; height: 72px; border-radius: var(--radius-sm);
+          border: 1px solid var(--border-2); overflow: hidden;
+          display: flex; align-items: center; justify-content: center;
+          background: var(--card-2); position: relative;
+        }
+        .jc-line-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .jc-line-img-placeholder { font-size: 22px; color: var(--text-dim); }
+        .jc-line-img-overlay {
+          position: absolute; inset: 0;
+          background: rgba(0,0,0,0.45);
+          color: white; font-size: 18px;
+          display: flex; align-items: center; justify-content: center;
+          opacity: 0; transition: opacity 0.15s;
+        }
+        .jc-line-img-label:hover .jc-line-img-overlay { opacity: 1; }
+
+        /* ── FLASH PRODUIT SHOPIFY ── */
+        .jc-product-tile { transition: border-color 0.15s, box-shadow 0.2s; }
+        .jc-product-flash { border-color: #4ade80 !important; box-shadow: 0 0 0 2px rgba(74,222,128,0.3) !important; }
+        .jc-product-img-wrap { position: relative; }
+        .jc-product-flash-overlay {
+          position: absolute; inset: 0;
+          background: rgba(74,222,128,0.35);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 22px; font-weight: 900; color: white;
+          animation: flashFade 0.9s ease forwards;
+        }
+        @keyframes flashFade {
+          0%   { opacity: 1; }
+          70%  { opacity: 1; }
+          100% { opacity: 0; }
+        }
+
+        /* ── IMAGES AMBIANCE DRAG ── */
+        .jc-ambiance-tile { cursor: grab; }
+        .jc-ambiance-dragging { opacity: 0.4; }
+        .jc-ambiance-drag-hint {
+          position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+          background: rgba(0,0,0,0.55); color: white; border-radius: 4px;
+          font-size: 16px; padding: 2px 8px; letter-spacing: 2px;
+          pointer-events: none;
+        }
+
+        /* ── PRINT ── */
+        .printOnly { display: none; }
         @media print {
-          body { background:white; color:var(--sheet-text); }
-          .page { padding:0; }
-          .screenOnly { display:none !important; }
-          .printOnly { display:block; }
-          .sheet { max-width:none; gap:6px; }
-          .card, .headerCard {
-            background:white; color:var(--sheet-text);
-            border:1px solid #d1d5db; box-shadow:none; border-radius:0; break-inside:avoid;
-          }
-          input, select, textarea { color:var(--sheet-text); background:transparent; border:1px solid #d1d5db; box-shadow:none !important; }
-          .quoteTable { border-spacing:0; }
-          .quoteTable td, .quoteTable th { color:var(--sheet-text) !important; border:1px solid #d1d5db !important; background:white !important; border-radius:0 !important; }
-          .lineImageBox { border:1px solid #d1d5db; background:white; }
-          .money, .number { white-space:nowrap; }
-          .signatureBlock { display:block !important; }
-          @page { size:A4 portrait; margin:10mm; }
+          body { background: white; color: #111; -webkit-font-smoothing: auto; }
+          .jc-page { padding: 0; }
+          .screenOnly { display: none !important; }
+          .printOnly { display: block !important; }
+          .jc-sheet { gap: 6px; max-width: none; }
+          .jc-card { background: white; color: #111; border: 1px solid #d1d5db; box-shadow: none; border-radius: 0; break-inside: avoid; }
+          input, select, textarea { color: #111; background: transparent; border: 1px solid #d1d5db; }
+          .jc-table td, .jc-table th { color: #111 !important; border: 1px solid #d1d5db !important; background: white !important; border-radius: 0 !important; }
+          .jc-table { border-spacing: 0; }
+          .jc-line-img { border: 1px solid #d1d5db; background: white; }
+          .jc-sign-block { display: block !important; }
+          /* Images d'ambiance : page 2, grille 2 colonnes */
+          .jc-ambiance-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+          .jc-ambiance-img-wrap { aspect-ratio: 4/3; border: 1px solid #d1d5db; }
+          .jc-ambiance-legende { font-size: 11px !important; text-align: center; border: 0 !important; background: transparent !important; color: #6b7280 !important; }
+          @page { size: A4 portrait; margin: 10mm; }
         }
 
-        /* RESPONSIVE */
-        @media (max-width:1400px) { .productGrid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-        @media (max-width:1100px) {
-          .headerCard, .totalsGrid, .docMeta, .grid-3, .grid-address, .grid-custom-v2 { grid-template-columns:1fr; }
-          .topbar { flex-direction:column; align-items:flex-start; }
-          .productGrid { grid-template-columns:1fr; }
-          .totalCard { position:static; }
+        /* ── RESPONSIVE ── */
+        @media (max-width: 1300px) { .jc-product-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 1000px) {
+          .jc-header-card, .jc-totals-grid, .jc-doc-meta,
+          .jc-g3, .jc-g-addr, .jc-g-custom { grid-template-columns: 1fr; }
+          .jc-topbar { flex-direction: column; align-items: flex-start; }
+          .jc-product-grid { grid-template-columns: 1fr 1fr; }
+          .jc-total-card { position: static; }
+          .jc-g2 { grid-template-columns: 1fr; }
         }
+        @media (max-width: 600px) { .jc-product-grid { grid-template-columns: 1fr; } }
       `}</style>
     </div>
   );
