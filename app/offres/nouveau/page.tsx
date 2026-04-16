@@ -1837,4 +1837,4 @@ export default function JardinConfortV7() {
       `}</style>
     </div>
   );
-}
+} 
