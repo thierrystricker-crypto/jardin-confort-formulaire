@@ -32,6 +32,7 @@ type QuoteLine = {
   title: string;
   unitPrice: number;
   qty: number;
+  stock?: number | null | "sur_commande"; // null = inconnu, number = qty, "sur_commande" = hors stock
 };
 
 type DraftSnapshot = {
@@ -168,6 +169,7 @@ export default function JardinConfortV7() {
   const [customTitle, setCustomTitle]   = useState("");
   const [customPrice, setCustomPrice]   = useState("");
   const [customQty, setCustomQty]       = useState("1");
+  const [customStock, setCustomStock]   = useState("");
   const [customImage, setCustomImage]   = useState("");
   const [discount, setDiscount]         = useState("0");
   const [discountPercent, setDiscountPercent] = useState("0");
@@ -192,6 +194,7 @@ export default function JardinConfortV7() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [activeTab, setActiveTab]           = useState<"shopify" | "custom">("shopify");
   const [darkMode, setDarkMode]             = useState(true);
+  const [filterInStock, setFilterInStock]   = useState(false);
 
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const customerNumber = useMemo(() => generateCustomerNumber(email), [email]);
@@ -274,6 +277,8 @@ export default function JardinConfortV7() {
   function addShopifyItem(item: ShopifyItem) {
     captureUndo();
     const id = `shopify-${Date.now()}`;
+    // Stock : 0 = sur commande, null = inconnu, >0 = en stock
+    const stockVal: QuoteLine["stock"] = item.stock === null ? null : item.stock === 0 ? "sur_commande" : item.stock;
     setLines((c) => [...c, {
       id,
       type: "product",
@@ -282,6 +287,7 @@ export default function JardinConfortV7() {
       title: item.variant,
       unitPrice: parseFloat(item.price) || 0,
       qty: 1,
+      stock: stockVal,
     }]);
     highlightAdded(id);
     setFlashProductId(item.id);
@@ -292,8 +298,9 @@ export default function JardinConfortV7() {
     if (!customTitle.trim()) return;
     captureUndo();
     const id = `custom-${Date.now()}`;
-    setLines((c) => [...c, { id, type: "custom", image: customImage, sku: customSku.trim(), title: customTitle.trim(), unitPrice: Number(customPrice || 0), qty: Math.max(1, parseInt(customQty || "1", 10)) }]);
-    setCustomSku(""); setCustomTitle(""); setCustomPrice(""); setCustomQty("1"); setCustomImage("");
+    const stockParsed = customStock.trim() === "" ? null : parseInt(customStock, 10);
+    setLines((c) => [...c, { id, type: "custom", image: customImage, sku: customSku.trim(), title: customTitle.trim(), unitPrice: Number(customPrice || 0), qty: Math.max(1, parseInt(customQty || "1", 10)), stock: isNaN(stockParsed as number) ? null : stockParsed }]);
+    setCustomSku(""); setCustomTitle(""); setCustomPrice(""); setCustomQty("1"); setCustomStock(""); setCustomImage("");
     if (customImageInputRef.current) customImageInputRef.current.value = "";
     highlightAdded(id);
   }
@@ -577,6 +584,15 @@ export default function JardinConfortV7() {
                 {search && (
                   <button className="jc-btn jc-btn-ghost jc-search-clear" onClick={() => { setSearch(""); setShopifyItems([]); }}>✕</button>
                 )}
+                {/* Filtre en stock */}
+                <label className="jc-filter-stock-label">
+                  <input
+                    type="checkbox"
+                    checked={filterInStock}
+                    onChange={(e) => setFilterInStock(e.target.checked)}
+                  />
+                  <span>En stock uniquement</span>
+                </label>
               </div>
 
               {/* État vide / loading / erreur */}
@@ -591,72 +607,77 @@ export default function JardinConfortV7() {
               {shopifyError && (
                 <div className="jc-shopify-error">⚠ {shopifyError}</div>
               )}
-              {!shopifyLoading && search.trim() && shopifyItems.length === 0 && !shopifyError && (
-                <div className="jc-shopify-hint">Aucun résultat pour « {search} »</div>
-              )}
 
-              {/* Résultats */}
-              <div className="jc-shopify-results">
-                {shopifyItems.map((item) => {
-                  const isFlash = flashProductId === item.id;
-                  const stockOk = item.stock !== null && item.stock > 2;
-                  const stockLow = item.stock !== null && item.stock > 0 && item.stock <= 2;
-                  const stockZero = item.stock !== null && item.stock === 0;
+              {/* Résultats — grille responsive 4/2/1 */}
+              {(() => {
+                const filtered = filterInStock
+                  ? shopifyItems.filter((item) => item.stock !== null && item.stock > 0)
+                  : shopifyItems;
 
-                  return (
-                    <div key={item.id} className={`jc-shopify-tile${isFlash ? " jc-product-flash" : ""}`}>
-                      {/* Images ×4 carrées */}
-                      <div className="jc-shopify-imgs">
-                        {[item.variantImage, item.image1, item.image2, item.image3].map((src, i) => (
-                          src ? (
-                            <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="jc-shopify-img-link">
-                              <div className="jc-shopify-img-box">
-                                <img src={src} alt="" />
-                                {i === 0 && isFlash && <div className="jc-product-flash-overlay">✓</div>}
-                              </div>
-                            </a>
-                          ) : (
-                            <div key={i} className="jc-shopify-img-box jc-shopify-img-empty" />
-                          )
-                        ))}
-                      </div>
+                if (!shopifyLoading && search.trim() && filtered.length === 0 && !shopifyError) {
+                  return <div className="jc-shopify-hint">Aucun résultat{filterInStock ? " en stock" : ""} pour « {search} »</div>;
+                }
 
-                      {/* Infos */}
-                      <div className="jc-shopify-meta">
-                        <div className="jc-shopify-variant">{item.variant}</div>
-                        <div className="jc-shopify-row">
-                          <span className="jc-shopify-label">SKU</span>
-                          <span className="jc-shopify-val">{item.sku || "—"}</span>
+                return (
+                  <div className="jc-shopify-grid">
+                    {filtered.map((item) => {
+                      const isFlash = flashProductId === item.id;
+                      const stockOk = item.stock !== null && item.stock > 2;
+                      const stockLow = item.stock !== null && item.stock > 0 && item.stock <= 2;
+                      const stockZero = item.stock !== null && item.stock === 0;
+
+                      return (
+                        <div key={item.id} className={`jc-shopify-tile${isFlash ? " jc-product-flash" : ""}`}>
+                          {/* Images ×4 carrées */}
+                          <div className="jc-shopify-imgs">
+                            {[item.variantImage, item.image1, item.image2, item.image3].map((src, i) => (
+                              src ? (
+                                <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="jc-shopify-img-link">
+                                  <div className="jc-shopify-img-box">
+                                    <img src={src} alt="" />
+                                    {i === 0 && isFlash && <div className="jc-product-flash-overlay">✓</div>}
+                                  </div>
+                                </a>
+                              ) : (
+                                <div key={i} className="jc-shopify-img-box jc-shopify-img-empty" />
+                              )
+                            ))}
+                          </div>
+
+                          {/* Infos */}
+                          <div className="jc-shopify-meta">
+                            <div className="jc-shopify-variant">{item.variant}</div>
+                            <div className="jc-shopify-row">
+                              <span className="jc-shopify-label">SKU</span>
+                              <span className="jc-shopify-val">{item.sku || "—"}</span>
+                            </div>
+                            <div className="jc-shopify-row">
+                              <span className="jc-shopify-label">Prix</span>
+                              <span className="jc-shopify-price">CHF {item.price}</span>
+                            </div>
+                            <div className="jc-shopify-row">
+                              <span className="jc-shopify-label">Stock</span>
+                              {item.stock === null ? (
+                                <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-stock-link">Vérifier ↗</a>
+                              ) : stockZero ? (
+                                <span className="jc-stock-cmd">Sur commande</span>
+                              ) : (
+                                <span className={stockOk ? "jc-stock-ok" : "jc-stock-low"}>
+                                  {item.stock} pce{item.stock > 1 ? "s" : ""}
+                                </span>
+                              )}
+                            </div>
+                            <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-open-link">Ouvrir sur la boutique ↗</a>
+                          </div>
+
+                          {/* Bouton ajouter */}
+                          <button className="jc-add-btn" onClick={() => addShopifyItem(item)}>+ Ajouter</button>
                         </div>
-                        <div className="jc-shopify-row">
-                          <span className="jc-shopify-label">Prix</span>
-                          <span className="jc-shopify-price">CHF {item.price}</span>
-                        </div>
-                        <div className="jc-shopify-row">
-                          <span className="jc-shopify-label">Stock</span>
-                          {item.stock === null ? (
-                            <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-stock-link">
-                              Vérifier ↗
-                            </a>
-                          ) : (
-                            <span className={stockOk ? "jc-stock-ok" : stockLow ? "jc-stock-low" : "jc-stock-zero"}>
-                              {stockZero ? "Hors stock" : `${item.stock} pce${item.stock > 1 ? "s" : ""}`}
-                            </span>
-                          )}
-                        </div>
-                        <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-open-link">
-                          Ouvrir sur la boutique ↗
-                        </a>
-                      </div>
-
-                      {/* Bouton ajouter */}
-                      <button className="jc-add-btn" onClick={() => addShopifyItem(item)}>
-                        + Ajouter
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </>
           )}
 
@@ -678,6 +699,10 @@ export default function JardinConfortV7() {
                 <div className="jc-field">
                   <label>Qté</label>
                   <input type="number" min="1" step="1" value={customQty} onChange={(e) => setCustomQty(String(Math.max(1, parseInt(e.target.value || "1", 10))))} />
+                </div>
+                <div className="jc-field">
+                  <label>Stock</label>
+                  <input className="no-spin" type="number" min="0" step="1" value={customStock} onChange={(e) => setCustomStock(e.target.value)} placeholder="—" />
                 </div>
                 <div className="jc-field">
                   <label>Image</label>
@@ -713,8 +738,9 @@ export default function JardinConfortV7() {
                   <th style={{ width: 72 }}>Qté</th>
                   <th style={{ width: 130 }}>SKU</th>
                   <th>Désignation</th>
-                  <th style={{ width: 120 }}>Prix/pce</th>
-                  <th style={{ width: 140 }}>Total</th>
+                  <th style={{ width: 90 }}>Prix/pce</th>
+                  <th style={{ width: 90 }}>Total</th>
+                  <th style={{ width: 110 }}>Stock</th>
                   <th style={{ width: 90 }} className="screenOnly"></th>
                 </tr>
               </thead>
@@ -751,6 +777,19 @@ export default function JardinConfortV7() {
                     <td><input className="jc-cell-input jc-title-input" value={line.title} onChange={(e) => updateLine(line.id, { title: e.target.value })} /></td>
                     <td><input className="jc-cell-input jc-price-input no-spin" type="number" step="0.01" value={line.unitPrice} onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value || 0) })} /></td>
                     <td className="td-money">{formatMoney(line.qty * line.unitPrice)}</td>
+                    {/* Colonne stock */}
+                    <td className="td-stock">
+                      {line.stock === undefined || line.stock === null ? (
+                        <input className="jc-cell-input jc-stock-input no-spin" type="number" min="0" placeholder="—"
+                          onChange={(e) => updateLine(line.id, { stock: e.target.value === "" ? null : parseInt(e.target.value) })} />
+                      ) : line.stock === "sur_commande" ? (
+                        <span className="jc-stock-cmd">Sur commande</span>
+                      ) : (
+                        <span className={line.stock > 2 ? "jc-stock-ok" : line.stock > 0 ? "jc-stock-low" : "jc-stock-cmd"}>
+                          {line.stock === 0 ? "Sur commande" : `${line.stock} pce${line.stock > 1 ? "s" : ""}`}
+                        </span>
+                      )}
+                    </td>
                     <td className="screenOnly">
                       <div className="jc-action-btns">
                         <button
@@ -1290,7 +1329,7 @@ export default function JardinConfortV7() {
         .jc-g2 { grid-template-columns: 1fr 1fr; }
         .jc-g3 { grid-template-columns: 1fr 1fr 1fr; }
         .jc-g-addr { grid-template-columns: 1.8fr 0.5fr 0.5fr 1fr; }
-        .jc-g-custom { grid-template-columns: 120px 2fr 140px 80px 1fr 160px; align-items: end; }
+        .jc-g-custom { grid-template-columns: 120px 2fr 120px 70px 80px 1fr 150px; align-items: end; }
         .jc-totals-grid { grid-template-columns: 1.3fr 0.7fr; align-items: start; }
 
         /* ── FIELDS ── */
@@ -1581,8 +1620,24 @@ export default function JardinConfortV7() {
         }
 
         /* ── MOTEUR SHOPIFY ── */
-        .jc-shopify-search-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+        .jc-shopify-search-bar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
         .jc-search-clear { padding: 8px 12px !important; flex-shrink: 0; }
+        .jc-filter-stock-label {
+          display: flex; align-items: center; gap: 7px;
+          font-size: 13px; font-weight: 600; color: var(--text-muted);
+          cursor: pointer; white-space: nowrap;
+          padding: 8px 12px;
+          border: 1px solid var(--border-2);
+          border-radius: var(--radius-xl);
+          background: var(--card-2);
+          transition: all 0.15s;
+        }
+        .jc-filter-stock-label:has(input:checked) {
+          border-color: var(--ok);
+          color: var(--ok);
+          background: rgba(74,222,128,0.08);
+        }
+        .jc-filter-stock-label input { width: 14px; height: 14px; }
         .jc-shopify-hint { color: var(--text-dim); font-style: italic; font-size: 13px; padding: 16px 0; }
         .jc-shopify-loading {
           display: flex; align-items: center; gap: 10px;
@@ -1604,13 +1659,19 @@ export default function JardinConfortV7() {
           color: var(--danger); font-size: 13px; margin-bottom: 12px;
         }
 
-        /* Grille résultats — layout horizontal comme votre page de recherche */
-        .jc-shopify-results { display: flex; flex-direction: column; gap: 10px; }
-        .jc-shopify-tile {
+        /* Grille résultats responsive : 4 cols grand écran, 2 medium, 1 petit */
+        .jc-shopify-grid {
           display: grid;
-          grid-template-columns: 240px 1fr auto;
-          gap: 14px;
-          align-items: center;
+          gap: 12px;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+        @media (max-width: 1400px) { .jc-shopify-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 700px)  { .jc-shopify-grid { grid-template-columns: 1fr; } }
+
+        .jc-shopify-tile {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
           background: var(--card-2);
           border: 1px solid var(--border);
           border-radius: var(--radius);
@@ -1640,22 +1701,21 @@ export default function JardinConfortV7() {
         .jc-shopify-img-empty { opacity: 0.25; }
 
         /* Infos */
-        .jc-shopify-meta { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-        .jc-shopify-variant { font-size: 14px; font-weight: 700; line-height: 1.3; margin-bottom: 4px; }
-        .jc-shopify-row { display: grid; grid-template-columns: 52px 1fr; gap: 8px; font-size: 13px; align-items: center; }
-        .jc-shopify-label { color: var(--text-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+        .jc-shopify-meta { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+        .jc-shopify-variant { font-size: 13px; font-weight: 700; line-height: 1.3; margin-bottom: 4px; }
+        .jc-shopify-row { display: grid; grid-template-columns: 48px 1fr; gap: 8px; font-size: 12px; align-items: center; }
+        .jc-shopify-label { color: var(--text-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
         .jc-shopify-val { color: var(--text); }
         .jc-shopify-price { font-weight: 800; font-size: 14px; }
         .jc-shopify-stock-link { color: var(--accent); font-size: 12px; font-weight: 700; text-decoration: underline; }
-        .jc-shopify-open-link { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        .jc-shopify-open-link { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
         .jc-shopify-open-link:hover { color: var(--accent); }
-        .jc-stock-zero { color: var(--danger); font-weight: 700; font-size: 13px; }
+        .jc-stock-zero { color: var(--danger); font-weight: 700; font-size: 12px; }
+        .jc-stock-cmd { color: #f59e0b; font-weight: 700; font-size: 12px; }
 
-        /* Responsive Shopify */
-        @media (max-width: 900px) {
-          .jc-shopify-tile { grid-template-columns: 1fr; }
-          .jc-shopify-imgs { grid-template-columns: repeat(4, 60px); }
-        }
+        /* Colonne stock dans le tableau */
+        .td-stock { text-align: center; vertical-align: middle; }
+        .jc-stock-input { width: 70px; text-align: center; }
 
         /* ── BOUTONS NAVIGATION FLOTTANTS ── */
         .jc-scroll-btns {
@@ -1837,4 +1897,4 @@ export default function JardinConfortV7() {
       `}</style>
     </div>
   );
-} 
+}
