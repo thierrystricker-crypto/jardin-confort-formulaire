@@ -144,7 +144,7 @@ export default function JardinConfortV7() {
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("Paiement d'avance à la commande");
   const [offerStatus, setOfferStatus] = useState<OfferStatus>("En cours");
   const [date, setDate]               = useState(todayForInput());
-  const [commercial, setCommercial]   = useState("Brice Chappé");
+  const [commercial, setCommercial]   = useState("");
   const [offerNumber, setOfferNumber] = useState(() => generateOfferNumber());
 
   const [societe, setSociete]         = useState("");
@@ -192,12 +192,14 @@ export default function JardinConfortV7() {
   const [justAddedLineId, setJustAddedLineId] = useState<string | null>(null);
   const [flashProductId, setFlashProductId] = useState<string | null>(null);
   const [draggedAmbianceId, setDraggedAmbianceId] = useState<string | null>(null);
+  const [openDiscountLines, setOpenDiscountLines] = useState<Set<string>>(new Set());
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [activeTab, setActiveTab]           = useState<"shopify" | "custom">("shopify");
   const [darkMode, setDarkMode]             = useState(true);
   const [filterInStock, setFilterInStock]   = useState(false);
 
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
+  const remarksEditorRef = useRef<HTMLDivElement | null>(null);
   const customerNumber = useMemo(() => generateCustomerNumber(email), [email]);
 
   // ── Recherche Shopify avec debounce 250ms + AbortController ──
@@ -272,8 +274,8 @@ export default function JardinConfortV7() {
     ? totalAfterRounding               // TTC déjà inclus
     : totalAfterRounding + tvaAmount;  // HT + TVA
 
-  const missingRequired = { nom: !nom.trim(), ville: !ville.trim(), email: !email.trim() };
-  const isFormValid = !missingRequired.nom && !missingRequired.ville && !missingRequired.email;
+  const missingRequired = { nom: !nom.trim(), ville: !ville.trim(), email: !email.trim(), commercial: !commercial.trim() };
+  const isFormValid = !missingRequired.nom && !missingRequired.ville && !missingRequired.email && !missingRequired.commercial;
 
   // ── helpers ──
   function captureUndo() { setUndoSnapshot(cloneLines(lines)); }
@@ -461,8 +463,13 @@ export default function JardinConfortV7() {
 
           <div className="jc-header-right">
             <div className="jc-field">
-              <label>Commercial</label>
-              <select value={commercial} onChange={(e) => setCommercial(e.target.value)}>
+              <label>Commercial *</label>
+              <select
+                className={missingRequired.commercial ? "jc-error" : ""}
+                value={commercial}
+                onChange={(e) => setCommercial(e.target.value)}
+              >
+                <option value="">— Choisir un commercial —</option>
                 <option>Brice Chappé</option>
                 <option>Alejandro Gallegos</option>
                 <option>Fabian Coquoz</option>
@@ -565,7 +572,7 @@ export default function JardinConfortV7() {
           </div>
           <div className="jc-validation-row">
             <span className={isFormValid ? "jc-ok" : "jc-warn"}>
-              {isFormValid ? "✓ Champs obligatoires remplis" : "⚠ Champs manquants : Nom, Ville, Email"}
+              {isFormValid ? "✓ Champs obligatoires remplis" : `⚠ Manquants : ${[missingRequired.commercial && "Commercial", missingRequired.nom && "Nom", missingRequired.ville && "Ville", missingRequired.email && "Email"].filter(Boolean).join(", ")}`}
             </span>
             {draftSavedAt && <span className="jc-muted-sm">💾 {draftSavedAt}</span>}
           </div>
@@ -758,9 +765,9 @@ export default function JardinConfortV7() {
                   <th style={{ width: 72 }}>Qté</th>
                   <th style={{ width: 130 }}>SKU</th>
                   <th>Désignation</th>
-                  <th style={{ width: 90 }}>Prix/pce</th>
+                  <th style={{ width: 110 }}>Prix/pce</th>
                   <th style={{ width: 90 }}>Total</th>
-                  <th style={{ width: 110 }}>Stock</th>
+                  <th style={{ width: 80 }}>Stock</th>
                   <th style={{ width: 90 }} className="screenOnly"></th>
                 </tr>
               </thead>
@@ -823,19 +830,24 @@ export default function JardinConfortV7() {
                           </td>
                           <td>
                             <div className="jc-price-cell">
-                              <input className="jc-cell-input jc-price-input no-spin" type="number" step="0.01" value={line.unitPrice} onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value || 0) })} />
-                              {/* Remise par ligne */}
-                              <div className="jc-line-discount-wrap">
-                                <span className="jc-line-discount-label">−</span>
+                              <div className="jc-price-row">
+                                <input className="jc-cell-input jc-price-input no-spin" type="number" step="0.01" value={line.unitPrice} onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value || 0) })} />
+                                <button
+                                  className={`jc-discount-toggle${openDiscountLines.has(line.id) ? " active" : ""}${(line.lineDiscount || 0) > 0 ? " has-value" : ""}`}
+                                  title="Remise sur cette ligne"
+                                  onClick={() => setOpenDiscountLines((s) => { const n = new Set(s); n.has(line.id) ? n.delete(line.id) : n.add(line.id); return n; })}
+                                >%−</button>
+                              </div>
+                              {openDiscountLines.has(line.id) && (
                                 <input
                                   className="jc-cell-input jc-line-discount-input no-spin"
                                   type="number" step="0.01" min="0"
-                                  placeholder="0"
+                                  placeholder="Remise CHF"
                                   value={line.lineDiscount || ""}
-                                  title="Remise sur cette ligne (CHF)"
+                                  autoFocus
                                   onChange={(e) => updateLine(line.id, { lineDiscount: e.target.value === "" ? 0 : Number(e.target.value) })}
                                 />
-                              </div>
+                              )}
                             </div>
                           </td>
                           <td className="td-money">
@@ -919,12 +931,29 @@ export default function JardinConfortV7() {
                   </button>
                 </div>
                 <div
+                  ref={remarksEditorRef}
                   className="jc-editor-content"
                   contentEditable
                   suppressContentEditableWarning
                   dir="ltr"
-                  style={{ direction: "ltr", textAlign: "left", unicodeBidi: "plaintext" }}
-                  onInput={(e) => setRemarks((e.target as HTMLDivElement).innerHTML)}
+                  lang="fr"
+                  spellCheck={false}
+                  onFocus={() => {
+                    if (remarksEditorRef.current) {
+                      remarksEditorRef.current.style.direction = "ltr";
+                      remarksEditorRef.current.style.textAlign = "left";
+                    }
+                  }}
+                  onKeyDown={() => {
+                    if (remarksEditorRef.current) {
+                      remarksEditorRef.current.style.direction = "ltr";
+                    }
+                  }}
+                  onInput={(e) => {
+                    const el = e.target as HTMLDivElement;
+                    el.style.direction = "ltr";
+                    setRemarks(el.innerHTML);
+                  }}
                   dangerouslySetInnerHTML={{ __html: remarks }}
                 />
               </div>
@@ -1789,7 +1818,7 @@ export default function JardinConfortV7() {
         .td-stock { text-align: center; vertical-align: middle; }
         .jc-stock-input { width: 70px; text-align: center; }
 
-        /* ── ÉDITEUR REMARQUES — forcer LTR ── */
+        /* ── ÉDITEUR REMARQUES — forcer LTR absolu ── */
         .jc-editor-content {
           min-height: 90px;
           padding: 10px 12px;
@@ -1800,8 +1829,21 @@ export default function JardinConfortV7() {
           outline: none;
           direction: ltr !important;
           text-align: left !important;
-          unicode-bidi: plaintext;
+          unicode-bidi: embed !important;
+          writing-mode: horizontal-tb !important;
         }
+        .jc-editor-content:empty::before {
+          content: "Notes pour le client, conditions spéciales…";
+          color: var(--text-muted);
+          opacity: 0.6;
+          font-style: italic;
+          pointer-events: none;
+        }
+        .jc-remarks-print { font-size: 13px; line-height: 1.6; padding: 8px 0; color: #111; }
+        .light-mode .jc-editor-content { color: #111827; }
+        .light-mode .jc-editor-toolbar { background: #e8eaed; border-color: rgba(0,0,0,0.1); }
+        .light-mode .jc-editor-btn { color: #52576b; }
+        .light-mode .jc-editor-btn:hover { background: rgba(0,0,0,0.08); color: #111827; }
 
         /* ── LIGNE COMMENTAIRE ── */
         .tr-comment td {
@@ -1822,29 +1864,40 @@ export default function JardinConfortV7() {
           border-color: var(--accent) !important;
         }
 
-        /* ── REMISE PAR LIGNE ── */
-        .jc-price-cell { display: flex; flex-direction: column; gap: 4px; }
-        .jc-line-discount-wrap {
-          display: flex; align-items: center; gap: 4px;
+        /* ── REMISE PAR LIGNE — toggle ── */
+        .jc-price-cell { display: flex; flex-direction: column; gap: 3px; }
+        .jc-price-row { display: flex; align-items: center; gap: 4px; }
+        .jc-discount-toggle {
+          flex-shrink: 0;
+          width: 28px; height: 28px;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 10px; font-weight: 800;
+          background: rgba(255,255,255,0.04);
+          color: var(--text-dim);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.15s;
         }
-        .jc-line-discount-label {
-          font-size: 12px; color: var(--ok); font-weight: 700; flex-shrink: 0;
-        }
+        .jc-discount-toggle:hover { background: rgba(74,222,128,0.1); color: var(--ok); border-color: rgba(74,222,128,0.3); }
+        .jc-discount-toggle.active { background: rgba(74,222,128,0.12); color: var(--ok); border-color: rgba(74,222,128,0.4); }
+        .jc-discount-toggle.has-value { color: var(--ok); border-color: rgba(74,222,128,0.4); }
         .jc-line-discount-input {
-          width: 72px !important;
+          width: 100% !important;
           font-size: 12px !important;
-          padding: 4px 6px !important;
+          padding: 5px 8px !important;
           background: rgba(74,222,128,0.05) !important;
-          border-color: rgba(74,222,128,0.2) !important;
+          border-color: rgba(74,222,128,0.25) !important;
           color: var(--ok) !important;
         }
-        .jc-line-discount-input:focus {
-          border-color: var(--ok) !important;
-          box-shadow: 0 0 0 2px rgba(74,222,128,0.15) !important;
-        }
+        .jc-line-discount-input::placeholder { color: var(--ok); opacity: 0.4; }
         .jc-line-discount-shown {
-          font-size: 11px; color: var(--ok); text-align: right; margin-top: 2px;
+          font-size: 11px; color: var(--ok); text-align: right; margin-top: 1px;
         }
+
+        /* ── COLONNE STOCK RÉDUITE ── */
+        .td-stock { text-align: center; vertical-align: middle; white-space: nowrap; }
+        .jc-stock-input { width: 58px !important; text-align: center; font-size: 12px !important; padding: 6px 4px !important; }
 
         /* ── BOUTONS NAVIGATION FLOTTANTS ── */
         .jc-scroll-btns {
