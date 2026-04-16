@@ -206,7 +206,7 @@ export default function JardinConfortV7() {
   // arrondi : toujours stocké comme string, toujours <= 0
   const [roundingStr, setRoundingStr]   = useState("");
   // Autocomplétion adresse via geo.admin.ch
-  const [addrSuggestions, setAddrSuggestions] = useState<{label: string; zip?: string; city?: string}[]>([]);
+  const [addrSuggestions, setAddrSuggestions] = useState<{label: string; road?: string; houseNumber?: string; postcode?: string; city?: string}[]>([]);
   const [addrQuery, setAddrQuery] = useState("");
   const [enabledServices, setEnabledServices] = useState<Record<string, boolean>>(initialEnabledServices);
   const [servicePrices, setServicePrices]     = useState<Record<string, string>>(initialServicePrices);
@@ -227,19 +227,38 @@ export default function JardinConfortV7() {
   const remarksEditorRef = useRef<HTMLDivElement | null>(null);
   const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Autocomplétion adresse suisse via geo.admin.ch (gratuit, sans clé) ──
+  // ── Autocomplétion adresse suisse via Nominatim (OpenStreetMap, gratuit, sans clé) ──
+  // Retourne rue, numéro, NPA et ville séparément
+  type AddrSuggestion = {
+    label: string;
+    road?: string;
+    houseNumber?: string;
+    postcode?: string;
+    city?: string;
+  };
+
   async function fetchAddressSuggestions(query: string) {
     if (query.length < 3) { setAddrSuggestions([]); return; }
     try {
       const res = await fetch(
-        `https://api3.geo.admin.ch/rest/services/api/SearchServer?searchText=${encodeURIComponent(query)}&type=locations&sr=4326&limit=6&lang=fr`
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=ch&format=json&addressdetails=1&limit=6&accept-language=fr`,
+        { headers: { "User-Agent": "JardinConfort-Formulaire/1.0" } }
       );
       const json = await res.json();
-      const results = (json.results || []).map((r: { attrs: { label: string; zip?: number; city?: string } }) => ({
-        label: r.attrs.label.replace(/<[^>]+>/g, ""),
-        zip: r.attrs.zip ? String(r.attrs.zip) : undefined,
-        city: r.attrs.city,
-      }));
+      const results: AddrSuggestion[] = (json || []).map((r: {
+        display_name: string;
+        address: { road?: string; house_number?: string; postcode?: string; city?: string; town?: string; village?: string; municipality?: string };
+      }) => {
+        const a = r.address || {};
+        const city = a.city || a.town || a.village || a.municipality || "";
+        return {
+          label: r.display_name.split(",").slice(0, 3).join(", "),
+          road: a.road,
+          houseNumber: a.house_number,
+          postcode: a.postcode ? a.postcode.slice(0, 4) : undefined,
+          city,
+        };
+      }).filter((r: AddrSuggestion) => r.road); // garder seulement les résultats avec une rue
       setAddrSuggestions(results);
     } catch { setAddrSuggestions([]); }
   }
@@ -248,17 +267,14 @@ export default function JardinConfortV7() {
     setRue(val);
     setAddrQuery(val);
     if (addrDebounceRef.current) clearTimeout(addrDebounceRef.current);
-    addrDebounceRef.current = setTimeout(() => fetchAddressSuggestions(val), 300);
+    addrDebounceRef.current = setTimeout(() => fetchAddressSuggestions(val), 400);
   }
 
-  function applyAddrSuggestion(s: { label: string; zip?: string; city?: string }) {
-    // Extraire rue et numéro de la suggestion
-    const parts = s.label.split(",");
-    const streetPart = (parts[0] || "").trim();
-    const match = streetPart.match(/^(.*?)\s+(\d+\w*)$/);
-    if (match) { setRue(match[1].trim()); setNumero(match[2]); }
-    else setRue(streetPart);
-    if (s.zip) setNpa(s.zip.slice(0, 4));
+  function applyAddrSuggestion(s: AddrSuggestion) {
+    if (s.road) setRue(s.road);
+    if (s.houseNumber) setNumero(s.houseNumber);
+    else setNumero("");
+    if (s.postcode) setNpa(s.postcode);
     if (s.city) setVille(s.city);
     setAddrSuggestions([]);
     setAddrQuery("");
@@ -601,7 +617,7 @@ export default function JardinConfortV7() {
 
         {/* ── COORDONNÉES ── */}
         <section className="jc-card">
-          <div className="jc-section-title">Coordonnées client</div>
+          <div className="jc-section-title">Adresse de facturation</div>
           <div className="jc-grid jc-g1">
             <div className="jc-field">
               <label>Société</label>
@@ -676,7 +692,8 @@ export default function JardinConfortV7() {
           </div>
 
           {/* Adresse de livraison */}
-          <div className="jc-livr-toggle mt12 screenOnly">
+          <div className="jc-section-title smallTop screenOnly" style={{marginTop:20}}>Adresse de livraison</div>
+          <div className="jc-livr-toggle screenOnly">
             <label className="jc-check-label">
               <input type="checkbox" checked={livrDiff} onChange={(e) => {
                 setLivrDiff(e.target.checked);
@@ -1148,6 +1165,7 @@ export default function JardinConfortV7() {
                     <span>{srv.label}</span>
                   </label>
                   <div className="jc-service-price-wrap" onClick={(e) => e.stopPropagation()}>
+                    <span className="jc-muted-sm">CHF</span>
                     <input
                       className="jc-service-price no-spin"
                       type="number"
@@ -1157,7 +1175,6 @@ export default function JardinConfortV7() {
                       disabled={!enabledServices[srv.code]}
                       onChange={(e) => setServicePrices((c) => ({ ...c, [srv.code]: e.target.value }))}
                     />
-                    <span className="jc-muted-sm">CHF</span>
                   </div>
                 </div>
               ))}
@@ -1178,6 +1195,7 @@ export default function JardinConfortV7() {
                   />
                 </div>
                 <div className="jc-service-price-wrap" onClick={(e) => e.stopPropagation()}>
+                  <span className="jc-muted-sm">CHF</span>
                   <input
                     className="jc-service-price no-spin"
                     type="number" step="1" placeholder="0"
@@ -1185,7 +1203,6 @@ export default function JardinConfortV7() {
                     disabled={!enabledServices["custom"]}
                     onChange={(e) => setServicePrices((c) => ({ ...c, custom: e.target.value }))}
                   />
-                  <span className="jc-muted-sm">CHF</span>
                 </div>
               </div>
             </div>
