@@ -14,14 +14,15 @@ type OfferStatus = "En cours" | "Envoyée" | "Acceptée" | "Refusée";
 type ShopifyItem = {
   id: string;
   sku: string;
-  variant: string;   // "Titre produit / Variante"
-  price: string;     // "949.00"
+  variant: string;
+  price: string;
   stock: number | null;
   productUrl: string;
   variantImage: string;
   image1: string;
   image2: string;
   image3: string;
+  delaiLivraison?: string;
 };
 
 type QuoteLine = {
@@ -44,6 +45,7 @@ type DraftSnapshot = {
   date: string;
   commercial: string;
   offerNumber: string;
+  reference: string;
   societe: string;
   nom: string;
   prenom: string;
@@ -54,6 +56,11 @@ type DraftSnapshot = {
   telephone1: string;
   telephone2: string;
   email: string;
+  livrDiff: boolean;
+  livrRue: string;
+  livrNumero: string;
+  livrNpa: string;
+  livrVille: string;
   lines: QuoteLine[];
   discount: string;
   discountPercent: string;
@@ -157,6 +164,16 @@ export default function JardinConfortV7() {
   const [telephone1, setTelephone1]   = useState("");
   const [telephone2, setTelephone2]   = useState("");
   const [email, setEmail]             = useState("");
+
+  // Adresse de livraison (si différente)
+  const [livrDiff, setLivrDiff]       = useState(false);
+  const [livrRue, setLivrRue]         = useState("");
+  const [livrNumero, setLivrNumero]   = useState("");
+  const [livrNpa, setLivrNpa]         = useState("");
+  const [livrVille, setLivrVille]     = useState("");
+
+  // Référence commande
+  const [reference, setReference]     = useState("");
 
   const [search, setSearch]           = useState("");
   // ── Moteur de recherche Shopify réel ──
@@ -336,7 +353,7 @@ export default function JardinConfortV7() {
   }
 
   function makeSnapshot(): DraftSnapshot {
-    return { formType, clientType, paymentMode, offerStatus, date, commercial, offerNumber, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, conditionsGenerales, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
+    return { formType, clientType, paymentMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrRue, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, conditionsGenerales, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
   function saveDraftLocal() {
@@ -350,9 +367,12 @@ export default function JardinConfortV7() {
     const s: DraftSnapshot = JSON.parse(raw);
     setFormType(s.formType); setClientType(s.clientType); setPaymentMode(s.paymentMode);
     setOfferStatus(s.offerStatus || "En cours"); setDate(s.date); setCommercial(s.commercial);
-    setOfferNumber(s.offerNumber); setSociete(s.societe); setNom(s.nom); setPrenom(s.prenom);
+    setOfferNumber(s.offerNumber); setReference(s.reference || "");
+    setSociete(s.societe); setNom(s.nom); setPrenom(s.prenom);
     setRue(s.rue); setNumero(s.numero); setNpa(s.npa); setVille(s.ville);
     setTelephone1(s.telephone1); setTelephone2(s.telephone2); setEmail(s.email);
+    setLivrDiff(s.livrDiff || false); setLivrRue(s.livrRue || "");
+    setLivrNumero(s.livrNumero || ""); setLivrNpa(s.livrNpa || ""); setLivrVille(s.livrVille || "");
     setLines(cloneLines(s.lines)); setDiscount(s.discount); setDiscountPercent(s.discountPercent || "0");
     setRemarks(s.remarks); setNotesInternes(s.notesInternes || "");
     setConditionsGenerales(s.conditionsGenerales || "");
@@ -365,8 +385,10 @@ export default function JardinConfortV7() {
   function resetForm() {
     setFormType("Offre"); setClientType("Privé (prix TTC)"); setPaymentMode("Paiement d'avance à la commande");
     setOfferStatus("En cours"); setDate(todayForInput()); setOfferNumber(generateOfferNumber());
-    setSociete(""); setNom(""); setPrenom(""); setRue(""); setNumero(""); setNpa(""); setVille("");
-    setTelephone1(""); setTelephone2(""); setEmail(""); setLines([]); setDiscount("0");
+    setReference(""); setSociete(""); setNom(""); setPrenom(""); setRue(""); setNumero(""); setNpa(""); setVille("");
+    setTelephone1(""); setTelephone2(""); setEmail("");
+    setLivrDiff(false); setLivrRue(""); setLivrNumero(""); setLivrNpa(""); setLivrVille("");
+    setLines([]); setDiscount("0");
     setDiscountPercent("0"); setRemarks(""); setNotesInternes(""); setAmbianceImages([]);
     setLeadTime("25-30 jours"); setRoundingStr("");
     setEnabledServices({ ...initialEnabledServices }); setServicePrices({ ...initialServicePrices });
@@ -472,6 +494,10 @@ export default function JardinConfortV7() {
               <div className="jc-field jc-field-grow">
                 <label>Numéro</label>
                 <input value={offerNumber} onChange={(e) => setOfferNumber(e.target.value)} />
+              </div>
+              <div className="jc-field jc-field-grow">
+                <label>Référence client</label>
+                <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Ex: Bon de commande, Ref. interne…" />
               </div>
             </div>
           </div>
@@ -585,6 +611,40 @@ export default function JardinConfortV7() {
               <input value={leadTime} onChange={(e) => setLeadTime(e.target.value)} />
             </div>
           </div>
+
+          {/* Adresse de livraison */}
+          <div className="jc-livr-toggle mt12 screenOnly">
+            <label className="jc-check-label">
+              <input type="checkbox" checked={livrDiff} onChange={(e) => {
+                setLivrDiff(e.target.checked);
+                if (e.target.checked && !livrRue) {
+                  setLivrRue(rue); setLivrNumero(numero); setLivrNpa(npa); setLivrVille(ville);
+                }
+              }} />
+              <span>Adresse de livraison différente de l'adresse de facturation</span>
+            </label>
+          </div>
+          {livrDiff && (
+            <div className="jc-grid jc-g-addr mt12">
+              <div className="jc-field">
+                <label>Rue livraison</label>
+                <input value={livrRue} onChange={(e) => setLivrRue(e.target.value)} placeholder="Rue de la livraison" />
+              </div>
+              <div className="jc-field">
+                <label>No</label>
+                <input value={livrNumero} onChange={(e) => setLivrNumero(e.target.value)} placeholder="12" />
+              </div>
+              <div className="jc-field">
+                <label>NPA</label>
+                <input inputMode="numeric" maxLength={4} value={livrNpa} onChange={(e) => setLivrNpa(sanitizeNpa(e.target.value))} placeholder="1000" />
+              </div>
+              <div className="jc-field">
+                <label>Ville livraison</label>
+                <input value={livrVille} onChange={(e) => setLivrVille(e.target.value)} placeholder="Genève" />
+              </div>
+            </div>
+          )}
+
           <div className="jc-validation-row">
             <span className={isFormValid ? "jc-ok" : "jc-warn"}>
               {isFormValid ? "✓ Champs obligatoires remplis" : `⚠ Manquants : ${[missingRequired.commercial && "Commercial", missingRequired.nom && "Nom", missingRequired.ville && "Ville", missingRequired.email && "Email"].filter(Boolean).join(", ")}`}
@@ -701,6 +761,10 @@ export default function JardinConfortV7() {
                               )}
                             </div>
                             <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-open-link">Ouvrir sur la boutique ↗</a>
+                            {/* Délai de livraison basé sur les tags */}
+                            {item.stock === 0 && item.delaiLivraison && (
+                              <div className="jc-shopify-delai">{item.delaiLivraison}</div>
+                            )}
                           </div>
 
                           {/* Bouton ajouter */}
@@ -941,50 +1005,14 @@ export default function JardinConfortV7() {
             <div className="jc-section-title">Informations complémentaires</div>
             <div className="jc-field">
               <label>Remarques <span className="jc-label-hint">(visibles sur le document)</span></label>
-              <div className="jc-editor-wrap screenOnly">
-                <div className="jc-editor-toolbar">
-                  <button type="button" className="jc-editor-btn" title="Gras"
-                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("bold"); }}>
-                    <strong>G</strong>
-                  </button>
-                  <button type="button" className="jc-editor-btn" title="Italique"
-                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("italic"); }}>
-                    <em>I</em>
-                  </button>
-                  <button type="button" className="jc-editor-btn" title="Souligné"
-                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("underline"); }}>
-                    <u>U</u>
-                  </button>
-                  <div className="jc-editor-sep" />
-                  <button type="button" className="jc-editor-btn" title="Texte rouge"
-                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("foreColor", false, "#ef4444"); }}>
-                    <strong style={{color:"#ef4444"}}>R</strong>
-                  </button>
-                  <button type="button" className="jc-editor-btn" title="Texte orange"
-                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("foreColor", false, "#f59e0b"); }}>
-                    <strong style={{color:"#f59e0b"}}>O</strong>
-                  </button>
-                  <button type="button" className="jc-editor-btn" title="Effacer format"
-                    onMouseDown={(e) => { e.preventDefault(); remarksEditorRef.current?.focus(); document.execCommand("removeFormat"); }}>
-                    ✕ fmt
-                  </button>
-                </div>
-                <div
-                  ref={remarksEditorRef}
-                  className="jc-editor-content"
-                  contentEditable
-                  suppressContentEditableWarning
-                  dir="ltr"
-                  onInput={(e) => {
-                    const el = e.currentTarget;
-                    el.style.setProperty("direction", "ltr", "important");
-                    el.style.setProperty("text-align", "left", "important");
-                    setRemarks(el.innerHTML);
-                  }}
-                  dangerouslySetInnerHTML={{ __html: remarks }}
-                />
-              </div>
-              <div className="printOnly jc-remarks-print" dangerouslySetInnerHTML={{ __html: remarks }} />
+              <textarea
+                rows={5}
+                dir="ltr"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Notes pour le client, conditions spéciales…"
+              />
+              <div className="printOnly jc-remarks-print">{remarks}</div>
             </div>
 
             {/* Notes internes — screenOnly, jamais imprimées */}
@@ -1427,7 +1455,7 @@ export default function JardinConfortV7() {
         .jc-header-left, .jc-header-right { display: flex; flex-direction: column; gap: 16px; }
         .jc-brand { font-size: 24px; font-weight: 900; letter-spacing: 0.02em; color: var(--text); font-family: 'Arial Black', 'Arial Bold', Arial, sans-serif; }
         .jc-brand-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-        .jc-doc-meta { display: grid; grid-template-columns: 180px 160px 1fr; gap: 10px; }
+        .jc-doc-meta { display: grid; grid-template-columns: 160px 150px 1fr 1fr; gap: 10px; }
         .jc-field-grow { flex: 1; }
 
         /* ── STATUS CHIPS ── */
@@ -1843,6 +1871,18 @@ export default function JardinConfortV7() {
         .jc-shopify-stock-link { color: var(--accent); font-size: 12px; font-weight: 700; text-decoration: underline; }
         .jc-shopify-open-link { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
         .jc-shopify-open-link:hover { color: var(--accent); }
+        .jc-shopify-delai {
+          margin-top: 4px;
+          font-size: 11px; font-weight: 700;
+          color: #f59e0b;
+          background: rgba(245,158,11,0.1);
+          border: 1px solid rgba(245,158,11,0.25);
+          border-radius: 4px;
+          padding: 3px 6px;
+        }
+
+        /* Adresse livraison */
+        .jc-livr-toggle { padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: rgba(255,255,255,0.02); }
         .jc-stock-zero { color: var(--danger); font-weight: 700; font-size: 12px; }
         .jc-stock-cmd { color: #f59e0b; font-weight: 700; font-size: 12px; }
 

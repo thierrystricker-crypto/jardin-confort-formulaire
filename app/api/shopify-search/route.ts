@@ -9,6 +9,7 @@ type ShopifyProduct = {
   title: string;
   handle: string;
   onlineStoreUrl: string | null;
+  tags: string[]; // ← tags pour délais de livraison
   images?: {
     nodes?: Array<{
       url: string;
@@ -81,6 +82,7 @@ type ResultItem = {
   image1: string;
   image2: string;
   image3: string;
+  delaiLivraison: string; // ← délai basé sur les tags
 };
 
 let cachedAdminToken: string | null = null;
@@ -103,6 +105,7 @@ async function runStorefrontSearch(query: string): Promise<ShopifyProduct[]> {
             title
             handle
             onlineStoreUrl
+            tags
             images(first: 4) {
               nodes {
                 url
@@ -223,10 +226,23 @@ async function getAdminAvailableBySku(skus: string[]) {
   return map;
 }
 
+// ── Décoder les tags Shopify en délai de livraison ──
+function getDelaiFromTags(tags: string[]): string {
+  if (tags.includes('10weeks')) return 'Sur commande ✓ Délai 10-12 semaines';
+  if (tags.includes('6weeks'))  return 'Sur commande ✓ Délai 6-8 semaines';
+  if (tags.includes('5weeks'))  return 'Sur commande ✓ Délai 5-6 semaines';
+  if (tags.includes('4weeks'))  return 'Sur commande ✓ Délai 4-5 semaines';
+  if (tags.includes('3weeks'))  return 'Sur commande ✓ Délai 3-4 semaines';
+  if (tags.includes('2weeks'))  return 'Sur commande ✓ Délai 2-3 semaines';
+  if (tags.includes('1week'))   return 'Sur commande ✓ Délai 1-2 semaines';
+  return 'Sur commande ✓';
+}
+
 function buildStorefrontItems(products: ShopifyProduct[], words: string[]): ResultItem[] {
   return products.flatMap((product) => {
     const productImages = product.images?.nodes ?? [];
     const variants = product.variants?.nodes ?? [];
+    const delaiLivraison = getDelaiFromTags(product.tags ?? []);
 
     return variants
       .filter((variant) => {
@@ -253,6 +269,7 @@ function buildStorefrontItems(products: ShopifyProduct[], words: string[]): Resu
           image1: productImages[1]?.url || '',
           image2: productImages[2]?.url || '',
           image3: productImages[3]?.url || '',
+          delaiLivraison,
         };
       });
   });
