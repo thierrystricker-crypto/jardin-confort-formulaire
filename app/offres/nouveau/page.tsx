@@ -226,11 +226,10 @@ export default function JardinConfortV7() {
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const remarksEditorRef = useRef<HTMLDivElement | null>(null);
   const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const addrCacheRef = useRef<Map<string, AddrSuggestion[]>>(new Map());
 
-  // ── Autocomplétion adresse suisse via Nominatim (OpenStreetMap, gratuit, sans clé) ──
-  // Retourne rue, numéro, NPA et ville séparément
   type AddrSuggestion = {
-    label: string;
+    label: string;   // "Route de Lavaux 12, 1095 Lutry"
     road?: string;
     houseNumber?: string;
     postcode?: string;
@@ -239,27 +238,54 @@ export default function JardinConfortV7() {
 
   async function fetchAddressSuggestions(query: string) {
     if (query.length < 3) { setAddrSuggestions([]); return; }
+
+    // Cache local pour éviter les appels répétés
+    const cached = addrCacheRef.current.get(query);
+    if (cached) { setAddrSuggestions(cached); return; }
+
     try {
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=ch&format=json&addressdetails=1&limit=6&accept-language=fr`,
+        `https://nominatim.openstreetmap.org/search` +
+        `?q=${encodeURIComponent(query)}` +
+        `&countrycodes=ch&format=json&addressdetails=1&limit=6&accept-language=fr` +
+        `&featuretype=street`,
         { headers: { "User-Agent": "JardinConfort-Formulaire/1.0" } }
       );
       const json = await res.json();
-      const results: AddrSuggestion[] = (json || []).map((r: {
-        display_name: string;
-        address: { road?: string; house_number?: string; postcode?: string; city?: string; town?: string; village?: string; municipality?: string };
-      }) => {
-        const a = r.address || {};
-        const city = a.city || a.town || a.village || a.municipality || "";
-        return {
-          label: r.display_name.split(",").slice(0, 3).join(", "),
-          road: a.road,
-          houseNumber: a.house_number,
-          postcode: a.postcode ? a.postcode.slice(0, 4) : undefined,
-          city,
-        };
-      }).filter((r: AddrSuggestion) => r.road); // garder seulement les résultats avec une rue
-      setAddrSuggestions(results);
+
+      const results: AddrSuggestion[] = (json || [])
+        .map((r: {
+          address: {
+            road?: string;
+            house_number?: string;
+            postcode?: string;
+            city?: string; town?: string; village?: string; municipality?: string;
+          };
+        }) => {
+          const a = r.address || {};
+          const city = a.city || a.town || a.village || a.municipality || "";
+          const postcode = a.postcode ? a.postcode.slice(0, 4) : "";
+          const road = a.road || "";
+          const hn = a.house_number || "";
+          // Format : "Route de Lavaux 12, 1095 Lutry"
+          const label = [
+            road + (hn ? " " + hn : ""),
+            postcode && city ? postcode + " " + city : city
+          ].filter(Boolean).join(", ");
+          return { label, road, houseNumber: hn || undefined, postcode: postcode || undefined, city: city || undefined };
+        })
+        .filter((r: AddrSuggestion) => r.road && r.city);
+
+      // Dédoublonner par label
+      const seen = new Set<string>();
+      const unique = results.filter((r: AddrSuggestion) => {
+        if (seen.has(r.label)) return false;
+        seen.add(r.label);
+        return true;
+      });
+
+      addrCacheRef.current.set(query, unique);
+      setAddrSuggestions(unique);
     } catch { setAddrSuggestions([]); }
   }
 
@@ -267,7 +293,7 @@ export default function JardinConfortV7() {
     setRue(val);
     setAddrQuery(val);
     if (addrDebounceRef.current) clearTimeout(addrDebounceRef.current);
-    addrDebounceRef.current = setTimeout(() => fetchAddressSuggestions(val), 400);
+    addrDebounceRef.current = setTimeout(() => fetchAddressSuggestions(val), 500);
   }
 
   function applyAddrSuggestion(s: AddrSuggestion) {
@@ -1154,10 +1180,10 @@ export default function JardinConfortV7() {
                 <div
                   className="jc-service-row"
                   key={srv.code}
-                  onClick={() => setEnabledServices((c) => ({ ...c, [srv.code]: !c[srv.code] }))}
                 >
-                  <label className="jc-check-label" onClick={(e) => e.stopPropagation()}>
+                  <label className="jc-check-label jc-check-label-full" htmlFor={`srv-${srv.code}`}>
                     <input
+                      id={`srv-${srv.code}`}
                       type="checkbox"
                       checked={enabledServices[srv.code]}
                       onChange={(e) => setEnabledServices((c) => ({ ...c, [srv.code]: e.target.checked }))}
@@ -1795,7 +1821,8 @@ export default function JardinConfortV7() {
         .jc-service-price { width: 80px; text-align: right; }
         .jc-service-free { font-size: 12px; color: var(--text-dim); font-style: italic; }
         .jc-check-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; }
-        .jc-check-label input { width: 15px; height: 15px; flex-shrink: 0; }
+        .jc-check-label-full { width: 100%; padding: 2px 0; }
+        .jc-check-label input { width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; }
 
         /* ── TOTALS ── */
         .jc-total-card { position: sticky; top: 12px; }
