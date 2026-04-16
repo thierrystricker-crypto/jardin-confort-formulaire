@@ -26,13 +26,14 @@ type ShopifyItem = {
 
 type QuoteLine = {
   id: string;
-  type: "product" | "custom";
+  type: "product" | "custom" | "comment"; // comment = ligne de texte sans prix
   image?: string;
   sku: string;
   title: string;
   unitPrice: number;
   qty: number;
-  stock?: number | null | "sur_commande"; // null = inconnu, number = qty, "sur_commande" = hors stock
+  stock?: number | null | "sur_commande";
+  lineDiscount?: number; // remise en CHF sur cette ligne uniquement
 };
 
 type DraftSnapshot = {
@@ -228,7 +229,14 @@ export default function JardinConfortV7() {
     return () => { clearTimeout(timer); controller.abort(); };
   }, [search]);
 
-  const subTotal = useMemo(() => lines.reduce((s, l) => s + l.qty * l.unitPrice, 0), [lines]);
+  const subTotal = useMemo(() =>
+    lines.reduce((s, l) => {
+      if (l.type === "comment") return s;
+      const lineTotal = l.qty * l.unitPrice - (l.lineDiscount || 0);
+      return s + lineTotal;
+    }, 0),
+    [lines]
+  );
 
   const discountValue = useMemo(() => {
     const pct = Number(discountPercent || 0);
@@ -726,7 +734,19 @@ export default function JardinConfortV7() {
         <section className="jc-card">
           <div className="jc-section-title-row">
             <div className="jc-section-title">Lignes de l'offre</div>
-            <span className="jc-badge screenOnly">{lines.length} article{lines.length !== 1 ? "s" : ""}</span>
+            <div style={{display:"flex", gap:8, alignItems:"center"}}>
+              <button
+                className="jc-btn jc-btn-ghost screenOnly"
+                style={{fontSize:12, padding:"5px 12px"}}
+                onClick={() => {
+                  captureUndo();
+                  const id = `comment-${Date.now()}`;
+                  setLines((c) => [...c, { id, type: "comment", sku: "", title: "", unitPrice: 0, qty: 1 }]);
+                  highlightAdded(id);
+                }}
+              >💬 Ligne commentaire</button>
+              <span className="jc-badge screenOnly">{lines.filter(l => l.type !== "comment").length} article{lines.filter(l => l.type !== "comment").length !== 1 ? "s" : ""}</span>
+            </div>
           </div>
           <p className="jc-drag-hint screenOnly">⬆⬇ Glisser-déposer pour réordonner</p>
           <div className="jc-table-wrap">
@@ -746,72 +766,122 @@ export default function JardinConfortV7() {
               </thead>
               <tbody>
                 {lines.length === 0 && (
-                  <tr><td colSpan={8} className="jc-empty-row">Aucun article — utilisez la section ci-dessus</td></tr>
+                  <tr><td colSpan={9} className="jc-empty-row">Aucun article — utilisez la section ci-dessus</td></tr>
                 )}
-                {lines.map((line, idx) => (
-                  <tr
-                    key={line.id}
-                    draggable
-                    onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", line.id); setDraggedLineId(line.id); }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => { e.preventDefault(); const from = e.dataTransfer.getData("text/plain") || draggedLineId; if (from) reorderLines(from, line.id); setDraggedLineId(null); }}
-                    onDragEnd={() => setDraggedLineId(null)}
-                    className={[idx % 2 === 0 ? "tr-even" : "tr-odd", draggedLineId === line.id ? "tr-dragging" : "", justAddedLineId === line.id ? "tr-added" : ""].join(" ")}
-                  >
-                    <td className="td-num">{idx + 1}</td>
-                    <td className="td-img-cell">
-                      <label className="jc-line-img-label screenOnly" title="Changer l'image">
-                        <div className="jc-line-img" onDragOver={(e) => e.preventDefault()} onDrop={(e) => onLineImageDrop(line.id, e)}>
-                          {line.image ? <img src={line.image} alt="" /> : <span className="jc-line-img-placeholder">📷</span>}
-                          <div className="jc-line-img-overlay">✎</div>
-                        </div>
-                        <input type="file" accept="image/*" style={{display:"none"}} onChange={(e) => onLineImageChange(line.id, e.target.files?.[0])} />
-                      </label>
-                      {/* Print : image seule sans bouton */}
-                      <div className="printOnly jc-line-img">
-                        {line.image ? <img src={line.image} alt="" /> : null}
-                      </div>
-                    </td>
-                    <td style={{ paddingRight: 16 }}><input className="jc-qty-input no-spin" type="number" min="1" value={line.qty} onChange={(e) => updateLine(line.id, { qty: Math.max(1, parseInt(e.target.value || "1", 10)) })} /></td>
-                    <td style={{ paddingLeft: 12 }}><input className="jc-cell-input jc-sku-input" value={line.sku} onChange={(e) => updateLine(line.id, { sku: e.target.value })} /></td>
-                    <td><input className="jc-cell-input jc-title-input" value={line.title} onChange={(e) => updateLine(line.id, { title: e.target.value })} /></td>
-                    <td><input className="jc-cell-input jc-price-input no-spin" type="number" step="0.01" value={line.unitPrice} onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value || 0) })} /></td>
-                    <td className="td-money">{formatMoney(line.qty * line.unitPrice)}</td>
-                    {/* Colonne stock */}
-                    <td className="td-stock">
-                      {line.stock === undefined || line.stock === null ? (
-                        <input className="jc-cell-input jc-stock-input no-spin" type="number" min="0" placeholder="—"
-                          onChange={(e) => updateLine(line.id, { stock: e.target.value === "" ? null : parseInt(e.target.value) })} />
-                      ) : line.stock === "sur_commande" ? (
-                        <span className="jc-stock-cmd">Sur commande</span>
+                {lines.map((line, idx) => {
+                  const isComment = line.type === "comment";
+                  const lineTotal = isComment ? 0 : line.qty * line.unitPrice - (line.lineDiscount || 0);
+
+                  return (
+                    <tr
+                      key={line.id}
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", line.id); setDraggedLineId(line.id); }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => { e.preventDefault(); const from = e.dataTransfer.getData("text/plain") || draggedLineId; if (from) reorderLines(from, line.id); setDraggedLineId(null); }}
+                      onDragEnd={() => setDraggedLineId(null)}
+                      className={[
+                        isComment ? "tr-comment" : idx % 2 === 0 ? "tr-even" : "tr-odd",
+                        draggedLineId === line.id ? "tr-dragging" : "",
+                        justAddedLineId === line.id ? "tr-added" : "",
+                      ].join(" ")}
+                    >
+                      <td className="td-num">{isComment ? "💬" : idx + 1}</td>
+
+                      {isComment ? (
+                        /* ── Ligne commentaire : s'étend sur toute la largeur ── */
+                        <td colSpan={7} className="td-comment-cell">
+                          <input
+                            className="jc-cell-input jc-comment-input"
+                            value={line.title}
+                            placeholder="Commentaire, note ou texte libre…"
+                            onChange={(e) => updateLine(line.id, { title: e.target.value })}
+                          />
+                        </td>
                       ) : (
-                        <span className={line.stock > 2 ? "jc-stock-ok" : line.stock > 0 ? "jc-stock-low" : "jc-stock-cmd"}>
-                          {line.stock === 0 ? "Sur commande" : `${line.stock} pce${line.stock > 1 ? "s" : ""}`}
-                        </span>
+                        <>
+                          <td className="td-img-cell">
+                            <label className="jc-line-img-label screenOnly" title="Changer l'image">
+                              <div className="jc-line-img" onDragOver={(e) => e.preventDefault()} onDrop={(e) => onLineImageDrop(line.id, e)}>
+                                {line.image ? <img src={line.image} alt="" /> : <span className="jc-line-img-placeholder">📷</span>}
+                                <div className="jc-line-img-overlay">✎</div>
+                              </div>
+                              <input type="file" accept="image/*" style={{display:"none"}} onChange={(e) => onLineImageChange(line.id, e.target.files?.[0])} />
+                            </label>
+                            <div className="printOnly jc-line-img">
+                              {line.image ? <img src={line.image} alt="" /> : null}
+                            </div>
+                          </td>
+                          <td style={{ paddingRight: 16 }}>
+                            <input className="jc-qty-input no-spin" type="number" min="1" value={line.qty} onChange={(e) => updateLine(line.id, { qty: Math.max(1, parseInt(e.target.value || "1", 10)) })} />
+                          </td>
+                          <td style={{ paddingLeft: 12 }}>
+                            <input className="jc-cell-input jc-sku-input" value={line.sku} onChange={(e) => updateLine(line.id, { sku: e.target.value })} />
+                          </td>
+                          <td>
+                            <input className="jc-cell-input jc-title-input" value={line.title} onChange={(e) => updateLine(line.id, { title: e.target.value })} />
+                          </td>
+                          <td>
+                            <div className="jc-price-cell">
+                              <input className="jc-cell-input jc-price-input no-spin" type="number" step="0.01" value={line.unitPrice} onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value || 0) })} />
+                              {/* Remise par ligne */}
+                              <div className="jc-line-discount-wrap">
+                                <span className="jc-line-discount-label">−</span>
+                                <input
+                                  className="jc-cell-input jc-line-discount-input no-spin"
+                                  type="number" step="0.01" min="0"
+                                  placeholder="0"
+                                  value={line.lineDiscount || ""}
+                                  title="Remise sur cette ligne (CHF)"
+                                  onChange={(e) => updateLine(line.id, { lineDiscount: e.target.value === "" ? 0 : Number(e.target.value) })}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="td-money">
+                            {formatMoney(lineTotal)}
+                            {(line.lineDiscount || 0) > 0 && (
+                              <div className="jc-line-discount-shown">− {formatMoney(line.lineDiscount || 0)}</div>
+                            )}
+                          </td>
+                          {/* Colonne stock */}
+                          <td className="td-stock">
+                            {line.stock === undefined || line.stock === null ? (
+                              <input className="jc-cell-input jc-stock-input no-spin" type="number" min="0" placeholder="—"
+                                onChange={(e) => updateLine(line.id, { stock: e.target.value === "" ? null : parseInt(e.target.value) })} />
+                            ) : line.stock === "sur_commande" ? (
+                              <span className="jc-stock-cmd">Sur commande</span>
+                            ) : (
+                              <span className={line.stock > 2 ? "jc-stock-ok" : line.stock > 0 ? "jc-stock-low" : "jc-stock-cmd"}>
+                                {line.stock === 0 ? "Sur commande" : `${line.stock} pce${line.stock > 1 ? "s" : ""}`}
+                              </span>
+                            )}
+                          </td>
+                        </>
                       )}
-                    </td>
-                    <td className="screenOnly">
-                      <div className="jc-action-btns">
-                        <button
-                          className="jc-dup-btn"
-                          title="Dupliquer la ligne"
-                          onClick={() => {
-                            captureUndo();
-                            const newId = `dup-${Date.now()}`;
-                            setLines((c) => {
-                              const idx2 = c.findIndex((l) => l.id === line.id);
-                              const clone2 = [...c];
-                              clone2.splice(idx2 + 1, 0, { ...line, id: newId });
-                              return clone2;
-                            });
-                            highlightAdded(newId);
-                          }}
-                        >⧉</button>
-                        <button className="jc-trash-btn" onClick={() => removeLine(line.id)}>🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+
+                      <td className="screenOnly">
+                        <div className="jc-action-btns">
+                          <button
+                            className="jc-dup-btn" title="Dupliquer"
+                            onClick={() => {
+                              captureUndo();
+                              const newId = `dup-${Date.now()}`;
+                              setLines((c) => {
+                                const idx2 = c.findIndex((l) => l.id === line.id);
+                                const clone2 = [...c];
+                                clone2.splice(idx2 + 1, 0, { ...line, id: newId });
+                                return clone2;
+                              });
+                              highlightAdded(newId);
+                            }}
+                          >⧉</button>
+                          <button className="jc-trash-btn" onClick={() => removeLine(line.id)}>🗑</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -852,6 +922,8 @@ export default function JardinConfortV7() {
                   className="jc-editor-content"
                   contentEditable
                   suppressContentEditableWarning
+                  dir="ltr"
+                  style={{ direction: "ltr", textAlign: "left", unicodeBidi: "plaintext" }}
                   onInput={(e) => setRemarks((e.target as HTMLDivElement).innerHTML)}
                   dangerouslySetInnerHTML={{ __html: remarks }}
                 />
@@ -1717,6 +1789,63 @@ export default function JardinConfortV7() {
         .td-stock { text-align: center; vertical-align: middle; }
         .jc-stock-input { width: 70px; text-align: center; }
 
+        /* ── ÉDITEUR REMARQUES — forcer LTR ── */
+        .jc-editor-content {
+          min-height: 90px;
+          padding: 10px 12px;
+          background: var(--card-2);
+          color: var(--text);
+          font-size: 14px;
+          line-height: 1.6;
+          outline: none;
+          direction: ltr !important;
+          text-align: left !important;
+          unicode-bidi: plaintext;
+        }
+
+        /* ── LIGNE COMMENTAIRE ── */
+        .tr-comment td {
+          background: rgba(96,165,250,0.06) !important;
+          border-color: rgba(96,165,250,0.15) !important;
+        }
+        .td-comment-cell { padding: 8px 10px; }
+        .jc-comment-input {
+          width: 100%;
+          font-style: italic;
+          color: var(--text-muted) !important;
+          background: transparent !important;
+          border: 1px dashed rgba(96,165,250,0.3) !important;
+        }
+        .jc-comment-input:focus {
+          color: var(--text) !important;
+          font-style: normal;
+          border-color: var(--accent) !important;
+        }
+
+        /* ── REMISE PAR LIGNE ── */
+        .jc-price-cell { display: flex; flex-direction: column; gap: 4px; }
+        .jc-line-discount-wrap {
+          display: flex; align-items: center; gap: 4px;
+        }
+        .jc-line-discount-label {
+          font-size: 12px; color: var(--ok); font-weight: 700; flex-shrink: 0;
+        }
+        .jc-line-discount-input {
+          width: 72px !important;
+          font-size: 12px !important;
+          padding: 4px 6px !important;
+          background: rgba(74,222,128,0.05) !important;
+          border-color: rgba(74,222,128,0.2) !important;
+          color: var(--ok) !important;
+        }
+        .jc-line-discount-input:focus {
+          border-color: var(--ok) !important;
+          box-shadow: 0 0 0 2px rgba(74,222,128,0.15) !important;
+        }
+        .jc-line-discount-shown {
+          font-size: 11px; color: var(--ok); text-align: right; margin-top: 2px;
+        }
+
         /* ── BOUTONS NAVIGATION FLOTTANTS ── */
         .jc-scroll-btns {
           position: fixed;
@@ -1787,29 +1916,6 @@ export default function JardinConfortV7() {
         }
         .jc-editor-btn:hover { background: var(--border); color: var(--text); border-color: var(--border-2); }
         .jc-editor-sep { width: 1px; height: 18px; background: var(--border-2); margin: 0 4px; }
-        .jc-editor-content {
-          min-height: 90px;
-          padding: 10px 12px;
-          background: var(--card-2);
-          color: var(--text);
-          font-size: 14px;
-          line-height: 1.6;
-          outline: none;
-        }
-        .jc-editor-content:focus { background: var(--card-2); }
-        .jc-editor-content:empty::before {
-          content: "Notes pour le client, conditions spéciales…";
-          color: var(--text-muted);
-          opacity: 0.6;
-          font-style: italic;
-          pointer-events: none;
-        }
-        .jc-remarks-print {
-          font-size: 13px;
-          line-height: 1.6;
-          padding: 8px 0;
-          color: #111;
-        }
         .light-mode .jc-editor-content { color: #111827; }
         .light-mode .jc-editor-toolbar { background: #e8eaed; border-color: rgba(0,0,0,0.1); }
         .light-mode .jc-editor-btn { color: #52576b; }
