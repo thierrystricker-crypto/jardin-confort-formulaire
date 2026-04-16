@@ -305,7 +305,6 @@ export default function JardinConfortV7() {
   }
 
   function addCustomLine() {
-    if (!customTitle.trim()) return;
     captureUndo();
     const id = `custom-${Date.now()}`;
     const stockParsed = customStock.trim() === "" ? null : parseInt(customStock, 10);
@@ -738,7 +737,7 @@ export default function JardinConfortV7() {
         </section>
 
         {/* ── TABLEAU ── */}
-        <section className="jc-card">
+        <section className="jc-card jc-lines-card">
           <div className="jc-section-title-row">
             <div className="jc-section-title">Lignes de l'offre</div>
             <div style={{display:"flex", gap:8, alignItems:"center"}}>
@@ -815,6 +814,14 @@ export default function JardinConfortV7() {
                               </div>
                               <input type="file" accept="image/*" style={{display:"none"}} onChange={(e) => onLineImageChange(line.id, e.target.files?.[0])} />
                             </label>
+                            {/* Croix pour supprimer l'image */}
+                            {line.image && (
+                              <button
+                                className="jc-img-clear-btn screenOnly"
+                                title="Supprimer l'image"
+                                onClick={(e) => { e.stopPropagation(); updateLine(line.id, { image: "" }); }}
+                              >✕</button>
+                            )}
                             <div className="printOnly jc-line-img">
                               {line.image ? <img src={line.image} alt="" /> : null}
                             </div>
@@ -907,58 +914,17 @@ export default function JardinConfortV7() {
             <div className="jc-section-title">Informations complémentaires</div>
             <div className="jc-field">
               <label>Remarques <span className="jc-label-hint">(visibles sur le document)</span></label>
-              {/* Mini-toolbar éditeur */}
-              <div className="jc-editor-wrap screenOnly">
-                <div className="jc-editor-toolbar">
-                  <button type="button" className="jc-editor-btn" title="Gras" onMouseDown={(e) => { e.preventDefault(); document.execCommand("bold"); }}>
-                    <strong>G</strong>
-                  </button>
-                  <button type="button" className="jc-editor-btn" title="Italique" onMouseDown={(e) => { e.preventDefault(); document.execCommand("italic"); }}>
-                    <em>I</em>
-                  </button>
-                  <button type="button" className="jc-editor-btn" title="Souligné" onMouseDown={(e) => { e.preventDefault(); document.execCommand("underline"); }}>
-                    <u>U</u>
-                  </button>
-                  <div className="jc-editor-sep" />
-                  <button type="button" className="jc-editor-btn jc-editor-btn-red" title="Texte rouge" onMouseDown={(e) => { e.preventDefault(); document.execCommand("foreColor", false, "#ef4444"); }}>
-                    <strong style={{color:"#ef4444"}}>R</strong>
-                  </button>
-                  <button type="button" className="jc-editor-btn jc-editor-btn-orange" title="Texte orange" onMouseDown={(e) => { e.preventDefault(); document.execCommand("foreColor", false, "#f59e0b"); }}>
-                    <strong style={{color:"#f59e0b"}}>O</strong>
-                  </button>
-                  <button type="button" className="jc-editor-btn" title="Couleur normale" onMouseDown={(e) => { e.preventDefault(); document.execCommand("removeFormat"); }}>
-                    ✕ fmt
-                  </button>
-                </div>
-                <div
-                  ref={remarksEditorRef}
-                  className="jc-editor-content"
-                  contentEditable
-                  suppressContentEditableWarning
-                  dir="ltr"
-                  lang="fr"
-                  spellCheck={false}
-                  onFocus={() => {
-                    if (remarksEditorRef.current) {
-                      remarksEditorRef.current.style.direction = "ltr";
-                      remarksEditorRef.current.style.textAlign = "left";
-                    }
-                  }}
-                  onKeyDown={() => {
-                    if (remarksEditorRef.current) {
-                      remarksEditorRef.current.style.direction = "ltr";
-                    }
-                  }}
-                  onInput={(e) => {
-                    const el = e.target as HTMLDivElement;
-                    el.style.direction = "ltr";
-                    setRemarks(el.innerHTML);
-                  }}
-                  dangerouslySetInnerHTML={{ __html: remarks }}
-                />
-              </div>
-              {/* Print : afficher le HTML des remarques */}
-              <div className="printOnly jc-remarks-print" dangerouslySetInnerHTML={{ __html: remarks }} />
+              {/* Textarea simple — direction LTR garantie */}
+              <textarea
+                className="jc-remarks-textarea"
+                rows={5}
+                dir="ltr"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Notes pour le client, conditions spéciales…"
+              />
+              {/* Print */}
+              <div className="printOnly jc-remarks-print">{remarks}</div>
             </div>
 
             {/* Notes internes — screenOnly, jamais imprimées */}
@@ -1898,6 +1864,45 @@ export default function JardinConfortV7() {
         /* ── COLONNE STOCK RÉDUITE ── */
         .td-stock { text-align: center; vertical-align: middle; white-space: nowrap; }
         .jc-stock-input { width: 58px !important; text-align: center; font-size: 12px !important; padding: 6px 4px !important; }
+
+        /* ── REMARQUES — textarea simple LTR garanti ── */
+        .jc-remarks-textarea {
+          direction: ltr !important;
+          text-align: left !important;
+          unicode-bidi: normal !important;
+          resize: vertical;
+          width: 100%;
+          font-family: inherit;
+        }
+        .jc-remarks-print { font-size: 13px; line-height: 1.6; padding: 8px 0; color: #111; white-space: pre-wrap; }
+
+        /* ── FOND BLEUTÉ SECTION TABLEAU ── */
+        .jc-card.jc-lines-card {
+          background: rgba(30, 58, 138, 0.08);
+          border-color: rgba(59, 130, 246, 0.15);
+        }
+        .light-mode .jc-card.jc-lines-card {
+          background: rgba(219, 234, 254, 0.4);
+          border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        /* ── CROIX SUPPRESSION IMAGE LIGNE ── */
+        .td-img-cell { width: 82px; vertical-align: middle; position: relative; }
+        .jc-img-clear-btn {
+          display: block;
+          width: 72px;
+          margin-top: 3px;
+          padding: 2px 0;
+          font-size: 10px;
+          text-align: center;
+          background: rgba(248,113,113,0.1);
+          color: var(--danger);
+          border: 1px solid rgba(248,113,113,0.2);
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .jc-img-clear-btn:hover { background: rgba(248,113,113,0.25); }
 
         /* ── BOUTONS NAVIGATION FLOTTANTS ── */
         .jc-scroll-btns {
