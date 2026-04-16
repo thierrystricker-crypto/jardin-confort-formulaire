@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
@@ -88,10 +88,10 @@ const STATUS_CONFIG: Record<OfferStatus, { color: string; bg: string; border: st
 };
 
 function formatMoney(value: number) {
-  return new Intl.NumberFormat("fr-CH", {
-    style: "currency", currency: "CHF",
+  const formatted = new Intl.NumberFormat("fr-CH", {
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(value);
+  return `CHF ${formatted}`;
 }
 
 function todayForInput() { return new Date().toISOString().slice(0, 10); }
@@ -387,18 +387,19 @@ export default function JardinConfortV7() {
     if (raw) setDraftSavedAt("Brouillon local trouvé");
   }, [formType, offerNumber]);
 
-  // ── Forcer LTR sur l'éditeur contentEditable au montage ──
-  useEffect(() => {
+  // ── Forcer LTR sur l'éditeur contentEditable — useLayoutEffect + MutationObserver ──
+  useLayoutEffect(() => {
     const el = remarksEditorRef.current;
     if (!el) return;
-    el.style.direction = "ltr";
-    el.style.textAlign = "left";
-    el.setAttribute("dir", "ltr");
-    // Observer pour maintenir LTR si le navigateur le réinitialise
-    const obs = new MutationObserver(() => {
-      if (el.style.direction !== "ltr") el.style.direction = "ltr";
-    });
-    obs.observe(el, { attributes: true, attributeFilter: ["style"] });
+    const forceLTR = () => {
+      el.style.setProperty("direction", "ltr", "important");
+      el.style.setProperty("text-align", "left", "important");
+      el.style.setProperty("unicode-bidi", "embed", "important");
+      el.setAttribute("dir", "ltr");
+    };
+    forceLTR();
+    const obs = new MutationObserver(forceLTR);
+    obs.observe(el, { attributes: true, attributeFilter: ["style", "dir"] });
     return () => obs.disconnect();
   }, []);
 
@@ -656,7 +657,11 @@ export default function JardinConfortV7() {
                       const stockZero = item.stock !== null && item.stock === 0;
 
                       return (
-                        <div key={item.id} className={`jc-shopify-tile${isFlash ? " jc-product-flash" : ""}`}>
+                        <div key={item.id} className={`jc-shopify-tile${isFlash ? " jc-product-flash" : ""}`} style={{position:"relative"}}>
+                          {/* Flash vert sur toute la tuile */}
+                          {isFlash && (
+                            <div className="jc-product-flash-overlay">✓</div>
+                          )}
                           {/* Images ×4 carrées */}
                           <div className="jc-shopify-imgs">
                             {[item.variantImage, item.image1, item.image2, item.image3].map((src, i) => (
@@ -664,7 +669,6 @@ export default function JardinConfortV7() {
                                 <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="jc-shopify-img-link">
                                   <div className="jc-shopify-img-box">
                                     <img src={src} alt="" />
-                                    {i === 0 && isFlash && <div className="jc-product-flash-overlay">✓</div>}
                                   </div>
                                 </a>
                               ) : (
@@ -778,9 +782,9 @@ export default function JardinConfortV7() {
                   <th style={{ width: 82 }}>Img</th>
                   <th style={{ width: 72 }}>Qté</th>
                   <th style={{ width: 130 }}>SKU</th>
-                  <th>Désignation</th>
-                  <th style={{ width: 110 }}>Prix/pce</th>
-                  <th style={{ width: 90 }}>Total</th>
+                  <th style={{ maxWidth: 280 }}>Désignation</th>
+                  <th style={{ width: 130 }}>Prix/pce</th>
+                  <th style={{ width: 110 }}>Total</th>
                   <th style={{ width: 80 }}>Stock</th>
                   <th style={{ width: 90 }} className="screenOnly"></th>
                 </tr>
@@ -973,8 +977,8 @@ export default function JardinConfortV7() {
                   dir="ltr"
                   onInput={(e) => {
                     const el = e.currentTarget;
-                    el.style.direction = "ltr";
-                    el.style.textAlign = "left";
+                    el.style.setProperty("direction", "ltr", "important");
+                    el.style.setProperty("text-align", "left", "important");
                     setRemarks(el.innerHTML);
                   }}
                   dangerouslySetInnerHTML={{ __html: remarks }}
@@ -1001,8 +1005,12 @@ export default function JardinConfortV7() {
             <div className="jc-section-title mt20">Services optionnels</div>
             <div className="jc-service-list">
               {serviceOptions.map((srv) => (
-                <div className="jc-service-row" key={srv.code}>
-                  <label className="jc-check-label">
+                <div
+                  className="jc-service-row"
+                  key={srv.code}
+                  onClick={() => setEnabledServices((c) => ({ ...c, [srv.code]: !c[srv.code] }))}
+                >
+                  <label className="jc-check-label" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={enabledServices[srv.code]}
@@ -1010,7 +1018,7 @@ export default function JardinConfortV7() {
                     />
                     <span>{srv.label}</span>
                   </label>
-                  <div className="jc-service-price-wrap">
+                  <div className="jc-service-price-wrap" onClick={(e) => e.stopPropagation()}>
                     <input
                       className="jc-service-price no-spin"
                       type="number"
@@ -1604,12 +1612,14 @@ export default function JardinConfortV7() {
         .jc-service-row {
           display: grid; grid-template-columns: 1fr auto;
           gap: 12px; align-items: center;
-          padding: 8px 10px;
+          padding: 10px 14px;
           border-radius: var(--radius-sm);
           background: rgba(255,255,255,0.02);
           border: 1px solid var(--border);
-          transition: border-color 0.15s;
+          transition: border-color 0.15s, background 0.15s;
+          cursor: pointer;
         }
+        .jc-service-row:hover { background: rgba(59,130,246,0.05); border-color: rgba(59,130,246,0.25); }
         .jc-service-row:has(input[type="checkbox"]:checked) {
           border-color: rgba(59,130,246,0.35);
           background: rgba(59,130,246,0.05);
@@ -1932,14 +1942,16 @@ export default function JardinConfortV7() {
         }
         .jc-remarks-print { font-size: 13px; line-height: 1.6; padding: 8px 0; color: #111; white-space: pre-wrap; }
 
-        /* ── FOND BLEUTÉ SECTION TABLEAU ── */
+        /* ── FOND ET BORDURE NÉON SECTION TABLEAU ── */
         .jc-card.jc-lines-card {
           background: rgba(59, 130, 246, 0.04);
-          border-color: rgba(59, 130, 246, 0.18);
+          border: 1.5px solid rgba(59, 130, 246, 0.35);
+          box-shadow: 0 0 0 1px rgba(59,130,246,0.10), 0 4px 24px rgba(59,130,246,0.08);
         }
         .light-mode .jc-card.jc-lines-card {
           background: rgba(219, 234, 254, 0.55);
-          border-color: rgba(59, 130, 246, 0.25);
+          border: 1.5px solid rgba(59, 130, 246, 0.4);
+          box-shadow: 0 0 0 1px rgba(59,130,246,0.15), 0 4px 16px rgba(59,130,246,0.1);
         }
 
         /* ── CROIX SUPPRESSION IMAGE LIGNE ── */
@@ -2061,10 +2073,11 @@ export default function JardinConfortV7() {
         .jc-product-img-wrap { position: relative; }
         .jc-product-flash-overlay {
           position: absolute; inset: 0;
-          background: rgba(74,222,128,0.35);
+          background: rgba(74,222,128,0.5);
           display: flex; align-items: center; justify-content: center;
-          font-size: 22px; font-weight: 900; color: white;
+          font-size: 36px; font-weight: 900; color: white;
           animation: flashFade 0.9s ease forwards;
+          z-index: 10;
         }
         @keyframes flashFade {
           0%   { opacity: 1; }
