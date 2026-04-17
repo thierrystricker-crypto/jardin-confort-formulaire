@@ -110,11 +110,9 @@ function formatMoney(value: number) {
 function todayForInput() { return new Date().toISOString().slice(0, 10); }
 
 function generateOfferNumber() {
-  const now = new Date();
-  const yy = String(now.getFullYear()).slice(2);
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const seq = String(Math.floor(Math.random() * 90000) + 10000);
-  return `OFFRE ${yy}${mm}-${seq}-V1`;
+  // Le vrai numéro DEV-2026-XXX est généré par Supabase au moment de l'enregistrement
+  // On retourne une chaîne vide — le numéro s'affiche après "Enregistrer & URL"
+  return "";
 }
 
 function generateCustomerNumber(email: string) {
@@ -454,13 +452,12 @@ export default function JardinConfortV7() {
     return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
-  // ── Sauvegarder dans Supabase + générer URL publique ──
+  // ── Sauvegarder dans Supabase + générer numéro + URL publique ──
   async function saveToSupabase() {
-    if (!offerNumber.trim()) { setSaveError("Numéro d'offre requis"); return; }
+    if (!commercial.trim()) { setSaveError("Commercial requis"); return; }
     setIsSaving(true); setSaveError("");
     try {
       const snap = { ...makeSnapshot(), ambianceImages };
-      // Aussi sauvegarder en local
       localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
       setDraftSavedAt(new Date().toLocaleString("fr-CH"));
 
@@ -471,6 +468,14 @@ export default function JardinConfortV7() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Erreur serveur");
+
+      // Mettre à jour le numéro affiché avec le vrai numéro DEV/CMD
+      if (json.numeroAffiche) {
+        setOfferNumber(json.numeroAffiche);
+        // Sauvegarder aussi en local avec le bon numéro
+        const snapWithNum = { ...snap, offerNumber: json.numeroAffiche };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(snapWithNum));
+      }
 
       setPublicUrl(json.publicUrl);
       setShowUrlBanner(true);
@@ -661,7 +666,15 @@ export default function JardinConfortV7() {
               </div>
               <div className="jc-field jc-field-grow">
                 <label>Numéro</label>
-                <input value={offerNumber} onChange={(e) => setOfferNumber(e.target.value)} />
+                <input
+                  value={offerNumber}
+                  onChange={(e) => setOfferNumber(e.target.value)}
+                  placeholder={formType === "Offre" ? "DEV-2026-001 (auto)" : "CMD-80500 (auto)"}
+                  readOnly={!!offerNumber && (offerNumber.startsWith("DEV-") || offerNumber.startsWith("CMD-"))}
+                  style={offerNumber && (offerNumber.startsWith("DEV-") || offerNumber.startsWith("CMD-"))
+                    ? {opacity:1, fontWeight:700, color:"var(--accent)", cursor:"default"}
+                    : {}}
+                />
               </div>
               <div className="jc-field jc-field-grow">
                 <label>Référence client</label>
