@@ -340,18 +340,55 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
         </div>
         {isEnCours && (
           <div style={{
-            background:"#FFF8E1", border:"1px solid #FFD54F",
-            borderRadius:R, padding:"14px 20px", marginBottom:24,
-            display:"flex", alignItems:"center", gap:14,
+            background:"white", border:`1px solid ${C.border}`,
+            borderRadius:R, padding:"24px 28px", marginBottom:24,
+            boxShadow:"0 2px 12px rgba(0,96,169,0.07)",
           }}>
-            <span style={{fontSize:24, flexShrink:0}}>⏳</span>
-            <div>
-              <div style={{fontWeight:700, color:"#856404", fontSize:15}}>
-                Offre en attente de validation
-              </div>
-              <div style={{fontSize:13, color:"#9A7800", marginTop:3}}>
-                Délai de livraison estimé : <strong>{d.leadTime||"–"}</strong>
-                {d.deliveryMode && ` · ${d.deliveryMode}`}
+            <div style={{display:"flex", alignItems:"flex-start", gap:16, flexWrap:"wrap"}}>
+              <div style={{fontSize:36, flexShrink:0}}>🌿</div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700, color:C.blue, fontSize:17, marginBottom:8}}>
+                  Offre personnalisée en attente de votre validation
+                </div>
+                <div style={{fontSize:14, color:C.text, lineHeight:1.8}}>
+                  Bonjour <strong>{[d.prenom, d.nom].filter(Boolean).join(" ") || offre.client_prenom + " " + offre.client_nom}</strong>,
+                  veuillez trouver votre offre selon notre aimable entretien.
+                  Si tout est en ordre, vous pouvez volontiers valider celle-ci en nous contactant.
+                  Vous recevrez ensuite une confirmation de commande avec les modalités de paiement convenues.
+                </div>
+                <div style={{fontSize:13, color:C.grey, marginTop:10}}>
+                  Je reste à votre disposition pour toute information supplémentaire.{" "}
+                  <strong style={{color:C.text}}>{offre.commercial}</strong>
+                  {" · "}
+                  <a href="tel:+41217913671" style={{color:C.blue}}>+41 21 791 36 71</a>
+                </div>
+                <div style={{marginTop:14, display:"flex", gap:10, flexWrap:"wrap"}}>
+                  <a href={`mailto:${d.email||""}?subject=Validation%20offre%20${offre.numero_affiche}&body=Bonjour%2C%0A%0AJe%20confirme%20la%20validation%20de%20l'offre%20${offre.numero_affiche}.%0A%0ACordialement`}
+                    style={{
+                      display:"inline-flex", alignItems:"center", gap:8,
+                      background:C.blue, color:"white",
+                      padding:"10px 20px", borderRadius:20,
+                      fontSize:13, fontWeight:600, textDecoration:"none",
+                    }}>
+                    ✅ Valider cette offre par e-mail
+                  </a>
+                  <a href={`/print/offre/${offre.slug}`} target="_blank" rel="noopener noreferrer"
+                    style={{
+                      display:"inline-flex", alignItems:"center", gap:8,
+                      background:"white", color:C.text,
+                      padding:"10px 20px", borderRadius:20,
+                      fontSize:13, fontWeight:600, textDecoration:"none",
+                      border:`1px solid ${C.border}`,
+                    }}>
+                    🖨 Imprimer / PDF
+                  </a>
+                </div>
+                {d.leadTime && (
+                  <div style={{fontSize:12, color:C.grey, marginTop:10}}>
+                    Délai de livraison estimé : <strong>{d.leadTime}</strong>
+                    {d.deliveryMode && ` · ${d.deliveryMode}`}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -359,12 +396,17 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
         {offre.statut==="Acceptée" && (
           <div style={{
             background:"#E8F5E9", border:`1px solid ${C.green}`,
-            borderRadius:R, padding:"14px 20px", marginBottom:24,
+            borderRadius:R, padding:"20px 24px", marginBottom:24,
             display:"flex", alignItems:"center", gap:14,
           }}>
-            <span style={{fontSize:24}}>✅</span>
-            <div style={{fontWeight:700, color:C.green, fontSize:15}}>
-              Offre acceptée — Merci pour votre confiance !
+            <span style={{fontSize:28}}>✅</span>
+            <div>
+              <div style={{fontWeight:700, color:C.green, fontSize:15}}>
+                Offre acceptée — Merci pour votre confiance !
+              </div>
+              <div style={{fontSize:13, color:"#2e7d32", marginTop:4}}>
+                Votre conseiller {offre.commercial} va vous contacter pour finaliser votre commande.
+              </div>
             </div>
           </div>
         )}
@@ -441,8 +483,8 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
                   }}>
                     <td className="article-img" style={{padding:"12px 16px",textAlign:"center",verticalAlign:"middle"}}>
                       {line.image
-                        ? <img src={line.image} alt="" style={{width:56,height:56,objectFit:"contain",borderRadius:8}}/>
-                        : <div style={{width:56,height:56,background:C.bgPage,borderRadius:8}}/>
+                        ? <img src={line.image} alt="" style={{width:72,height:72,objectFit:"contain",borderRadius:8}}/>
+                        : <div style={{width:72,height:72,background:C.bgPage,borderRadius:8}}/>
                       }
                     </td>
                     <td style={{padding:"12px 8px",verticalAlign:"middle"}}>
@@ -532,11 +574,11 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
                   <div style={{padding:"8px 20px 4px",fontSize:11,fontWeight:700,color:C.grey,textTransform:"uppercase",letterSpacing:"0.06em"}}>
                     Services inclus
                   </div>
-                  {activeServices.map((srv,i) => (
+                  {activeServices.map((srv) => (
                     <div key={srv.code} style={{
                       display:"flex",justifyContent:"space-between",
                       padding:"5px 20px 5px 32px",fontSize:13,
-                      background:i%2===0?"white":C.bgPage,
+                      background:"white",
                     }}>
                       <span style={{color:C.grey}}>↳ {srv.label}</span>
                       <span style={{color:C.text,whiteSpace:"nowrap"}}>{fmt(srv.amount)}</span>
