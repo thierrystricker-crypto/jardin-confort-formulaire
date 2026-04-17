@@ -219,48 +219,115 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
       `}</style>
 
       {/* ── TOP BAR bleue ── */}
-      <div style={{background:C.topBar, padding:"7px 24px"}}>
-        <div style={{maxWidth:960, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
-          <span style={{color:"white", fontSize:12, letterSpacing:"0.06em", fontWeight:500}}>
+      <div style={{background:"#2B8AD1", padding:"7px 24px"}}>
+        <div style={{maxWidth:1260, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+          <span style={{color:"white", fontSize:12, letterSpacing:"0.05em", fontWeight:500}}>
             MOBILIER D'EXTÉRIEUR DEPUIS 1960
           </span>
-          <a
-            href="https://www.jardin-confort.ch"
-            style={{
-              color:"white", fontSize:12, fontWeight:600,
-              display:"flex", alignItems:"center", gap:6,
-              opacity:0.9, textDecoration:"none",
-            }}
-          >
-            ← Retourner sur la boutique
-          </a>
+          <span style={{color:"white", fontSize:12, fontWeight:500}}>Français</span>
         </div>
       </div>
 
       {/* ── HEADER boutique ── */}
-      <header style={{background:"white", borderBottom:`1px solid ${C.border}`, padding:"16px 0", marginBottom:32}}>
-        <div style={{maxWidth:960, margin:"0 auto", padding:"0 24px",
-          display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:16}}>
-          <img
-            src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
-            alt="Jardin-Confort" style={{height:52, objectFit:"contain"}}
-          />
-          <div style={{textAlign:"right"}}>
-            <div style={{fontSize:13, color:C.grey}}>Votre offre personnalisée</div>
-            <div style={{fontSize:22, fontWeight:700, color:C.blue, letterSpacing:"-0.02em"}}>
-              {offre.type_document} {offre.numero_affiche}
+      <header style={{background:"white", borderBottom:"1px solid #E8EAED", marginBottom:32}}>
+        <div style={{maxWidth:1260, margin:"0 auto", padding:"16px 24px"}}>
+          {/* Ligne 1 : logo + recherche + icônes */}
+          <div style={{display:"flex", alignItems:"center", gap:24, marginBottom:12}}>
+            <a href="https://www.jardin-confort.ch" style={{flexShrink:0}}>
+              <img
+                src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
+                alt="Jardin-Confort" style={{height:72, objectFit:"contain"}}
+              />
+            </a>
+            {/* Barre de recherche */}
+            <div style={{
+              flex:1, display:"flex", alignItems:"center",
+              background:"#F3F5F6", borderRadius:8,
+              padding:"10px 16px", gap:8,
+            }}>
+              <svg width="18" height="18" fill="none" stroke="#888" strokeWidth="2" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+              <span style={{color:"#aaa", fontSize:14}}>Rechercher un article…</span>
             </div>
-            <div style={{fontSize:13, color:C.grey, marginTop:2}}>
-              {fmtDate(offre.date_document)} · Conseiller : {offre.commercial}
-              {d.reference && ` · ${d.reference}`}
+            {/* Icônes droite */}
+            <div style={{display:"flex", alignItems:"center", gap:16, flexShrink:0}}>
+              <a href="https://www.jardin-confort.ch/account" style={{color:"#3E4D56"}}>
+                <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+              </a>
+              <a href="https://www.jardin-confort.ch/cart" style={{color:"#3E4D56"}}>
+                <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                </svg>
+              </a>
             </div>
+          </div>
+
+          {/* Ligne 2 : navigation */}
+          <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8}}>
+            <nav style={{display:"flex", alignItems:"center", gap:4, flexWrap:"wrap"}}>
+              {[
+                ["Accueil", "https://www.jardin-confort.ch"],
+                ["Marques", "https://www.jardin-confort.ch/collections"],
+                ["Articles", "https://www.jardin-confort.ch/collections/all"],
+                ["Articles en stock – Délai rapide", "https://www.jardin-confort.ch/collections/en-stock"],
+                ["A notre sujet", "https://www.jardin-confort.ch/pages/a-notre-sujet"],
+                ["Catalogues", "https://www.jardin-confort.ch/pages/catalogues"],
+                ["Liquidations", "https://www.jardin-confort.ch/collections/liquidations"],
+              ].map(([label, href]) => (
+                <a key={label} href={href} style={{
+                  fontSize:13, fontWeight:500, color:"#3E4D56",
+                  padding:"4px 8px", textDecoration:"none",
+                  whiteSpace:"nowrap",
+                }}>{label}</a>
+              ))}
+              {/* Bouton retour boutique mis en évidence */}
+              <a href="https://www.jardin-confort.ch" style={{
+                fontSize:13, fontWeight:600, color:"#3E4D56",
+                padding:"4px 8px", textDecoration:"none",
+                borderBottom:"2px solid #2B8AD1",
+              }}>← Retour boutique</a>
+            </nav>
+            {/* Bouton téléphone */}
+            <a href="tel:+41217913671" style={{
+              display:"flex", alignItems:"center", gap:8,
+              background:"#2B8AD1", color:"white",
+              padding:"8px 16px", borderRadius:20,
+              fontSize:13, fontWeight:600, textDecoration:"none",
+              flexShrink:0,
+            }}>
+              <svg width="16" height="16" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l1.1-1.1a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+              </svg>
+              +41 (0)21 791 36 71
+            </a>
           </div>
         </div>
       </header>
 
-      <main style={{maxWidth:960, margin:"0 auto", padding:"0 24px 64px"}}>
+      <main style={{maxWidth:1260, margin:"0 auto", padding:"0 24px 64px"}}>
 
-        {/* ── STATUT ── */}
+        {/* ── TITRE OFFRE ── */}
+        <div style={{
+          display:"flex", alignItems:"center", justifyContent:"space-between",
+          flexWrap:"wrap", gap:12, marginBottom:24,
+          paddingBottom:16, borderBottom:`2px solid ${C.border}`,
+        }}>
+          <div>
+            <div style={{fontSize:13, color:C.grey}}>Votre offre personnalisée</div>
+            <div style={{fontSize:26, fontWeight:700, color:C.blue, letterSpacing:"-0.02em", marginTop:2}}>
+              {offre.type_document} {offre.numero_affiche}
+            </div>
+          </div>
+          <div style={{textAlign:"right", fontSize:13, color:C.grey}}>
+            <div>{fmtDate(offre.date_document)}</div>
+            <div>Conseiller : <strong style={{color:C.text}}>{offre.commercial}</strong></div>
+            {d.reference && <div>Réf. : {d.reference}</div>}
+          </div>
+        </div>
         {isEnCours && (
           <div style={{
             background:"#FFF8E1", border:"1px solid #FFD54F",
