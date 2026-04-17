@@ -131,10 +131,10 @@ async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: u
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const { slug } = params;
+    const { slug } = await params;
     const useSnapshot = request.nextUrl.searchParams.get("snapshot") === "true";
 
     // Lire l'offre depuis Supabase
@@ -191,10 +191,10 @@ export async function GET(
 // PATCH /api/offres/[slug] — mettre à jour le statut ou créer un snapshot
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const { slug } = params;
+    const { slug } = await params;
     const body = await request.json();
 
     // Action : mettre à jour le statut
