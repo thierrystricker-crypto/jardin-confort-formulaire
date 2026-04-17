@@ -79,12 +79,15 @@ export default function PrintOffe() {
 
   return (
     <>
+      {/* Police Raleway via link — plus fiable que @import dans <style> */}
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;700;900&display=swap" rel="stylesheet" />
       <style>{`
         /* ═══════════════════════════════════════════
            STYLES TEMPLATE OFFRE — Jardin-Confort
-           Print-first, responsive screen preview
+           Police Raleway chargée via <link> dans le head
         ═══════════════════════════════════════════ */
-        @import url('https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;700;900&display=swap');
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -104,10 +107,7 @@ export default function PrintOffe() {
         }
 
         /* ── HEADER ── */
-        .doc-header {
-          display: flex; justify-content: space-between;
-          gap: 20px; margin-bottom: 6mm; width: 100%;
-        }
+        .doc-header { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 6mm; width: 100%; }
         .doc-header-left { flex: 0 0 46%; }
         .doc-header-right { flex: 0 0 50%; }
 
@@ -115,24 +115,15 @@ export default function PrintOffe() {
         .doc-logo-small { max-width: 130px; max-height: 50px; }
 
         /* Titre "Offre" — pas en gras */
-        .doc-type {
-          font-size: 26px;
-          font-weight: 400;
-          color: ${THEME};
-          margin-bottom: 10px; line-height: 1.1;
-        }
+        .doc-type { font-size: 26px; font-weight: 400; color: ${THEME}; margin-bottom: 8px; line-height: 1.1; }
 
+        /* Méta infos — interligne compact */
         .doc-meta-table { border-collapse: collapse; width: 100%; }
-        .doc-meta-table td { padding: 2px 6px 2px 0; vertical-align: top; font-size: 12px; }
+        .doc-meta-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 12px; line-height: 1.35; }
         .doc-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 44%; }
 
-        /* Fenêtre adresse — sans bordure, légèrement décalée à droite */
-        .doc-addr-window {
-          padding: 10px 14px 10px 20px;
-          min-height: 60mm;
-          background: white;
-        }
-        /* N° offre en poids normal (pas léger) */
+        /* Fenêtre adresse — sans bordure, décalée à droite */
+        .doc-addr-window { padding: 10px 14px 10px 20px; min-height: 58mm; background: white; }
         .doc-addr-ref { font-size: 12px; color: #666; font-weight: 400; margin-bottom: 8px; }
         .doc-addr-name { font-size: 19px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin-bottom: 4px; }
         .doc-addr-line { font-size: 19px; color: ${BLACK}; line-height: 1.3; font-weight: 400; }
@@ -140,38 +131,45 @@ export default function PrintOffe() {
         /* ── SÉPARATEUR ── */
         .doc-hr { border: 0; border-top: 2px solid ${THEME}; margin: 4mm 0; width: 100%; }
 
-        /* ── ADRESSES — titres en minuscule ── */
-        .doc-addresses { display: flex; gap: 20px; margin-bottom: 6mm; }
-        .doc-addr-block { flex: 1; }
-        .doc-addr-title {
-          font-size: 11px; font-weight: 700; color: ${THEME};
-          /* minuscule au lieu de uppercase */
-          text-transform: none;
-          letter-spacing: 0.02em;
-          margin-bottom: 5px; display: block;
+        /* ── ADRESSES — style Shopify : titre col gauche, contenu col droite ── */
+        .doc-addresses {
+          display: table; width: 100%;
+          margin-bottom: 6mm;
+          border-collapse: collapse;
         }
-        .doc-addr-content { font-size: 12px; line-height: 1.6; color: ${BLACK}; }
+        .doc-addr-row { display: table-row; }
+
+        /* Chaque bloc = 2 colonnes : titre | contenu */
+        .doc-addr-group {
+          display: table-cell;
+          width: 50%;
+          vertical-align: top;
+          padding-right: 10px;
+        }
+        .doc-addr-inner {
+          display: flex;
+          gap: 0;
+        }
+        .doc-addr-title {
+          font-size: 12px;
+          font-weight: 700;
+          color: ${THEME};
+          white-space: nowrap;
+          padding-right: 12px;
+          padding-top: 1px;
+          min-width: 110px;
+          flex-shrink: 0;
+          display: block;
+        }
+        .doc-addr-content { font-size: 12px; line-height: 1.6; color: ${BLACK}; flex: 1; }
 
         /* ── TABLEAU ARTICLES ── */
         .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; }
-
-        .doc-table thead th {
-          padding: 7px 4px;
-          border-top: 2px solid ${THEME};
-          border-bottom: 2px solid ${THEME};
-          font-weight: 700; font-size: 12px;
-          color: ${BLACK};
-        }
+        .doc-table thead th { padding: 7px 4px; border-top: 2px solid ${THEME}; border-bottom: 2px solid ${THEME}; font-weight: 700; font-size: 12px; color: ${BLACK}; }
         .doc-table thead th.th-left { text-align: left; }
         .doc-table thead th.th-center { text-align: center; }
         .doc-table thead th.th-right { text-align: right; }
-
-        .doc-table tbody tr td {
-          padding: 8px 4px;
-          border-bottom: 1px solid #efefef;
-          vertical-align: top;
-          font-size: 12px;
-        }
+        .doc-table tbody tr td { padding: 8px 4px; border-bottom: 1px solid #efefef; vertical-align: top; font-size: 12px; }
         .doc-table tbody tr:nth-child(odd) td { background: ${LIGHT}; }
 
         .td-img { width: 56px; vertical-align: middle; text-align: center; }
@@ -189,14 +187,31 @@ export default function PrintOffe() {
         .tr-comment td { background: #eef4fb !important; }
         .td-comment { padding: 6px 10px !important; font-style: italic; color: #445 !important; font-size: 12px; }
 
-        /* ── TOTAUX ── */
-        .doc-totals-wrap { display: flex; gap: 20px; margin-bottom: 8mm; align-items: flex-start; }
-        .doc-notes-col { flex: 1; min-width: 0; }
+        /* ── ZONE TOTAUX + SIGNATURE CLIENT ── */
+        .doc-bottom-wrap {
+          display: flex;
+          gap: 20px;
+          margin-bottom: 8mm;
+          align-items: flex-end; /* aligner en bas = signature au niveau du total */
+        }
+        .doc-notes-sign-col {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-end;
+        }
         .doc-totals-col { flex: 0 0 44%; }
 
         .doc-notes-title { font-weight: 700; color: ${BLACK}; margin-bottom: 5px; font-size: 12px; }
-        .doc-notes-text { font-size: 12px; color: ${GREY}; line-height: 1.55; white-space: pre-wrap; }
+        .doc-notes-text { font-size: 12px; color: ${GREY}; line-height: 1.55; white-space: pre-wrap; margin-bottom: 12px; }
 
+        /* Signature client seulement */
+        .doc-sign-block { margin-top: auto; }
+        .doc-sign-name { font-weight: 600; color: ${BLACK}; font-size: 12px; margin-bottom: 28px; }
+        .doc-sign-line { border-bottom: 1px solid #aaa; margin-bottom: 4px; }
+        .doc-sign-sub { font-size: 10px; color: #aaa; }
+
+        /* Pricing table */
         .doc-pricing { width: 100%; border-collapse: collapse; }
         .doc-pricing td { padding: 5px 4px; font-size: 12px; }
         .doc-pricing tr:nth-child(even) td { background: ${LIGHT}; }
@@ -204,21 +219,9 @@ export default function PrintOffe() {
         .doc-pricing .pt-sub { font-size: 11px; padding-left: 14px !important; color: #555; }
         .doc-pricing .pt-value { text-align: right; white-space: nowrap; color: ${BLACK}; }
         .doc-pricing .pt-tva td { color: #666; font-size: 11px; }
-
-        .doc-pricing .pt-total td {
-          border-top: 2px solid ${THEME} !important;
-          border-bottom: 2px solid ${THEME} !important;
-          padding: 8px 4px !important;
-        }
+        .doc-pricing .pt-total td { border-top: 2px solid ${THEME} !important; border-bottom: 2px solid ${THEME} !important; padding: 8px 4px !important; }
         .pt-total-label { font-weight: 900 !important; font-size: 15px !important; color: ${BLACK} !important; }
         .pt-total-value { font-weight: 900 !important; font-size: 15px !important; color: ${BLACK} !important; text-align: right; white-space: nowrap; }
-
-        /* ── SIGNATURES ── */
-        .doc-sign-grid { display: flex; gap: 48px; margin-bottom: 8mm; margin-top: 6mm; page-break-inside: avoid; break-inside: avoid; }
-        .doc-sign-block { flex: 1; }
-        .doc-sign-name { font-weight: 600; color: ${BLACK}; font-size: 12px; margin-bottom: 28px; }
-        .doc-sign-line { border-bottom: 1px solid #aaa; margin-bottom: 4px; }
-        .doc-sign-sub { font-size: 10px; color: #aaa; }
 
         /* ── REMERCIEMENTS ── */
         .doc-thanks { text-align: center; font-weight: 700; color: ${THEME}; margin: 6mm 0 3px; font-size: 13px; }
@@ -226,28 +229,11 @@ export default function PrintOffe() {
         .doc-terms a { color: ${THEME}; }
 
         /* ── PIED DE PAGE — centré ── */
-        .doc-footer {
-          border-top: 1px solid #ddd;
-          padding-top: 6px;
-          text-align: center;
-          font-size: 11px; color: #666;
-          line-height: 1.7;
-        }
+        .doc-footer { border-top: 1px solid #ddd; padding-top: 6px; text-align: center; font-size: 11px; color: #666; line-height: 1.7; }
         .doc-footer strong { color: ${BLACK}; }
         .doc-footer-url { font-weight: 700; color: ${THEME}; }
-        /* Icônes social centrées */
-        .doc-footer-social {
-          margin-top: 5px;
-          text-align: center;
-          display: block;
-          width: 100%;
-        }
-        .doc-footer-social img {
-          width: 18px; height: 18px;
-          margin: 0 4px;
-          vertical-align: middle;
-          display: inline-block;
-        }
+        .doc-footer-social { margin-top: 5px; text-align: center; display: block; width: 100%; }
+        .doc-footer-social img { width: 18px; height: 18px; margin: 0 4px; vertical-align: middle; display: inline-block; }
 
         /* ── PAGE 2 — IMAGES D'AMBIANCE ── */
         .doc-page2 { page-break-before: always; break-before: page; padding-top: 4mm; }
@@ -255,7 +241,6 @@ export default function PrintOffe() {
         .doc-page2-titles { flex: 1; }
         .doc-page2-type { font-size: 18px; font-weight: 700; color: ${THEME}; }
         .doc-page2-sub { font-size: 11px; color: #aaa; font-style: italic; margin-top: 2px; }
-
         .doc-ambiance-grid { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8mm; }
         .doc-ambiance-item { flex: 0 0 calc(50% - 7px); page-break-inside: avoid; break-inside: avoid; text-align: center; }
         .doc-ambiance-item img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; }
@@ -336,49 +321,55 @@ export default function PrintOffe() {
 
         <hr className="doc-hr" />
 
-        {/* ADRESSES FACTURATION / LIVRAISON */}
+        {/* ADRESSES — style Shopify : titre col gauche + contenu col droite, 4 colonnes */}
         <div className="doc-addresses">
-          <div className="doc-addr-block">
-            <span className="doc-addr-title">Adresse de facturation</span>
-            <div className="doc-addr-content">
-              {data.societe && <div>{data.societe}</div>}
-              <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
-              {data.rue && <div>{data.rue} {data.numero}</div>}
-              {data.npa && <div>{data.npa} {data.ville}</div>}
-              {data.telephone1 && <div>Tél. {data.telephone1}</div>}
-              {data.telephone2 && <div>Tél. {data.telephone2}</div>}
-              {data.email && <div>{data.email}</div>}
-            </div>
-          </div>
-
-          <div className="doc-addr-block">
-            <span className="doc-addr-title">Adresse de livraison</span>
-            <div className="doc-addr-content">
-              {/* À l'emporter */}
-              {(data as any).deliveryMode === "À l'emporter" ? (
-                <div style={{fontStyle:"italic", color:"#555"}}>
-                  À l'emporter · Jardin-Confort SA<br/>
-                  Route de Lavaux 425 · 1095 Lutry
-                </div>
-              ) : data.livrDiff ? (
-                /* Adresse différente */
-                <>
-                  {data.livrSociete && <div>{data.livrSociete}</div>}
-                  <div style={{fontWeight:700}}>{data.livrNom} {data.livrPrenom}</div>
-                  {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
-                  {data.livrNpa && <div>{data.livrNpa} {data.livrVille}</div>}
-                  {data.livrTel && <div>Tél. {data.livrTel}</div>}
-                </>
-              ) : (
-                /* Identique à facturation — recopier */
-                <>
+          <div className="doc-addr-row">
+            {/* Bloc facturation */}
+            <div className="doc-addr-group">
+              <div className="doc-addr-inner">
+                <span className="doc-addr-title">Adresse de facturation</span>
+                <div className="doc-addr-content">
                   {data.societe && <div>{data.societe}</div>}
                   <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
                   {data.rue && <div>{data.rue} {data.numero}</div>}
                   {data.npa && <div>{data.npa} {data.ville}</div>}
                   {data.telephone1 && <div>Tél. {data.telephone1}</div>}
-                </>
-              )}
+                  {data.telephone2 && <div>Tél. {data.telephone2}</div>}
+                  {data.email && <div>{data.email}</div>}
+                </div>
+              </div>
+            </div>
+
+            {/* Bloc livraison */}
+            <div className="doc-addr-group">
+              <div className="doc-addr-inner">
+                <span className="doc-addr-title">Adresse de livraison</span>
+                <div className="doc-addr-content">
+                  {(data as any).deliveryMode === "À l'emporter" ? (
+                    <div style={{fontStyle:"italic"}}>
+                      À l'emporter<br/>
+                      Jardin-Confort SA<br/>
+                      Route de Lavaux 425 · 1095 Lutry
+                    </div>
+                  ) : data.livrDiff ? (
+                    <>
+                      {data.livrSociete && <div>{data.livrSociete}</div>}
+                      <div style={{fontWeight:700}}>{data.livrNom} {data.livrPrenom}</div>
+                      {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
+                      {data.livrNpa && <div>{data.livrNpa} {data.livrVille}</div>}
+                      {data.livrTel && <div>Tél. {data.livrTel}</div>}
+                    </>
+                  ) : (
+                    <>
+                      {data.societe && <div>{data.societe}</div>}
+                      <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                      {data.rue && <div>{data.rue} {data.numero}</div>}
+                      {data.npa && <div>{data.npa} {data.ville}</div>}
+                      {data.telephone1 && <div>Tél. {data.telephone1}</div>}
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -428,46 +419,45 @@ export default function PrintOffe() {
           </tbody>
         </table>
 
-        {/* NOTES + TOTAUX */}
-        <div className="doc-totals-wrap">
+        {/* NOTES + TOTAUX + SIGNATURE CLIENT */}
+        <div className="doc-bottom-wrap">
 
-          {/* Notes / Remarques */}
-          <div className="doc-notes-col">
+          {/* Colonne gauche : Notes + Signature client */}
+          <div className="doc-notes-sign-col">
             {data.remarks && (
               <>
                 <div className="doc-notes-title">Notes</div>
                 <div className="doc-notes-text">{data.remarks}</div>
               </>
             )}
+            {/* Signature client — alignée au bas = niveau du total */}
+            <div className="doc-sign-block">
+              <div className="doc-sign-name">Client — {data.nom} {data.prenom}</div>
+              <div className="doc-sign-line" />
+              <div className="doc-sign-sub">Signature &amp; date</div>
+            </div>
           </div>
 
-          {/* Tableau totaux */}
+          {/* Colonne droite : Tableau totaux */}
           <div className="doc-totals-col">
             <table className="doc-pricing">
               <tbody>
-                {/* Sous-total */}
                 <tr>
                   <td className="pt-label">Sous-total articles</td>
                   <td className="pt-value">{formatMoney(subTotal)}</td>
                 </tr>
-
-                {/* Remise globale */}
                 {discountValue > 0 && (
                   <tr>
                     <td className="pt-label">Remise</td>
                     <td className="pt-value" style={{color:"#2a8a2a"}}>− {formatMoney(discountValue)}</td>
                   </tr>
                 )}
-
-                {/* Après remise si remise active */}
                 {discountValue > 0 && (
                   <tr>
                     <td className="pt-label">Après remise</td>
                     <td className="pt-value">{formatMoney(subTotal - discountValue)}</td>
                   </tr>
                 )}
-
-                {/* Services */}
                 {serviceTotal > 0 && (
                   <>
                     <tr><td className="pt-label">Services</td><td className="pt-value">{formatMoney(serviceTotal)}</td></tr>
@@ -479,16 +469,12 @@ export default function PrintOffe() {
                     ))}
                   </>
                 )}
-
-                {/* Arrondi */}
                 {roundingValue !== 0 && (
                   <tr>
                     <td className="pt-label">Arrondi</td>
                     <td className="pt-value">{formatMoney(roundingValue)}</td>
                   </tr>
                 )}
-
-                {/* TVA */}
                 {isPrivateTTC ? (
                   <tr className="pt-tva">
                     <td className="pt-label">TVA 8.1% (incluse)</td>
@@ -506,28 +492,12 @@ export default function PrintOffe() {
                     </tr>
                   </>
                 )}
-
-                {/* TOTAL */}
                 <tr className="pt-total">
                   <td className="pt-total-label">TOTAL {isPrivateTTC ? "TTC" : "HT + TVA"}</td>
                   <td className="pt-total-value">{formatMoney(finalTotal)}</td>
                 </tr>
               </tbody>
             </table>
-          </div>
-        </div>
-
-        {/* SIGNATURES */}
-        <div className="doc-sign-grid">
-          <div className="doc-sign-block">
-            <div className="doc-sign-name">Jardin-Confort — {data.commercial}</div>
-            <div className="doc-sign-line" />
-            <div className="doc-sign-sub">Signature &amp; tampon</div>
-          </div>
-          <div className="doc-sign-block">
-            <div className="doc-sign-name">Client — {data.nom} {data.prenom}</div>
-            <div className="doc-sign-line" />
-            <div className="doc-sign-sub">Signature &amp; date</div>
           </div>
         </div>
 
