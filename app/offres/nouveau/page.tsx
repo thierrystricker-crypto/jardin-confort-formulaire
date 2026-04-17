@@ -445,6 +445,14 @@ export default function JardinConfortV7() {
     return { formType, clientType, paymentMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
+  // ── Ouvrir le template d'impression dans un nouvel onglet ──
+  function openPrint() {
+    // Sauvegarder tout incluant les images d'ambiance
+    const snap = { ...makeSnapshot(), ambianceImages };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
+    window.open("/print/offre", "_blank");
+  }
+
   function saveDraftLocal() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(makeSnapshot()));
     setDraftSavedAt(new Date().toLocaleString("fr-CH"));
@@ -551,7 +559,7 @@ export default function JardinConfortV7() {
           <button className="jc-btn jc-btn-ghost" onClick={loadDraftLocal}>📂 Charger</button>
           <button className="jc-btn jc-btn-ghost" onClick={saveDraftLocal}>💾 Sauvegarder</button>
           <button className="jc-btn jc-btn-ghost" disabled={!undoSnapshot} onClick={undoLastChange}>↩ Undo</button>
-          <button className="jc-btn jc-btn-primary" onClick={() => window.print()}>🖨 Imprimer</button>
+          <button className="jc-btn jc-btn-primary" onClick={openPrint}>🖨 Imprimer</button>
         </div>
       </header>
 
