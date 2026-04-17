@@ -44,7 +44,7 @@ type OffreData = {
     lines: QuoteLine[];
     clientType: string;
     paymentMode: string;
-    deliveryMode: string;
+    deliveryMode?: string;
     leadTime: string;
     remarks: string;
     discount: string;
@@ -52,7 +52,24 @@ type OffreData = {
     manualRounding: string;
     enabledServices: Record<string, boolean>;
     servicePrices: Record<string, string>;
-    [key: string]: unknown;
+    reference?: string;
+    societe?: string;
+    nom?: string;
+    prenom?: string;
+    rue?: string;
+    numero?: string;
+    npa?: string;
+    ville?: string;
+    telephone1?: string;
+    livrDiff?: boolean;
+    livrSociete?: string;
+    livrNom?: string;
+    livrPrenom?: string;
+    livrTel?: string;
+    livrRue?: string;
+    livrNumero?: string;
+    livrNpa?: string;
+    livrVille?: string;
   };
   stockRefreshedAt?: string;
 };
@@ -181,7 +198,7 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
           </div>
           <div style={{textAlign:"right"}}>
             <div style={{fontSize:18, fontWeight:900, color:"#222"}}>{offre.numero_affiche}</div>
-            {offre.data.reference && <div style={{fontSize:12, color:"#888", marginTop:2}}>{offre.data.reference}</div>}
+            {(offre.data.reference as string) && <div style={{fontSize:12, color:"#888", marginTop:2}}>{offre.data.reference as string}</div>}
             <div style={{fontSize:12, color:"#aaa", marginTop:2}}>
               {formatDate(offre.date_document)} · {offre.commercial}
             </div>
@@ -334,18 +351,18 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
               <div style={{fontSize:13, lineHeight:1.7, color:"#333"}}>
                 {offre.data.livrDiff ? (
                   <>
-                    {offre.data.livrSociete && <div>{offre.data.livrSociete as string}</div>}
-                    <div><strong>{offre.data.livrNom as string} {offre.data.livrPrenom as string}</strong></div>
-                    <div>{offre.data.livrRue as string} {offre.data.livrNumero as string}</div>
-                    <div>{offre.data.livrNpa as string} {offre.data.livrVille as string}</div>
+                    {offre.data.livrSociete && <div>{offre.data.livrSociete}</div>}
+                    <div><strong>{offre.data.livrNom} {offre.data.livrPrenom}</strong></div>
+                    <div>{offre.data.livrRue} {offre.data.livrNumero}</div>
+                    <div>{offre.data.livrNpa} {offre.data.livrVille}</div>
                   </>
-                ) : (d as any).deliveryMode === "À l'emporter" ? (
+                ) : offre.data.deliveryMode === "À l'emporter" ? (
                   <div><em>À l'emporter — Jardin-Confort SA, Route de Lavaux 425, 1095 Lutry</em></div>
                 ) : (
                   <>
-                    {offre.data.societe && <div>{offre.data.societe as string}</div>}
+                    {offre.data.societe && <div>{offre.data.societe}</div>}
                     <div><strong>{offre.client_nom} {offre.client_prenom}</strong></div>
-                    <div>{offre.data.rue as string} {offre.data.numero as string}</div>
+                    <div>{offre.data.rue} {offre.data.numero}</div>
                     <div>{offre.client_npa} {offre.client_ville}</div>
                   </>
                 )}
@@ -354,9 +371,9 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
             <div>
               <div style={{fontSize:11, fontWeight:700, color:THEME, marginBottom:4}}>Conditions</div>
               <div style={{fontSize:13, lineHeight:1.7, color:"#333"}}>
-                <div>💳 {offre.data.paymentMode as string}</div>
-                <div>🚚 {(offre.data as any).deliveryMode || "Livraison à domicile"}</div>
-                {offre.data.leadTime && <div>⏱ Délai estimé : {offre.data.leadTime as string}</div>}
+                <div>💳 {offre.data.paymentMode}</div>
+                <div>🚚 {offre.data.deliveryMode || "Livraison à domicile"}</div>
+                {offre.data.leadTime && <div>⏱ Délai estimé : {offre.data.leadTime}</div>}
               </div>
             </div>
           </div>
