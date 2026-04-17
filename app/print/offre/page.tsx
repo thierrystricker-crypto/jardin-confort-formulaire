@@ -32,7 +32,8 @@ const EMPTY: PrintData = {
   lines: [], discount: "0", discountPercent: "0", manualRounding: "",
   enabledServices: {}, servicePrices: {}, remarks: "", leadTime: "",
   ambianceImages: [],
-};
+  deliveryMode: "Livraison à domicile",
+} as any;
 
 export default function PrintOffe() {
   const [data, setData] = useState<PrintData>(EMPTY);
@@ -94,51 +95,59 @@ export default function PrintOffe() {
           -webkit-print-color-adjust: exact;
         }
 
-        @page { size: A4 portrait; margin: 12mm; }
+        /* Marges A4 généreuses pour éviter les coupures */
+        @page { size: A4 portrait; margin: 14mm 16mm 14mm 14mm; }
 
         /* ── Screen preview ── */
         @media screen {
-          .doc-wrap { max-width: 794px; margin: 0 auto; padding: 20px; }
+          .doc-wrap { max-width: 794px; margin: 0 auto; padding: 20px 28px; }
         }
 
         /* ── HEADER ── */
         .doc-header {
           display: flex; justify-content: space-between;
-          gap: 16px; margin-bottom: 6mm; width: 100%;
+          gap: 20px; margin-bottom: 6mm; width: 100%;
         }
-        .doc-header-left { flex: 0 0 44%; }
-        .doc-header-right { flex: 0 0 52%; }
+        .doc-header-left { flex: 0 0 46%; }
+        .doc-header-right { flex: 0 0 50%; }
 
         .doc-logo { max-width: 175px; max-height: 65px; object-fit: contain; display: block; margin-bottom: 10px; }
+        .doc-logo-small { max-width: 130px; max-height: 50px; }
 
+        /* Titre "Offre" — pas en gras */
         .doc-type {
-          font-size: 26px; font-weight: 900; color: ${THEME};
+          font-size: 26px;
+          font-weight: 400;
+          color: ${THEME};
           margin-bottom: 10px; line-height: 1.1;
         }
 
         .doc-meta-table { border-collapse: collapse; width: 100%; }
         .doc-meta-table td { padding: 2px 6px 2px 0; vertical-align: top; font-size: 12px; }
-        .doc-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 40%; }
+        .doc-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 44%; }
 
-        /* Fenêtre adresse style enveloppe */
+        /* Fenêtre adresse — sans bordure, légèrement décalée à droite */
         .doc-addr-window {
-          border: 1px solid #ddd; border-radius: 3px;
-          padding: 10px 14px; min-height: 62mm;
-          background: white; position: relative;
+          padding: 10px 14px 10px 20px;
+          min-height: 60mm;
+          background: white;
         }
-        .doc-addr-ref { font-size: 11px; color: #aaa; margin-bottom: 8px; }
+        /* N° offre en poids normal (pas léger) */
+        .doc-addr-ref { font-size: 12px; color: #666; font-weight: 400; margin-bottom: 8px; }
         .doc-addr-name { font-size: 19px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin-bottom: 4px; }
-        .doc-addr-line { font-size: 19px; color: ${BLACK}; line-height: 1.3; }
+        .doc-addr-line { font-size: 19px; color: ${BLACK}; line-height: 1.3; font-weight: 400; }
 
         /* ── SÉPARATEUR ── */
         .doc-hr { border: 0; border-top: 2px solid ${THEME}; margin: 4mm 0; width: 100%; }
 
-        /* ── ADRESSES ── */
+        /* ── ADRESSES — titres en minuscule ── */
         .doc-addresses { display: flex; gap: 20px; margin-bottom: 6mm; }
         .doc-addr-block { flex: 1; }
         .doc-addr-title {
           font-size: 11px; font-weight: 700; color: ${THEME};
-          text-transform: uppercase; letter-spacing: 0.06em;
+          /* minuscule au lieu de uppercase */
+          text-transform: none;
+          letter-spacing: 0.02em;
           margin-bottom: 5px; display: block;
         }
         .doc-addr-content { font-size: 12px; line-height: 1.6; color: ${BLACK}; }
@@ -175,20 +184,13 @@ export default function PrintOffe() {
         .item-title { font-weight: 700; color: ${BLACK}; line-height: 1.35; }
         .item-sku { font-size: 11px; color: #777; margin-top: 2px; font-weight: 400; }
         .item-discount { font-size: 11px; color: #2a8a2a; margin-top: 3px; }
-        .item-original { font-size: 11px; color: #999; text-decoration: line-through; }
 
         /* Ligne commentaire */
         .tr-comment td { background: #eef4fb !important; }
-        .td-comment {
-          padding: 6px 10px !important; font-style: italic;
-          color: #445 !important; font-size: 12px;
-        }
+        .td-comment { padding: 6px 10px !important; font-style: italic; color: #445 !important; font-size: 12px; }
 
         /* ── TOTAUX ── */
-        .doc-totals-wrap {
-          display: flex; gap: 20px;
-          margin-bottom: 8mm; align-items: flex-start;
-        }
+        .doc-totals-wrap { display: flex; gap: 20px; margin-bottom: 8mm; align-items: flex-start; }
         .doc-notes-col { flex: 1; min-width: 0; }
         .doc-totals-col { flex: 0 0 44%; }
 
@@ -201,8 +203,7 @@ export default function PrintOffe() {
         .doc-pricing .pt-label { font-weight: 600; color: ${BLACK}; }
         .doc-pricing .pt-sub { font-size: 11px; padding-left: 14px !important; color: #555; }
         .doc-pricing .pt-value { text-align: right; white-space: nowrap; color: ${BLACK}; }
-        .doc-pricing .pt-tva td { color: #666; font-size: 11px; border-bottom: 0; }
-        .doc-pricing .pt-sep td { border-bottom: 1px solid #ddd !important; padding: 2px 0 !important; }
+        .doc-pricing .pt-tva td { color: #666; font-size: 11px; }
 
         .doc-pricing .pt-total td {
           border-top: 2px solid ${THEME} !important;
@@ -213,30 +214,18 @@ export default function PrintOffe() {
         .pt-total-value { font-weight: 900 !important; font-size: 15px !important; color: ${BLACK} !important; text-align: right; white-space: nowrap; }
 
         /* ── SIGNATURES ── */
-        .doc-sign-grid {
-          display: flex; gap: 48px;
-          margin-bottom: 8mm; margin-top: 6mm;
-          page-break-inside: avoid; break-inside: avoid;
-        }
+        .doc-sign-grid { display: flex; gap: 48px; margin-bottom: 8mm; margin-top: 6mm; page-break-inside: avoid; break-inside: avoid; }
         .doc-sign-block { flex: 1; }
         .doc-sign-name { font-weight: 600; color: ${BLACK}; font-size: 12px; margin-bottom: 28px; }
         .doc-sign-line { border-bottom: 1px solid #aaa; margin-bottom: 4px; }
         .doc-sign-sub { font-size: 10px; color: #aaa; }
 
         /* ── REMERCIEMENTS ── */
-        .doc-thanks {
-          text-align: center; font-weight: 700;
-          color: ${THEME}; margin: 6mm 0 3px;
-          font-size: 13px;
-        }
-        .doc-terms {
-          text-align: center; font-size: 10px;
-          color: #888; line-height: 1.5;
-          margin-bottom: 6mm;
-        }
+        .doc-thanks { text-align: center; font-weight: 700; color: ${THEME}; margin: 6mm 0 3px; font-size: 13px; }
+        .doc-terms { text-align: center; font-size: 10px; color: #888; line-height: 1.5; margin-bottom: 6mm; }
         .doc-terms a { color: ${THEME}; }
 
-        /* ── PIED DE PAGE ── */
+        /* ── PIED DE PAGE — centré ── */
         .doc-footer {
           border-top: 1px solid #ddd;
           padding-top: 6px;
@@ -246,55 +235,36 @@ export default function PrintOffe() {
         }
         .doc-footer strong { color: ${BLACK}; }
         .doc-footer-url { font-weight: 700; color: ${THEME}; }
-        .doc-footer-social { margin-top: 4px; }
-        .doc-footer-social img { width: 18px; height: 18px; margin: 0 3px; vertical-align: middle; }
+        /* Icônes social centrées */
+        .doc-footer-social {
+          margin-top: 5px;
+          text-align: center;
+          display: block;
+          width: 100%;
+        }
+        .doc-footer-social img {
+          width: 18px; height: 18px;
+          margin: 0 4px;
+          vertical-align: middle;
+          display: inline-block;
+        }
 
         /* ── PAGE 2 — IMAGES D'AMBIANCE ── */
-        .doc-page2 {
-          page-break-before: always; break-before: page;
-          padding-top: 4mm;
-        }
-        .doc-page2-header {
-          display: flex; align-items: flex-end;
-          gap: 16px;
-          margin-bottom: 5mm;
-          border-bottom: 2px solid ${THEME};
-          padding-bottom: 4mm;
-        }
+        .doc-page2 { page-break-before: always; break-before: page; padding-top: 4mm; }
+        .doc-page2-header { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 5mm; border-bottom: 2px solid ${THEME}; padding-bottom: 4mm; }
         .doc-page2-titles { flex: 1; }
-        .doc-page2-type { font-size: 18px; font-weight: 900; color: ${THEME}; }
+        .doc-page2-type { font-size: 18px; font-weight: 700; color: ${THEME}; }
         .doc-page2-sub { font-size: 11px; color: #aaa; font-style: italic; margin-top: 2px; }
 
-        .doc-ambiance-grid {
-          display: flex; flex-wrap: wrap;
-          gap: 14px; margin-bottom: 8mm;
-        }
-        .doc-ambiance-item {
-          flex: 0 0 calc(50% - 7px);
-          page-break-inside: avoid; break-inside: avoid;
-          text-align: center;
-        }
-        .doc-ambiance-item img {
-          max-width: 100%; max-height: 200px;
-          object-fit: contain; display: block;
-          margin: 0 auto;
-          border: 1px solid #e5e7eb; border-radius: 4px;
-        }
-        .doc-ambiance-caption {
-          font-size: 10px; color: #777;
-          font-style: italic; margin-top: 5px;
-          text-align: center;
-        }
+        .doc-ambiance-grid { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8mm; }
+        .doc-ambiance-item { flex: 0 0 calc(50% - 7px); page-break-inside: avoid; break-inside: avoid; text-align: center; }
+        .doc-ambiance-item img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; }
+        .doc-ambiance-caption { font-size: 10px; color: #777; font-style: italic; margin-top: 5px; text-align: center; }
 
-        /* ── PRINT ONLY ── */
+        /* ── Bouton print (écran seulement) ── */
         @media screen {
           .doc-wrap { box-shadow: 0 0 20px rgba(0,0,0,0.08); }
-          .print-btn {
-            position: fixed; top: 16px; right: 16px; z-index: 100;
-            background: ${THEME}; color: white; border: 0;
-            padding: 10px 20px; border-radius: 6px;
-            font-size: 14px; font-weight: 700; cursor: pointer;
-          }
+          .print-btn { position: fixed; top: 16px; right: 16px; z-index: 100; background: ${THEME}; color: white; border: 0; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
         }
         @media print { .print-btn { display: none !important; } }
       `}</style>
@@ -338,6 +308,9 @@ export default function PrintOffe() {
                 {data.leadTime && (
                   <tr><td className="doc-meta-label">Délai de livraison</td><td>{data.leadTime}</td></tr>
                 )}
+                {(data as any).deliveryMode && (
+                  <tr><td className="doc-meta-label">Mode de livraison</td><td>{(data as any).deliveryMode}</td></tr>
+                )}
                 {data.email && (
                   <tr><td className="doc-meta-label">E-mail</td><td>{data.email}</td></tr>
                 )}
@@ -378,25 +351,36 @@ export default function PrintOffe() {
             </div>
           </div>
 
-          {data.livrDiff ? (
-            <div className="doc-addr-block">
-              <span className="doc-addr-title">Adresse de livraison</span>
-              <div className="doc-addr-content">
-                {data.livrSociete && <div>{data.livrSociete}</div>}
-                <div style={{fontWeight:700}}>{data.livrNom} {data.livrPrenom}</div>
-                {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
-                {data.livrNpa && <div>{data.livrNpa} {data.livrVille}</div>}
-                {data.livrTel && <div>Tél. {data.livrTel}</div>}
-              </div>
+          <div className="doc-addr-block">
+            <span className="doc-addr-title">Adresse de livraison</span>
+            <div className="doc-addr-content">
+              {/* À l'emporter */}
+              {(data as any).deliveryMode === "À l'emporter" ? (
+                <div style={{fontStyle:"italic", color:"#555"}}>
+                  À l'emporter · Jardin-Confort SA<br/>
+                  Route de Lavaux 425 · 1095 Lutry
+                </div>
+              ) : data.livrDiff ? (
+                /* Adresse différente */
+                <>
+                  {data.livrSociete && <div>{data.livrSociete}</div>}
+                  <div style={{fontWeight:700}}>{data.livrNom} {data.livrPrenom}</div>
+                  {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
+                  {data.livrNpa && <div>{data.livrNpa} {data.livrVille}</div>}
+                  {data.livrTel && <div>Tél. {data.livrTel}</div>}
+                </>
+              ) : (
+                /* Identique à facturation — recopier */
+                <>
+                  {data.societe && <div>{data.societe}</div>}
+                  <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                  {data.rue && <div>{data.rue} {data.numero}</div>}
+                  {data.npa && <div>{data.npa} {data.ville}</div>}
+                  {data.telephone1 && <div>Tél. {data.telephone1}</div>}
+                </>
+              )}
             </div>
-          ) : (
-            <div className="doc-addr-block">
-              <span className="doc-addr-title">Adresse de livraison</span>
-              <div className="doc-addr-content" style={{color:"#aaa", fontStyle:"italic"}}>
-                Identique à l'adresse de facturation
-              </div>
-            </div>
-          )}
+          </div>
         </div>
 
         {/* TABLEAU ARTICLES */}

@@ -8,6 +8,7 @@ type PaymentMode =
   | "Paiement d'avance à la commande"
   | "Acompte de 50% à la commande"
   | "Paiement à 30 jours";
+type DeliveryMode = "Livraison à domicile" | "À l'emporter";
 type OfferStatus = "En cours" | "Envoyée" | "Acceptée" | "Refusée";
 
 // Type retourné par l'API /api/shopify-search
@@ -41,6 +42,7 @@ type DraftSnapshot = {
   formType: FormType;
   clientType: ClientType;
   paymentMode: PaymentMode;
+  deliveryMode: DeliveryMode;
   offerStatus: OfferStatus;
   date: string;
   commercial: string;
@@ -153,6 +155,7 @@ export default function JardinConfortV7() {
   const [formType, setFormType]       = useState<FormType>("Offre");
   const [clientType, setClientType]   = useState<ClientType>("Privé (prix TTC)");
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("Paiement d'avance à la commande");
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("Livraison à domicile");
   const [offerStatus, setOfferStatus] = useState<OfferStatus>("En cours");
   const [date, setDate]               = useState(todayForInput());
   const [commercial, setCommercial]   = useState("");
@@ -442,7 +445,7 @@ export default function JardinConfortV7() {
   }
 
   function makeSnapshot(): DraftSnapshot {
-    return { formType, clientType, paymentMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
+    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
   // ── Ouvrir le template d'impression dans un nouvel onglet ──
@@ -463,6 +466,7 @@ export default function JardinConfortV7() {
     if (!raw) return;
     const s: DraftSnapshot = JSON.parse(raw);
     setFormType(s.formType); setClientType(s.clientType); setPaymentMode(s.paymentMode);
+    setDeliveryMode((s as any).deliveryMode || "Livraison à domicile");
     setOfferStatus(s.offerStatus || "En cours"); setDate(s.date); setCommercial(s.commercial);
     setOfferNumber(s.offerNumber); setReference(s.reference || "");
     setSociete(s.societe); setNom(s.nom); setPrenom(s.prenom);
@@ -484,7 +488,7 @@ export default function JardinConfortV7() {
     setFormType("Offre"); setClientType("Privé (prix TTC)"); setPaymentMode("Paiement d'avance à la commande");
     setOfferStatus("En cours"); setDate(todayForInput()); setOfferNumber(generateOfferNumber());
     setReference(""); setSociete(""); setNom(""); setPrenom(""); setRue(""); setNumero(""); setNpa(""); setVille("");
-    setTelephone1(""); setTelephone2(""); setEmail("");
+    setTelephone1(""); setTelephone2(""); setEmail(""); setDeliveryMode("Livraison à domicile");
     setLivrDiff(false); setLivrSociete(""); setLivrNom(""); setLivrPrenom("");
     setLivrTel(""); setLivrRue(""); setLivrNumero(""); setLivrNpa(""); setLivrVille("");
     setLines([]); setDiscount("0");
@@ -631,6 +635,13 @@ export default function JardinConfortV7() {
                 <option>Paiement d'avance à la commande</option>
                 <option>Acompte de 50% à la commande</option>
                 <option>Paiement à 30 jours</option>
+              </select>
+            </div>
+            <div className="jc-field">
+              <label>Mode de livraison</label>
+              <select value={deliveryMode} onChange={(e) => setDeliveryMode(e.target.value as DeliveryMode)}>
+                <option>Livraison à domicile</option>
+                <option>À l'emporter</option>
               </select>
             </div>
             <div className="jc-field screenOnly">
@@ -1355,7 +1366,7 @@ export default function JardinConfortV7() {
             </div>
 
             <div className="jc-info-badge">💳 {paymentMode}</div>
-            <div className="jc-info-badge">🚚 Délai : {leadTime}</div>
+            <div className="jc-info-badge">🚚 {deliveryMode} · Délai : {leadTime}</div>
           </div>
         </section>
 
