@@ -411,7 +411,7 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
                   ["Paiement", d.paymentMode],
                   ["Livraison", d.deliveryMode||"Livraison à domicile"],
                   d.leadTime ? ["Délai estimé", d.leadTime] : null,
-                ].filter(Boolean).map(([k,v],i) => (
+                ].filter((x): x is string[] => x !== null).map(([k,v],i) => (
                   <div key={i} style={{display:"flex",gap:12,marginBottom:8,fontSize:14}}>
                     <span style={{color:C.grey,fontWeight:500,minWidth:100}}>{k}</span>
                     <span style={{color:C.text}}>{v}</span>
