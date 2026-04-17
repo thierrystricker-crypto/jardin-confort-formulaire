@@ -219,10 +219,22 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
       `}</style>
 
       {/* ── TOP BAR bleue ── */}
-      <div style={{background:C.topBar, padding:"7px 0", textAlign:"center"}}>
-        <span style={{color:"white", fontSize:12, letterSpacing:"0.06em", fontWeight:500}}>
-          MOBILIER D'EXTÉRIEUR DEPUIS 1960
-        </span>
+      <div style={{background:C.topBar, padding:"7px 24px"}}>
+        <div style={{maxWidth:960, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+          <span style={{color:"white", fontSize:12, letterSpacing:"0.06em", fontWeight:500}}>
+            MOBILIER D'EXTÉRIEUR DEPUIS 1960
+          </span>
+          <a
+            href="https://www.jardin-confort.ch"
+            style={{
+              color:"white", fontSize:12, fontWeight:600,
+              display:"flex", alignItems:"center", gap:6,
+              opacity:0.9, textDecoration:"none",
+            }}
+          >
+            ← Retourner sur la boutique
+          </a>
+        </div>
       </div>
 
       {/* ── HEADER boutique ── */}
