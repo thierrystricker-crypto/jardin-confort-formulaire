@@ -1,14 +1,26 @@
 "use client";
 // app/offre/[slug]/page.tsx
-// Page publique client — style identique au template d'impression Jardin-Confort
-// Stock en temps réel depuis Shopify
+// Page publique client — style boutique jardin-confort.ch
+// DM Sans, #0060A9, #F3F5F6, corner radius 16px
 
 import React, { useEffect, useState } from "react";
 
-const THEME = "#2b8ad1";
-const BLACK = "#000000";
-const GREY  = "#333333";
-const LIGHT = "#f9f9f9";
+// ── Tokens du thème Jardin-Confort boutique ──
+const C = {
+  blue:       "#0060A9",   // headings, accents
+  blueBtn:    "#2B8AD1",   // boutons primaires
+  text:       "#2A2B2A",   // texte body
+  bgPage:     "#F3F5F6",   // fond page
+  bgCard:     "#FFFFFF",   // fond cards
+  border:     "#E8EAED",   // bordures
+  green:      "#2C7E3F",   // stock ok
+  orange:     "#E67E22",   // stock limité / sur commande
+  grey:       "#6B7280",   // texte secondaire
+  topBar:     "#0060A9",   // bande top
+};
+const R = "16px"; // corner radius
+const FONT = "'DM Sans', system-ui, sans-serif";
+const TVA_RATE = 0.081;
 
 const serviceLabels: Record<string, string> = {
   montage:       "Frais de montage",
@@ -18,8 +30,6 @@ const serviceLabels: Record<string, string> = {
   etage_montage: "Livraison « à l'étage », déballage et montage",
   reprise:       "Reprise et recyclage des anciens meubles",
 };
-
-const TVA_RATE = 0.081;
 
 type QuoteLine = {
   id: string;
@@ -69,11 +79,41 @@ type OffreData = {
 };
 
 function fmt(v: number) {
-  return "CHF\u00a0" + new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+  return "CHF\u00a0" + new Intl.NumberFormat("de-CH", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2
+  }).format(v);
 }
 function fmtDate(iso: string) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(iso).toLocaleDateString("fr-CH", {
+    day: "2-digit", month: "2-digit", year: "numeric"
+  });
+}
+
+// ── Composant card ──
+function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div style={{
+      background: C.bgCard,
+      border: `1px solid ${C.border}`,
+      borderRadius: R,
+      overflow: "hidden",
+      ...style,
+    }}>{children}</div>
+  );
+}
+
+// ── Label de section ──
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      fontSize: 11, fontWeight: 700, color: C.blue,
+      textTransform: "uppercase", letterSpacing: "0.08em",
+      padding: "14px 20px 10px",
+      borderBottom: `1px solid ${C.border}`,
+      marginBottom: 0,
+    }}>{children}</div>
+  );
 }
 
 export default function OffrePubliquePage({ params }: { params: Promise<{ slug: string }> }) {
@@ -96,26 +136,33 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
   }, [params]);
 
   if (loading) return (
-    <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",fontFamily:"'Raleway',sans-serif",color:GREY,fontSize:14}}>
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
+      minHeight:"100vh", fontFamily:FONT, color:C.grey, fontSize:15 }}>
       Chargement de l'offre…
     </div>
   );
+
   if (error === "404") return (
-    <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",fontFamily:"'Raleway',sans-serif",flexDirection:"column",gap:12}}>
-      <div style={{fontSize:48}}>🔍</div>
-      <div style={{fontSize:20,fontWeight:700,color:"#333"}}>Offre introuvable</div>
-      <div style={{color:"#888",fontSize:13}}>Cette offre n'existe pas ou a été supprimée.</div>
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
+      minHeight:"100vh", fontFamily:FONT, flexDirection:"column", gap:16,
+      background: C.bgPage }}>
+      <div style={{fontSize:52}}>🔍</div>
+      <div style={{fontSize:22, fontWeight:700, color:C.blue}}>Offre introuvable</div>
+      <div style={{color:C.grey, fontSize:14}}>Cette offre n'existe pas ou a été supprimée.</div>
     </div>
   );
-  if (!offre) return null;
 
+  if (!offre) return null;
   const d = offre.data;
   const isPrivateTTC = d.clientType === "Privé (prix TTC)";
 
   // ── Totaux ──
-  const subTotal = (d.lines||[]).reduce((s,l) => l.type==="comment" ? s : s + l.qty*l.unitPrice - (l.lineDiscount||0), 0);
+  const subTotal = (d.lines||[]).reduce((s,l) =>
+    l.type==="comment" ? s : s + l.qty*l.unitPrice - (l.lineDiscount||0), 0);
   const discountPct = Number(d.discountPercent||0);
-  const discountValue = discountPct > 0 ? Math.round(subTotal*discountPct)/100 : Number(d.discount||0);
+  const discountValue = discountPct > 0
+    ? Math.round(subTotal*discountPct)/100
+    : Number(d.discount||0);
   const activeServices = Object.entries(d.enabledServices||{})
     .filter(([,v]) => v)
     .map(([code]) => ({
@@ -127,116 +174,170 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
   const serviceTotal = activeServices.reduce((s,srv) => s+srv.amount, 0);
   const roundingValue = Math.min(0, Number(d.manualRounding)||0);
   const totalAfterAll = subTotal - discountValue + serviceTotal + roundingValue;
-  const tvaAmount = isPrivateTTC ? totalAfterAll - totalAfterAll/(1+TVA_RATE) : totalAfterAll*TVA_RATE;
+  const tvaAmount = isPrivateTTC
+    ? totalAfterAll - totalAfterAll/(1+TVA_RATE)
+    : totalAfterAll*TVA_RATE;
   const finalTotal = isPrivateTTC ? totalAfterAll : totalAfterAll+tvaAmount;
 
   const isEnCours = ["En cours","Envoyée"].includes(offre.statut);
 
-  // Adresses
+  // ── Adresses ──
   const addrFact = [
-    d.societe,
-    [d.nom, d.prenom].filter(Boolean).join(" "),
-    [d.rue, d.numero].filter(Boolean).join(" "),
-    [d.npa, d.ville].filter(Boolean).join(" "),
+    d.societe || null,
+    [d.nom, d.prenom].filter(Boolean).join(" ") || null,
+    [d.rue, d.numero].filter(Boolean).join(" ") || null,
+    [d.npa, d.ville].filter(Boolean).join(" ") || null,
     d.telephone1 ? `Tél. ${d.telephone1}` : null,
-    d.email,
+    d.email || null,
   ].filter(Boolean) as string[];
 
-  const addrLivr = d.deliveryMode === "À l'emporter"
+  const addrLivr: string[] = d.deliveryMode === "À l'emporter"
     ? ["À l'emporter", "Jardin-Confort SA", "Route de Lavaux 425", "1095 Lutry"]
     : d.livrDiff
-      ? [d.livrSociete, [d.livrNom, d.livrPrenom].filter(Boolean).join(" "), [d.livrRue, d.livrNumero].filter(Boolean).join(" "), [d.livrNpa, d.livrVille].filter(Boolean).join(" "), d.livrTel ? `Tél. ${d.livrTel}` : null].filter(Boolean) as string[]
-      : addrFact.slice(0, -1); // Même que facturation sans email
+      ? [
+          d.livrSociete || null,
+          [d.livrNom, d.livrPrenom].filter(Boolean).join(" ") || null,
+          [d.livrRue, d.livrNumero].filter(Boolean).join(" ") || null,
+          [d.livrNpa, d.livrVille].filter(Boolean).join(" ") || null,
+          d.livrTel ? `Tél. ${d.livrTel}` : null,
+        ].filter(Boolean) as string[]
+      : addrFact.filter(l => !l.includes("@"));
 
   return (
     <>
       <link rel="preconnect" href="https://fonts.googleapis.com"/>
-      <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;600;700;900&display=swap" rel="stylesheet"/>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
       <style>{`
         *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Raleway',sans-serif;background:#eff1f4;color:${GREY};font-size:13px;line-height:1.5}
-        a{color:${THEME}}
-        @media print{@page{margin:14mm 16mm}body{background:white}.no-print{display:none!important}}
+        body{font-family:${FONT};background:${C.bgPage};color:${C.text};font-size:15px;line-height:1.6}
+        a{color:${C.blue};text-decoration:none}
+        @media(max-width:640px){
+          .addr-grid{flex-direction:column!important}
+          .totaux-grid{flex-direction:column!important}
+          .article-img{display:none!important}
+        }
       `}</style>
 
-      {/* ── HEADER ── */}
-      <div style={{background:"white",borderBottom:`3px solid ${THEME}`,marginBottom:24}}>
-        <div style={{maxWidth:900,margin:"0 auto",padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
-          <div style={{display:"flex",alignItems:"center",gap:16}}>
-            <img src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
-              alt="Jardin-Confort" style={{height:52,objectFit:"contain"}}/>
-            <div>
-              <div style={{fontSize:11,color:"#bbb",textTransform:"uppercase",letterSpacing:"0.08em"}}>Jardin-Confort SA · Lutry</div>
-              <div style={{fontSize:22,fontWeight:400,color:THEME,letterSpacing:"-0.01em"}}>{offre.type_document}</div>
-            </div>
-          </div>
-          <div style={{textAlign:"right"}}>
-            <div style={{fontSize:22,fontWeight:900,color:BLACK,letterSpacing:"-0.02em"}}>{offre.numero_affiche}</div>
-            {d.reference && <div style={{fontSize:12,color:"#999",marginTop:1}}>{d.reference}</div>}
-            <div style={{fontSize:11,color:"#bbb",marginTop:2}}>{fmtDate(offre.date_document)} · {offre.commercial}</div>
-          </div>
-        </div>
+      {/* ── TOP BAR bleue ── */}
+      <div style={{background:C.topBar, padding:"7px 0", textAlign:"center"}}>
+        <span style={{color:"white", fontSize:12, letterSpacing:"0.06em", fontWeight:500}}>
+          MOBILIER D'EXTÉRIEUR DEPUIS 1960
+        </span>
       </div>
 
-      <div style={{maxWidth:900,margin:"0 auto",padding:"0 24px 48px"}}>
+      {/* ── HEADER boutique ── */}
+      <header style={{background:"white", borderBottom:`1px solid ${C.border}`, padding:"16px 0", marginBottom:32}}>
+        <div style={{maxWidth:960, margin:"0 auto", padding:"0 24px",
+          display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:16}}>
+          <img
+            src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
+            alt="Jardin-Confort" style={{height:52, objectFit:"contain"}}
+          />
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:13, color:C.grey}}>Votre offre personnalisée</div>
+            <div style={{fontSize:22, fontWeight:700, color:C.blue, letterSpacing:"-0.02em"}}>
+              {offre.type_document} {offre.numero_affiche}
+            </div>
+            <div style={{fontSize:13, color:C.grey, marginTop:2}}>
+              {fmtDate(offre.date_document)} · Conseiller : {offre.commercial}
+              {d.reference && ` · ${d.reference}`}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main style={{maxWidth:960, margin:"0 auto", padding:"0 24px 64px"}}>
 
         {/* ── STATUT ── */}
         {isEnCours && (
-          <div style={{background:"#fff8e1",border:"1px solid #ffc107",borderRadius:6,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:12}}>
-            <span style={{fontSize:18,flexShrink:0}}>⏳</span>
+          <div style={{
+            background:"#FFF8E1", border:"1px solid #FFD54F",
+            borderRadius:R, padding:"14px 20px", marginBottom:24,
+            display:"flex", alignItems:"center", gap:14,
+          }}>
+            <span style={{fontSize:24, flexShrink:0}}>⏳</span>
             <div>
-              <div style={{fontWeight:700,color:"#856404",fontSize:13}}>Offre en attente de validation</div>
-              <div style={{fontSize:12,color:"#856404",marginTop:2}}>
-                Délai estimé : <strong>{d.leadTime||"–"}</strong>
+              <div style={{fontWeight:700, color:"#856404", fontSize:15}}>
+                Offre en attente de validation
+              </div>
+              <div style={{fontSize:13, color:"#9A7800", marginTop:3}}>
+                Délai de livraison estimé : <strong>{d.leadTime||"–"}</strong>
                 {d.deliveryMode && ` · ${d.deliveryMode}`}
               </div>
             </div>
           </div>
         )}
         {offre.statut==="Acceptée" && (
-          <div style={{background:"#e8f5e9",border:"1px solid #4caf50",borderRadius:6,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:18}}>✅</span>
-            <div style={{fontWeight:700,color:"#2e7d32",fontSize:13}}>Offre acceptée — Merci pour votre confiance !</div>
+          <div style={{
+            background:"#E8F5E9", border:`1px solid ${C.green}`,
+            borderRadius:R, padding:"14px 20px", marginBottom:24,
+            display:"flex", alignItems:"center", gap:14,
+          }}>
+            <span style={{fontSize:24}}>✅</span>
+            <div style={{fontWeight:700, color:C.green, fontSize:15}}>
+              Offre acceptée — Merci pour votre confiance !
+            </div>
           </div>
         )}
 
-        {/* ── ADRESSES (style template print) ── */}
-        <div style={{display:"flex",gap:0,marginBottom:20,background:"white",border:"1px solid #e0e0e0",borderRadius:6,overflow:"hidden"}}>
-          <div style={{flex:1,padding:"16px 20px",borderRight:"2px solid #f0f0f0"}}>
-            <div style={{fontSize:10,fontWeight:700,color:THEME,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${THEME}`}}>
-              Adresse de facturation
+        {/* ── ADRESSES ── */}
+        <div className="addr-grid" style={{display:"flex", gap:16, marginBottom:24}}>
+          <Card style={{flex:1}}>
+            <SectionLabel>Adresse de facturation</SectionLabel>
+            <div style={{padding:"14px 20px"}}>
+              {addrFact.map((line, i) => (
+                <div key={i} style={{
+                  fontSize:14,
+                  fontWeight: i===1 ? 600 : 400,
+                  color: i===1 ? C.text : C.grey,
+                  lineHeight:1.8,
+                  fontStyle: line.includes("@") ? "normal" : "normal",
+                }}>{line}</div>
+              ))}
             </div>
-            {addrFact.map((line,i) => (
-              <div key={i} style={{fontSize:12,color:i===1?BLACK:GREY,fontWeight:i===1?700:400,lineHeight:1.7}}>{line}</div>
-            ))}
-          </div>
-          <div style={{flex:1,padding:"16px 20px"}}>
-            <div style={{fontSize:10,fontWeight:700,color:THEME,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${THEME}`}}>
-              Adresse de livraison
+          </Card>
+          <Card style={{flex:1}}>
+            <SectionLabel>Adresse de livraison</SectionLabel>
+            <div style={{padding:"14px 20px"}}>
+              {addrLivr.map((line, i) => (
+                <div key={i} style={{
+                  fontSize:14,
+                  fontWeight: i===1 ? 600 : 400,
+                  color: i===1 ? C.text : C.grey,
+                  lineHeight:1.8,
+                  fontStyle: d.deliveryMode==="À l'emporter" && i>0 ? "italic" : "normal",
+                }}>{line}</div>
+              ))}
             </div>
-            {addrLivr.map((line,i) => (
-              <div key={i} style={{fontSize:12,color:i===1?BLACK:GREY,fontWeight:i===1?700:400,lineHeight:1.7,fontStyle:d.deliveryMode==="À l'emporter"&&i>0?"italic":"normal"}}>{line}</div>
-            ))}
-          </div>
+          </Card>
         </div>
 
-        {/* ── TABLEAU ARTICLES (style identique template print) ── */}
-        <div style={{background:"white",border:"1px solid #e0e0e0",borderRadius:6,overflow:"hidden",marginBottom:20}}>
-          <table style={{width:"100%",borderCollapse:"collapse"}}>
+        {/* ── ARTICLES ── */}
+        <Card style={{marginBottom:24}}>
+          <SectionLabel>
+            Articles ({(d.lines||[]).filter(l=>l.type!=="comment").length})
+          </SectionLabel>
+          <table style={{width:"100%", borderCollapse:"collapse"}}>
             <thead>
-              <tr style={{borderTop:`2px solid ${THEME}`,borderBottom:`2px solid ${THEME}`,background:"white"}}>
-                <th style={{width:60,padding:"9px 12px"}}></th>
-                <th style={{textAlign:"left",padding:"9px 8px",fontSize:11,fontWeight:700,color:BLACK,textTransform:"uppercase",letterSpacing:"0.05em"}}>Description de l'article</th>
-                <th style={{textAlign:"center",padding:"9px 8px",fontSize:11,fontWeight:700,color:BLACK,width:55,textTransform:"uppercase",letterSpacing:"0.05em"}}>Qté</th>
-                <th style={{textAlign:"right",padding:"9px 8px",fontSize:11,fontWeight:700,color:BLACK,width:105,textTransform:"uppercase",letterSpacing:"0.05em"}}>Prix/pce</th>
-                <th style={{textAlign:"right",padding:"9px 14px",fontSize:11,fontWeight:700,color:BLACK,width:115,textTransform:"uppercase",letterSpacing:"0.05em"}}>Total</th>
+              <tr style={{background:C.bgPage}}>
+                <th className="article-img" style={{width:72,padding:"10px 16px"}}></th>
+                <th style={{textAlign:"left",padding:"10px 8px",fontSize:12,fontWeight:600,color:C.grey}}>Article</th>
+                <th style={{textAlign:"center",padding:"10px 8px",fontSize:12,fontWeight:600,color:C.grey,width:60}}>Qté</th>
+                <th style={{textAlign:"right",padding:"10px 8px",fontSize:12,fontWeight:600,color:C.grey,width:110}}>Prix/pce</th>
+                <th style={{textAlign:"right",padding:"10px 16px",fontSize:12,fontWeight:600,color:C.grey,width:120}}>Total</th>
               </tr>
             </thead>
             <tbody>
               {(d.lines||[]).map((line,i) => {
                 if (line.type==="comment") return (
                   <tr key={line.id}>
-                    <td colSpan={5} style={{padding:"8px 14px",fontStyle:"italic",color:"#667",fontSize:12,background:"#eef4fb",borderBottom:"1px solid #dde8f5"}}>{line.title}</td>
+                    <td colSpan={5} style={{
+                      padding:"10px 16px", fontStyle:"italic",
+                      color:C.grey, fontSize:13,
+                      background:"#EEF4FB",
+                      borderTop:`1px solid ${C.border}`,
+                      borderBottom:`1px solid ${C.border}`,
+                    }}>{line.title}</td>
                   </tr>
                 );
                 const lineTotal = line.qty*line.unitPrice-(line.lineDiscount||0);
@@ -245,131 +346,181 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
                 const isOk = sn!==null&&sn>2;
                 const isLow = sn!==null&&sn>0&&sn<=2;
                 return (
-                  <tr key={line.id} style={{background:i%2===0?LIGHT:"white"}}>
-                    <td style={{padding:"10px 12px",textAlign:"center",borderBottom:"1px solid #efefef",verticalAlign:"middle"}}>
-                      {line.image && <img src={line.image} alt="" style={{width:50,height:50,objectFit:"contain"}}/>}
+                  <tr key={line.id} style={{
+                    borderTop:`1px solid ${C.border}`,
+                    background: i%2===0 ? "white" : C.bgPage,
+                  }}>
+                    <td className="article-img" style={{padding:"12px 16px",textAlign:"center",verticalAlign:"middle"}}>
+                      {line.image
+                        ? <img src={line.image} alt="" style={{width:56,height:56,objectFit:"contain",borderRadius:8}}/>
+                        : <div style={{width:56,height:56,background:C.bgPage,borderRadius:8}}/>
+                      }
                     </td>
-                    <td style={{padding:"10px 8px",borderBottom:"1px solid #efefef",verticalAlign:"middle"}}>
-                      <div style={{fontWeight:700,color:BLACK,fontSize:13}}>{line.title}</div>
-                      {line.sku && <div style={{fontSize:11,color:"#aaa",marginTop:1}}>{line.sku}</div>}
+                    <td style={{padding:"12px 8px",verticalAlign:"middle"}}>
+                      <div style={{fontWeight:600,color:C.text,fontSize:14}}>{line.title}</div>
+                      {line.sku && <div style={{fontSize:12,color:C.grey,marginTop:1}}>Réf. {line.sku}</div>}
                       {(line.lineDiscount||0)>0 && (
-                        <div style={{fontSize:11,color:"#27ae60",marginTop:2}}>Remise : − {fmt(line.lineDiscount||0)}</div>
+                        <div style={{fontSize:12,color:C.green,marginTop:2,fontWeight:500}}>
+                          Remise : − {fmt(line.lineDiscount||0)}
+                        </div>
                       )}
-                      <div style={{marginTop:4,fontSize:11,fontWeight:600}}>
+                      <div style={{marginTop:5,fontSize:12,fontWeight:600}}>
                         {sn===null||sn===undefined ? null
-                          : isSC ? <span style={{color:"#e67e22"}}>{line.delaiLivraison||"Sur commande"}</span>
-                          : isOk ? <span style={{color:"#27ae60"}}>✓ En stock ({sn} pce{sn>1?"s":""})</span>
-                          : isLow ? <span style={{color:"#e67e22"}}>⚠ Stock limité ({sn} pce{sn>1?"s":""})</span>
-                          : null}
+                          : isSC
+                            ? <span style={{color:C.orange}}>📦 {line.delaiLivraison||"Sur commande"}</span>
+                            : isOk
+                              ? <span style={{color:C.green}}>✓ En stock ({sn} pce{sn>1?"s":""})</span>
+                              : isLow
+                                ? <span style={{color:C.orange}}>⚠ Stock limité ({sn} pce{sn>1?"s":""})</span>
+                                : null}
                       </div>
                     </td>
-                    <td style={{padding:"10px 8px",textAlign:"center",borderBottom:"1px solid #efefef",color:GREY,verticalAlign:"middle",fontSize:13}}>× {line.qty}</td>
-                    <td style={{padding:"10px 8px",textAlign:"right",borderBottom:"1px solid #efefef",color:GREY,whiteSpace:"nowrap",verticalAlign:"middle",fontSize:13}}>{fmt(line.unitPrice)}</td>
-                    <td style={{padding:"10px 14px",textAlign:"right",borderBottom:"1px solid #efefef",fontWeight:700,color:BLACK,whiteSpace:"nowrap",verticalAlign:"middle",fontSize:13}}>{fmt(lineTotal)}</td>
+                    <td style={{padding:"12px 8px",textAlign:"center",verticalAlign:"middle",color:C.grey,fontSize:14}}>
+                      {line.qty}
+                    </td>
+                    <td style={{padding:"12px 8px",textAlign:"right",verticalAlign:"middle",color:C.grey,whiteSpace:"nowrap",fontSize:14}}>
+                      {fmt(line.unitPrice)}
+                    </td>
+                    <td style={{padding:"12px 16px",textAlign:"right",verticalAlign:"middle",fontWeight:700,color:C.text,whiteSpace:"nowrap",fontSize:14}}>
+                      {fmt(lineTotal)}
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-        </div>
+        </Card>
 
-        {/* ── NOTES + TOTAUX (côte à côte comme template print) ── */}
-        <div style={{display:"flex",gap:16,marginBottom:20,alignItems:"flex-start",flexWrap:"wrap"}}>
+        {/* ── NOTES + TOTAUX ── */}
+        <div className="totaux-grid" style={{display:"flex",gap:16,marginBottom:24,alignItems:"flex-start",flexWrap:"wrap"}}>
 
-          {/* Notes */}
-          <div style={{flex:1,minWidth:200,display:"flex",flexDirection:"column",gap:12}}>
+          {/* Gauche : notes + conditions */}
+          <div style={{flex:1,minWidth:220,display:"flex",flexDirection:"column",gap:16}}>
             {d.remarks && (
-              <div style={{background:"white",border:"1px solid #e0e0e0",borderRadius:6,padding:"14px 18px"}}>
-                <div style={{fontSize:10,fontWeight:700,color:BLACK,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8,paddingBottom:5,borderBottom:"1px solid #eee"}}>Notes</div>
-                <div style={{fontSize:12,lineHeight:1.7,whiteSpace:"pre-wrap",color:GREY}}>{d.remarks}</div>
-              </div>
+              <Card>
+                <SectionLabel>Notes</SectionLabel>
+                <div style={{padding:"14px 20px",fontSize:14,lineHeight:1.7,color:C.grey,whiteSpace:"pre-wrap"}}>
+                  {d.remarks}
+                </div>
+              </Card>
             )}
-            {/* Conditions */}
-            <div style={{background:"white",border:"1px solid #e0e0e0",borderRadius:6,padding:"14px 18px"}}>
-              <div style={{fontSize:10,fontWeight:700,color:BLACK,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8,paddingBottom:5,borderBottom:"1px solid #eee"}}>Conditions</div>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                <tbody>
-                  <tr><td style={{color:GREY,paddingBottom:4,paddingRight:8,fontWeight:600,width:"45%"}}>Paiement</td><td>{d.paymentMode}</td></tr>
-                  <tr><td style={{color:GREY,paddingBottom:4,fontWeight:600}}>Livraison</td><td>{d.deliveryMode||"Livraison à domicile"}</td></tr>
-                  {d.leadTime && <tr><td style={{color:GREY,paddingBottom:4,fontWeight:600}}>Délai estimé</td><td>{d.leadTime}</td></tr>}
-                </tbody>
-              </table>
-            </div>
+            <Card>
+              <SectionLabel>Conditions</SectionLabel>
+              <div style={{padding:"14px 20px"}}>
+                {[
+                  ["Paiement", d.paymentMode],
+                  ["Livraison", d.deliveryMode||"Livraison à domicile"],
+                  d.leadTime ? ["Délai estimé", d.leadTime] : null,
+                ].filter(Boolean).map(([k,v],i) => (
+                  <div key={i} style={{display:"flex",gap:12,marginBottom:8,fontSize:14}}>
+                    <span style={{color:C.grey,fontWeight:500,minWidth:100}}>{k}</span>
+                    <span style={{color:C.text}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
           </div>
 
-          {/* Totaux */}
-          <div style={{minWidth:300,background:"white",border:"1px solid #e0e0e0",borderRadius:6,overflow:"hidden"}}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <tbody>
-                {/* Sous-total */}
-                <tr style={{background:LIGHT}}>
-                  <td style={{padding:"9px 16px",fontSize:12,color:GREY}}>Sous-total articles</td>
-                  <td style={{padding:"9px 16px",textAlign:"right",fontSize:12,whiteSpace:"nowrap"}}>{fmt(subTotal)}</td>
-                </tr>
-                {/* Remise */}
-                {discountValue>0 && (
-                  <tr>
-                    <td style={{padding:"7px 16px",fontSize:12,color:GREY}}>Remise globale</td>
-                    <td style={{padding:"7px 16px",textAlign:"right",fontSize:12,color:"#27ae60",whiteSpace:"nowrap"}}>− {fmt(discountValue)}</td>
-                  </tr>
-                )}
-                {/* Services détaillés */}
-                {activeServices.length>0 && (
-                  <>
-                    <tr style={{background:LIGHT}}>
-                      <td colSpan={2} style={{padding:"7px 16px 3px",fontSize:10,fontWeight:700,color:BLACK,textTransform:"uppercase",letterSpacing:"0.06em"}}>
-                        Services
-                      </td>
-                    </tr>
-                    {activeServices.map((srv,i) => (
-                      <tr key={srv.code} style={{background:i%2===0?"white":LIGHT}}>
-                        <td style={{padding:"5px 16px 5px 24px",fontSize:12,color:GREY}}>↳ {srv.label}</td>
-                        <td style={{padding:"5px 16px",textAlign:"right",fontSize:12,whiteSpace:"nowrap"}}>{fmt(srv.amount)}</td>
-                      </tr>
-                    ))}
-                  </>
-                )}
-                {/* Arrondi */}
-                {roundingValue!==0 && (
-                  <tr>
-                    <td style={{padding:"7px 16px",fontSize:12,color:GREY}}>Arrondi</td>
-                    <td style={{padding:"7px 16px",textAlign:"right",fontSize:12,whiteSpace:"nowrap"}}>{fmt(roundingValue)}</td>
-                  </tr>
-                )}
-                {/* TVA */}
-                <tr style={{borderTop:"1px solid #eee"}}>
-                  <td style={{padding:"7px 16px",fontSize:11,color:"#aaa"}}>TVA 8.1% {isPrivateTTC?"(incluse)":""}</td>
-                  <td style={{padding:"7px 16px",textAlign:"right",fontSize:11,color:"#aaa",whiteSpace:"nowrap"}}>{fmt(tvaAmount)}</td>
-                </tr>
-                {/* TOTAL */}
-                <tr style={{borderTop:`2px solid ${THEME}`,background:"white"}}>
-                  <td style={{padding:"14px 16px",fontWeight:900,fontSize:17,color:BLACK}}>TOTAL {isPrivateTTC?"TTC":"HT+TVA"}</td>
-                  <td style={{padding:"14px 16px",textAlign:"right",fontWeight:900,fontSize:17,color:BLACK,whiteSpace:"nowrap"}}>{fmt(finalTotal)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {/* Droite : totaux */}
+          <Card style={{minWidth:300}}>
+            <SectionLabel>Récapitulatif</SectionLabel>
+            <div style={{padding:"8px 0"}}>
+              {/* Sous-total */}
+              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 20px",fontSize:14}}>
+                <span style={{color:C.grey}}>Sous-total articles</span>
+                <span style={{color:C.text}}>{fmt(subTotal)}</span>
+              </div>
+              {/* Remise */}
+              {discountValue>0 && (
+                <div style={{display:"flex",justifyContent:"space-between",padding:"6px 20px",fontSize:14}}>
+                  <span style={{color:C.grey}}>Remise</span>
+                  <span style={{color:C.green,fontWeight:600}}>− {fmt(discountValue)}</span>
+                </div>
+              )}
+              {/* Services */}
+              {activeServices.length>0 && (
+                <>
+                  <div style={{padding:"8px 20px 4px",fontSize:11,fontWeight:700,color:C.grey,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+                    Services inclus
+                  </div>
+                  {activeServices.map((srv,i) => (
+                    <div key={srv.code} style={{
+                      display:"flex",justifyContent:"space-between",
+                      padding:"5px 20px 5px 32px",fontSize:13,
+                      background:i%2===0?"white":C.bgPage,
+                    }}>
+                      <span style={{color:C.grey}}>↳ {srv.label}</span>
+                      <span style={{color:C.text,whiteSpace:"nowrap"}}>{fmt(srv.amount)}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+              {/* Arrondi */}
+              {roundingValue!==0 && (
+                <div style={{display:"flex",justifyContent:"space-between",padding:"6px 20px",fontSize:14}}>
+                  <span style={{color:C.grey}}>Arrondi</span>
+                  <span>{fmt(roundingValue)}</span>
+                </div>
+              )}
+              {/* TVA */}
+              <div style={{
+                display:"flex",justifyContent:"space-between",
+                padding:"6px 20px",fontSize:12,color:C.grey,
+                borderTop:`1px solid ${C.border}`,marginTop:4,
+              }}>
+                <span>TVA 8.1% {isPrivateTTC?"(incluse)":""}</span>
+                <span>{fmt(tvaAmount)}</span>
+              </div>
+              {/* TOTAL */}
+              <div style={{
+                display:"flex",justifyContent:"space-between",alignItems:"center",
+                padding:"16px 20px",
+                background:C.blue,
+                borderRadius:"0 0 14px 14px",
+                marginTop:4,
+              }}>
+                <span style={{fontWeight:700,fontSize:16,color:"white"}}>
+                  TOTAL {isPrivateTTC?"TTC":"HT+TVA"}
+                </span>
+                <span style={{fontWeight:700,fontSize:20,color:"white",whiteSpace:"nowrap"}}>
+                  {fmt(finalTotal)}
+                </span>
+              </div>
+            </div>
+          </Card>
         </div>
 
         {/* ── STOCK MIS À JOUR ── */}
         {offre.stockRefreshedAt && (
-          <div style={{textAlign:"center",fontSize:11,color:"#ccc",marginBottom:24}}>
-            Stock mis à jour le {new Date(offre.stockRefreshedAt).toLocaleString("fr-CH")}
+          <div style={{textAlign:"center",fontSize:12,color:"#C0C4CC",marginBottom:32}}>
+            🔄 Disponibilités vérifiées le {new Date(offre.stockRefreshedAt).toLocaleString("fr-CH")}
           </div>
         )}
 
         {/* ── FOOTER ── */}
-        <div style={{borderTop:"1px solid #ddd",paddingTop:14,textAlign:"center",color:"#bbb",fontSize:11,lineHeight:1.9}}>
-          <strong style={{color:"#666",fontSize:12}}>Jardin-Confort SA</strong><br/>
-          Route de Lavaux 425 · 1095 Lutry · +41 21 791 36 71 · contact@jardinconfort.ch<br/>
-          <a href="https://www.jardin-confort.ch" style={{color:THEME}}>www.jardin-confort.ch</a> · TVA CHE-100.142.327<br/>
-          <span style={{fontSize:10,color:"#ddd"}}>
-            En consultant cette offre, vous acceptez nos{" "}
-            <a href="https://www.jardin-confort.ch/pages/conditions-generales" style={{color:"#ccc"}}>conditions générales de vente</a>.
-          </span>
+        <div style={{
+          borderTop:`1px solid ${C.border}`,paddingTop:24,
+          textAlign:"center",color:C.grey,fontSize:13,lineHeight:2,
+        }}>
+          <div>
+            <strong style={{color:C.text}}>Jardin-Confort SA</strong> · Route de Lavaux 425 · 1095 Lutry
+          </div>
+          <div>
+            <a href="tel:+41217913671" style={{color:C.blue}}>+41 21 791 36 71</a>
+            {" · "}
+            <a href="mailto:contact@jardinconfort.ch" style={{color:C.blue}}>contact@jardinconfort.ch</a>
+            {" · "}
+            <a href="https://www.jardin-confort.ch" style={{color:C.blue}}>www.jardin-confort.ch</a>
+          </div>
+          <div style={{fontSize:11,color:"#C0C4CC",marginTop:8}}>
+            TVA CHE-100.142.327 ·{" "}
+            <a href="https://www.jardin-confort.ch/pages/conditions-generales" style={{color:"#C0C4CC"}}>
+              Conditions générales de vente
+            </a>
+          </div>
         </div>
 
-      </div>
+      </main>
     </>
   );
 }
