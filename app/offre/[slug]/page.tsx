@@ -205,24 +205,28 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
 
   return (
     <>
+      {/* fonts chargées via style ci-dessous */}
       <link rel="preconnect" href="https://fonts.googleapis.com"/>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet"/>
       <style>{`
         *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:${FONT};background:${C.bgPage};color:${C.text};font-size:15px;line-height:1.6}
+        body{font-family:'DM Sans',system-ui,sans-serif;background:${C.bgPage};color:${C.text};font-size:15px;line-height:1.6}
         a{color:${C.blue};text-decoration:none}
         @media(max-width:640px){
           .addr-grid{flex-direction:column!important}
           .totaux-grid{flex-direction:column!important}
           .article-img{display:none!important}
         }
+        .nav-sujet:hover .nav-dropdown{display:block!important}
+        .nav-link{transition:box-shadow 0.1s}
+        .nav-link:hover{box-shadow:inset 0 -2px 0 0 #3E4D56}
       `}</style>
 
       {/* ── TOP BAR bleue ── */}
-      <div style={{background:"#2B8AD1", padding:"6px 24px"}}>
-        <div style={{maxWidth:1260, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+      <div style={{background:"#2B8AD1", padding:"6px 0"}}>
+        <div style={{maxWidth:1260, margin:"0 auto", padding:"0 24px", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
           <span style={{color:"white", fontSize:12, letterSpacing:"0.06em", fontWeight:500}}>
-            +10&apos;000 ARTICLES EN STOCK !
+            1&apos;000 M2 D&apos;EXPOSITION A LUTRY
           </span>
           <span style={{color:"white", fontSize:12, fontWeight:500}}>Français</span>
         </div>
@@ -232,41 +236,24 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
       <header style={{background:"white", borderBottom:"1px solid rgba(62,77,86,0.15)", marginBottom:32}}>
         <div style={{maxWidth:1260, margin:"0 auto", padding:"12px 24px 0"}}>
 
-          {/* Ligne 1 : logo + recherche + icônes */}
-          <div style={{display:"flex", alignItems:"center", gap:20, marginBottom:8, paddingBottom:8}}>
-            {/* Logo */}
+          {/* Ligne 1 : logo + icônes */}
+          <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:0, paddingBottom:8}}>
             <a href="https://www.jardin-confort.ch" style={{flexShrink:0, display:"flex", alignItems:"center"}}>
               <img
                 src="https://www.jardin-confort.ch/cdn/shop/files/logo_JARDIN_CONFORT_shopify_51f35272-8a30-45a2-8718-36fb2af011c8.jpg?v=1736184411&width=480"
                 alt="Jardin-Confort" style={{height:68, width:"auto", objectFit:"contain"}}
               />
             </a>
-            {/* Barre de recherche */}
-            <div style={{
-              flex:1, display:"flex", alignItems:"center",
-              background:"#F0F2F4", borderRadius:8,
-              padding:"11px 18px", gap:10,
-            }}>
-              <svg width="18" height="18" fill="none" stroke="#888" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-              </svg>
-              <span style={{color:"#aaa", fontSize:14, fontFamily:"'DM Sans',sans-serif"}}>Rechercher un article…</span>
-            </div>
-            {/* Icônes droite */}
-            <div style={{display:"flex", alignItems:"center", gap:4, flexShrink:0}}>
-              {/* Compte client */}
+            <div style={{display:"flex", alignItems:"center", gap:4}}>
               <a href="https://www.jardin-confort.ch/customer_authentication/redirect?locale=fr&region_country=CH"
-                style={{display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-                  width:44, height:44, padding:10, color:"#3E4D56", textDecoration:"none"}}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                style={{display:"flex", alignItems:"center", justifyContent:"center", width:44, height:44, color:"#3E4D56", textDecoration:"none"}}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.429a3.571 3.571 0 1 0 0 7.142 3.571 3.571 0 0 0 0-7.142zm0 10c2.558 0 5.114.471 7.664 1.411A3.571 3.571 0 0 1 22 18.19v3.096c0 .394-.32.714-.714.714H2.714A.714.714 0 0 1 2 21.286V18.19c0-1.495.933-2.833 2.336-3.35 2.55-.94 5.106-1.411 7.664-1.411zm0 1.428c-2.387 0-4.775.44-7.17 1.324a2.143 2.143 0 0 0-1.401 2.01v2.38H20.57v-2.38c0-.898-.56-1.7-1.401-2.01-2.395-.885-4.783-1.324-7.17-1.324z"/>
                 </svg>
               </a>
-              {/* Panier */}
               <a href="https://www.jardin-confort.ch/cart"
-                style={{display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-                  width:44, height:44, padding:10, color:"#3E4D56", textDecoration:"none", position:"relative"}}>
-                <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+                style={{display:"flex", alignItems:"center", justifyContent:"center", width:44, height:44, color:"#3E4D56", textDecoration:"none"}}>
+                <svg width="24" height="24" viewBox="0 0 24 24">
                   <path fill="currentColor" d="M17 18a2 2 0 0 1 2 2 2 2 0 0 1-2 2 2 2 0 0 1-2-2c0-1.11.89-2 2-2M1 2h3.27l.94 2H20a1 1 0 0 1 1 1c0 .17-.05.34-.12.5l-3.58 6.47c-.34.61-1 1.03-1.75 1.03H8.1l-.9 1.63-.03.12a.25.25 0 0 0 .25.25H19v2H7a2 2 0 0 1-2-2c0-.35.09-.68.24-.96l1.36-2.45L3 4H1V2m6 16a2 2 0 0 1 2 2 2 2 0 0 1-2 2 2 2 0 0 1-2-2c0-1.11.89-2 2-2m9-7 2.78-5H6.14l2.36 5H16Z"/>
                 </svg>
               </a>
@@ -276,42 +263,32 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
           {/* Ligne 2 : navigation + téléphone */}
           <div style={{display:"flex", alignItems:"flex-end", justifyContent:"space-between", flexWrap:"wrap", gap:8}}>
             <nav style={{display:"flex", alignItems:"center", flexWrap:"wrap", margin:"0 -12px"}}>
-              {/* ACCUEIL */}
-              <a href="https://www.jardin-confort.ch" style={{
+              <a href="https://www.jardin-confort.ch" className="nav-link" style={{
                 display:"block", margin:"0 12px", padding:"10px 0",
-                fontSize:13, fontWeight:600, color:"#3E4D56",
+                fontSize:13, fontWeight:500, color:"#3E4D56",
                 textDecoration:"none", whiteSpace:"nowrap",
-                letterSpacing:"0.02em",
               }}>ACCUEIL</a>
 
-              {/* RETOUR À LA BOUTIQUE — mis en évidence */}
               <a href="https://www.jardin-confort.ch" style={{
                 display:"block", margin:"0 12px", padding:"10px 0",
-                fontSize:13, fontWeight:700, color:"#2B8AD1",
+                fontSize:13, fontWeight:500, color:"#3E4D56",
                 textDecoration:"none", whiteSpace:"nowrap",
-                letterSpacing:"0.02em",
-                boxShadow:"inset 0 -2px 0 0 #2B8AD1",
-              }}>← RETOUR À LA BOUTIQUE</a>
+                boxShadow:"inset 0 -2px 0 0 #3E4D56",
+              }}>← RETOUR A LA BOUTIQUE</a>
 
-              {/* À NOTRE SUJET avec sous-menu */}
               <div style={{position:"relative", margin:"0 12px"}} className="nav-sujet">
-                <a href="https://www.jardin-confort.ch/pages/a-notre-sujet" style={{
-                  display:"flex", alignItems:"center", gap:4,
-                  padding:"10px 0",
-                  fontSize:13, fontWeight:600, color:"#3E4D56",
+                <a href="https://www.jardin-confort.ch/pages/a-notre-sujet" className="nav-link" style={{
+                  display:"inline-flex", alignItems:"center", gap:4, padding:"10px 0",
+                  fontSize:13, fontWeight:500, color:"#3E4D56",
                   textDecoration:"none", whiteSpace:"nowrap",
-                  letterSpacing:"0.02em",
                 }}>
-                  À NOTRE SUJET
-                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="m6 9 6 6 6-6"/>
-                  </svg>
+                  A NOTRE SUJET
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
                 </a>
                 <div className="nav-dropdown" style={{
                   display:"none", position:"absolute", top:"100%", left:0,
                   background:"white", boxShadow:"0 5px 15px rgba(0,0,0,0.1)",
-                  borderTop:"1px solid #E8EAED", minWidth:220, zIndex:100,
-                  padding:"8px 0",
+                  borderTop:"1px solid #E8EAED", minWidth:220, zIndex:100, padding:"8px 0",
                 }}>
                   {[
                     ["Qui sommes nous", "https://www.jardin-confort.ch/pages/a-notre-sujet"],
@@ -319,26 +296,18 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
                     ["Conditions générales", "https://www.jardin-confort.ch/pages/conditions-generales"],
                     ["Coordonnées bancaires", "https://www.jardin-confort.ch/pages/coordonnees-bancaires"],
                   ].map(([label, href]) => (
-                    <a key={label} href={href} style={{
-                      display:"block", padding:"10px 20px",
-                      fontSize:13, color:"#3E4D56", textDecoration:"none",
-                      transition:"color 0.2s",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#2B8AD1")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "#3E4D56")}
+                    <a key={label} href={href} style={{display:"block", padding:"10px 20px", fontSize:13, color:"#3E4D56", textDecoration:"none"}}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#2B8AD1")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "#3E4D56")}
                     >{label}</a>
                   ))}
                 </div>
               </div>
             </nav>
-
-            {/* Bouton téléphone */}
             <a href="tel:+41217913671" style={{
               display:"inline-flex", alignItems:"center", gap:8,
-              background:"#2B8AD1", color:"white",
-              padding:"8px 18px", borderRadius:20,
-              fontSize:13, fontWeight:600, textDecoration:"none",
-              flexShrink:0, marginBottom:8,
+              background:"#2B8AD1", color:"white", padding:"8px 18px", borderRadius:20,
+              fontSize:13, fontWeight:600, textDecoration:"none", flexShrink:0, marginBottom:8,
             }}>
               <svg width="15" height="15" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24">
                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l1.1-1.1a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
@@ -348,10 +317,6 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
           </div>
         </div>
       </header>
-
-      <style>{`
-        .nav-sujet:hover .nav-dropdown { display:block !important; }
-      `}</style>
 
       <main style={{maxWidth:1260, margin:"0 auto", padding:"0 24px 64px"}}>
 
@@ -616,15 +581,20 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
 
         {/* ── STOCK MIS À JOUR ── */}
         {offre.stockRefreshedAt && (
-          <div style={{textAlign:"center",fontSize:12,color:"#C0C4CC",marginBottom:32}}>
-            🔄 Disponibilités vérifiées le {new Date(offre.stockRefreshedAt).toLocaleString("fr-CH")}
+          <div style={{
+            background:"#FFF8E1", border:"1px solid #FFE082",
+            borderRadius:8, padding:"10px 16px", marginBottom:24,
+            fontSize:12, color:"#7B5E00", lineHeight:1.6,
+          }}>
+            ℹ️ <strong>Info du stock non contractuel.</strong> Disponibilités vérifiées le{" "}
+            {new Date(offre.stockRefreshedAt).toLocaleString("fr-CH")} sous toutes réserves d&apos;erreurs et de disponibilité.
           </div>
         )}
 
       </main>
 
       {/* ══ FOOTER ══ */}
-      <footer style={{background:"#f4f4f4", color:"#2A2B2A", fontFamily:"'DM Sans',sans-serif", borderTop:"1px solid rgba(42,43,42,0.15)"}}>
+      <footer style={{background:"white", color:"#2A2B2A", fontFamily:"'DM Sans',sans-serif", borderTop:"1px solid rgba(42,43,42,0.15)"}}>
         <div style={{maxWidth:1260, margin:"0 auto", padding:"40px 24px 16px"}}>
 
           {/* Grille principale */}
@@ -637,25 +607,24 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
                 alt="Jardin-Confort" style={{height:56, objectFit:"contain", marginBottom:16}}
               />
               <p style={{fontSize:13, fontWeight:700, color:"#2A2B2A", marginBottom:8}}>
-                LE MEILLEUR DU MOBILIER D'EXTÉRIEUR DEPUIS 1960
+                LE MEILLEUR DU MOBILIER D&apos;EXTÉRIEUR DEPUIS 1960
               </p>
               <p style={{fontSize:13, color:"#555", lineHeight:1.7, marginBottom:0}}>
-                Plus de 40 grandes marques de meubles de jardin de renom sur 1&apos;000m2 d'exposition à Lutry.
+                Plus de 40 grandes marques de meubles de jardin de renom sur 1&apos;000m2 d&apos;exposition à Lutry.
               </p>
               <p style={{fontSize:13, color:"#555", lineHeight:1.7, marginTop:8}}>
                 Une équipe qualifiée et passionnée à votre disposition et à votre écoute pour vous conseiller.
               </p>
-              {/* Réseaux sociaux */}
-              <div style={{display:"flex", gap:12, marginTop:20}}>
+              <div style={{display:"flex", gap:4, marginTop:20}}>
                 <a href="https://www.facebook.com/jardinconfort" target="_blank" rel="noopener noreferrer"
-                  style={{color:"#2A2B2A", display:"flex", alignItems:"center", justifyContent:"center", width:36, height:36}}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  style={{color:"#2A2B2A", display:"flex", alignItems:"center", justifyContent:"center", width:40, height:40, borderRadius:"50%", background:"#f5f5f5"}}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>
                   </svg>
                 </a>
                 <a href="https://www.instagram.com/jardinconfort" target="_blank" rel="noopener noreferrer"
-                  style={{color:"#2A2B2A", display:"flex", alignItems:"center", justifyContent:"center", width:36, height:36}}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  style={{color:"#2A2B2A", display:"flex", alignItems:"center", justifyContent:"center", width:40, height:40, borderRadius:"50%", background:"#f5f5f5"}}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
                     <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
                     <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
@@ -673,30 +642,38 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
                 ["Politique des retours", "https://www.jardin-confort.ch/pages/politique-des-retours"],
               ].map(([label, href]) => (
                 <div key={label} style={{marginBottom:14}}>
-                  <a href={href} style={{fontSize:13, color:"#555", textDecoration:"none"}}
-                    onMouseEnter={(e) => (e.currentTarget.style.textDecorationColor = "#555")}
-                  >{label}</a>
+                  <a href={href} style={{fontSize:13, color:"#555", textDecoration:"none"}}>{label}</a>
                 </div>
               ))}
             </div>
 
-            {/* Col 3 — Newsletter */}
+            {/* Col 3 — Newsletter fonctionnelle */}
             <div style={{flex:"1 1 260px", maxWidth:340}}>
               <h3 style={{fontSize:13, fontWeight:700, marginBottom:8, color:"#2A2B2A"}}>Newsletter</h3>
               <p style={{fontSize:13, color:"#555", lineHeight:1.6, marginBottom:16}}>
                 Ne ratez aucune promotion ou information importante en vous inscrivant en 1 clic à notre newsletter
               </p>
-              <div style={{display:"flex", border:"1px solid rgba(42,43,42,0.2)", borderRadius:8, overflow:"hidden", background:"white"}}>
-                <input
-                  type="email" placeholder="Votre e-mail"
-                  style={{flex:1, border:"none", outline:"none", padding:"12px 16px", fontSize:13, fontFamily:"inherit", background:"transparent"}}
-                />
-                <button style={{background:"none", border:"none", padding:"12px 16px", cursor:"pointer", color:"#2A2B2A"}}>
-                  <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
-                  </svg>
-                </button>
-              </div>
+              <form action="https://www.jardin-confort.ch/contact#footer-signup_form" method="post" acceptCharset="UTF-8">
+                <input type="hidden" name="form_type" value="customer"/>
+                <input type="hidden" name="utf8" value="✓"/>
+                <input type="hidden" name="contact[tags]" value="newsletter"/>
+                <div style={{display:"flex", border:"1px solid rgba(42,43,42,0.2)", borderRadius:8, overflow:"hidden", background:"white"}}>
+                  <input
+                    type="email"
+                    name="contact[email]"
+                    id="footer-signup"
+                    placeholder="Votre e-mail"
+                    autoComplete="email"
+                    required
+                    style={{flex:1, border:"none", outline:"none", padding:"12px 16px", fontSize:13, fontFamily:"inherit", background:"transparent", color:"#2A2B2A"}}
+                  />
+                  <button type="submit" style={{background:"none", border:"none", padding:"12px 16px", cursor:"pointer", color:"#2A2B2A"}}>
+                    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                  </button>
+                </div>
+              </form>
             </div>
 
             {/* Col 4 — Adresse */}
@@ -710,19 +687,6 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
                   <a href="tel:+41217913671" style={{color:"#555", textDecoration:"none"}}>T : +41 21 791 36 71</a>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Modes de paiement */}
-          <div style={{borderTop:"1px solid rgba(42,43,42,0.15)", paddingTop:20, marginBottom:16}}>
-            <div style={{display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end", alignItems:"center"}}>
-              {["Twint","PostFinance","Visa","Mastercard","Maestro","Amex","PayPal","Google Pay","Apple Pay"].map((pm) => (
-                <div key={pm} style={{
-                  border:"1px solid #ddd", borderRadius:4, background:"white",
-                  padding:"3px 8px", fontSize:10, fontWeight:600, color:"#555",
-                  height:24, display:"flex", alignItems:"center",
-                }}>{pm}</div>
-              ))}
             </div>
           </div>
 
