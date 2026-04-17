@@ -4,7 +4,7 @@
 // GET /api/offres/[slug]?snapshot=true  → retourne le snapshot figé
 
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin as supabase } from "@/lib/supabase";
 
 const SHOP             = process.env.SHOPIFY_STORE_DOMAIN;
 const STOREFRONT_TOKEN = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN;
