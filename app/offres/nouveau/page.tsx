@@ -226,6 +226,12 @@ export default function JardinConfortV7() {
   const [darkMode, setDarkMode]             = useState(true);
   const [filterInStock, setFilterInStock]   = useState(false);
 
+  // ── Supabase — sauvegarde en base ──
+  const [publicUrl, setPublicUrl]           = useState("");
+  const [isSaving, setIsSaving]             = useState(false);
+  const [saveError, setSaveError]           = useState("");
+  const [showUrlBanner, setShowUrlBanner]   = useState(false);
+
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const remarksEditorRef = useRef<HTMLDivElement | null>(null);
   const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -448,9 +454,35 @@ export default function JardinConfortV7() {
     return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
+  // ── Sauvegarder dans Supabase + générer URL publique ──
+  async function saveToSupabase() {
+    if (!offerNumber.trim()) { setSaveError("Numéro d'offre requis"); return; }
+    setIsSaving(true); setSaveError("");
+    try {
+      const snap = { ...makeSnapshot(), ambianceImages };
+      // Aussi sauvegarder en local
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
+      setDraftSavedAt(new Date().toLocaleString("fr-CH"));
+
+      const res = await fetch("/api/offres/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: snap }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Erreur serveur");
+
+      setPublicUrl(json.publicUrl);
+      setShowUrlBanner(true);
+    } catch (err) {
+      setSaveError((err as Error).message);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   // ── Ouvrir le template d'impression dans un nouvel onglet ──
   function openPrint() {
-    // Sauvegarder tout incluant les images d'ambiance
     const snap = { ...makeSnapshot(), ambianceImages };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
     window.open("/print/offre", "_blank");
@@ -561,11 +593,44 @@ export default function JardinConfortV7() {
             <button className="jc-btn jc-btn-ghost" onClick={() => setShowResetConfirm(true)}>🔄 Nouvelle offre</button>
           )}
           <button className="jc-btn jc-btn-ghost" onClick={loadDraftLocal}>📂 Charger</button>
-          <button className="jc-btn jc-btn-ghost" onClick={saveDraftLocal}>💾 Sauvegarder</button>
+          <button className="jc-btn jc-btn-ghost" onClick={saveDraftLocal}>💾 Brouillon</button>
           <button className="jc-btn jc-btn-ghost" disabled={!undoSnapshot} onClick={undoLastChange}>↩ Undo</button>
+          <button
+            className="jc-btn jc-btn-save-cloud"
+            onClick={saveToSupabase}
+            disabled={isSaving}
+            title="Enregistrer dans la base de données et générer une URL publique"
+          >
+            {isSaving ? "⏳ Enregistrement…" : "☁️ Enregistrer & URL"}
+          </button>
           <button className="jc-btn jc-btn-primary" onClick={openPrint}>🖨 Imprimer</button>
         </div>
       </header>
+
+      {/* ── BANNIÈRE URL PUBLIQUE ── */}
+      {showUrlBanner && publicUrl && (
+        <div className="jc-url-banner screenOnly">
+          <div className="jc-url-banner-content">
+            <span className="jc-url-banner-label">✅ Offre enregistrée · URL publique :</span>
+            <a className="jc-url-banner-link" href={publicUrl} target="_blank" rel="noopener noreferrer">
+              {publicUrl}
+            </a>
+            <button
+              className="jc-url-copy-btn"
+              onClick={() => { navigator.clipboard.writeText(publicUrl); }}
+              title="Copier l'URL"
+            >📋 Copier</button>
+            <button className="jc-url-close-btn" onClick={() => setShowUrlBanner(false)}>✕</button>
+          </div>
+          {saveError && <div className="jc-url-error">{saveError}</div>}
+        </div>
+      )}
+      {saveError && !showUrlBanner && (
+        <div className="jc-url-banner jc-url-banner-error screenOnly">
+          <span>❌ {saveError}</span>
+          <button onClick={() => setSaveError("")}>✕</button>
+        </div>
+      )}
 
       {/* ── BOUTONS NAVIGATION FLOTTANTS ── */}
       <div className="jc-scroll-btns screenOnly">
@@ -1620,6 +1685,31 @@ export default function JardinConfortV7() {
         .jc-btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
         .jc-btn-primary { background: var(--accent); color: white; border-color: var(--accent); border-radius: var(--radius-xl); }
         .jc-btn-primary:hover { background: var(--accent-h); }
+        .jc-btn-save-cloud {
+          background: linear-gradient(135deg, #10b981, #059669);
+          color: white; border-color: #059669;
+          border-radius: var(--radius-xl);
+        }
+        .jc-btn-save-cloud:hover { background: linear-gradient(135deg, #059669, #047857); }
+        .jc-btn-save-cloud:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* ── BANNIÈRE URL PUBLIQUE ── */
+        .jc-url-banner {
+          background: rgba(16,185,129,0.12);
+          border: 1px solid rgba(16,185,129,0.3);
+          border-radius: var(--radius);
+          padding: 10px 16px;
+          margin: 0 0 12px 0;
+          display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+        .jc-url-banner-error { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.3); }
+        .jc-url-banner-content { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1; }
+        .jc-url-banner-label { font-size: 13px; font-weight: 600; color: #10b981; white-space: nowrap; }
+        .jc-url-banner-link { font-size: 13px; color: var(--accent); text-decoration: underline; word-break: break-all; }
+        .jc-url-copy-btn { background: rgba(59,130,246,0.1); color: var(--accent); border: 1px solid rgba(59,130,246,0.2); border-radius: var(--radius-sm); padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+        .jc-url-copy-btn:hover { background: rgba(59,130,246,0.2); }
+        .jc-url-close-btn { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 2px 6px; }
+        .jc-url-error { font-size: 12px; color: var(--danger); width: 100%; }
         .jc-btn-danger { background: rgba(248,113,113,0.15); color: var(--danger); border-color: rgba(248,113,113,0.3); }
         .jc-btn-wide { width: 100%; justify-content: center; }
 
