@@ -1174,7 +1174,20 @@ export default function JardinConfortV7() {
                             <input className="jc-cell-input jc-sku-input" value={line.sku} onChange={(e) => updateLine(line.id, { sku: e.target.value })} />
                           </td>
                           <td>
-                            <input className="jc-cell-input jc-title-input" value={line.title} onChange={(e) => updateLine(line.id, { title: e.target.value })} />
+                            <textarea
+                              className="jc-cell-input jc-title-input"
+                              value={line.title}
+                              onChange={(e) => {
+                                updateLine(line.id, { title: e.target.value });
+                                e.target.style.height = "auto";
+                                e.target.style.height = e.target.scrollHeight + "px";
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.height = "auto";
+                                e.target.style.height = e.target.scrollHeight + "px";
+                              }}
+                              rows={1}
+                            />
                           </td>
                           <td>
                             <div className="jc-price-cell">
@@ -2033,7 +2046,8 @@ export default function JardinConfortV7() {
         .jc-img-file-input { font-size: 11px; padding: 4px; margin-top: 4px; max-width: 140px; }
         .jc-qty-input { width: 64px; text-align: center; }
         .jc-cell-input { border-radius: 6px; padding: 8px; background: rgba(255,255,255,0.03); }
-        .jc-title-input { width: 100%; }
+        .jc-table tbody td { vertical-align: top; padding-top: 10px; }
+        .jc-title-input { width: 100%; resize: none; overflow: hidden; min-height: 32px; line-height: 1.4; padding-top: 6px; padding-bottom: 6px; }
         .jc-price-input { width: 90px; text-align: right; }
         .jc-empty-row { text-align: center; color: var(--text-dim); padding: 24px; font-style: italic; }
 
