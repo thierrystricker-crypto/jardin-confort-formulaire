@@ -1507,7 +1507,7 @@ export default function JardinConfortV7() {
                               style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 12, cursor: "pointer", border: "1px solid var(--border)", background: "var(--card)", position: "relative" }}
                               className={isFlash ? "jc-product-flash" : ""}>
                               {isFlash && <div className="jc-product-flash-overlay">✓</div>}
-                              {item.images?.[0] && <img src={item.images[0]} alt="" style={{ width: 52, height: 52, objectFit: "contain", borderRadius: 6, flexShrink: 0 }} />}
+                              {item.image1 && <img src={item.image1} alt="" style={{ width: 52, height: 52, objectFit: "contain", borderRadius: 6, flexShrink: 0 }} />}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</div>
                                 <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{item.sku}</div>
