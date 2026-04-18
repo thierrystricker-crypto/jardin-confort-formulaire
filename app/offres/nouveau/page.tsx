@@ -231,8 +231,7 @@ export default function JardinConfortV7() {
 
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const remarksEditorRef = useRef<HTMLDivElement | null>(null);
-  const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const livrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
 
   // ── Google Places Autocomplete ──
   type PlaceSuggestion = {
@@ -250,7 +249,6 @@ export default function JardinConfortV7() {
   const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const livrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Charger le script Google Maps — non nécessaire avec le proxy /api/places
 
   async function fetchGoogleSuggestions(query: string): Promise<PlaceSuggestion[]> {
     if (query.length < 3) return [];
