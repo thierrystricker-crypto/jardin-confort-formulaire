@@ -774,7 +774,7 @@ export default function JardinConfortV7() {
           <div className="jc-grid jc-g1">
             <div className="jc-field">
               <label>Société</label>
-              <input autoComplete="off" value={societe} onChange={(e) => setSociete(e.target.value)} placeholder="Nom de l'entreprise (optionnel)" />
+              <input autoComplete="new-password" value={societe} onChange={(e) => setSociete(e.target.value)} placeholder="Nom de l'entreprise (optionnel)" />
             </div>
           </div>
           <div className="jc-grid jc-g2 mt12">
@@ -784,7 +784,7 @@ export default function JardinConfortV7() {
             </div>
             <div className="jc-field">
               <label>Prénom</label>
-              <input autoComplete="off" value={prenom} onChange={(e) => setPrenom(e.target.value)} placeholder="Jean" />
+              <input autoComplete="new-password" value={prenom} onChange={(e) => setPrenom(e.target.value)} placeholder="Jean" />
             </div>
           </div>
           <div className="jc-grid jc-g-addr mt12">
@@ -794,7 +794,7 @@ export default function JardinConfortV7() {
                 value={rue}
                 onChange={(e) => onRueChange(e.target.value)}
                 placeholder="Commencez à taper…"
-                autoComplete="off"
+                autoComplete="new-password"
               />
               {addrSuggestions.length > 0 && (
                 <div className="jc-addr-dropdown">
@@ -808,29 +808,29 @@ export default function JardinConfortV7() {
             </div>
             <div className="jc-field">
               <label>No</label>
-              <input autoComplete="off" value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="12" />
+              <input autoComplete="new-password" value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="12" />
             </div>
             <div className="jc-field">
               <label>NPA</label>
-              <input inputMode="numeric" maxLength={4} autoComplete="off" value={npa} onChange={(e) => setNpa(sanitizeNpa(e.target.value))} placeholder="1000" />
+              <input inputMode="numeric" maxLength={4} autoComplete="new-password" value={npa} onChange={(e) => setNpa(sanitizeNpa(e.target.value))} placeholder="1000" />
             </div>
             <div className="jc-field">
               <label>Ville *</label>
-              <input autoComplete="off" className={missingRequired.ville ? "jc-error" : ""} value={ville} onChange={(e) => setVille(e.target.value)} placeholder="Lausanne" />
+              <input autoComplete="new-password" className={missingRequired.ville ? "jc-error" : ""} value={ville} onChange={(e) => setVille(e.target.value)} placeholder="Lausanne" />
             </div>
           </div>
           <div className="jc-grid jc-g3 mt12">
             <div className="jc-field">
               <label>Téléphone 1</label>
-              <input autoComplete="off" placeholder="+41 79 000 00 00" value={telephone1} onChange={(e) => setTelephone1(normalizeSwissPhone(e.target.value))} />
+              <input autoComplete="new-password" placeholder="+41 79 000 00 00" value={telephone1} onChange={(e) => setTelephone1(normalizeSwissPhone(e.target.value))} />
             </div>
             <div className="jc-field">
               <label>Téléphone 2</label>
-              <input autoComplete="off" placeholder="+41 79 000 00 00" value={telephone2} onChange={(e) => setTelephone2(normalizeSwissPhone(e.target.value))} />
+              <input autoComplete="new-password" placeholder="+41 79 000 00 00" value={telephone2} onChange={(e) => setTelephone2(normalizeSwissPhone(e.target.value))} />
             </div>
             <div className="jc-field">
               <label>Email *</label>
-              <input autoComplete="off" className={missingRequired.email ? "jc-error" : ""} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jean@exemple.ch" />
+              <input autoComplete="new-password" className={missingRequired.email ? "jc-error" : ""} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jean@exemple.ch" />
             </div>
           </div>
           <div className="jc-grid jc-g2 mt12">
@@ -876,24 +876,24 @@ export default function JardinConfortV7() {
               <div className="jc-grid jc-g1 mt12">
                 <div className="jc-field">
                   <label>Société livraison</label>
-                  <input value={livrSociete} onChange={(e) => setLivrSociete(e.target.value)} placeholder="Société (optionnel)" />
+                  <input autoComplete="new-password" value={livrSociete} onChange={(e) => setLivrSociete(e.target.value)} placeholder="Société (optionnel)" />
                 </div>
               </div>
               <div className="jc-grid jc-g2 mt12">
                 <div className="jc-field">
                   <label>Nom livraison</label>
-                  <input value={livrNom} onChange={(e) => setLivrNom(e.target.value)} placeholder="Dupont" />
+                  <input autoComplete="new-password" value={livrNom} onChange={(e) => setLivrNom(e.target.value)} placeholder="Dupont" />
                 </div>
                 <div className="jc-field">
                   <label>Prénom</label>
-                  <input value={livrPrenom} onChange={(e) => setLivrPrenom(e.target.value)} placeholder="Jean" />
+                  <input autoComplete="new-password" value={livrPrenom} onChange={(e) => setLivrPrenom(e.target.value)} placeholder="Jean" />
                 </div>
               </div>
               <div className="jc-grid jc-g-addr mt12">
                 <div className="jc-field" style={{position:"relative"}}>
                   <label>Rue livraison</label>
                   <input value={livrRue} onChange={(e) => onLivrRueChange(e.target.value)}
-                    placeholder="Commencez à taper…" autoComplete="off"/>
+                    placeholder="Commencez à taper…" autoComplete="new-password"/>
                   {livrAddrSuggestions.length > 0 && (
                     <div className="jc-addr-dropdown">
                       {livrAddrSuggestions.map((s, i) => (
@@ -920,7 +920,7 @@ export default function JardinConfortV7() {
               <div className="jc-grid jc-g2 mt12">
                 <div className="jc-field">
                   <label>Téléphone livraison</label>
-                  <input placeholder="+41 79 000 00 00" value={livrTel} onChange={(e) => setLivrTel(normalizeSwissPhone(e.target.value))} />
+                  <input autoComplete="new-password" placeholder="+41 79 000 00 00" value={livrTel} onChange={(e) => setLivrTel(normalizeSwissPhone(e.target.value))} />
                 </div>
               </div>
             </div>
@@ -952,7 +952,7 @@ export default function JardinConfortV7() {
                   placeholder="🔍 Rechercher par SKU, titre ou variante sur Shopify…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  autoComplete="off"
+                  autoComplete="new-password"
                 />
                 {search && (
                   <button className="jc-btn jc-btn-ghost jc-search-clear" onClick={() => { setSearch(""); setShopifyItems([]); }}>✕</button>
@@ -1527,7 +1527,7 @@ export default function JardinConfortV7() {
                 <>
                   <div className="jc-shopify-search-bar">
                     <input className="jc-search-input" placeholder="🔍 SKU, titre ou variante…" value={search}
-                      onChange={(e) => setSearch(e.target.value)} autoComplete="off" style={{ width: "100%" }} />
+                      onChange={(e) => setSearch(e.target.value)} autoComplete="new-password" style={{ width: "100%" }} />
                     {search && <button className="jc-btn jc-btn-ghost jc-search-clear" onClick={() => { setSearch(""); setShopifyItems([]); }}>✕</button>}
                     <label className="jc-filter-stock-label">
                       <input type="checkbox" checked={filterInStock} onChange={(e) => setFilterInStock(e.target.checked)} />
