@@ -553,6 +553,14 @@ export default function JardinConfortV7() {
     if (raw) setDraftSavedAt("Brouillon local trouvé");
   }, [formType, offerNumber]);
 
+  // ── Auto-resize toutes les textareas titre au rendu ──
+  useEffect(() => {
+    document.querySelectorAll<HTMLTextAreaElement>("textarea.jc-title-input").forEach((ta) => {
+      ta.style.height = "auto";
+      ta.style.height = ta.scrollHeight + "px";
+    });
+  }, [lines]);
+
   // ── Forcer LTR sur l'éditeur contentEditable — useLayoutEffect + MutationObserver ──
   useLayoutEffect(() => {
     const el = remarksEditorRef.current;
