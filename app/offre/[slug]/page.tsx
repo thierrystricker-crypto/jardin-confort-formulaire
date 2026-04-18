@@ -363,24 +363,27 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
                   <a href="tel:+41217913671" style={{color:C.blue}}>+41 21 791 36 71</a>
                 </div>
                 <div style={{marginTop:14, display:"flex", gap:10, flexWrap:"wrap"}}>
-                  <a href={`mailto:${d.email||""}?subject=Validation%20offre%20${offre.numero_affiche}&body=Bonjour%2C%0A%0AJe%20confirme%20la%20validation%20de%20l'offre%20${offre.numero_affiche}.%0A%0ACordialement`}
+                  <a href={`/offre/${offre.slug}/valider`}
                     style={{
                       display:"inline-flex", alignItems:"center", gap:8,
                       background:C.blue, color:"white",
-                      padding:"10px 20px", borderRadius:20,
+                      padding:"10px 22px", borderRadius:20,
                       fontSize:13, fontWeight:600, textDecoration:"none",
                     }}>
-                    ✅ Valider cette offre par e-mail
+                    ✅ Valider cette offre
                   </a>
                   <a href={`/print/offre/${offre.slug}`} target="_blank" rel="noopener noreferrer"
                     style={{
                       display:"inline-flex", alignItems:"center", gap:8,
-                      background:"white", color:C.text,
-                      padding:"10px 20px", borderRadius:20,
+                      background:"#2B8AD1", color:"white",
+                      padding:"10px 22px", borderRadius:20,
                       fontSize:13, fontWeight:600, textDecoration:"none",
-                      border:`1px solid ${C.border}`,
                     }}>
-                    🖨 Imprimer / PDF
+                    <svg width="15" height="15" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                      <rect x="6" y="14" width="12" height="8"/>
+                    </svg>
+                    Imprimer / Télécharger offre
                   </a>
                 </div>
                 {d.leadTime && (
@@ -689,36 +692,7 @@ export default function OffrePubliquePage({ params }: { params: Promise<{ slug: 
               ))}
             </div>
 
-            {/* Col 3 — Newsletter fonctionnelle */}
-            <div style={{flex:"1 1 260px", maxWidth:340}}>
-              <h3 style={{fontSize:13, fontWeight:700, marginBottom:8, color:"#2A2B2A"}}>Newsletter</h3>
-              <p style={{fontSize:13, color:"#555", lineHeight:1.6, marginBottom:16}}>
-                Ne ratez aucune promotion ou information importante en vous inscrivant en 1 clic à notre newsletter
-              </p>
-              <form action="https://www.jardin-confort.ch/contact#footer-signup_form" method="post" acceptCharset="UTF-8">
-                <input type="hidden" name="form_type" value="customer"/>
-                <input type="hidden" name="utf8" value="✓"/>
-                <input type="hidden" name="contact[tags]" value="newsletter"/>
-                <div style={{display:"flex", border:"1px solid rgba(42,43,42,0.2)", borderRadius:8, overflow:"hidden", background:"white"}}>
-                  <input
-                    type="email"
-                    name="contact[email]"
-                    id="footer-signup"
-                    placeholder="Votre e-mail"
-                    autoComplete="email"
-                    required
-                    style={{flex:1, border:"none", outline:"none", padding:"12px 16px", fontSize:13, fontFamily:"inherit", background:"transparent", color:"#2A2B2A"}}
-                  />
-                  <button type="submit" style={{background:"none", border:"none", padding:"12px 16px", cursor:"pointer", color:"#2A2B2A"}}>
-                    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M5 12h14M12 5l7 7-7 7"/>
-                    </svg>
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Col 4 — Adresse */}
+            {/* Col 3 — Adresse */}
             <div style={{flex:"0 1 200px"}}>
               <h3 style={{fontSize:13, fontWeight:700, marginBottom:16, color:"#2A2B2A"}}>JARDIN-CONFORT SA</h3>
               <div style={{fontSize:13, color:"#555", lineHeight:2}}>
