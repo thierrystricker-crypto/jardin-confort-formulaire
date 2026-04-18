@@ -1499,9 +1499,6 @@ export default function JardinConfortV7() {
                       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
                         {filtered.map((item) => {
                           const isFlash = flashProductId === item.id;
-                          const stockOk = item.stock !== null && item.stock > 2;
-                          const stockLow = item.stock !== null && item.stock > 0 && item.stock <= 2;
-                          const stockZero = item.stock !== null && item.stock < 1;
                           return (
                             <div key={item.id} onClick={() => addShopifyItem(item)}
                               style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 12, cursor: "pointer", border: "1px solid var(--border)", background: "var(--card)", position: "relative" }}
@@ -1509,12 +1506,12 @@ export default function JardinConfortV7() {
                               {isFlash && <div className="jc-product-flash-overlay">✓</div>}
                               {item.image1 && <img src={item.image1} alt="" style={{ width: 52, height: 52, objectFit: "contain", borderRadius: 6, flexShrink: 0 }} />}
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</div>
+                                <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.variant}</div>
                                 <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{item.sku}</div>
                                 <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
-                                  <span style={{ fontSize: 13, fontWeight: 700 }}>CHF {item.price.toFixed(2)}</span>
-                                  <span style={{ fontSize: 11, fontWeight: 600, color: stockOk ? "#2C7E3F" : stockLow ? "#E67E22" : stockZero ? "#dc2626" : "#888" }}>
-                                    {stockOk ? `✓ ${item.stock}` : stockLow ? `⚠ ${item.stock}` : stockZero ? "Rupture" : "N/A"}
+                                  <span style={{ fontSize: 13, fontWeight: 700 }}>CHF {item.price}</span>
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: (item.stock !== null && item.stock > 2) ? "#2C7E3F" : (item.stock !== null && item.stock > 0 && item.stock <= 2) ? "#E67E22" : (item.stock !== null && item.stock < 1) ? "#dc2626" : "#888" }}>
+                                    {item.stock === null ? "N/A" : item.stock > 2 ? `✓ ${item.stock}` : item.stock > 0 ? `⚠ ${item.stock}` : "Rupture"}
                                   </span>
                                 </div>
                               </div>
