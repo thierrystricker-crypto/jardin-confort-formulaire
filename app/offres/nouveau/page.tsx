@@ -1503,7 +1503,7 @@ export default function JardinConfortV7() {
                           const stockLow = item.stock !== null && item.stock > 0 && item.stock <= 2;
                           const stockZero = item.stock !== null && item.stock < 1;
                           return (
-                            <div key={item.id} onClick={() => addShopifyLine(item)}
+                            <div key={item.id} onClick={() => addShopifyItem(item)}
                               style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 12, cursor: "pointer", border: "1px solid var(--border)", background: "var(--card)", position: "relative" }}
                               className={isFlash ? "jc-product-flash" : ""}>
                               {isFlash && <div className="jc-product-flash-overlay">✓</div>}
@@ -1518,7 +1518,7 @@ export default function JardinConfortV7() {
                                   </span>
                                 </div>
                               </div>
-                              <button onClick={(e) => { e.stopPropagation(); addShopifyLine(item); }}
+                              <button onClick={(e) => { e.stopPropagation(); addShopifyItem(item); }}
                                 style={{ flexShrink: 0, background: "var(--accent)", color: "white", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 18, cursor: "pointer" }}>+</button>
                             </div>
                           );
