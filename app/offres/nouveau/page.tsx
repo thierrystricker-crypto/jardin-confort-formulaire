@@ -1504,9 +1504,9 @@ export default function JardinConfortV7() {
                               style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 12, cursor: "pointer", border: "1px solid var(--border)", background: "var(--card)", position: "relative" }}
                               className={isFlash ? "jc-product-flash" : ""}>
                               {isFlash && <div className="jc-product-flash-overlay">✓</div>}
-                              {item.image1 && <img src={item.image1} alt="" style={{ width: 52, height: 52, objectFit: "contain", borderRadius: 6, flexShrink: 0 }} />}
+                              {item.variantImage && <img src={item.variantImage} alt="" style={{ width: 52, height: 52, objectFit: "contain", borderRadius: 6, flexShrink: 0 }} />}
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.variant}</div>
+                                <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "normal" }}>{item.variant}</div>
                                 <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{item.sku}</div>
                                 <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
                                   <span style={{ fontSize: 13, fontWeight: 700 }}>CHF {item.price}</span>
