@@ -35,8 +35,28 @@ export async function POST(
       return NextResponse.json({ error: "Offre non trouvée" }, { status: 404 });
     }
 
-    if (offre.statut === "Acceptée" || offre.numero_commande) {
-      return NextResponse.json({ error: "Cette offre a déjà été validée" }, { status: 409 });
+    // Protection anti-doublon : vérifier TOUS les statuts finaux
+    if (["Acceptée", "Convertie", "Commande"].includes(offre.statut) || offre.numero_commande) {
+      // Récupérer le slug de la commande existante pour rediriger
+      const existingCmdSlug = offre.numero_commande
+        ? offre.numero_commande.toLowerCase().replace(/[^a-z0-9-]/g, "-")
+        : null;
+      return NextResponse.json({
+        error: "Cette offre a déjà été validée",
+        alreadyValidated: true,
+        cmdSlug: existingCmdSlug,
+      }, { status: 409 });
+    }
+
+    // Verrouillage immédiat avant toute opération — évite les doubles clics simultanés
+    const { error: lockError } = await supabaseAdmin
+      .from("offres")
+      .update({ statut: "Convertie" })
+      .eq("slug", slug)
+      .eq("statut", offre.statut); // condition atomique : échoue si déjà modifié
+
+    if (lockError) {
+      return NextResponse.json({ error: "Offre déjà en cours de validation" }, { status: 409 });
     }
 
     // 2. Générer le numéro de commande CMD-XXXXX
@@ -50,11 +70,10 @@ export async function POST(
     const numeroCommande = cmdNum as string;
     const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
-    // 3. Mettre à jour l'offre originale → statut "Convertie"
+    // 3. Compléter la mise à jour de l'offre avec numéro commande + signature
     await supabaseAdmin
       .from("offres")
       .update({
-        statut: "Convertie",
         numero_commande: numeroCommande,
         data: {
           ...(offre.data as Record<string, unknown>),

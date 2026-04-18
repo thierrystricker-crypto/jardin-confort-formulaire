@@ -199,6 +199,14 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
         body: JSON.stringify({ signataire: signataire.trim(), signature_base64: signatureBase64, date_signature: todayStr() }),
       });
       const json = await res.json();
+
+      // Cas doublon : offre déjà validée → rediriger vers confirmation existante
+      if (res.status === 409 && json.cmdSlug) {
+        setSuccess(true);
+        setTimeout(() => { window.location.href = `/offre/${json.cmdSlug}/confirmation`; }, 800);
+        return;
+      }
+
       if (!res.ok) throw new Error(json.error || "Erreur serveur");
       setSuccess(true);
       setTimeout(() => { window.location.href = `/offre/${json.cmdSlug}/confirmation`; }, 1400);

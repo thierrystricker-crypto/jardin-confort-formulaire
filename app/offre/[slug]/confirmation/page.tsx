@@ -179,7 +179,7 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
               {[
                 ["Numéro de commande", cmd.numero_commande],
                 ["Offre d'origine", cmd.offre_origine || "–"],
-                ["Date", fmtDate(cmd.date_document)],
+                ["Date de commande", fmtDate(cmd.date_document)],
                 ["Mode de paiement", payMode],
                 ["Votre conseiller", cmd.commercial],
               ].map(([k,v]) => (
