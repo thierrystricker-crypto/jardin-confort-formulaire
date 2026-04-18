@@ -222,6 +222,7 @@ export default function JardinConfortV7() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [activeTab, setActiveTab]           = useState<"shopify" | "custom">("shopify");
   const [darkMode, setDarkMode]             = useState(true);
+  const [wideMode, setWideMode]             = useState(false);
   const [filterInStock, setFilterInStock]   = useState(false);
 
   // ── Supabase — sauvegarde en base ──
@@ -455,6 +456,9 @@ export default function JardinConfortV7() {
   // ── Sauvegarder dans Supabase + générer numéro + URL publique ──
   async function saveToSupabase() {
     if (!commercial.trim()) { setSaveError("Commercial requis"); return; }
+    if (!nom.trim()) { setSaveError("Le nom du client est obligatoire."); return; }
+    if (!email.trim()) { setSaveError("L'email du client est obligatoire."); return; }
+    if (!ville.trim()) { setSaveError("La ville du client est obligatoire."); return; }
     setIsSaving(true); setSaveError("");
     try {
       const snap = { ...makeSnapshot(), ambianceImages };
@@ -587,6 +591,9 @@ export default function JardinConfortV7() {
         <div className="jc-toolbar">
           <button className="jc-btn jc-btn-ghost" onClick={() => setDarkMode((d) => !d)}>
             {darkMode ? "☀️ Mode clair" : "🌙 Mode sombre"}
+          </button>
+          <button className="jc-btn jc-btn-ghost" onClick={() => setWideMode((w) => !w)} title="Mode grand écran — recherche à droite">
+            {wideMode ? "◧ Mode normal" : "⬛ Grand écran"}
           </button>
           {showResetConfirm ? (
             <>
@@ -895,6 +902,8 @@ export default function JardinConfortV7() {
         </section>
 
         {/* ── AJOUT ARTICLES ── */}
+        {/* En mode wideMode, cette section est extraite du flux normal via le wide-layout ci-dessous */}
+        {!wideMode && (
         <section className="jc-card">
           <div className="jc-section-title">Ajouter des articles</div>
           <div className="jc-tabs screenOnly">
@@ -1059,6 +1068,14 @@ export default function JardinConfortV7() {
             </div>
           )}
         </section>
+        )} {/* fin !wideMode */}
+
+        {/* ── LAYOUT WIDE : tableau+totaux à gauche, recherche à droite ── */}
+        {/* En mode normal les sections s'affichent simplement en flux */}
+        {/* ── WIDE MODE GRID WRAPPER ── */}
+        <div className={wideMode ? "jc-wide-grid" : ""}>
+
+        <div className={wideMode ? "jc-wide-left" : ""}>
 
         {/* ── TABLEAU ── */}
         <section className="jc-card jc-lines-card">
@@ -1448,6 +1465,103 @@ export default function JardinConfortV7() {
           </div>
         </section>
 
+        </div> {/* fin jc-wide-left */}
+
+        {/* Colonne droite wide mode — recherche articles sticky */}
+        {wideMode && (
+          <div style={{ position: "sticky", top: 20, maxHeight: "calc(100vh - 100px)", overflowY: "auto" }}>
+            <section className="jc-card">
+              <div className="jc-section-title">Ajouter des articles</div>
+              <div className="jc-tabs screenOnly">
+                <button className={`jc-tab ${activeTab === "shopify" ? "jc-tab-active" : ""}`} onClick={() => setActiveTab("shopify")}>Catalogue Shopify</button>
+                <button className={`jc-tab ${activeTab === "custom" ? "jc-tab-active" : ""}`} onClick={() => setActiveTab("custom")}>Article à la volée</button>
+              </div>
+
+              {activeTab === "shopify" && (
+                <>
+                  <div className="jc-shopify-search-bar">
+                    <input className="jc-search-input" placeholder="🔍 SKU, titre ou variante…" value={search}
+                      onChange={(e) => setSearch(e.target.value)} autoComplete="off" style={{ width: "100%" }} />
+                    {search && <button className="jc-btn jc-btn-ghost jc-search-clear" onClick={() => { setSearch(""); setShopifyItems([]); }}>✕</button>}
+                    <label className="jc-filter-stock-label">
+                      <input type="checkbox" checked={filterInStock} onChange={(e) => setFilterInStock(e.target.checked)} />
+                      <span>En stock uniquement</span>
+                    </label>
+                  </div>
+                  {!search.trim() && <div className="jc-shopify-hint">Tapez un SKU ou nom de produit…</div>}
+                  {shopifyLoading && <div className="jc-shopify-loading"><div className="jc-spinner" /> Recherche…</div>}
+                  {shopifyError && <div className="jc-shopify-error">⚠ {shopifyError}</div>}
+                  {(() => {
+                    const filtered = filterInStock ? shopifyItems.filter(i => i.stock !== null && i.stock > 0) : shopifyItems;
+                    if (!shopifyLoading && search.trim() && filtered.length === 0 && !shopifyError)
+                      return <div className="jc-shopify-hint">Aucun résultat pour « {search} »</div>;
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                        {filtered.map((item) => {
+                          const isFlash = flashProductId === item.id;
+                          const stockOk = item.stock !== null && item.stock > 2;
+                          const stockLow = item.stock !== null && item.stock > 0 && item.stock <= 2;
+                          const stockZero = item.stock !== null && item.stock < 1;
+                          return (
+                            <div key={item.id} onClick={() => addShopifyLine(item)}
+                              style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 12, cursor: "pointer", border: "1px solid var(--border)", background: "var(--card)", position: "relative" }}
+                              className={isFlash ? "jc-product-flash" : ""}>
+                              {isFlash && <div className="jc-product-flash-overlay">✓</div>}
+                              {item.images?.[0] && <img src={item.images[0]} alt="" style={{ width: 52, height: 52, objectFit: "contain", borderRadius: 6, flexShrink: 0 }} />}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</div>
+                                <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{item.sku}</div>
+                                <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
+                                  <span style={{ fontSize: 13, fontWeight: 700 }}>CHF {item.price.toFixed(2)}</span>
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: stockOk ? "#2C7E3F" : stockLow ? "#E67E22" : stockZero ? "#dc2626" : "#888" }}>
+                                    {stockOk ? `✓ ${item.stock}` : stockLow ? `⚠ ${item.stock}` : stockZero ? "Rupture" : "N/A"}
+                                  </span>
+                                </div>
+                              </div>
+                              <button onClick={(e) => { e.stopPropagation(); addShopifyLine(item); }}
+                                style={{ flexShrink: 0, background: "var(--accent)", color: "white", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 18, cursor: "pointer" }}>+</button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+
+              {activeTab === "custom" && (
+                <div className="jc-grid jc-g2">
+                  <div className="jc-field" style={{ gridColumn: "1/-1" }}>
+                    <label>Désignation</label>
+                    <input value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} placeholder="Ex: Table en teck 180cm" />
+                  </div>
+                  <div className="jc-field">
+                    <label>SKU</label>
+                    <input value={customSku} onChange={(e) => setCustomSku(e.target.value)} placeholder="REF-001" />
+                  </div>
+                  <div className="jc-field">
+                    <label>Prix CHF</label>
+                    <input type="number" min="0" step="0.05" value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} />
+                  </div>
+                  <div className="jc-field">
+                    <label>Qté</label>
+                    <input type="number" min="1" value={customQty} onChange={(e) => setCustomQty(String(Math.max(1, parseInt(e.target.value || "1", 10))))} />
+                  </div>
+                  <div className="jc-field">
+                    <label>Stock</label>
+                    <input className="no-spin" type="number" min="0" value={customStock} onChange={(e) => setCustomStock(e.target.value)} placeholder="—" />
+                  </div>
+                  <div className="jc-field jc-align-end" style={{ gridColumn: "1/-1" }}>
+                    <button className="jc-btn jc-btn-primary jc-btn-wide" onClick={addCustomLine}>+ Ajouter</button>
+                  </div>
+                </div>
+              )}
+            </section>
+        </div>
+        )} {/* fin colonne droite wideMode */}
+
+        </div> {/* fin jc-wide-grid */}
+
         {/* ── IMAGES D'AMBIANCE ── */}
         <section className="jc-card">
           <div className="jc-section-title-row">
@@ -1777,6 +1891,10 @@ export default function JardinConfortV7() {
         .jc-g-addr { grid-template-columns: 1.8fr 0.5fr 0.5fr 1fr; }
         .jc-g-custom { grid-template-columns: 120px 2fr 120px 70px 80px 1fr 150px; align-items: end; }
         .jc-totals-grid { grid-template-columns: 1.3fr 0.7fr; align-items: start; }
+
+        /* ── WIDE MODE ── */
+        .jc-wide-grid { display: grid; grid-template-columns: 1fr 400px; gap: 20px; align-items: start; }
+        .jc-wide-left { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 
         /* ── FIELDS ── */
         .jc-field { display: flex; flex-direction: column; gap: 5px; }
