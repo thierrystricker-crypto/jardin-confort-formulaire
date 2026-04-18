@@ -206,9 +206,7 @@ export default function JardinConfortV7() {
   const [leadTime, setLeadTime]         = useState("25-30 jours");
   // arrondi : toujours stocké comme string, toujours <= 0
   const [roundingStr, setRoundingStr]   = useState("");
-  // Autocomplétion adresse via geo.admin.ch
-  const [addrSuggestions, setAddrSuggestions] = useState<{label: string; road?: string; houseNumber?: string; postcode?: string; city?: string}[]>([]);
-  const [addrQuery, setAddrQuery] = useState("");
+  // Autocomplétion adresse — Google Places
   const [enabledServices, setEnabledServices] = useState<Record<string, boolean>>(initialEnabledServices);
   const [servicePrices, setServicePrices]     = useState<Record<string, string>>(initialServicePrices);
 
@@ -234,84 +232,103 @@ export default function JardinConfortV7() {
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const remarksEditorRef = useRef<HTMLDivElement | null>(null);
   const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const addrCacheRef = useRef<Map<string, AddrSuggestion[]>>(new Map());
+  const livrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  type AddrSuggestion = {
-    label: string;   // "Route de Lavaux 12, 1095 Lutry"
+  // ── Google Places Autocomplete ──
+  type PlaceSuggestion = {
+    placeId: string;
+    label: string;
     road?: string;
     houseNumber?: string;
     postcode?: string;
     city?: string;
   };
 
-  async function fetchAddressSuggestions(query: string) {
-    if (query.length < 3) { setAddrSuggestions([]); return; }
+  // State pour les deux champs d'adresse
+  const [addrSuggestions, setAddrSuggestions]         = useState<PlaceSuggestion[]>([]);
+  const [livrAddrSuggestions, setLivrAddrSuggestions] = useState<PlaceSuggestion[]>([]);
+  const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const livrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Cache local pour éviter les appels répétés
-    const cached = addrCacheRef.current.get(query);
-    if (cached) { setAddrSuggestions(cached); return; }
+  // Charger le script Google Maps — non nécessaire avec le proxy /api/places
 
+  async function fetchGoogleSuggestions(query: string): Promise<PlaceSuggestion[]> {
+    if (query.length < 3) return [];
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search` +
-        `?q=${encodeURIComponent(query)}` +
-        `&countrycodes=ch&format=json&addressdetails=1&limit=6&accept-language=fr` +
-        `&featuretype=street`,
-        { headers: { "User-Agent": "JardinConfort-Formulaire/1.0" } }
-      );
+      const res = await fetch(`/api/places?type=autocomplete&q=${encodeURIComponent(query)}`);
       const json = await res.json();
-
-      const results: AddrSuggestion[] = (json || [])
-        .map((r: {
-          address: {
-            road?: string;
-            house_number?: string;
-            postcode?: string;
-            city?: string; town?: string; village?: string; municipality?: string;
-          };
-        }) => {
-          const a = r.address || {};
-          const city = a.city || a.town || a.village || a.municipality || "";
-          const postcode = a.postcode ? a.postcode.slice(0, 4) : "";
-          const road = a.road || "";
-          const hn = a.house_number || "";
-          // Format : "Route de Lavaux 12, 1095 Lutry"
-          const label = [
-            road + (hn ? " " + hn : ""),
-            postcode && city ? postcode + " " + city : city
-          ].filter(Boolean).join(", ");
-          return { label, road, houseNumber: hn || undefined, postcode: postcode || undefined, city: city || undefined };
-        })
-        .filter((r: AddrSuggestion) => r.road && r.city);
-
-      // Dédoublonner par label
-      const seen = new Set<string>();
-      const unique = results.filter((r: AddrSuggestion) => {
-        if (seen.has(r.label)) return false;
-        seen.add(r.label);
-        return true;
-      });
-
-      addrCacheRef.current.set(query, unique);
-      setAddrSuggestions(unique);
-    } catch { setAddrSuggestions([]); }
+      if (json.status !== "OK" && json.status !== "ZERO_RESULTS") return [];
+      return (json.predictions || []).map((p: {place_id: string; description: string}) => ({
+        placeId: p.place_id,
+        label: p.description.replace(", Suisse", "").replace(", Switzerland", ""),
+      }));
+    } catch { return []; }
   }
 
+  async function fetchPlaceDetails(placeId: string): Promise<PlaceSuggestion | null> {
+    try {
+      const res = await fetch(`/api/places?type=details&place_id=${encodeURIComponent(placeId)}`);
+      const json = await res.json();
+      if (json.status !== "OK") return null;
+      const comps: {types: string[]; long_name: string; short_name: string}[] = json.result?.address_components || [];
+      const get = (type: string) => comps.find(c => c.types.includes(type))?.long_name || "";
+      const getShort = (type: string) => comps.find(c => c.types.includes(type))?.short_name || "";
+      return {
+        placeId,
+        label: "",
+        road: get("route"),
+        houseNumber: get("street_number"),
+        postcode: getShort("postal_code").slice(0, 4),
+        city: get("locality") || get("administrative_area_level_2"),
+      };
+    } catch { return null; }
+  }
+
+  // Adresse facturation
   function onRueChange(val: string) {
     setRue(val);
-    setAddrQuery(val);
     if (addrDebounceRef.current) clearTimeout(addrDebounceRef.current);
-    addrDebounceRef.current = setTimeout(() => fetchAddressSuggestions(val), 500);
+    addrDebounceRef.current = setTimeout(async () => {
+      const suggestions = await fetchGoogleSuggestions(val);
+      setAddrSuggestions(suggestions);
+    }, 400);
   }
 
-  function applyAddrSuggestion(s: AddrSuggestion) {
-    if (s.road) setRue(s.road);
-    if (s.houseNumber) setNumero(s.houseNumber);
-    else setNumero("");
-    if (s.postcode) setNpa(s.postcode);
-    if (s.city) setVille(s.city);
+  async function applyAddrSuggestion(s: PlaceSuggestion) {
     setAddrSuggestions([]);
-    setAddrQuery("");
+    const details = await fetchPlaceDetails(s.placeId);
+    if (details) {
+      if (details.road) setRue(details.road);
+      if (details.houseNumber) setNumero(details.houseNumber); else setNumero("");
+      if (details.postcode) setNpa(details.postcode);
+      if (details.city) setVille(details.city);
+    } else {
+      // Fallback : afficher le label brut
+      setRue(s.label);
+    }
+  }
+
+  // Adresse livraison
+  function onLivrRueChange(val: string) {
+    setLivrRue(val);
+    if (livrDebounceRef.current) clearTimeout(livrDebounceRef.current);
+    livrDebounceRef.current = setTimeout(async () => {
+      const suggestions = await fetchGoogleSuggestions(val);
+      setLivrAddrSuggestions(suggestions);
+    }, 400);
+  }
+
+  async function applyLivrSuggestion(s: PlaceSuggestion) {
+    setLivrAddrSuggestions([]);
+    const details = await fetchPlaceDetails(s.placeId);
+    if (details) {
+      if (details.road) setLivrRue(details.road);
+      if (details.houseNumber) setLivrNumero(details.houseNumber); else setLivrNumero("");
+      if (details.postcode) setLivrNpa(details.postcode);
+      if (details.city) setLivrVille(details.city);
+    } else {
+      setLivrRue(s.label);
+    }
   }
   const customerNumber = useMemo(() => generateCustomerNumber(email), [email]);
 
@@ -875,9 +892,19 @@ export default function JardinConfortV7() {
                 </div>
               </div>
               <div className="jc-grid jc-g-addr mt12">
-                <div className="jc-field">
+                <div className="jc-field" style={{position:"relative"}}>
                   <label>Rue livraison</label>
-                  <input value={livrRue} onChange={(e) => setLivrRue(e.target.value)} placeholder="Rue de la livraison" />
+                  <input value={livrRue} onChange={(e) => onLivrRueChange(e.target.value)}
+                    placeholder="Commencez à taper…" autoComplete="off"/>
+                  {livrAddrSuggestions.length > 0 && (
+                    <div className="jc-addr-dropdown">
+                      {livrAddrSuggestions.map((s, i) => (
+                        <div key={i} className="jc-addr-item" onClick={() => applyLivrSuggestion(s)}>
+                          {s.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="jc-field">
                   <label>No</label>
