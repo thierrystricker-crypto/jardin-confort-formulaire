@@ -769,7 +769,7 @@ export default function JardinConfortV7() {
         </section>
 
         {/* ── COORDONNÉES ── */}
-        <section className="jc-card" autoComplete="off">
+        <section className="jc-card">
           <div className="jc-section-title">Adresse de facturation</div>
           <div className="jc-grid jc-g1">
             <div className="jc-field">
