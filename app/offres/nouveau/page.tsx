@@ -149,6 +149,15 @@ function cloneLines(lines: QuoteLine[]) { return lines.map((l) => ({ ...l })); }
 const initialEnabledServices = Object.fromEntries(serviceOptions.map((s) => [s.code, false]));
 const initialServicePrices   = Object.fromEntries(serviceOptions.map((s) => [s.code, String(s.defaultPrice)]));
 
+type PlaceSuggestion = {
+  placeId: string;
+  label: string;
+  road?: string;
+  houseNumber?: string;
+  postcode?: string;
+  city?: string;
+};
+
 export default function JardinConfortV7() {
   const [formType, setFormType]       = useState<FormType>("Offre");
   const [clientType, setClientType]   = useState<ClientType>("Privé (prix TTC)");
@@ -220,7 +229,7 @@ export default function JardinConfortV7() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [activeTab, setActiveTab]           = useState<"shopify" | "custom">("shopify");
   const [darkMode, setDarkMode]             = useState(true);
-  const [wideMode, setWideMode]             = useState(false);
+  const [wideMode, setWideMode]             = useState(true);
   const [filterInStock, setFilterInStock]   = useState(false);
 
   // ── Supabase — sauvegarde en base ──
@@ -231,24 +240,15 @@ export default function JardinConfortV7() {
 
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const remarksEditorRef = useRef<HTMLDivElement | null>(null);
-
-
-  // ── Google Places Autocomplete ──
-  type PlaceSuggestion = {
-    placeId: string;
-    label: string;
-    road?: string;
-    houseNumber?: string;
-    postcode?: string;
-    city?: string;
-  };
-
-  // State pour les deux champs d'adresse
-  const [addrSuggestions, setAddrSuggestions]         = useState<PlaceSuggestion[]>([]);
-  const [livrAddrSuggestions, setLivrAddrSuggestions] = useState<PlaceSuggestion[]>([]);
   const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const livrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Google Places Autocomplete ──
+  // State pour les deux champs d'adresse
+  const [addrSuggestions, setAddrSuggestions]         = useState<PlaceSuggestion[]>([]);
+  const [livrAddrSuggestions, setLivrAddrSuggestions] = useState<PlaceSuggestion[]>([]);
+
+  // Charger le script Google Maps — non nécessaire avec le proxy /api/places
 
   async function fetchGoogleSuggestions(query: string): Promise<PlaceSuggestion[]> {
     if (query.length < 3) return [];
@@ -769,22 +769,22 @@ export default function JardinConfortV7() {
         </section>
 
         {/* ── COORDONNÉES ── */}
-        <section className="jc-card">
+        <section className="jc-card" autoComplete="off">
           <div className="jc-section-title">Adresse de facturation</div>
           <div className="jc-grid jc-g1">
             <div className="jc-field">
               <label>Société</label>
-              <input value={societe} onChange={(e) => setSociete(e.target.value)} placeholder="Nom de l'entreprise (optionnel)" />
+              <input autoComplete="off" value={societe} onChange={(e) => setSociete(e.target.value)} placeholder="Nom de l'entreprise (optionnel)" />
             </div>
           </div>
           <div className="jc-grid jc-g2 mt12">
             <div className="jc-field">
               <label>Nom *</label>
-              <input className={missingRequired.nom ? "jc-error" : ""} value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Dupont" />
+              <input className={missingRequired.nom ? "jc-error" : ""} autoComplete="new-password" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Dupont" />
             </div>
             <div className="jc-field">
               <label>Prénom</label>
-              <input value={prenom} onChange={(e) => setPrenom(e.target.value)} placeholder="Jean" />
+              <input autoComplete="off" value={prenom} onChange={(e) => setPrenom(e.target.value)} placeholder="Jean" />
             </div>
           </div>
           <div className="jc-grid jc-g-addr mt12">
@@ -808,29 +808,29 @@ export default function JardinConfortV7() {
             </div>
             <div className="jc-field">
               <label>No</label>
-              <input value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="12" />
+              <input autoComplete="off" value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="12" />
             </div>
             <div className="jc-field">
               <label>NPA</label>
-              <input inputMode="numeric" maxLength={4} value={npa} onChange={(e) => setNpa(sanitizeNpa(e.target.value))} placeholder="1000" />
+              <input inputMode="numeric" maxLength={4} autoComplete="off" value={npa} onChange={(e) => setNpa(sanitizeNpa(e.target.value))} placeholder="1000" />
             </div>
             <div className="jc-field">
               <label>Ville *</label>
-              <input className={missingRequired.ville ? "jc-error" : ""} value={ville} onChange={(e) => setVille(e.target.value)} placeholder="Lausanne" />
+              <input autoComplete="off" className={missingRequired.ville ? "jc-error" : ""} value={ville} onChange={(e) => setVille(e.target.value)} placeholder="Lausanne" />
             </div>
           </div>
           <div className="jc-grid jc-g3 mt12">
             <div className="jc-field">
               <label>Téléphone 1</label>
-              <input placeholder="+41 79 000 00 00" value={telephone1} onChange={(e) => setTelephone1(normalizeSwissPhone(e.target.value))} />
+              <input autoComplete="off" placeholder="+41 79 000 00 00" value={telephone1} onChange={(e) => setTelephone1(normalizeSwissPhone(e.target.value))} />
             </div>
             <div className="jc-field">
               <label>Téléphone 2</label>
-              <input placeholder="+41 79 000 00 00" value={telephone2} onChange={(e) => setTelephone2(normalizeSwissPhone(e.target.value))} />
+              <input autoComplete="off" placeholder="+41 79 000 00 00" value={telephone2} onChange={(e) => setTelephone2(normalizeSwissPhone(e.target.value))} />
             </div>
             <div className="jc-field">
               <label>Email *</label>
-              <input className={missingRequired.email ? "jc-error" : ""} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jean@exemple.ch" />
+              <input autoComplete="off" className={missingRequired.email ? "jc-error" : ""} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jean@exemple.ch" />
             </div>
           </div>
           <div className="jc-grid jc-g2 mt12">
@@ -1719,7 +1719,7 @@ export default function JardinConfortV7() {
           --border:      rgba(255,255,255,0.08);
           --border-2:    rgba(255,255,255,0.12);
           --text:        #f4f4f5;
-          --text-muted:  #a1a1aa;
+          --text-muted:  #c8c8d0;
           --text-dim:    #71717a;
           --accent:      #3b82f6;
           --accent-h:    #2563eb;
