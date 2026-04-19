@@ -35,7 +35,7 @@ export async function POST(
     const printUrl = `${APP_URL}/print/offre/${slug}`
 
     // 3. Appel pdf.co — URL vers PDF
-    const pdfcoRes = await fetch("https://api.pdf.co/v1/url/convert/to/pdf", {
+    const pdfcoRes = await fetch("https://api.pdf.co/v1/pdf/convert/from/url", {
       method: "POST",
       headers: {
         "x-api-key": PDFCO_API_KEY,
