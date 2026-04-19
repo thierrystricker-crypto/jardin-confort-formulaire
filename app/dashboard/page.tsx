@@ -78,9 +78,9 @@ function todayLabel() {
   return `${new Intl.DateTimeFormat("fr-CH",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}).format(now)} · Semaine ${isoWeek(now)}`
 }
 
-function KpiCard({title,value,sub,extra}:{title:string;value:string|number;sub?:string;extra?:string}) {
+function KpiCard({title,value,sub,extra,onClick,active}:{title:string;value:string|number;sub?:string;extra?:string;onClick?:()=>void;active?:boolean}) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+    <div onClick={onClick} className={`rounded-2xl border p-6 transition ${onClick?"cursor-pointer hover:bg-[#34383d]":""} ${active?"border-[#2B8AD1]/50 bg-[#2B8AD1]/10":"border-white/10 bg-[#2a2d31]"}`}>
       <div className="text-sm text-zinc-400">{title}</div>
       <div className="mt-4 text-4xl font-semibold tracking-tight text-zinc-100">{value}</div>
       {sub&&<div className="mt-3 text-sm text-zinc-500">{sub}</div>}
@@ -152,11 +152,11 @@ export default function DashboardPage() {
   },[offres,quickFilter,commercial,search,sortKey,sortDir])
 
   const stats=useMemo(()=>computeStats(offres),[offres])
-const quickFilters:{label:string;value:QuickFilter}[] = [
+  const quickFilters:[{label:string;value:QuickFilter}] = [
     {label:"Toutes",value:"all"},{label:"Offres actives",value:"offres"},
     {label:"Commandes",value:"commandes"},{label:"Abandonnées",value:"abandonnes"},
     {label:"À relancer (≥7j)",value:"relance"},
-  ]
+  ] as [{label:string;value:QuickFilter}]
 
   if(loading) return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
@@ -209,10 +209,14 @@ const quickFilters:{label:string;value:QuickFilter}[] = [
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <KpiCard title="Offres actives" value={stats.totalOffres} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caOffres)} potentiel`}/>
-          <KpiCard title="Commandes" value={stats.totalCommandes} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caCommandes)} confirmé`}/>
-          <KpiCard title="À relancer" value={stats.aRelancer} sub="Offres ouvertes ≥ 7 jours" extra={stats.aRelancer>0?"⚠ Action requise":"✓ À jour"}/>
-          <KpiCard title="Abandonnées" value={stats.totalAbandonnes} sub={`${offres.length} dossiers total`}/>
+          <KpiCard title="Offres actives" value={stats.totalOffres} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caOffres)} potentiel`}
+            onClick={()=>setQuickFilter(quickFilter==="offres"?"all":"offres")} active={quickFilter==="offres"}/>
+          <KpiCard title="Commandes" value={stats.totalCommandes} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caCommandes)} confirmé`}
+            onClick={()=>setQuickFilter(quickFilter==="commandes"?"all":"commandes")} active={quickFilter==="commandes"}/>
+          <KpiCard title="À relancer" value={stats.aRelancer} sub="Offres ouvertes ≥ 7 jours" extra={stats.aRelancer>0?"⚠ Action requise":"✓ À jour"}
+            onClick={()=>setQuickFilter(quickFilter==="relance"?"all":"relance")} active={quickFilter==="relance"}/>
+          <KpiCard title="Abandonnées" value={stats.totalAbandonnes} sub={`${offres.length} dossiers total`}
+            onClick={()=>setQuickFilter(quickFilter==="abandonnes"?"all":"abandonnes")} active={quickFilter==="abandonnes"}/>
         </div>
 
         <div className="space-y-3">

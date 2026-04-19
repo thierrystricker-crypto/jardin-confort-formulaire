@@ -1,6 +1,4 @@
 // app/api/offres/[slug]/statut/route.ts
-// POST — changer le statut d'une offre (Abandonnée, En cours, etc.)
-
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -12,23 +10,26 @@ export async function POST(
 ) {
   try {
     const { slug } = await params
-    const body = await request.json()
-    const { statut } = body
+    const { statut } = await request.json()
 
     if (!STATUTS_VALIDES.includes(statut)) {
       return NextResponse.json({ error: "Statut invalide" }, { status: 400 })
     }
 
-    const { error } = await supabaseAdmin
-      .from("offres")
-      .update({ statut })
-      .eq("slug", slug)
+    const update: Record<string, unknown> = { statut }
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (statut === "Abandonnée" || statut === "Refusée") {
+      update.date_abandon = new Date().toISOString()
+    } else if (statut === "En cours" || statut === "Envoyée") {
+      update.date_abandon = null
     }
 
-    return NextResponse.json({ success: true, statut })
+    const { error } = await supabaseAdmin
+      .from("offres").update(update).eq("slug", slug)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    return NextResponse.json({ success: true, statut, date_abandon: update.date_abandon || null })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

@@ -19,6 +19,7 @@ type OffreRecord = {
   sous_total: number; remise_chf: number; services_total: number
   tva_montant: number; total_ttc: number; nb_articles: number
   remarques: string|null; notes_internes: string|null; note_commerciale: string|null
+  date_abandon: string|null
   data: Record<string,unknown>; created_at: string; updated_at: string|null
 }
 
@@ -118,7 +119,14 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({statut})
     })
-    if(res.ok) setOffre(prev=>prev?{...prev,statut:statut as OffreStatut}:prev)
+    if(res.ok) {
+      const json = await res.json()
+      setOffre(prev=>prev?{
+        ...prev,
+        statut:statut as OffreStatut,
+        date_abandon: json.date_abandon || null
+      }:prev)
+    }
   }
 
   const mailBody=useMemo(()=>{
@@ -268,10 +276,15 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   </button>
                 )}
                 {isAbandonne&&(
-                  <button type="button" onClick={()=>{if(confirm("Confirmer la réactivation ?")) changeStatut("En cours")}}
-                    className="rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
-                    Réactiver l&apos;offre
-                  </button>
+                  <>
+                    <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 text-sm text-rose-300">
+                      Abandonnée le {fmtDate(offre.date_abandon)}
+                    </div>
+                    <button type="button" onClick={()=>{if(confirm("Confirmer la réactivation ?")) changeStatut("En cours")}}
+                      className="rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
+                      Réactiver l&apos;offre
+                    </button>
+                  </>
                 )}
                 {offre.client_email&&(
                   <a href={`mailto:${offre.client_email}?subject=${encodeURIComponent(`Suivi offre ${offre.numero_affiche}`)}&body=${encodeURIComponent(mailBody)}`}
@@ -324,6 +337,18 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
           <div className="flex flex-wrap gap-3">
             <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">← Retour</Link>
             <Link href="/offres/nouveau" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">+ Nouvelle offre</Link>
+            {offre && (
+              <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
+                nom: offre.client_nom||"", prenom: offre.client_prenom||"",
+                societe: offre.client_societe||"", email: offre.client_email||"",
+                telephone1: offre.client_tel1||"", rue: offre.client_rue||"",
+                npa: offre.client_npa||"", ville: offre.client_ville||"",
+                commercial: offre.commercial||"",
+              }))}`}
+                className="inline-flex items-center rounded-xl border border-[#2B8AD1]/40 bg-[#2B8AD1]/15 px-4 py-2 text-sm text-sky-300 hover:bg-[#2B8AD1]/25">
+                👤 Nouvelle offre même client
+              </Link>
+            )}
           </div>
         </div>
 

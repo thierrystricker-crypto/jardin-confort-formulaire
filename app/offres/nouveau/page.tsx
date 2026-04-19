@@ -568,6 +568,26 @@ export default function JardinConfortV7() {
     if (raw) setDraftSavedAt("Brouillon local trouvé");
   }, [formType, offerNumber]);
 
+  // ── Préfill depuis URL ?prefill=... (venant du dashboard) ──
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const prefillRaw = params.get("prefill");
+    if (!prefillRaw) return;
+    try {
+      const p = JSON.parse(decodeURIComponent(prefillRaw));
+      if (p.nom) setNom(p.nom);
+      if (p.prenom) setPrenom(p.prenom);
+      if (p.societe) setSociete(p.societe);
+      if (p.email) setEmail(p.email);
+      if (p.telephone1) setTelephone1(p.telephone1);
+      if (p.rue) setRue(p.rue);
+      if (p.npa) setNpa(p.npa);
+      if (p.ville) setVille(p.ville);
+      if (p.commercial) setCommercial(p.commercial);
+    } catch { /* ignore */ }
+  }, []);
+
   // ── Auto-resize toutes les textareas titre au rendu ──
   useEffect(() => {
     document.querySelectorAll<HTMLTextAreaElement>("textarea.jc-title-input").forEach((ta) => {
