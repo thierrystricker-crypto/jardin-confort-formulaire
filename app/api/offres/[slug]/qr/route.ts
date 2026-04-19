@@ -203,11 +203,11 @@ export async function GET(
   const jobId = searchParams.get("jobId")
 
   // Mode polling — vérifier le statut d'un job pdf4me
-  const pollUrl = statusUrl || (jobId ? `https://api.pdf4me.com/SwissQr/GetJobResult/${jobId}` : null)
+  const pollUrl = statusUrl || (jobId ? `https://api.pdf4me.com/v2/jobs/result/${jobId}` : null)
   if (pollUrl) {
     try {
       const statusRes = await fetch(pollUrl, {
-        headers: { "Authorization": "Basic " + Buffer.from(PDF4ME_API_KEY + ":").toString("base64") }
+        headers: { "Authorization": PDF4ME_API_KEY }
       })
       const rawText = await statusRes.text()
       if (!rawText) return NextResponse.json({ ready: false, rawEmpty: true, status: statusRes.status })
