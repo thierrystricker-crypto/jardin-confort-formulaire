@@ -137,7 +137,7 @@ export async function POST(
 
     // Toujours async — retourner statusUrl pour polling côté client
     const locationUrl = pdf4meRes.headers.get("Location") || pdf4meData.statusUrl
-    if (locationUrl) {
+    if (locationUrl || pdf4meData.jobId) {
       return NextResponse.json({
         async: true,
         statusUrl: locationUrl,
@@ -200,12 +200,14 @@ export async function GET(
   const { slug } = await params
   const { searchParams } = new URL(request.url)
   const statusUrl = searchParams.get("statusUrl")
+  const jobId = searchParams.get("jobId")
 
   // Mode polling — vérifier le statut d'un job pdf4me
-  if (statusUrl) {
+  const pollUrl = statusUrl || (jobId ? `https://api.pdf4me.com/v2/jobs/${jobId}` : null)
+  if (pollUrl) {
     try {
-      const statusRes = await fetch(statusUrl, {
-        headers: { "Authorization": PDF4ME_API_KEY }
+      const statusRes = await fetch(pollUrl, {
+        headers: { "Authorization": "Basic " + Buffer.from(PDF4ME_API_KEY + ":").toString("base64") }
       })
       const statusData = await statusRes.json()
       const base64Content = statusData.document?.docData
