@@ -134,22 +134,17 @@ export async function POST(
 
     const pdf4meData = await pdf4meRes.json()
 
-    // Si async, attendre le résultat via statusUrl
+    // Si docData disponible immédiatement
     let base64Content = pdf4meData.document?.docData
 
+    // Si async, retourner le statusUrl pour polling côté client
     if (!base64Content && pdf4meData.statusUrl) {
-      // Polling jusqu'à ce que le document soit prêt (max 30 secondes)
-      for (let i = 0; i < 15; i++) {
-        await new Promise(r => setTimeout(r, 2000))
-        const statusRes = await fetch(pdf4meData.statusUrl, {
-          headers: { "Authorization": PDF4ME_API_KEY }
-        })
-        const statusData = await statusRes.json()
-        if (statusData.document?.docData) {
-          base64Content = statusData.document.docData
-          break
-        }
-      }
+      return NextResponse.json({
+        async: true,
+        statusUrl: pdf4meData.statusUrl,
+        jobId: pdf4meData.jobId,
+        slug,
+      })
     }
 
     if (!base64Content) {
@@ -200,10 +195,42 @@ export async function POST(
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params
+  const { searchParams } = new URL(request.url)
+  const statusUrl = searchParams.get("statusUrl")
+
+  // Mode polling — vérifier le statut d'un job pdf4me
+  if (statusUrl) {
+    try {
+      const statusRes = await fetch(statusUrl, {
+        headers: { "Authorization": PDF4ME_API_KEY }
+      })
+      const statusData = await statusRes.json()
+      const base64Content = statusData.document?.docData
+
+      if (!base64Content) {
+        return NextResponse.json({ ready: false, docStatus: statusData.document?.docStatus })
+      }
+
+      // PDF prêt — stocker dans Supabase
+      const pdfBuffer = Buffer.from(base64Content, "base64")
+      const storagePath = `qr/${slug}_qr.pdf`
+      await supabaseAdmin.storage.from("pdfs").upload(storagePath, pdfBuffer, {
+        contentType: "application/pdf", upsert: true,
+      })
+      const qrUrl = `${SUPABASE_URL}/storage/v1/object/public/pdfs/${storagePath}`
+      await supabaseAdmin.from("offres").update({ qr_url: qrUrl }).eq("slug", slug)
+
+      return NextResponse.json({ ready: true, qr_url: qrUrl, slug })
+    } catch (err) {
+      return NextResponse.json({ error: String(err) }, { status: 500 })
+    }
+  }
+
+  // Mode normal — retourner l'URL QR stockée
   const { data } = await supabaseAdmin
     .from("offres")
     .select("qr_url, total_ttc, payment_mode")
