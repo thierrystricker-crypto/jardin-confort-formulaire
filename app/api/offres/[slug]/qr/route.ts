@@ -131,9 +131,15 @@ export async function POST(
 
     const pdf4meData = await pdf4meRes.json()
 
+    console.log("pdf4me response keys:", Object.keys(pdf4meData))
+    console.log("pdf4me response sample:", JSON.stringify(pdf4meData).slice(0, 300))
+
     if (!pdf4meData.fileContent && !pdf4meData.document?.docData) {
-      console.error("pdf4me response:", JSON.stringify(pdf4meData).slice(0, 500))
-      return NextResponse.json({ error: "Pas de contenu PDF dans la réponse pdf4me" }, { status: 500 })
+      return NextResponse.json({
+        error: "Pas de contenu PDF dans la réponse pdf4me",
+        responseKeys: Object.keys(pdf4meData),
+        responseSample: JSON.stringify(pdf4meData).slice(0, 500)
+      }, { status: 500 })
     }
 
     // 6. Décoder le PDF base64
