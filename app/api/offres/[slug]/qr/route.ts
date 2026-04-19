@@ -145,13 +145,6 @@ export async function POST(
         slug,
       })
     }
-      return NextResponse.json({
-        async: true,
-        statusUrl: pdf4meData.statusUrl,
-        jobId: pdf4meData.jobId,
-        slug,
-      })
-    }
 
     if (!base64Content) {
       return NextResponse.json({
