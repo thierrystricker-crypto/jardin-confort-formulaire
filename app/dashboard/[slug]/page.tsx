@@ -75,6 +75,8 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [saving,setSaving]=useState(false)
   const [saveStatus,setSaveStatus]=useState("")
   const [saveKind,setSaveKind]=useState<"success"|"error"|"info">("info")
+  const [pdfUrl,setPdfUrl]=useState<string|null>(null)
+  const [pdfGenerating,setPdfGenerating]=useState(false)
 
   useEffect(()=>{
     async function load() {
@@ -88,11 +90,28 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         setOffre(o)
         setNoteCommerciale(o.note_commerciale||"")
         setNotesInternes(o.notes_internes||"")
+        // Charger l'URL PDF existante
+        if ((o as unknown as Record<string,unknown>).pdf_url) {
+          setPdfUrl((o as unknown as Record<string,unknown>).pdf_url as string)
+        }
       } catch(e) { setError((e as Error).message) }
       finally { setLoading(false) }
     }
     load()
   },[params])
+
+  async function generatePdf() {
+    if(!slug) return
+    setPdfGenerating(true)
+    try {
+      const res=await fetch(`/api/offres/${slug}/pdf`,{method:"POST"})
+      const json=await res.json()
+      if(res.ok && json.pdf_url) {
+        setPdfUrl(json.pdf_url)
+      }
+    } catch { /* ignore */ }
+    finally { setPdfGenerating(false) }
+  }
 
   async function saveNotes() {
     if(!offre) return
@@ -115,17 +134,23 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
 
   async function changeStatut(statut: string) {
     if(!offre) return
-    const res=await fetch(`/api/offres/${slug}/statut`,{
-      method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({statut})
-    })
-    if(res.ok) {
-      const json = await res.json()
-      setOffre(prev=>prev?{
-        ...prev,
-        statut:statut as OffreStatut,
-        date_abandon: json.date_abandon || null
-      }:prev)
+    try {
+      const res=await fetch(`/api/offres/${slug}/statut`,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({statut})
+      })
+      const json = await res.json().catch(()=>({}))
+      if(res.ok) {
+        setOffre(prev=>prev?{
+          ...prev,
+          statut:statut as OffreStatut,
+          date_abandon: json.date_abandon ?? (statut==="Abandonnée" ? new Date().toISOString() : null)
+        }:prev)
+      } else {
+        alert("Erreur: " + (json.error || res.status))
+      }
+    } catch(e) {
+      alert("Erreur réseau: " + (e as Error).message)
     }
   }
 
@@ -170,6 +195,17 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">👁 Page client</a>
             <a href={urlPrint} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">🖨 Imprimer</a>
+            {pdfUrl ? (
+              <a href={pdfUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
+                📄 Télécharger PDF
+              </a>
+            ) : (
+              <button onClick={generatePdf} disabled={pdfGenerating}
+                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-50">
+                {pdfGenerating ? "⏳ Génération…" : "📄 Générer PDF"}
+              </button>
+            )}
           </div>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex items-start gap-4">

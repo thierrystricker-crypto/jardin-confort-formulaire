@@ -199,9 +199,14 @@ export async function POST(
         body: JSON.stringify(webhookPayload),
       });
     } catch (webhookErr) {
-      // Ne pas bloquer si le webhook échoue
       console.error("Webhook error:", webhookErr);
     }
+
+    // Générer les PDFs en arrière-plan (offre originale + nouvelle commande)
+    Promise.all([
+      fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" }),
+      fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST" }),
+    ]).catch(err => console.error("PDF generation error:", err));
 
     return NextResponse.json({
       success: true,
