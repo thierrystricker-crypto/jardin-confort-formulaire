@@ -181,6 +181,8 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
       setConverting(false)
     }
   }
+
+  const mailBody=useMemo(()=>{
     if(!offre) return ""
     const prenom=offre.client_prenom||""
     const greeting=prenom?`Bonjour ${prenom},`:"Bonjour,"
