@@ -1,318 +1,298 @@
 "use client";
-// ═══════════════════════════════════════════════════════════════
-//  app/dashboard/page.tsx
-//  Dashboard backoffice — liste offres & commandes depuis Supabase
-// ═══════════════════════════════════════════════════════════════
+// app/dashboard/page.tsx
+// Dashboard backoffice — liste des offres et commandes depuis Supabase
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import type { OffreRecord } from "@/types/dashboard";
+import {
+  fmtDate, fmtMoney, nomClient, getDaysOpen,
+  getStatusColor, getDaysBadgeColor, computeStats, COMMERCIAUX
+} from "@/lib/dashboard-utils";
 
-type OffreSummary = {
-  id: number;
-  slug: string;
-  type_document: string;
-  numero_affiche: string;
-  numero_offre: string | null;
-  numero_commande: string | null;
-  reference: string | null;
-  statut: string;
-  date_document: string | null;
-  commercial: string | null;
-  client_type: string | null;
-  client_nom: string | null;
-  client_prenom: string | null;
-  client_societe: string | null;
-  client_email: string | null;
-  client_npa: string | null;
-  client_ville: string | null;
-  total_ttc: number | null;
-  nb_articles: number;
-  date_envoi: string | null;
-  date_relance_prevue: string | null;
-  nb_relances: number;
-  created_at: string;
-  updated_at: string;
-};
+type SortKey = "date" | "client" | "montant" | "statut" | "commercial" | "jours" | "numero"
+type SortDir = "asc" | "desc"
+type QuickFilter = "all" | "offres" | "commandes" | "abandonnes" | "relance"
 
-const STATUT_CONFIG: Record<string, { label: string; bg: string; color: string; border: string }> = {
-  "En cours":  { label: "En cours",  bg: "rgba(245,158,11,0.15)",  color: "#f59e0b", border: "rgba(245,158,11,0.3)"  },
-  "Envoyée":   { label: "Envoyée",   bg: "rgba(96,165,250,0.15)",  color: "#60a5fa", border: "rgba(96,165,250,0.3)"  },
-  "Acceptée":  { label: "Acceptée",  bg: "rgba(74,222,128,0.15)",  color: "#4ade80", border: "rgba(74,222,128,0.3)"  },
-  "Refusée":   { label: "Refusée",   bg: "rgba(248,113,113,0.15)", color: "#f87171", border: "rgba(248,113,113,0.3)" },
-  "Convertie": { label: "Convertie", bg: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "rgba(167,139,250,0.3)" },
-  "Abandonnée":{ label: "Abandonnée",bg: "rgba(113,113,122,0.15)", color: "#71717a", border: "rgba(113,113,122,0.3)" },
-  "Commande":  { label: "Commande",  bg: "rgba(74,222,128,0.15)",  color: "#4ade80", border: "rgba(74,222,128,0.3)"  },
-};
-
-function formatMoney(v: number | null) {
-  if (v === null || v === undefined) return "—";
-  return "CHF " + new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+function isoWeek(d: Date) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  const day = (t.getUTCDay() + 6) % 7
+  t.setUTCDate(t.getUTCDate() - day + 3)
+  const jan4 = new Date(Date.UTC(t.getUTCFullYear(), 0, 4))
+  const dayJan = (jan4.getUTCDay() + 6) % 7
+  jan4.setUTCDate(jan4.getUTCDate() - dayJan + 3)
+  return 1 + Math.round((t.getTime() - jan4.getTime()) / 604800000)
 }
 
-function formatDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
+function todayLabel() {
+  const now = new Date()
+  const d = new Intl.DateTimeFormat("fr-CH", { weekday:"long", day:"2-digit", month:"2-digit", year:"numeric" }).format(now)
+  return `${d} · Semaine ${isoWeek(now)}`
 }
 
-function getDaysAgo(iso: string | null): number | null {
-  if (!iso) return null;
-  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
-}
-
-function StatutBadge({ statut }: { statut: string }) {
-  const cfg = STATUT_CONFIG[statut] || STATUT_CONFIG["En cours"];
+function KpiCard({ title, value, sub, extra }: { title: string; value: string | number; sub?: string; extra?: string }) {
   return (
-    <span style={{
-      display: "inline-block",
-      padding: "2px 10px",
-      borderRadius: 20,
-      fontSize: 11,
-      fontWeight: 700,
-      background: cfg.bg,
-      color: cfg.color,
-      border: `1px solid ${cfg.border}`,
-      whiteSpace: "nowrap",
-    }}>{cfg.label}</span>
-  );
+    <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+      <div className="text-sm text-zinc-400">{title}</div>
+      <div className="mt-4 text-4xl font-semibold tracking-tight text-zinc-100">{value}</div>
+      {sub && <div className="mt-3 text-sm text-zinc-500">{sub}</div>}
+      {extra && <div className="mt-2 text-sm text-sky-300">{extra}</div>}
+    </div>
+  )
+}
+
+function SortTh({ label, k, cur, dir, onSort }: {
+  label: string; k: SortKey; cur: SortKey; dir: SortDir; onSort: (k: SortKey) => void
+}) {
+  const active = k === cur
+  return (
+    <th className="px-4 py-3 font-medium">
+      <button type="button" onClick={() => onSort(k)}
+        className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 transition ${active ? "bg-white/10 text-zinc-100" : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"}`}>
+        {label} <span className="text-xs">{active ? (dir === "asc" ? "↑" : "↓") : "↕"}</span>
+      </button>
+    </th>
+  )
 }
 
 export default function DashboardPage() {
-  const [offres, setOffres] = useState<OffreSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState<"all"|"Offre"|"Commande">("all");
-  const [filterStatut, setFilterStatut] = useState("all");
-  const [filterCommercial, setFilterCommercial] = useState("all");
-  const [sortKey, setSortKey] = useState<string>("created_at");
-  const [sortDir, setSortDir] = useState<"asc"|"desc">("desc");
+  const [offres, setOffres] = useState<OffreRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all")
+  const [commercial, setCommercial] = useState("all")
+  const [sortKey, setSortKey] = useState<SortKey>("date")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
 
   useEffect(() => {
     fetch("/api/dashboard/offres")
-      .then((r) => r.json())
-      .then((data) => setOffres(Array.isArray(data) ? data : []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+      .then(r => r.json())
+      .then(d => setOffres(Array.isArray(d) ? d : []))
+      .catch(() => setOffres([]))
+      .finally(() => setLoading(false))
+  }, [])
 
-  // KPIs
-  const kpis = useMemo(() => {
-    const offresActives = offres.filter((o) => o.type_document === "Offre" && !["Abandonnée","Refusée","Convertie"].includes(o.statut));
-    const commandes = offres.filter((o) => o.type_document === "Commande" || o.statut === "Acceptée");
-    const abandonnees = offres.filter((o) => ["Abandonnée","Refusée"].includes(o.statut));
-    const totalCA = commandes.reduce((s, o) => s + (o.total_ttc || 0), 0);
-    const totalPotentiel = offresActives.reduce((s, o) => s + (o.total_ttc || 0), 0);
-    const aRelancer = offres.filter((o) => {
-      if (!o.date_relance_prevue) return false;
-      return new Date(o.date_relance_prevue) <= new Date();
-    });
-    return { offresActives: offresActives.length, commandes: commandes.length, abandonnees: abandonnees.length, totalCA, totalPotentiel, aRelancer: aRelancer.length, total: offres.length };
-  }, [offres]);
+  function handleSort(k: SortKey) {
+    if (k === sortKey) { setSortDir(d => d === "asc" ? "desc" : "asc"); return }
+    setSortKey(k); setSortDir("desc")
+  }
 
-  // Commerciaux uniques
-  const commerciaux = useMemo(() => {
-    const set = new Set(offres.map((o) => o.commercial).filter(Boolean));
-    return Array.from(set).sort() as string[];
-  }, [offres]);
-
-  // Filtrage + tri
   const filtered = useMemo(() => {
-    let list = [...offres];
-    if (filterType !== "all") list = list.filter((o) => o.type_document === filterType);
-    if (filterStatut !== "all") list = list.filter((o) => o.statut === filterStatut);
-    if (filterCommercial !== "all") list = list.filter((o) => o.commercial === filterCommercial);
+    let list = offres
+
+    // Quick filter
+    if (quickFilter === "offres") list = list.filter(o => o.type_document === "Offre" && !["Abandonnée","Convertie","Refusée"].includes(o.statut))
+    else if (quickFilter === "commandes") list = list.filter(o => o.type_document === "Commande" || o.statut === "Acceptée")
+    else if (quickFilter === "abandonnes") list = list.filter(o => ["Abandonnée","Refusée"].includes(o.statut))
+    else if (quickFilter === "relance") list = list.filter(o => { const d = getDaysOpen(o); return d !== null && d >= 7 })
+
+    // Commercial
+    if (commercial !== "all") list = list.filter(o => o.commercial === commercial)
+
+    // Search
     if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter((o) =>
-        [o.numero_affiche, o.client_nom, o.client_prenom, o.client_email, o.client_ville, o.reference, o.commercial]
-          .some((v) => v?.toLowerCase().includes(q))
-      );
+      const q = search.toLowerCase()
+      list = list.filter(o =>
+        nomClient(o).toLowerCase().includes(q) ||
+        (o.numero_affiche || "").toLowerCase().includes(q) ||
+        (o.client_email || "").toLowerCase().includes(q) ||
+        (o.client_ville || "").toLowerCase().includes(q) ||
+        (o.commercial || "").toLowerCase().includes(q)
+      )
     }
-    list.sort((a, b) => {
-      let av: string | number = (a as any)[sortKey] || "";
-      let bv: string | number = (b as any)[sortKey] || "";
-      if (sortKey === "total_ttc") { av = Number(av); bv = Number(bv); }
-      if (av < bv) return sortDir === "asc" ? -1 : 1;
-      if (av > bv) return sortDir === "asc" ? 1 : -1;
-      return 0;
-    });
-    return list;
-  }, [offres, filterType, filterStatut, filterCommercial, search, sortKey, sortDir]);
 
-  function toggleSort(key: string) {
-    if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("asc"); }
-  }
+    // Sort
+    return [...list].sort((a, b) => {
+      let av: string | number = "", bv: string | number = ""
+      switch (sortKey) {
+        case "numero": av = a.id; bv = b.id; break
+        case "date": av = a.date_document || ""; bv = b.date_document || ""; break
+        case "client": av = nomClient(a); bv = nomClient(b); break
+        case "montant": av = a.total_ttc || 0; bv = b.total_ttc || 0; break
+        case "statut": av = a.statut; bv = b.statut; break
+        case "commercial": av = a.commercial || ""; bv = b.commercial || ""; break
+        case "jours": av = getDaysOpen(a) ?? -1; bv = getDaysOpen(b) ?? -1; break
+      }
+      if (av < bv) return sortDir === "asc" ? -1 : 1
+      if (av > bv) return sortDir === "asc" ? 1 : -1
+      return 0
+    })
+  }, [offres, quickFilter, commercial, search, sortKey, sortDir])
 
-  function SortIcon({ k }: { k: string }) {
-    if (sortKey !== k) return <span style={{color:"#555", marginLeft:4}}>↕</span>;
-    return <span style={{color:"#60a5fa", marginLeft:4}}>{sortDir === "asc" ? "↑" : "↓"}</span>;
-  }
+  const stats = useMemo(() => computeStats(offres), [offres])
 
-  const thStyle: React.CSSProperties = {
-    padding: "10px 12px", textAlign: "left", fontSize: 11,
-    fontWeight: 700, color: "#71717a", textTransform: "uppercase",
-    letterSpacing: "0.06em", cursor: "pointer", whiteSpace: "nowrap",
-    borderBottom: "1px solid rgba(255,255,255,0.08)",
-  };
-  const tdStyle: React.CSSProperties = {
-    padding: "10px 12px", fontSize: 13,
-    borderBottom: "1px solid rgba(255,255,255,0.05)",
-    verticalAlign: "middle",
-  };
+  const quickFilters: { label: string; value: QuickFilter }[] = [
+    { label: "Toutes", value: "all" },
+    { label: "Offres actives", value: "offres" },
+    { label: "Commandes", value: "commandes" },
+    { label: "Abandonnées", value: "abandonnes" },
+    { label: "À relancer (≥7j)", value: "relance" },
+  ]
+
+  if (loading) return (
+    <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
+      <div className="mx-auto max-w-[1700px]">
+        <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-8 text-zinc-400">
+          Chargement des offres…
+        </div>
+      </div>
+    </main>
+  )
 
   return (
-    <div style={{minHeight:"100vh", background:"#1f2125", color:"#f4f4f5", fontFamily:"system-ui,sans-serif", padding:"24px"}}>
-      <div style={{maxWidth:1700, margin:"0 auto"}}>
+    <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100 font-sans">
+      <div className="mx-auto max-w-[1700px] space-y-6">
 
-        {/* TOP BAR */}
-        <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:24, flexWrap:"wrap", gap:12}}>
-          <div style={{display:"flex", alignItems:"center", gap:12}}>
-            <img
-              src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/picto_jardin_confort_apple_low.png?v=1775944940"
-              alt="JC" style={{width:44, height:44, borderRadius:10, objectFit:"cover"}}
-            />
-            <div>
-              <div style={{fontSize:11, color:"#71717a", textTransform:"uppercase", letterSpacing:"0.08em"}}>Jardin-Confort · Backoffice</div>
-              <div style={{fontSize:22, fontWeight:700}}>Suivi offres & commandes</div>
+        {/* ── HEADER ── */}
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="flex items-start gap-4">
+              <img src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/picto_jardin_confort_apple_low.png?v=1775944940"
+                alt="Jardin-Confort" className="h-16 w-16 rounded-xl object-contain" />
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Suivi offres & commandes</h1>
+                <p className="mt-1 text-sm text-zinc-400">Vue commerciale centralisée Jardin-Confort</p>
+                <p className="mt-1 text-xs text-zinc-500">{todayLabel()}</p>
+              </div>
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              <Link href="/offres/nouveau"
+                className="inline-flex items-center rounded-2xl bg-[#2B8AD1] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-[#2B8AD1]/20 transition hover:bg-[#2478b8]">
+                + Nouvelle offre
+              </Link>
+              <button onClick={() => { setLoading(true); fetch("/api/dashboard/offres").then(r=>r.json()).then(d=>setOffres(Array.isArray(d)?d:[])).finally(()=>setLoading(false)) }}
+                className="inline-flex items-center rounded-2xl border border-white/10 bg-[#2a2d31] px-4 py-3 text-sm text-zinc-300 transition hover:bg-[#34383d]">
+                🔄 Actualiser
+              </button>
             </div>
           </div>
-          <Link href="/offres/nouveau" style={{
-            display:"inline-flex", alignItems:"center", gap:8,
-            background:"#3b82f6", color:"white", padding:"10px 20px",
-            borderRadius:20, fontWeight:700, fontSize:14, textDecoration:"none",
-          }}>
-            ✚ Nouvelle offre / commande
-          </Link>
-        </div>
 
-        {/* KPIs */}
-        {!loading && (
-          <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:12, marginBottom:24}}>
-            {[
-              { label: "Offres actives", value: kpis.offresActives, sub: `${formatMoney(kpis.totalPotentiel)} potentiel`, color: "#60a5fa" },
-              { label: "Commandes", value: kpis.commandes, sub: `${formatMoney(kpis.totalCA)} CA`, color: "#4ade80" },
-              { label: "Abandonnées", value: kpis.abandonnees, sub: "", color: "#f87171" },
-              { label: "À relancer", value: kpis.aRelancer, sub: "relance prévue dépassée", color: "#f59e0b" },
-              { label: "Total dossiers", value: kpis.total, sub: "", color: "#a78bfa" },
-            ].map((kpi) => (
-              <div key={kpi.label} style={{background:"#2a2d31", borderRadius:16, padding:"16px 20px", border:"1px solid rgba(255,255,255,0.06)"}}>
-                <div style={{fontSize:11, color:"#71717a", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6}}>{kpi.label}</div>
-                <div style={{fontSize:32, fontWeight:900, color:kpi.color, lineHeight:1}}>{kpi.value}</div>
-                {kpi.sub && <div style={{fontSize:12, color:"#71717a", marginTop:4}}>{kpi.sub}</div>}
-              </div>
+          {/* Filtres */}
+          <div className="grid gap-3 xl:grid-cols-[240px_200px_minmax(0,1fr)_160px]">
+            <select value={commercial} onChange={e => setCommercial(e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 text-sm text-zinc-100 outline-none">
+              <option value="all">Tous les conseillers</option>
+              {COMMERCIAUX.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={quickFilter} onChange={e => setQuickFilter(e.target.value as QuickFilter)}
+              className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 text-sm text-zinc-100 outline-none">
+              {quickFilters.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Recherche : client, référence, email, ville…"
+              className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500" />
+            <button onClick={() => { setSearch(""); setQuickFilter("all"); setCommercial("all") }}
+              className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2.5 text-sm text-zinc-100 transition hover:bg-[#40454b]">
+              Reset filtres
+            </button>
+          </div>
+
+          {/* Boutons quick filter */}
+          <div className="flex flex-wrap gap-2">
+            {quickFilters.map(f => (
+              <button key={f.value} type="button" onClick={() => setQuickFilter(f.value)}
+                className={`rounded-full px-4 py-2 text-sm transition ${quickFilter === f.value ? "bg-zinc-100 text-zinc-900" : "border border-white/10 bg-[#34383d] text-zinc-200 hover:bg-[#40454b]"}`}>
+                {f.label}
+              </button>
             ))}
           </div>
-        )}
-
-        {/* FILTRES */}
-        <div style={{background:"#2a2d31", borderRadius:16, padding:"16px 20px", marginBottom:16, border:"1px solid rgba(255,255,255,0.06)", display:"flex", gap:12, flexWrap:"wrap", alignItems:"center"}}>
-          <input
-            placeholder="🔍 Recherche : nom, email, numéro, ville…"
-            value={search} onChange={(e) => setSearch(e.target.value)}
-            style={{flex:1, minWidth:220, background:"#1f2125", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, padding:"8px 12px", color:"#f4f4f5", fontSize:13, outline:"none"}}
-          />
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)}
-            style={{background:"#1f2125", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, padding:"8px 12px", color:"#f4f4f5", fontSize:13}}>
-            <option value="all">Tous types</option>
-            <option value="Offre">Offres</option>
-            <option value="Commande">Commandes</option>
-          </select>
-          <select value={filterStatut} onChange={(e) => setFilterStatut(e.target.value)}
-            style={{background:"#1f2125", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, padding:"8px 12px", color:"#f4f4f5", fontSize:13}}>
-            <option value="all">Tous statuts</option>
-            {Object.keys(STATUT_CONFIG).map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select value={filterCommercial} onChange={(e) => setFilterCommercial(e.target.value)}
-            style={{background:"#1f2125", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, padding:"8px 12px", color:"#f4f4f5", fontSize:13}}>
-            <option value="all">Tous conseillers</option>
-            {commerciaux.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <span style={{fontSize:13, color:"#71717a"}}>{filtered.length} résultat(s)</span>
         </div>
 
-        {/* TABLEAU */}
-        <div style={{background:"#2a2d31", borderRadius:16, border:"1px solid rgba(255,255,255,0.06)", overflow:"auto"}}>
-          {loading ? (
-            <div style={{padding:40, textAlign:"center", color:"#71717a"}}>Chargement…</div>
-          ) : filtered.length === 0 ? (
-            <div style={{padding:40, textAlign:"center", color:"#71717a"}}>Aucun résultat</div>
-          ) : (
-            <table style={{width:"100%", borderCollapse:"collapse", minWidth:900}}>
-              <thead>
-                <tr style={{background:"rgba(0,0,0,0.2)"}}>
-                  <th style={thStyle} onClick={() => toggleSort("numero_affiche")}>N° <SortIcon k="numero_affiche"/></th>
-                  <th style={thStyle} onClick={() => toggleSort("client_nom")}>Client <SortIcon k="client_nom"/></th>
-                  <th style={thStyle} onClick={() => toggleSort("client_ville")}>Ville <SortIcon k="client_ville"/></th>
-                  <th style={thStyle} onClick={() => toggleSort("commercial")}>Conseiller <SortIcon k="commercial"/></th>
-                  <th style={thStyle} onClick={() => toggleSort("total_ttc")}>Montant <SortIcon k="total_ttc"/></th>
-                  <th style={thStyle} onClick={() => toggleSort("statut")}>Statut <SortIcon k="statut"/></th>
-                  <th style={thStyle} onClick={() => toggleSort("created_at")}>Créé le <SortIcon k="created_at"/></th>
-                  <th style={thStyle} onClick={() => toggleSort("date_relance_prevue")}>Relance <SortIcon k="date_relance_prevue"/></th>
-                  <th style={{...thStyle, cursor:"default"}}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((o) => {
-                  const daysAgo = getDaysAgo(o.created_at);
-                  const relanceDepassee = o.date_relance_prevue && new Date(o.date_relance_prevue) <= new Date();
-                  return (
-                    <tr key={o.id} style={{transition:"background 0.1s"}}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                    >
-                      <td style={tdStyle}>
-                        <div style={{fontWeight:700, color:"#f4f4f5"}}>{o.numero_affiche}</div>
-                        {o.reference && <div style={{fontSize:11, color:"#71717a", marginTop:2}}>{o.reference}</div>}
-                        <div style={{fontSize:10, color:"#555", marginTop:2}}>{o.type_document}</div>
-                      </td>
-                      <td style={tdStyle}>
-                        <div style={{fontWeight:600}}>{o.client_nom} {o.client_prenom}</div>
-                        {o.client_societe && <div style={{fontSize:11, color:"#71717a"}}>{o.client_societe}</div>}
-                        {o.client_email && <div style={{fontSize:11, color:"#71717a"}}>{o.client_email}</div>}
-                      </td>
-                      <td style={{...tdStyle, color:"#a1a1aa"}}>{o.client_npa} {o.client_ville}</td>
-                      <td style={{...tdStyle, color:"#a1a1aa"}}>{o.commercial || "—"}</td>
-                      <td style={{...tdStyle, fontWeight:700}}>{formatMoney(o.total_ttc)}</td>
-                      <td style={tdStyle}><StatutBadge statut={o.statut} /></td>
-                      <td style={{...tdStyle, color:"#71717a", fontSize:12}}>
-                        {formatDate(o.created_at)}
-                        {daysAgo !== null && <div style={{fontSize:11, color:"#555"}}>{daysAgo}j</div>}
-                      </td>
-                      <td style={tdStyle}>
-                        {o.date_relance_prevue ? (
-                          <span style={{
-                            fontSize:12, fontWeight:600,
-                            color: relanceDepassee ? "#f59e0b" : "#71717a",
-                          }}>
-                            {relanceDepassee ? "⚠ " : ""}{formatDate(o.date_relance_prevue)}
+        {/* ── KPIs ── */}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <KpiCard title="Offres actives" value={stats.totalOffres}
+            sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caOffres)} potentiel`} />
+          <KpiCard title="Commandes" value={stats.totalCommandes}
+            sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caCommandes)} confirmé`} />
+          <KpiCard title="À relancer" value={stats.aRelancer}
+            sub="Offres ouvertes ≥ 7 jours" extra={stats.aRelancer > 0 ? "⚠ Action requise" : "✓ À jour"} />
+          <KpiCard title="Abandonnées" value={stats.totalAbandonnes}
+            sub={`${offres.length} dossiers total`} />
+        </div>
+
+        {/* ── TABLEAU ── */}
+        <div className="space-y-3">
+          <div className="text-sm text-zinc-400">{filtered.length} résultat(s)</div>
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#2a2d31]">
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-sm">
+                <thead className="bg-black/10 text-left text-zinc-400">
+                  <tr>
+                    <SortTh label="Réf." k="numero" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                    <SortTh label="Client" k="client" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                    <th className="px-4 py-3 font-medium text-zinc-400">Ville</th>
+                    <SortTh label="Conseiller" k="commercial" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                    <SortTh label="Montant" k="montant" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                    <SortTh label="Statut" k="statut" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                    <SortTh label="Jours" k="jours" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                    <SortTh label="Date" k="date" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                    <th className="px-4 py-3 font-medium text-right text-zinc-400">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={9} className="px-4 py-10 text-center text-zinc-500">Aucun dossier trouvé.</td></tr>
+                  ) : filtered.map((o, idx) => {
+                    const days = getDaysOpen(o)
+                    const statusCls = getStatusColor(o.statut, o.type_document)
+                    const daysCls = getDaysBadgeColor(days)
+                    const rowBg = idx % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.05]"
+                    return (
+                      <tr key={o.id} onClick={() => window.location.href = `/dashboard/${o.slug}`}
+                        className={`${rowBg} cursor-pointer border-t border-white/5 text-zinc-200 transition hover:bg-white/10`}>
+                        <td className="px-4 py-4">
+                          <div className="font-semibold text-zinc-100">{o.numero_affiche}</div>
+                          <div className="text-xs text-zinc-500">{o.type_document}</div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div>{nomClient(o)}</div>
+                          {o.client_societe && <div className="text-xs text-zinc-400">{o.client_societe}</div>}
+                          {o.client_email && <div className="text-xs text-zinc-500">{o.client_email}</div>}
+                        </td>
+                        <td className="px-4 py-4 text-zinc-400">{o.client_ville || "—"}</td>
+                        <td className="px-4 py-4 text-zinc-300">{o.commercial || "—"}</td>
+                        <td className="px-4 py-4 font-medium text-zinc-100">{fmtMoney(o.total_ttc)}</td>
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${statusCls}`}>
+                            {o.statut}
                           </span>
-                        ) : <span style={{color:"#555"}}>—</span>}
-                      </td>
-                      <td style={tdStyle}>
-                        <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
-                          <Link href={`/dashboard/${o.slug}`}
-                            style={{padding:"4px 10px", borderRadius:8, background:"rgba(59,130,246,0.15)", color:"#60a5fa", fontSize:12, fontWeight:600, textDecoration:"none", border:"1px solid rgba(59,130,246,0.25)"}}>
-                            Détail
-                          </Link>
-                          <a href={`/offre/${o.slug}`} target="_blank"
-                            style={{padding:"4px 10px", borderRadius:8, background:"rgba(74,222,128,0.1)", color:"#4ade80", fontSize:12, fontWeight:600, textDecoration:"none", border:"1px solid rgba(74,222,128,0.2)"}}>
-                            Client ↗
-                          </a>
-                          <a href={`/print/offre/${o.slug}`} target="_blank"
-                            style={{padding:"4px 10px", borderRadius:8, background:"rgba(255,255,255,0.05)", color:"#a1a1aa", fontSize:12, fontWeight:600, textDecoration:"none", border:"1px solid rgba(255,255,255,0.1)"}}>
-                            🖨
-                          </a>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          {days !== null ? (
+                            <span className={`inline-flex min-w-8 items-center justify-center rounded-full px-3 py-1 text-xs font-medium ${daysCls}`}>
+                              {days}j
+                            </span>
+                          ) : <span className="text-zinc-600">—</span>}
+                        </td>
+                        <td className="px-4 py-4 text-zinc-400">{fmtDate(o.date_document)}</td>
+                        <td className="px-4 py-4">
+                          <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
+                            <Link href={`/dashboard/${o.slug}`}
+                              className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-[#40454b]">
+                              Voir
+                            </Link>
+                            <a href={`/offre/${o.slug}`} target="_blank" rel="noopener noreferrer"
+                              className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-[#40454b]">
+                              Client
+                            </a>
+                            {o.client_email && (
+                              <a href={`mailto:${o.client_email}?subject=Suivi%20offre%20${o.numero_affiche}&body=Bonjour%20${o.client_prenom || ""}%2C%0A%0AVeuillez%20trouver%20ci-joint%20votre%20offre%20Jardin-Confort.%0A%0ACordialement%2C%0A${o.commercial || "L'équipe Jardin-Confort"}`}
+                                className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-[#40454b]">
+                                Mail
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
       </div>
-    </div>
-  );
+    </main>
+  )
 }
