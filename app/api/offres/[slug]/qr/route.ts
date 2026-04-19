@@ -136,7 +136,15 @@ export async function POST(
     const base64Content = pdf4meData.document?.docData
 
     // Toujours async — retourner statusUrl pour polling côté client
-    if ("statusUrl" in pdf4meData) {
+    const locationUrl = pdf4meRes.headers.get("Location") || pdf4meData.statusUrl
+    if (locationUrl) {
+      return NextResponse.json({
+        async: true,
+        statusUrl: locationUrl,
+        jobId: pdf4meData.jobId,
+        slug,
+      })
+    }
       return NextResponse.json({
         async: true,
         statusUrl: pdf4meData.statusUrl,
