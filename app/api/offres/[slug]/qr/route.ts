@@ -1,4 +1,4 @@
-// app/api/offres/[slug]/qr/route.ts
+// app/api/offres/[slug]/qr/route.ts — v2
 // POST — génère un QR paiement Swiss via pdf4me
 // et le stocke dans Supabase Storage bucket "pdfs"
 
