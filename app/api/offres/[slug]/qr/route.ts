@@ -91,6 +91,7 @@ export async function POST(
           name: `qr_${slug}.pdf`,
         },
         swissQrCreatorAction: {
+          pageNumber: 1,
           amount: formatAmount(montant),
           currency: "CHF",
           iban: formatIban(CREDITOR.iban),
@@ -99,12 +100,14 @@ export async function POST(
           unstructuredMessage: message,
           languageType: "French",
           seperatorLine: "LineWithScissor",
-          creditorAddressType: CREDITOR.addressType,
-          creditorName: CREDITOR.name,
-          creditorAddressLine1: CREDITOR.addressLine1,
-          creditorAddressLine2: CREDITOR.addressLine2,
-          creditorCity: CREDITOR.city,
-          creditorPostalCode: CREDITOR.postalCode,
+          // Créditeur — format S (structured)
+          creditorAddressType: "S",
+          creditorName: "JARDIN CONFORT SA",
+          creditorAddressLine1: "Route de Lavaux",
+          creditorAddressLine2: "425",
+          creditorPostalCode: "1095",
+          creditorCity: "Lutry",
+          // Débiteur
           ultimateDebtorAddressType: "S",
           ultimateDebtorName: debtorName.slice(0, 70),
           ultimateDebtorAddressLine1: debtorAddress1.slice(0, 70),
@@ -131,19 +134,33 @@ export async function POST(
 
     const pdf4meData = await pdf4meRes.json()
 
-    console.log("pdf4me response keys:", Object.keys(pdf4meData))
-    console.log("pdf4me response sample:", JSON.stringify(pdf4meData).slice(0, 300))
+    // Si async, attendre le résultat via statusUrl
+    let base64Content = pdf4meData.document?.docData
 
-    if (!pdf4meData.fileContent && !pdf4meData.document?.docData) {
+    if (!base64Content && pdf4meData.statusUrl) {
+      // Polling jusqu'à ce que le document soit prêt (max 30 secondes)
+      for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 2000))
+        const statusRes = await fetch(pdf4meData.statusUrl, {
+          headers: { "Authorization": PDF4ME_API_KEY }
+        })
+        const statusData = await statusRes.json()
+        if (statusData.document?.docData) {
+          base64Content = statusData.document.docData
+          break
+        }
+      }
+    }
+
+    if (!base64Content) {
       return NextResponse.json({
         error: "Pas de contenu PDF dans la réponse pdf4me",
         responseKeys: Object.keys(pdf4meData),
-        responseSample: JSON.stringify(pdf4meData).slice(0, 500)
+        responseSample: JSON.stringify(pdf4meData).slice(0, 300)
       }, { status: 500 })
     }
 
     // 6. Décoder le PDF base64
-    const base64Content = pdf4meData.fileContent || pdf4meData.document?.docData
     const pdfBuffer = Buffer.from(base64Content, "base64")
 
     // 7. Stocker dans Supabase Storage
