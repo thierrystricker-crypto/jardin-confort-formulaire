@@ -82,7 +82,7 @@ export async function POST(
     const pdf4meRes = await fetch("https://api.pdf4me.com/SwissQr/CreateSwissQrBill", {
       method: "POST",
       headers: {
-        "Authorization": `Basic ${Buffer.from(PDF4ME_API_KEY + ":").toString("base64")}`,
+        "Authorization": PDF4ME_API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
