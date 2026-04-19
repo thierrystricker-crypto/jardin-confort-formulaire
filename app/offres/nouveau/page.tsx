@@ -647,6 +647,7 @@ export default function JardinConfortV7() {
           ) : (
             <button className="jc-btn jc-btn-ghost" onClick={() => setShowResetConfirm(true)}>🔄 Nouvelle offre</button>
           )}
+          <a href="/dashboard" className="jc-btn jc-btn-ghost">📊 Dashboard</a>
           <button className="jc-btn jc-btn-ghost" onClick={loadDraftLocal}>📂 Charger</button>
           <button className="jc-btn jc-btn-ghost" onClick={saveDraftLocal}>💾 Brouillon</button>
           <button className="jc-btn jc-btn-ghost" disabled={!undoSnapshot} onClick={undoLastChange}>↩ Undo</button>
