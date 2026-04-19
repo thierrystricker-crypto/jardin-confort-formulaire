@@ -167,7 +167,7 @@ export async function POST(
       })
 
     if (uploadError) {
-      return NextResponse.json({ error: "Erreur stockage: " + uploadError.message }, { status: 500 })
+      return NextResponse.json({ error: "Erreur stockage: " + uploadError?.message }, { status: 500 })
     }
 
     // 8. URL publique
