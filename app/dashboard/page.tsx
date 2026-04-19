@@ -1,10 +1,8 @@
 "use client";
-// app/dashboard/[slug]/page.tsx
+// app/dashboard/page.tsx
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
 type OffreStatut = "En cours"|"Envoyée"|"Convertie"|"Acceptée"|"Abandonnée"|"Refusée"
 type TypeDocument = "Offre"|"Commande"
@@ -19,7 +17,6 @@ type OffreRecord = {
   sous_total: number; remise_chf: number; services_total: number
   tva_montant: number; total_ttc: number; nb_articles: number
   remarques: string|null; notes_internes: string|null; note_commerciale: string|null
-  date_abandon: string|null
   data: Record<string,unknown>; created_at: string; updated_at: string|null
 }
 
@@ -51,310 +48,238 @@ function getDaysBadgeColor(days: number|null) {
   if (days>=7) return "bg-amber-500/15 text-amber-300"
   return "bg-white/5 text-zinc-300"
 }
-
-function ts() {
-  return new Intl.DateTimeFormat("fr-CH",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).format(new Date()).replace(",","")
-}
-function appendTs(cur: string, prev: string) {
-  const c=cur.replace(/\r\n/g,"\n"), p=prev.replace(/\r\n/g,"\n")
-  if(c.trim()===p.trim()) return c
-  const lines=c.split("\n")
-  for(let i=lines.length-1;i>=0;i--) {
-    if(lines[i].trim()){lines[i]=`${lines[i].trimEnd()} — ${ts()}`;return lines.join("\n")}
+function computeStats(offres: OffreRecord[]) {
+  const actives = offres.filter(o => o.type_document==="Offre"&&!["Abandonnée","Convertie","Refusée"].includes(o.statut))
+  const commandes = offres.filter(o => o.type_document==="Commande"||o.statut==="Acceptée")
+  const abandonnes = offres.filter(o => ["Abandonnée","Refusée"].includes(o.statut))
+  const aRelancer = actives.filter(o => { const d=getDaysOpen(o); return d!==null&&d>=7 })
+  return {
+    totalOffres:actives.length, totalCommandes:commandes.length,
+    totalAbandonnes:abandonnes.length, aRelancer:aRelancer.length,
+    caOffres:actives.reduce((s,o)=>s+(o.total_ttc||0),0),
+    caCommandes:commandes.reduce((s,o)=>s+(o.total_ttc||0),0),
   }
-  return c
+}
+const COMMERCIAUX = ["Brice Chappé","Alejandro Gallegos","Fabian Coquoz","Michel Gédéon","Sabrina Striberni","Team Jardin-Confort","Thierry Stricker"]
+
+type SortKey = "date"|"client"|"montant"|"statut"|"commercial"|"jours"|"numero"
+type SortDir = "asc"|"desc"
+type QuickFilter = "all"|"offres"|"commandes"|"abandonnes"|"relance"
+
+function isoWeek(d: Date) {
+  const t = new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()))
+  const day=(t.getUTCDay()+6)%7; t.setUTCDate(t.getUTCDate()-day+3)
+  const jan4=new Date(Date.UTC(t.getUTCFullYear(),0,4))
+  const dayJ=(jan4.getUTCDay()+6)%7; jan4.setUTCDate(jan4.getUTCDate()-dayJ+3)
+  return 1+Math.round((t.getTime()-jan4.getTime())/604800000)
+}
+function todayLabel() {
+  const now=new Date()
+  return `${new Intl.DateTimeFormat("fr-CH",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}).format(now)} · Semaine ${isoWeek(now)}`
 }
 
-export default function DashboardDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const [offre,setOffre]=useState<OffreRecord|null>(null)
+function KpiCard({title,value,sub,extra,onClick,active}:{title:string;value:string|number;sub?:string;extra?:string;onClick?:()=>void;active?:boolean}) {
+  return (
+    <div onClick={onClick} className={`rounded-2xl border p-6 transition ${onClick?"cursor-pointer hover:bg-[#34383d]":""} ${active?"border-[#2B8AD1]/50 bg-[#2B8AD1]/10":"border-white/10 bg-[#2a2d31]"}`}>
+      <div className="text-sm text-zinc-400">{title}</div>
+      <div className="mt-4 text-4xl font-semibold tracking-tight text-zinc-100">{value}</div>
+      {sub&&<div className="mt-3 text-sm text-zinc-500">{sub}</div>}
+      {extra&&<div className="mt-2 text-sm text-sky-300">{extra}</div>}
+    </div>
+  )
+}
+function SortTh({label,k,cur,dir,onSort}:{label:string;k:SortKey;cur:SortKey;dir:SortDir;onSort:(k:SortKey)=>void}) {
+  const active=k===cur
+  return (
+    <th className="px-4 py-3 font-medium">
+      <button type="button" onClick={()=>onSort(k)}
+        className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 transition ${active?"bg-white/10 text-zinc-100":"text-zinc-400 hover:bg-white/5 hover:text-zinc-200"}`}>
+        {label} <span className="text-xs">{active?(dir==="asc"?"↑":"↓"):"↕"}</span>
+      </button>
+    </th>
+  )
+}
+
+export default function DashboardPage() {
+  const [offres,setOffres]=useState<OffreRecord[]>([])
   const [loading,setLoading]=useState(true)
-  const [slug,setSlug]=useState("")
-  const [error,setError]=useState("")
-  const [noteCommerciale,setNoteCommerciale]=useState("")
-  const [notesInternes,setNotesInternes]=useState("")
-  const [saving,setSaving]=useState(false)
-  const [saveStatus,setSaveStatus]=useState("")
-  const [saveKind,setSaveKind]=useState<"success"|"error"|"info">("info")
+  const [search,setSearch]=useState("")
+  const [quickFilter,setQuickFilter]=useState<QuickFilter>("all")
+  const [commercial,setCommercial]=useState("all")
+  const [sortKey,setSortKey]=useState<SortKey>("date")
+  const [sortDir,setSortDir]=useState<SortDir>("desc")
 
-  useEffect(()=>{
-    async function load() {
-      const {slug:s}=await params
-      setSlug(s)
-      try {
-        const res=await fetch(`/api/offres/${s}`)
-        if(!res.ok) throw new Error(`Erreur ${res.status}`)
-        const json=await res.json()
-        const o=json.offre as OffreRecord
-        setOffre(o)
-        setNoteCommerciale(o.note_commerciale||"")
-        setNotesInternes(o.notes_internes||"")
-      } catch(e) { setError((e as Error).message) }
-      finally { setLoading(false) }
-    }
-    load()
-  },[params])
+  function loadOffres() {
+    setLoading(true)
+    fetch("/api/dashboard/offres")
+      .then(r=>r.json()).then(d=>setOffres(Array.isArray(d)?d:[]))
+      .catch(()=>setOffres([])).finally(()=>setLoading(false))
+  }
+  useEffect(()=>{loadOffres()},[])
 
-  async function saveNotes() {
-    if(!offre) return
-    setSaving(true);setSaveStatus("Enregistrement…");setSaveKind("info")
-    try {
-      const sc=appendTs(noteCommerciale,offre.note_commerciale||"")
-      const si=appendTs(notesInternes,offre.notes_internes||"")
-      const res=await fetch(`/api/offres/${slug}/notes`,{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({note_commerciale:sc,notes_internes:si})
-      })
-      if(!res.ok) throw new Error("Erreur sauvegarde")
-      setNoteCommerciale(sc);setNotesInternes(si)
-      setOffre(prev=>prev?{...prev,note_commerciale:sc,notes_internes:si}:prev)
-      setSaveStatus(`Enregistré à ${ts()}`);setSaveKind("success")
-      setTimeout(()=>setSaveStatus(""),3000)
-    } catch { setSaveStatus("Erreur lors de la sauvegarde");setSaveKind("error") }
-    finally { setSaving(false) }
+  function handleSort(k:SortKey) {
+    if(k===sortKey){setSortDir(d=>d==="asc"?"desc":"asc");return}
+    setSortKey(k);setSortDir("desc")
   }
 
-  async function changeStatut(statut: string) {
-    if(!offre) return
-    try {
-      const res=await fetch(`/api/offres/${slug}/statut`,{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({statut})
-      })
-      const json = await res.json().catch(()=>({}))
-      if(res.ok) {
-        setOffre(prev=>prev?{
-          ...prev,
-          statut:statut as OffreStatut,
-          date_abandon: json.date_abandon ?? (statut==="Abandonnée" ? new Date().toISOString() : null)
-        }:prev)
-      } else {
-        alert("Erreur: " + (json.error || res.status))
-      }
-    } catch(e) {
-      alert("Erreur réseau: " + (e as Error).message)
+  const filtered=useMemo(()=>{
+    let list=offres
+    if(quickFilter==="offres") list=list.filter(o=>o.type_document==="Offre"&&!["Abandonnée","Convertie","Refusée"].includes(o.statut))
+    else if(quickFilter==="commandes") list=list.filter(o=>o.type_document==="Commande"||o.statut==="Acceptée")
+    else if(quickFilter==="abandonnes") list=list.filter(o=>["Abandonnée","Refusée"].includes(o.statut))
+    else if(quickFilter==="relance") list=list.filter(o=>{const d=getDaysOpen(o);return d!==null&&d>=7})
+    if(commercial!=="all") list=list.filter(o=>o.commercial===commercial)
+    if(search.trim()){
+      const q=search.toLowerCase()
+      list=list.filter(o=>
+        nomClient(o).toLowerCase().includes(q)||(o.numero_affiche||"").toLowerCase().includes(q)||
+        (o.client_email||"").toLowerCase().includes(q)||(o.client_ville||"").toLowerCase().includes(q)||
+        (o.commercial||"").toLowerCase().includes(q))
     }
-  }
+    return [...list].sort((a,b)=>{
+      let av:string|number="",bv:string|number=""
+      if(sortKey==="numero"){av=a.id;bv=b.id}
+      else if(sortKey==="date"){av=a.date_document||"";bv=b.date_document||""}
+      else if(sortKey==="client"){av=nomClient(a);bv=nomClient(b)}
+      else if(sortKey==="montant"){av=a.total_ttc||0;bv=b.total_ttc||0}
+      else if(sortKey==="statut"){av=a.statut;bv=b.statut}
+      else if(sortKey==="commercial"){av=a.commercial||"";bv=b.commercial||""}
+      else if(sortKey==="jours"){av=getDaysOpen(a)??-1;bv=getDaysOpen(b)??-1}
+      if(av<bv) return sortDir==="asc"?-1:1
+      if(av>bv) return sortDir==="asc"?1:-1
+      return 0
+    })
+  },[offres,quickFilter,commercial,search,sortKey,sortDir])
 
-  const mailBody=useMemo(()=>{
-    if(!offre) return ""
-    const prenom=offre.client_prenom||""
-    const greeting=prenom?`Bonjour ${prenom},`:"Bonjour,"
-    return `\n${greeting}\n\nJe me permets de reprendre contact avec vous suite à notre offre concernant votre mobilier d'extérieur.\n\nEst-ce que vous avez eu l'occasion de consulter notre offre ?\n\nLien vers votre offre : ${APP_URL}/offre/${offre.slug}\n\nCordialement,\n${offre.commercial||"L'équipe Jardin-Confort"}`
-  },[offre])
+  const stats=useMemo(()=>computeStats(offres),[offres])
+  const quickFilters:[{label:string;value:QuickFilter}] = [
+    {label:"Toutes",value:"all"},{label:"Offres actives",value:"offres"},
+    {label:"Commandes",value:"commandes"},{label:"Abandonnées",value:"abandonnes"},
+    {label:"À relancer (≥7j)",value:"relance"},
+  ] as [{label:string;value:QuickFilter}]
 
   if(loading) return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
-      <div className="mx-auto max-w-[1800px] rounded-2xl border border-white/10 bg-[#2a2d31] p-8 text-zinc-400">Chargement…</div>
+      <div className="mx-auto max-w-[1700px] rounded-2xl border border-white/10 bg-[#2a2d31] p-8 text-zinc-400">Chargement…</div>
     </main>
   )
-  if(error||!offre) return (
-    <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
-      <div className="mx-auto max-w-[1800px] rounded-2xl border border-red-500/20 bg-[#2a2d31] p-8 text-red-300">Impossible de charger le dossier. {error}</div>
-    </main>
-  )
-
-  const days=getDaysOpen(offre)
-  const d=offre.data as Record<string,unknown>
-  const urlPublique=`${APP_URL}/offre/${offre.slug}`
-  const urlPrint=`${APP_URL}/print/offre/${offre.slug}`
-  const isAbandonne=offre.statut==="Abandonnée"
-  const isOffre=offre.type_document==="Offre"&&!["Convertie","Acceptée"].includes(offre.statut)
 
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
-      <div className="mx-auto max-w-[1800px] space-y-6">
+      <div className="mx-auto max-w-[1700px] space-y-6">
 
-        {/* TOP */}
-        <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-          <div className="mb-5 flex flex-wrap items-center gap-3">
-            <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">← Retour</Link>
-            {offre.client_email&&(
-              <a href={`mailto:${offre.client_email}?subject=${encodeURIComponent(`Suivi offre ${offre.numero_affiche}`)}&body=${encodeURIComponent(mailBody)}`}
-                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">✉ Email relance</a>
-            )}
-            <a href={urlPublique} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">👁 Page client</a>
-            <a href={urlPrint} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">🖨 Imprimer</a>
-          </div>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="flex items-start gap-4">
-              <img src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/picto_jardin_confort_apple_low.png?v=1775944940" alt="" className="h-16 w-16 rounded-xl object-contain"/>
+              <img src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/picto_jardin_confort_apple_low.png?v=1775944940"
+                alt="" className="h-16 w-16 rounded-xl object-contain"/>
               <div>
-                <div className="text-sm text-zinc-400">Dossier</div>
-                <h1 className="mt-2 text-3xl font-semibold">{offre.numero_affiche}</h1>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(offre.statut,offre.type_document)}`}>{offre.statut}</span>
-                  <span className="text-sm text-zinc-400">{offre.type_document}</span>
-                  {offre.offre_origine&&<span className="text-sm text-zinc-500">Issu de : {offre.offre_origine}</span>}
-                  {days!==null&&(
-                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getDaysBadgeColor(days)}`}>{days} jour{days>1?"s":""} ouvert</span>
-                  )}
-                </div>
+                <h1 className="text-2xl font-semibold tracking-tight">Suivi offres & commandes</h1>
+                <p className="mt-1 text-sm text-zinc-400">Vue commerciale centralisée — Jardin-Confort</p>
+                <p className="mt-1 text-xs text-zinc-500">{todayLabel()}</p>
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-zinc-100">{fmtMoney(offre.total_ttc)}</div>
-              <div className="mt-1 text-sm text-zinc-400">{offre.payment_mode||"—"}</div>
-              <div className="mt-1 text-sm text-zinc-500">{offre.nb_articles} article{offre.nb_articles!==1?"s":""}</div>
+            <div className="flex gap-3 flex-wrap">
+              <Link href="/offres/nouveau" className="inline-flex items-center rounded-2xl bg-[#2B8AD1] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#2478b8]">+ Nouvelle offre</Link>
+              <button onClick={loadOffres} className="inline-flex items-center rounded-2xl border border-white/10 bg-[#2a2d31] px-4 py-3 text-sm text-zinc-300 transition hover:bg-[#34383d]">🔄 Actualiser</button>
             </div>
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-[240px_200px_minmax(0,1fr)_160px]">
+            <select value={commercial} onChange={e=>setCommercial(e.target.value)} className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 text-sm text-zinc-100 outline-none">
+              <option value="all">Tous les conseillers</option>
+              {COMMERCIAUX.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={quickFilter} onChange={e=>setQuickFilter(e.target.value as QuickFilter)} className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 text-sm text-zinc-100 outline-none">
+              {quickFilters.map(f=><option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Recherche : client, référence, email, ville…"
+              className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"/>
+            <button onClick={()=>{setSearch("");setQuickFilter("all");setCommercial("all")}} className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2.5 text-sm text-zinc-100 transition hover:bg-[#40454b]">Reset</button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {quickFilters.map(f=>(
+              <button key={f.value} type="button" onClick={()=>setQuickFilter(f.value)}
+                className={`rounded-full px-4 py-2 text-sm transition ${quickFilter===f.value?"bg-zinc-100 text-zinc-900":"border border-white/10 bg-[#34383d] text-zinc-200 hover:bg-[#40454b]"}`}>
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* GRILLE */}
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_660px]">
-
-          {/* Gauche */}
-          <div className="space-y-6">
-
-            <div className="grid gap-6 lg:grid-cols-2">
-              <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-                <h2 className="mb-4 text-xl font-semibold">Client</h2>
-                <div className="space-y-2 text-sm">
-                  {([["Nom",nomClient(offre)],["Société",offre.client_societe],["Email",offre.client_email],["Tél.",offre.client_tel1],
-                    ["Rue",[offre.client_rue,(d.numero as string)||""].filter(Boolean).join(" ")],
-                    ["NPA / Ville",[offre.client_npa,offre.client_ville].filter(Boolean).join(" ")],
-                  ] as [string,string|null][]).map(([k,v])=>(
-                    <div key={k} className="flex gap-2">
-                      <span className="w-24 shrink-0 text-zinc-400">{k} :</span>
-                      <span>{v||"—"}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-                <h2 className="mb-4 text-xl font-semibold">Offre</h2>
-                <div className="space-y-2 text-sm">
-                  {([["Conseiller",offre.commercial],["Date",fmtDate(offre.date_document)],
-                    ["Paiement",offre.payment_mode],["Livraison",offre.delivery_mode||(d.deliveryMode as string)],
-                    ["Délai",offre.lead_time||(d.leadTime as string)],["Référence",(d.reference as string)],
-                    ["Articles",String(offre.nb_articles||0)],
-                  ] as [string,string|null|undefined][]).map(([k,v])=>(
-                    <div key={k} className="flex gap-2">
-                      <span className="w-24 shrink-0 text-zinc-400">{k} :</span>
-                      <span>{v||"—"}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            </div>
-
-            <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-              <h2 className="mb-4 text-xl font-semibold">Montants</h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {([["Sous-total",fmtMoney(offre.sous_total)],["Remise",offre.remise_chf>0?`− ${fmtMoney(offre.remise_chf)}`:"—"],
-                  ["Services",offre.services_total>0?fmtMoney(offre.services_total):"—"],["TVA 8.1%",fmtMoney(offre.tva_montant)],
-                ] as [string,string][]).map(([k,v])=>(
-                  <div key={k} className="rounded-xl border border-white/10 bg-black/10 p-4">
-                    <div className="text-xs text-zinc-400">{k}</div>
-                    <div className="mt-2 text-lg font-semibold text-zinc-100">{v}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-[#2B8AD1]/10 px-6 py-4">
-                <span className="text-lg font-semibold text-zinc-100">TOTAL TTC</span>
-                <span className="text-2xl font-bold text-white">{fmtMoney(offre.total_ttc)}</span>
-              </div>
-            </section>
-
-            {offre.remarques&&(
-              <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-                <h2 className="mb-3 text-xl font-semibold">Remarques client</h2>
-                <p className="whitespace-pre-wrap text-sm text-zinc-300">{offre.remarques}</p>
-              </section>
-            )}
-
-            <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold">Suivi commercial</h2>
-                <button type="button" onClick={saveNotes} disabled={saving}
-                  className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b] disabled:opacity-50">
-                  {saving?"Enregistrement…":"Enregistrer"}
-                </button>
-              </div>
-
-              <div className="mb-4 flex flex-wrap gap-2 rounded-xl border border-white/10 bg-black/10 p-4">
-                {isOffre&&(
-                  <button type="button" onClick={()=>{if(confirm("Confirmer l'abandon ?")) changeStatut("Abandonnée")}}
-                    className="rounded-xl border border-rose-500/30 bg-rose-500/15 px-4 py-2 text-sm text-rose-300 transition hover:bg-rose-500/20">
-                    Abandonner l&apos;offre
-                  </button>
-                )}
-                {isAbandonne&&(
-                  <>
-                    <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 text-sm text-rose-300">
-                      Abandonnée le {fmtDate(offre.date_abandon)}
-                    </div>
-                    <button type="button" onClick={()=>{if(confirm("Confirmer la réactivation ?")) changeStatut("En cours")}}
-                      className="rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
-                      Réactiver l&apos;offre
-                    </button>
-                  </>
-                )}
-                {offre.client_email&&(
-                  <a href={`mailto:${offre.client_email}?subject=${encodeURIComponent(`Suivi offre ${offre.numero_affiche}`)}&body=${encodeURIComponent(mailBody)}`}
-                    className="rounded-xl border border-sky-500/30 bg-sky-500/15 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
-                    ✉ Mail de relance
-                  </a>
-                )}
-              </div>
-
-              {saveStatus&&(
-                <div className={`mb-4 rounded-xl px-4 py-3 text-sm ${saveKind==="success"?"border border-emerald-500/20 bg-emerald-500/10 text-emerald-300":saveKind==="error"?"border border-rose-500/20 bg-rose-500/10 text-rose-300":"border border-white/10 bg-black/10 text-zinc-300"}`}>
-                  {saveStatus}
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm text-zinc-400">Note commerciale</label>
-                  <textarea value={noteCommerciale} onChange={e=>setNoteCommerciale(e.target.value)} rows={4}
-                    className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-4 py-3 text-sm text-zinc-100 outline-none"/>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm text-zinc-400">Notes internes</label>
-                  <textarea value={notesInternes} onChange={e=>setNotesInternes(e.target.value)} rows={4}
-                    className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-4 py-3 text-sm text-zinc-100 outline-none"/>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-              <h2 className="mb-2 text-xl font-semibold">Brouillon mail de relance</h2>
-              <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300 whitespace-pre-wrap">{mailBody}</div>
-            </section>
-          </div>
-
-          {/* Droite — aperçu iframe */}
-          <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6 xl:sticky xl:top-6 xl:self-start">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Aperçu de l&apos;offre</h2>
-              <a href={urlPublique} target="_blank" rel="noopener noreferrer"
-                className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">Ouvrir ↗</a>
-            </div>
-            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-              <iframe src={urlPublique} title="Aperçu" className="h-[900px] w-full border-0"/>
-            </div>
-          </section>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <KpiCard title="Offres actives" value={stats.totalOffres} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caOffres)} potentiel`}
+            onClick={()=>setQuickFilter(quickFilter==="offres"?"all":"offres")} active={quickFilter==="offres"}/>
+          <KpiCard title="Commandes" value={stats.totalCommandes} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caCommandes)} confirmé`}
+            onClick={()=>setQuickFilter(quickFilter==="commandes"?"all":"commandes")} active={quickFilter==="commandes"}/>
+          <KpiCard title="À relancer" value={stats.aRelancer} sub="Offres ouvertes ≥ 7 jours" extra={stats.aRelancer>0?"⚠ Action requise":"✓ À jour"}
+            onClick={()=>setQuickFilter(quickFilter==="relance"?"all":"relance")} active={quickFilter==="relance"}/>
+          <KpiCard title="Abandonnées" value={stats.totalAbandonnes} sub={`${offres.length} dossiers total`}
+            onClick={()=>setQuickFilter(quickFilter==="abandonnes"?"all":"abandonnes")} active={quickFilter==="abandonnes"}/>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-4">
-          <div className="flex flex-wrap gap-3">
-            <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">← Retour</Link>
-            <Link href="/offres/nouveau" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">+ Nouvelle offre</Link>
-            {offre && (
-              <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
-                nom: offre.client_nom||"", prenom: offre.client_prenom||"",
-                societe: offre.client_societe||"", email: offre.client_email||"",
-                telephone1: offre.client_tel1||"", rue: offre.client_rue||"",
-                npa: offre.client_npa||"", ville: offre.client_ville||"",
-                commercial: offre.commercial||"",
-              }))}`}
-                className="inline-flex items-center rounded-xl border border-[#2B8AD1]/40 bg-[#2B8AD1]/15 px-4 py-2 text-sm text-sky-300 hover:bg-[#2B8AD1]/25">
-                👤 Nouvelle offre même client
-              </Link>
-            )}
+        <div className="space-y-3">
+          <div className="text-sm text-zinc-400">{filtered.length} résultat(s)</div>
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#2a2d31]">
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-sm">
+                <thead className="bg-black/10 text-left text-zinc-400">
+                  <tr>
+                    <SortTh label="Réf." k="numero" cur={sortKey} dir={sortDir} onSort={handleSort}/>
+                    <SortTh label="Client" k="client" cur={sortKey} dir={sortDir} onSort={handleSort}/>
+                    <th className="px-4 py-3 font-medium text-zinc-400">Ville</th>
+                    <SortTh label="Conseiller" k="commercial" cur={sortKey} dir={sortDir} onSort={handleSort}/>
+                    <SortTh label="Montant" k="montant" cur={sortKey} dir={sortDir} onSort={handleSort}/>
+                    <SortTh label="Statut" k="statut" cur={sortKey} dir={sortDir} onSort={handleSort}/>
+                    <SortTh label="Jours" k="jours" cur={sortKey} dir={sortDir} onSort={handleSort}/>
+                    <SortTh label="Date" k="date" cur={sortKey} dir={sortDir} onSort={handleSort}/>
+                    <th className="px-4 py-3 text-right font-medium text-zinc-400">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length===0?(
+                    <tr><td colSpan={9} className="px-4 py-10 text-center text-zinc-500">Aucun dossier trouvé.</td></tr>
+                  ):filtered.map((o,idx)=>{
+                    const days=getDaysOpen(o)
+                    const rowBg=idx%2===0?"bg-white/[0.02]":"bg-white/[0.05]"
+                    return (
+                      <tr key={o.id} onClick={()=>window.location.href=`/dashboard/${o.slug}`}
+                        className={`${rowBg} cursor-pointer border-t border-white/5 text-zinc-200 transition hover:bg-white/10`}>
+                        <td className="px-4 py-4"><div className="font-semibold text-zinc-100">{o.numero_affiche}</div><div className="text-xs text-zinc-500">{o.type_document}</div></td>
+                        <td className="px-4 py-4">
+                          <div>{nomClient(o)}</div>
+                          {o.client_societe&&<div className="text-xs text-zinc-400">{o.client_societe}</div>}
+                          {o.client_email&&<div className="text-xs text-zinc-500">{o.client_email}</div>}
+                        </td>
+                        <td className="px-4 py-4 text-zinc-400">{o.client_ville||"—"}</td>
+                        <td className="px-4 py-4 text-zinc-300">{o.commercial||"—"}</td>
+                        <td className="px-4 py-4 font-medium text-zinc-100">{fmtMoney(o.total_ttc)}</td>
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(o.statut,o.type_document)}`}>{o.statut}</span>
+                        </td>
+                        <td className="px-4 py-4">
+                          {days!==null?(
+                            <span className={`inline-flex min-w-8 items-center justify-center rounded-full px-3 py-1 text-xs font-medium ${getDaysBadgeColor(days)}`}>{days}j</span>
+                          ):<span className="text-zinc-600">—</span>}
+                        </td>
+                        <td className="px-4 py-4 text-zinc-400">{fmtDate(o.date_document)}</td>
+                        <td className="px-4 py-4">
+                          <div className="flex justify-end gap-2" onClick={e=>e.stopPropagation()}>
+                            <Link href={`/dashboard/${o.slug}`} className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-[#40454b]">Voir</Link>
+                            <a href={`/offre/${o.slug}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-[#40454b]">Client</a>
+                            {o.client_email&&(
+                              <a href={`mailto:${o.client_email}?subject=${encodeURIComponent(`Suivi offre ${o.numero_affiche}`)}`}
+                                className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-[#40454b]">Mail</a>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
