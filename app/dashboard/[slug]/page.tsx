@@ -154,7 +154,33 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     }
   }
 
-  const mailBody=useMemo(()=>{
+  const [converting, setConverting] = useState(false)
+
+  async function convertirEnCommande() {
+    if (!offre || !confirm("Confirmer la conversion de cette offre en commande ?")) return
+    setConverting(true)
+    try {
+      const res = await fetch(`/api/offres/${slug}/valider`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signataire: offre.commercial || "Conversion manuelle",
+          signature_base64: "",
+          date_signature: new Date().toLocaleDateString("fr-CH"),
+        }),
+      })
+      const json = await res.json()
+      if (res.ok && json.cmdSlug) {
+        window.location.href = `/dashboard/${json.cmdSlug}`
+      } else {
+        alert("Erreur: " + (json.error || res.status))
+      }
+    } catch (e) {
+      alert("Erreur: " + (e as Error).message)
+    } finally {
+      setConverting(false)
+    }
+  }
     if(!offre) return ""
     const prenom=offre.client_prenom||""
     const greeting=prenom?`Bonjour ${prenom},`:"Bonjour,"
@@ -196,7 +222,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             <a href={urlPrint} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">🖨 Imprimer</a>
             {pdfUrl ? (
-              <a href={pdfUrl} target="_blank" rel="noopener noreferrer"
+              <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
                 className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
                 📄 Télécharger PDF
               </a>
@@ -306,10 +332,16 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
 
               <div className="mb-4 flex flex-wrap gap-2 rounded-xl border border-white/10 bg-black/10 p-4">
                 {isOffre&&(
-                  <button type="button" onClick={()=>{if(confirm("Confirmer l'abandon ?")) changeStatut("Abandonnée")}}
-                    className="rounded-xl border border-rose-500/30 bg-rose-500/15 px-4 py-2 text-sm text-rose-300 transition hover:bg-rose-500/20">
-                    Abandonner l&apos;offre
-                  </button>
+                  <>
+                    <button type="button" onClick={convertirEnCommande} disabled={converting}
+                      className="rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
+                      {converting ? "Conversion…" : "✅ Convertir en commande"}
+                    </button>
+                    <button type="button" onClick={()=>{if(confirm("Confirmer l'abandon ?")) changeStatut("Abandonnée")}}
+                      className="rounded-xl border border-rose-500/30 bg-rose-500/15 px-4 py-2 text-sm text-rose-300 transition hover:bg-rose-500/20">
+                      Abandonner l&apos;offre
+                    </button>
+                  </>
                 )}
                 {isAbandonne&&(
                   <>
