@@ -133,12 +133,10 @@ export async function POST(
     }
 
     const pdf4meData = await pdf4meRes.json()
+    const base64Content = pdf4meData.document?.docData
 
-    // Si docData disponible immédiatement
-    let base64Content = pdf4meData.document?.docData
-
-    // Si async, retourner le statusUrl pour polling côté client
-    if (!base64Content && pdf4meData.statusUrl) {
+    // Toujours async — retourner statusUrl pour polling côté client
+    if (pdf4meData.statusUrl) {
       return NextResponse.json({
         async: true,
         statusUrl: pdf4meData.statusUrl,
