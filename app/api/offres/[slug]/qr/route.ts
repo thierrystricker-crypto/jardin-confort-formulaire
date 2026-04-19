@@ -43,7 +43,6 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    return NextResponse.json({ test: "version-3", timestamp: Date.now() })
     const { slug } = await params
 
     if (!PDF4ME_API_KEY) {
