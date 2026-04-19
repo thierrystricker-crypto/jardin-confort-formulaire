@@ -152,11 +152,11 @@ export default function DashboardPage() {
   },[offres,quickFilter,commercial,search,sortKey,sortDir])
 
   const stats=useMemo(()=>computeStats(offres),[offres])
-  const quickFilters:[{label:string;value:QuickFilter}] = [
+const quickFilters:{label:string;value:QuickFilter}[] = [
     {label:"Toutes",value:"all"},{label:"Offres actives",value:"offres"},
     {label:"Commandes",value:"commandes"},{label:"Abandonnées",value:"abandonnes"},
     {label:"À relancer (≥7j)",value:"relance"},
-  ] as [{label:string;value:QuickFilter}]
+]
 
   if(loading) return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
