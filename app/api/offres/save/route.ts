@@ -117,6 +117,13 @@ export async function POST(request: NextRequest) {
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://jardin-confort-formulaire.vercel.app";
 
+    // Générer le PDF en arrière-plan (non bloquant)
+    // On lance la génération sans attendre pour ne pas ralentir la réponse
+    fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }).catch(err => console.error("PDF generation background error:", err));
+
     return NextResponse.json({
       success: true,
       id: result.id,
@@ -127,6 +134,7 @@ export async function POST(request: NextRequest) {
       publicUrl: `${baseUrl}/offre/${slug}`,
       printUrl: `${baseUrl}/print/offre/${slug}`,
       dashboardUrl: `${baseUrl}/dashboard/${slug}`,
+      pdfUrl: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/${slug.startsWith("cmd") ? "commandes" : "offres"}/${slug}.pdf`,
     });
 
   } catch (err) {
