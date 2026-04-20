@@ -252,18 +252,7 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
         @media print { .print-btn { display: none !important; } .preview-watermark { opacity: 1 !important; } }
       `}</style>
 
-      {isPreview && (
-        <div style={{
-          position:"fixed", top:0, left:0, right:0, bottom:0,
-          display:"flex", alignItems:"center", justifyContent:"center",
-          pointerEvents:"none", zIndex:50, transform:"rotate(-35deg)",
-        }}>
-          <div style={{
-            fontSize:80, fontWeight:900, color:"rgba(220,38,38,0.12)",
-            letterSpacing:"0.05em", whiteSpace:"nowrap", userSelect:"none",
-          }}>PRINT PREVIEW ONLY</div>
-        </div>
-      )}
+      
       {!isPreview && (
         <div style={{
           position:"fixed", top:0, left:0, right:0, bottom:0,
@@ -282,6 +271,16 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
       
 
       <div className="doc-wrap">
+        {isPreview && (
+          <div style={{
+            background:"#fef2f2", border:"2px solid #dc2626",
+            borderRadius:6, padding:"8px 16px", marginBottom:16,
+            display:"flex", alignItems:"center", gap:12,
+          }}>
+            <span style={{color:"#dc2626", fontWeight:900, fontSize:13, letterSpacing:"0.1em"}}>⚠ PREVIEW</span>
+            <span style={{color:"#dc2626", fontSize:12}}>Document non enregistré — ne pas envoyer au client</span>
+          </div>
+        )}
 
         {/* ═══════════ PAGE 1 ═══════════ */}
 
