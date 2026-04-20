@@ -243,8 +243,13 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </a>
             ) : (
               <button onClick={generatePdf} disabled={pdfGenerating}
-                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-50">
-                {pdfGenerating ? "⏳ Génération…" : "📄 Générer PDF"}
+                className="relative inline-flex items-center overflow-hidden rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-80">
+                {pdfGenerating && (
+                  <span className="absolute inset-0 overflow-hidden rounded-xl">
+                    <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30"/>
+                  </span>
+                )}
+                <span className="relative">{pdfGenerating ? "📄 Génération PDF…" : "📄 Générer PDF"}</span>
               </button>
             )}
             {qrUrl ? (
