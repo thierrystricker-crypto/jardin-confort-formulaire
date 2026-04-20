@@ -71,6 +71,7 @@ export async function POST(
     const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
     // 3. Compléter la mise à jour de l'offre avec numéro commande + signature
+    // On ne modifie PAS numero_affiche — l'offre garde son numéro DEV-XXXX
     await supabaseAdmin
       .from("offres")
       .update({
@@ -86,12 +87,14 @@ export async function POST(
       .eq("slug", slug);
 
     // 4. Créer la nouvelle ligne commande dans Supabase
+    // offre_origine = numéro d'offre original (DEV-XXXX), pas le CMD
+    const offreNumero = offre.numero_offre || offre.numero_affiche
     const cmdRow = {
       slug: cmdSlug,
       type_document: "Commande",
       numero_offre: offre.numero_offre,
       numero_commande: numeroCommande,
-      offre_origine: offre.numero_affiche,
+      offre_origine: offreNumero,
       statut: "Acceptée",
       date_document: new Date().toISOString().split("T")[0],
       reference: offre.reference,
