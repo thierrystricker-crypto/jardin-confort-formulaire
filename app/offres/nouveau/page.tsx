@@ -417,17 +417,20 @@ export default function JardinConfortV7() {
   function addShopifyItem(item: ShopifyItem) {
     captureUndo();
     const id = `shopify-${Date.now()}`;
-    // Stock : 0 = sur commande, null = inconnu, >0 = en stock
     const stockVal: QuoteLine["stock"] = item.stock === null ? null : item.stock === 0 ? "sur_commande" : item.stock;
+    const price = parseFloat(item.price) || 0
+    const compareAt = item.compareAtPrice ? parseFloat(item.compareAtPrice) : 0
+    const hasPromo = compareAt > price
     setLines((c) => [...c, {
       id,
       type: "product",
       image: item.variantImage,
       sku: item.sku,
       title: item.variant,
-      unitPrice: parseFloat(item.price) || 0,
+      unitPrice: hasPromo ? compareAt : price,
       qty: 1,
       stock: stockVal,
+      lineDiscount: hasPromo ? Math.round((compareAt - price) * 100) / 100 : 0,
     }]);
     highlightAdded(id);
     setFlashProductId(item.id);
