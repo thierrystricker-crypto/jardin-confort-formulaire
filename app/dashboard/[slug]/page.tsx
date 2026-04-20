@@ -77,6 +77,8 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [saveKind,setSaveKind]=useState<"success"|"error"|"info">("info")
   const [pdfUrl,setPdfUrl]=useState<string|null>(null)
   const [pdfGenerating,setPdfGenerating]=useState(false)
+  const [qrUrl,setQrUrl]=useState<string|null>(null)
+  const [qrGenerating,setQrGenerating]=useState(false)
 
   useEffect(()=>{
     async function load() {
@@ -90,9 +92,11 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         setOffre(o)
         setNoteCommerciale(o.note_commerciale||"")
         setNotesInternes(o.notes_internes||"")
-        // Charger l'URL PDF existante
         if ((o as unknown as Record<string,unknown>).pdf_url) {
           setPdfUrl((o as unknown as Record<string,unknown>).pdf_url as string)
+        }
+        if ((o as unknown as Record<string,unknown>).qr_url) {
+          setQrUrl((o as unknown as Record<string,unknown>).qr_url as string)
         }
       } catch(e) { setError((e as Error).message) }
       finally { setLoading(false) }
@@ -106,11 +110,20 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     try {
       const res=await fetch(`/api/offres/${slug}/pdf`,{method:"POST"})
       const json=await res.json()
-      if(res.ok && json.pdf_url) {
-        setPdfUrl(json.pdf_url)
-      }
+      if(res.ok && json.pdf_url) setPdfUrl(json.pdf_url)
     } catch { /* ignore */ }
     finally { setPdfGenerating(false) }
+  }
+
+  async function generateQr() {
+    if(!slug) return
+    setQrGenerating(true)
+    try {
+      const res=await fetch(`/api/offres/${slug}/qr`,{method:"POST"})
+      const json=await res.json()
+      if(res.ok && json.qr_url) setQrUrl(json.qr_url)
+    } catch { /* ignore */ }
+    finally { setQrGenerating(false) }
   }
 
   async function saveNotes() {
@@ -232,6 +245,17 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               <button onClick={generatePdf} disabled={pdfGenerating}
                 className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-50">
                 {pdfGenerating ? "⏳ Génération…" : "📄 Générer PDF"}
+              </button>
+            )}
+            {qrUrl ? (
+              <a href={qrUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/15 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
+                🧾 QR paiement
+              </a>
+            ) : (
+              <button onClick={generateQr} disabled={qrGenerating}
+                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-50">
+                {qrGenerating ? "⏳ Génération QR…" : "🧾 Générer QR paiement"}
               </button>
             )}
           </div>
