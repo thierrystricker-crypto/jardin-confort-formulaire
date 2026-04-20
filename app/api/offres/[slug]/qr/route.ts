@@ -131,7 +131,8 @@ export async function POST(
     return NextResponse.json({
       error: "Erreur pdf4me",
       status: pdf4meRes.status,
-      details: errText.slice(0, 500)
+      details: errText.slice(0, 500),
+      payloadSent: { iban: payload.iban, amount: payload.amount, crName: payload.crName, udName: payload.udName }
     }, { status: 500 })
 
   } catch (err) {
