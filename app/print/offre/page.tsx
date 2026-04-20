@@ -279,7 +279,7 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
       {!isPreview && (
         <button className="print-btn" onClick={() => window.print()}>🖨 Imprimer</button>
       )}
-      )}
+      
 
       <div className="doc-wrap">
 
