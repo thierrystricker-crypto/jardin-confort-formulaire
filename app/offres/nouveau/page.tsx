@@ -632,6 +632,7 @@ export default function JardinConfortV7() {
           </div>
         </div>
         <div className="jc-toolbar">
+          <a href="/dashboard" target="_blank" rel="noopener noreferrer" className="jc-btn jc-btn-ghost">📊 Dashboard</a>
           <button className="jc-btn jc-btn-ghost" onClick={() => setDarkMode((d) => !d)}>
             {darkMode ? "☀️ Mode clair" : "🌙 Mode sombre"}
           </button>
@@ -647,7 +648,6 @@ export default function JardinConfortV7() {
           ) : (
             <button className="jc-btn jc-btn-ghost" onClick={() => setShowResetConfirm(true)}>🔄 Nouvelle offre</button>
           )}
-          <a href="/dashboard" className="jc-btn jc-btn-ghost">📊 Dashboard</a>
           <button className="jc-btn jc-btn-ghost" onClick={loadDraftLocal}>📂 Charger</button>
           <button className="jc-btn jc-btn-ghost" onClick={saveDraftLocal}>💾 Brouillon</button>
           <button className="jc-btn jc-btn-ghost" disabled={!undoSnapshot} onClick={undoLastChange}>↩ Undo</button>
