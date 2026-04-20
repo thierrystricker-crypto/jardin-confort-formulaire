@@ -165,7 +165,7 @@ async function htmlToPdfBase64(html: string): Promise<string> {
   return Buffer.from(pdfBuffer).toString("base64")
 }
 
-async function addSwissQrBill(pdfBase64: string, offre: Record<string,unknown>, montant: number): Promise<ArrayBuffer> {
+async function addSwissQrBill(pdfBase64: string, offre: Record<string,unknown>, montant: number, isAcompte: boolean): Promise<ArrayBuffer> {
   const d = (offre.data as Record<string,unknown>) || {}
   const udName = ([offre.client_prenom, offre.client_nom].filter(Boolean).join(" ")
     || offre.client_societe || "Client").toString().slice(0, 70)
@@ -257,7 +257,7 @@ export async function POST(
 
     const html = generateQrPageHtml(offre as Record<string,unknown>, montant, isAcompte)
     const pdfBase64 = await htmlToPdfBase64(html)
-    const qrPdfBuffer = await addSwissQrBill(pdfBase64, offre as Record<string,unknown>, montant)
+    const qrPdfBuffer = await addSwissQrBill(pdfBase64, offre as Record<string,unknown>, montant, isAcompte)
     const qrUrl = await storeQrPdf(slug, qrPdfBuffer)
 
     return NextResponse.json({ success: true, qr_url: qrUrl, montant, isAcompte, slug })
