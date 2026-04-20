@@ -17,6 +17,7 @@ type ShopifyItem = {
   sku: string;
   variant: string;
   price: string;
+  compareAtPrice: string | null;
   stock: number | null;
   productUrl: string;
   variantImage: string;
@@ -1038,7 +1039,16 @@ export default function JardinConfortV7() {
                             </div>
                             <div className="jc-shopify-row">
                               <span className="jc-shopify-label">Prix</span>
-                              <span className="jc-shopify-price">CHF {item.price}</span>
+                              <span>
+                                {item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price) && (
+                                  <span style={{textDecoration:"line-through", color:"#9CA3AF", fontSize:12, marginRight:6}}>
+                                    CHF {item.compareAtPrice}
+                                  </span>
+                                )}
+                                <span className="jc-shopify-price" style={item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price) ? {color:"#dc2626"} : {}}>
+                                  CHF {item.price}
+                                </span>
+                              </span>
                             </div>
                             <div className="jc-shopify-row">
                               <span className="jc-shopify-label">Stock</span>
@@ -1564,7 +1574,12 @@ export default function JardinConfortV7() {
                                 <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "normal" }}>{item.variant}</div>
                                 <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{item.sku}</div>
                                 <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
-                                  <span style={{ fontSize: 13, fontWeight: 700 }}>CHF {item.price}</span>
+                                  <span style={{ display:"flex", alignItems:"center", gap:6 }}>
+                                    {item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price) && (
+                                      <span style={{textDecoration:"line-through", color:"#9CA3AF", fontSize:11}}>CHF {item.compareAtPrice}</span>
+                                    )}
+                                    <span style={{ fontSize: 13, fontWeight: 700, color: item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price) ? "#dc2626" : "inherit" }}>CHF {item.price}</span>
+                                  </span>
                                   <span style={{ fontSize: 11, fontWeight: 600, color: (item.stock !== null && item.stock > 2) ? "#2C7E3F" : (item.stock !== null && item.stock > 0 && item.stock <= 2) ? "#E67E22" : (item.stock !== null && item.stock < 1) ? "#dc2626" : "#888" }}>
                                     {item.stock === null ? "N/A" : item.stock > 2 ? `✓ ${item.stock}` : item.stock > 0 ? `⚠ ${item.stock}` : "Rupture"}
                                   </span>
