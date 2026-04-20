@@ -27,9 +27,13 @@ type ShopifyProduct = {
         altText: string | null;
       } | null;
       price: {
-        amount: string;
-        currencyCode: string;
-      };
+                amount: string;
+                currencyCode: string;
+              };
+              compareAtPrice: {
+                amount: string;
+                currencyCode: string;
+              } | null;
     }>;
   };
 };
@@ -76,6 +80,7 @@ type ResultItem = {
   sku: string;
   variant: string;
   price: string;
+  compareAtPrice: string | null;
   stock: number | null;
   productUrl: string;
   variantImage: string;
@@ -123,6 +128,10 @@ async function runStorefrontSearch(query: string): Promise<ShopifyProduct[]> {
                   altText
                 }
                 price {
+                  amount
+                  currencyCode
+                }
+                compareAtPrice {
                   amount
                   currencyCode
                 }
@@ -261,6 +270,7 @@ function buildStorefrontItems(products: ShopifyProduct[], words: string[]): Resu
               ? `${product.title} / ${variant.title}`
               : product.title,
           price: Number(variant.price.amount).toFixed(2),
+          compareAtPrice: variant.compareAtPrice ? Number(variant.compareAtPrice.amount).toFixed(2) : null,
           stock: null,
           productUrl: product.onlineStoreUrl
             ? `${product.onlineStoreUrl}?variant=${variantNumericId}`
