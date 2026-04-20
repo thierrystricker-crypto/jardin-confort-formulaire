@@ -55,12 +55,10 @@ export default function PrintOffe() {
       }
     }
     setReady(true);
-    // Auto-print après chargement
-    setTimeout(() => window.print(), 600);
   }, []);
 
   if (!ready) return <div style={{padding:40, textAlign:"center", color:GREY}}>Chargement…</div>;
-
+const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
   const totals = computeTotals(data);
   const {
     isPrivateTTC, subTotal, discountValue, serviceTotal,
@@ -254,7 +252,35 @@ export default function PrintOffe() {
         @media print { .print-btn { display: none !important; } }
       `}</style>
 
-      <button className="print-btn" onClick={() => window.print()}>🖨 Imprimer</button>
+      {isPreview && (
+        <div style={{
+          position:"fixed", top:0, left:0, right:0, bottom:0,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          pointerEvents:"none", zIndex:50, transform:"rotate(-35deg)",
+        }}>
+          <div style={{
+            fontSize:80, fontWeight:900, color:"rgba(220,38,38,0.12)",
+            letterSpacing:"0.05em", whiteSpace:"nowrap", userSelect:"none",
+          }}>PRINT PREVIEW ONLY</div>
+        </div>
+      )}
+      {!isPreview && (
+        {isPreview && (
+        <div style={{
+          position:"fixed", top:0, left:0, right:0, bottom:0,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          pointerEvents:"none", zIndex:50, transform:"rotate(-35deg)",
+        }}>
+          <div style={{
+            fontSize:80, fontWeight:900, color:"rgba(220,38,38,0.12)",
+            letterSpacing:"0.05em", whiteSpace:"nowrap", userSelect:"none",
+          }}>PRINT PREVIEW ONLY</div>
+        </div>
+      )}
+      {!isPreview && (
+        <button className="print-btn" onClick={() => window.print()}>🖨 Imprimer</button>
+      )}
+      )}
 
       <div className="doc-wrap">
 

@@ -659,7 +659,7 @@ export default function JardinConfortV7() {
           >
             {isSaving ? "⏳ Enregistrement…" : "☁️ Enregistrer & URL"}
           </button>
-          <button className="jc-btn jc-btn-primary" onClick={openPrint}>🖨 Imprimer</button>
+          <button className="jc-btn jc-btn-primary" onClick={openPrint}>👁 Aperçu</button>
         </div>
       </header>
 
