@@ -242,8 +242,7 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
   const discountValue = discountPct > 0 ? Math.round(subTotal * discountPct) / 100 : Number(d.discount || 0);
   const activeServices = Object.entries(d.enabledServices || {})
     .filter(([, v]) => v)
-    .map(([code]) => ({ code, label: serviceLabels[code] || code, amount: Number(d.servicePrices?.[code] || 0) }))
-    .filter(s => s.amount > 0);
+    .map(([code]) => ({ code, label: serviceLabels[code] || code, amount: Number(d.servicePrices?.[code] || 0) }));
   const serviceTotal = activeServices.reduce((s, srv) => s + srv.amount, 0);
   const roundingValue = Number(d.manualRounding || 0);
   const totalAfterAll = subTotal - discountValue + serviceTotal + roundingValue;
@@ -617,7 +616,7 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
                       {activeServices.map(srv => (
                         <div key={srv.code} style={{ display: "flex", justifyContent: "space-between", padding: "5px 24px 5px 36px", fontSize: 14 }}>
                           <span style={{ color: C.grey }}>↳ {srv.label}</span>
-                          <span>{fmt(srv.amount)}</span>
+                          <span>{srv.amount === 0 ? "Offert" : fmt(srv.amount)}</span>
                         </div>
                       ))}
                     </>
