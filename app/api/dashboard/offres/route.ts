@@ -1,7 +1,4 @@
 // app/api/dashboard/offres/route.ts
-// Retourne la liste des offres pour le dashboard
-// GET /api/dashboard/offres
-
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
