@@ -377,9 +377,7 @@ export default function JardinConfortV7() {
   const serviceTotal = useMemo(() => {
     const fixed = serviceOptions.reduce((s, srv) => {
       if (!enabledServices[srv.code]) return s;
-      const val = servicePrices[srv.code]
-      const isOffert = typeof val === "string" && val.toLowerCase().trim() === "offert"
-      return s + (isOffert ? 0 : Number(val || 0));
+      return s + Number(servicePrices[srv.code] || 0);
     }, 0);
     const custom = enabledServices["custom"] ? Number(servicePrices["custom"] || 0) : 0;
     return fixed + custom;
@@ -1365,7 +1363,8 @@ export default function JardinConfortV7() {
                     <span className="jc-muted-sm">CHF</span>
                     <input
                       className="jc-service-price no-spin"
-                      type="text"
+                      type="number"
+                      step="1"
                       placeholder="0"
                       value={servicePrices[srv.code]}
                       disabled={!enabledServices[srv.code]}

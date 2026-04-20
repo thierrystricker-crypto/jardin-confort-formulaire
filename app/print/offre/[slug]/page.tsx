@@ -78,7 +78,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
   const activeServices = [
     ...serviceOptions
       .filter((s) => data.enabledServices[s.code] && Number(data.servicePrices[s.code] || 0) > 0)
-      .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code]) })),
+      .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code] || 0) })),
     ...(data.enabledServices["custom"] && Number(data.servicePrices["custom"] || 0) > 0
       ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices["custom"]) }]
       : []),
@@ -471,7 +471,9 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                     {activeServices.map((srv, i) => (
                       <tr key={i}>
                         <td className="pt-label pt-sub">↳ {srv.label}</td>
-                        <td className="pt-value" style={{fontSize:11}}>{formatMoney(srv.amount)}</td>
+                        <td className="pt-value" style={{fontSize:11}}>
+                          {srv.amount === 0 ? "Offert" : formatMoney(srv.amount)}
+                        </td>
                       </tr>
                     ))}
                   </>
