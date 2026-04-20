@@ -109,12 +109,13 @@ body {
 <div class="doc-meta">
   <table><tbody>
     <tr><td class="lbl">N° ${isCommande ? "de commande" : "d'offre"}</td><td>${numero}</td></tr>
+    ${offre.date_document ? `<tr><td class="lbl">Date</td><td>${new Date(offre.date_document as string).toLocaleDateString("fr-CH", {day:"2-digit",month:"2-digit",year:"numeric"})}</td></tr>` : ""}
     ${offre.commercial ? `<tr><td class="lbl">Conseiller</td><td>${offre.commercial}</td></tr>` : ""}
     <tr><td class="lbl">Mode de paiement</td><td>${offre.payment_mode || ""}</td></tr>
   </tbody></table>
 </div>
 
-<div class="section-title">Destinataire</div>
+<div class="section-title">Adresse de facturation</div>
 <div class="client-block">
   <div class="client-name">${nomClient}</div>
   ${societe && nomClient !== societe ? `<div>${societe}</div>` : ""}
@@ -194,7 +195,7 @@ async function addSwissQrBill(pdfBase64: string, offre: Record<string,unknown>, 
     udCity,
     referenceType: "NON",
     reference,
-    unstructuredMessage: `Paiement ${offre.numero_affiche}`.slice(0, 140),
+    unstructuredMessage: (isAcompte ? `Acompte 50% - ${offre.numero_affiche}` : `Paiement ${offre.numero_affiche}`).slice(0, 140),
     languageType: "French",
     seperatorLine: "LineWithScissor",
     async: true,
