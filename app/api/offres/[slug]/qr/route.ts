@@ -81,12 +81,11 @@ body { font-family:Arial,sans-serif; font-size:13px; color:#2A2B2A; background:w
 
 // ── Convertir HTML en PDF via pdf.co ─────────────────────────────────────
 async function htmlToPdfBase64(html: string): Promise<string> {
-  const encoded = Buffer.from(html).toString("base64")
   const res = await fetch("https://api.pdf.co/v1/pdf/convert/from/html", {
     method: "POST",
     headers: { "x-api-key": PDFCO_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
-      html: encoded,
+      html: html,
       name: "qr_base.pdf",
       paperSize: "A4",
       orientation: "Portrait",
