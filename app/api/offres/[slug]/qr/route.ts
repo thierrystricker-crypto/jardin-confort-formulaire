@@ -81,7 +81,7 @@ export async function POST(
     const payload = {
       docContent: BLANK_PDF_BASE64,
       docName: `qr_${slug}.pdf`,
-      iban: "CH7200767000K033379650",
+      iban: "CH7200767000K03337965",
       crName: "JARDIN CONFORT SA",
       crAddressType: "S",
       crStreetOrAddressLine1: "Route de Lavaux",
