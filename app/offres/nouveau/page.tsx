@@ -80,8 +80,8 @@ type DraftSnapshot = {
 
 // ── Services selon le document Jardin-Confort ──
 const serviceOptions = [
-  { code: "montage",       label: "Frais de montage",                                    defaultPrice: 0   },
-  { code: "poste",         label: "Livraison des colis par La Poste",                    defaultPrice: 0   },
+  { code: "montage",       label: "Frais de montage",                                    defaultPrice: "" as unknown as number  },
+  { code: "poste",         label: "Livraison des colis par La Poste",                    defaultPrice: "" as unknown as number  },
   { code: "trottoir",      label: "Livraison colis franco trottoir par transporteur",    defaultPrice: 60  },
   { code: "etage",         label: "Livraison « à l'étage » et déballage des articles",  defaultPrice: 80  },
   { code: "etage_montage", label: "Livraison « à l'étage », déballage et montage",      defaultPrice: 120 },
@@ -377,7 +377,9 @@ export default function JardinConfortV7() {
   const serviceTotal = useMemo(() => {
     const fixed = serviceOptions.reduce((s, srv) => {
       if (!enabledServices[srv.code]) return s;
-      return s + Number(servicePrices[srv.code] || 0);
+      const val = servicePrices[srv.code]
+      const isOffert = typeof val === "string" && val.toLowerCase().trim() === "offert"
+      return s + (isOffert ? 0 : Number(val || 0));
     }, 0);
     const custom = enabledServices["custom"] ? Number(servicePrices["custom"] || 0) : 0;
     return fixed + custom;
@@ -773,19 +775,7 @@ export default function JardinConfortV7() {
                 <option>À l'emporter</option>
               </select>
             </div>
-            <div className="jc-field screenOnly">
-              <label>Statut</label>
-              <div className="jc-status-row">
-                {(["En cours", "Envoyée", "Acceptée", "Refusée"] as OfferStatus[]).map((s) => (
-                  <button
-                    key={s}
-                    className={`jc-status-chip ${offerStatus === s ? "active" : ""}`}
-                    style={offerStatus === s ? { background: STATUS_CONFIG[s].bg, color: STATUS_CONFIG[s].color, borderColor: STATUS_CONFIG[s].border } : {}}
-                    onClick={() => setOfferStatus(s)}
-                  >{s}</button>
-                ))}
-              </div>
-            </div>
+            
           </div>
         </section>
 
@@ -1375,8 +1365,7 @@ export default function JardinConfortV7() {
                     <span className="jc-muted-sm">CHF</span>
                     <input
                       className="jc-service-price no-spin"
-                      type="number"
-                      step="1"
+                      type="text"
                       placeholder="0"
                       value={servicePrices[srv.code]}
                       disabled={!enabledServices[srv.code]}
@@ -1705,7 +1694,7 @@ export default function JardinConfortV7() {
                   className="jc-ambiance-legende"
                   placeholder="Légende (optionnel)…"
                   value={img.legende}
-                  onChange={(e) => setAmbianceImages((c) => c.map((i) => i.id === img.id ? { ...i, legende: e.target.value } : i))}
+                  onChange={(e) => setAmbianceImages((c) => c.map((i) => i.id === img.id ? { ...i, legende: e.target.value.slice(0, 25) } : i))}
                 />
               </div>
             ))}
