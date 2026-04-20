@@ -254,8 +254,13 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </a>
             ) : (
               <button onClick={generateQr} disabled={qrGenerating}
-                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-50">
-                {qrGenerating ? "⏳ Génération QR…" : "🧾 Générer QR paiement"}
+                className="relative inline-flex items-center overflow-hidden rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-80">
+                {qrGenerating && (
+                  <span className="absolute inset-0 overflow-hidden rounded-xl">
+                    <span className="absolute inset-y-0 left-0 animate-[progress_12s_ease-in-out_forwards] bg-[#2B8AD1]/30"/>
+                  </span>
+                )}
+                <span className="relative">{qrGenerating ? "🧾 Génération QR…" : "🧾 Générer QR paiement"}</span>
               </button>
             )}
           </div>
