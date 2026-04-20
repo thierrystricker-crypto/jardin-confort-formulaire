@@ -75,7 +75,9 @@ export async function POST(
     await supabaseAdmin
       .from("offres")
       .update({
-        numero_commande: numeroCommande,
+        // Ne pas mettre numero_commande sur l'offre originale
+        // car numero_affiche est généré et prendrait le numéro CMD
+        // L'offre garde son numéro DEV grâce à offre_origine sur la commande
         data: {
           ...(offre.data as Record<string, unknown>),
           signataire,
