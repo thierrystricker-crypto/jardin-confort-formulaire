@@ -1,7 +1,6 @@
 // app/api/offres/[slug]/qr/route.ts
-// Génère une page de paiement dynamique (HTML→PDF via pdf.co)
-// puis y ajoute le QR bill Swiss (pdf4me)
-// Stocke le résultat dans Supabase Storage
+// Page de paiement dynamique au style du template print Jardin-Confort
+// HTML → pdf.co → pdf4me (QR Swiss) → Supabase Storage
 
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
@@ -9,56 +8,112 @@ import { supabaseAdmin } from "@/lib/supabase"
 const PDF4ME_API_KEY = process.env.PDF4ME_API_KEY || ""
 const PDFCO_API_KEY = process.env.PDFCO_API_KEY || ""
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
-// ── HTML dynamique pour la page de paiement ──────────────────────────────
+const THEME = "#2b8ad1"
+const BLACK = "#000000"
+const GREY  = "#333333"
+
+function buildReference(numero: string): string {
+  // Max 27 chars alphanumériques
+  return numero.replace(/[^A-Z0-9]/g, "").slice(0, 27)
+}
+
+function fmtMoney(v: number): string {
+  return new Intl.NumberFormat("fr-CH", {
+    style: "currency", currency: "CHF", minimumFractionDigits: 2
+  }).format(v)
+}
+
 function generateQrPageHtml(offre: Record<string,unknown>, montant: number, isAcompte: boolean): string {
   const d = (offre.data as Record<string,unknown>) || {}
-  const nomClient = [offre.client_prenom, offre.client_nom].filter(Boolean).join(" ")
-    || offre.client_societe || ""
+  const nomClient = [offre.client_prenom, offre.client_nom].filter(Boolean).join(" ") || offre.client_societe || ""
   const societe = (offre.client_societe as string) || ""
   const rue = [offre.client_rue, (d.numero as string) || ""].filter(Boolean).join(" ")
   const npaVille = [offre.client_npa, offre.client_ville].filter(Boolean).join(" ")
   const libelle = isAcompte ? "Acompte 50% à la commande" : "Paiement d'avance à la commande"
-  const montantFormate = new Intl.NumberFormat("fr-CH", {
-    style: "currency", currency: "CHF", minimumFractionDigits: 2
-  }).format(montant)
+  const montantFormate = fmtMoney(montant)
+  const numero = offre.numero_affiche as string
+  const isCommande = (offre.type_document as string) === "Commande"
 
   return `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;700;900&display=swap" rel="stylesheet"/>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:Arial,sans-serif; font-size:13px; color:#2A2B2A; background:white;
-  width:210mm; min-height:297mm; padding:18mm 18mm 80mm 18mm; }
-.header { display:flex; justify-content:space-between; align-items:flex-start;
-  margin-bottom:28px; padding-bottom:18px; border-bottom:2px solid #0060A9; }
-.logo { width:150px; }
-.ref { text-align:right; }
-.ref h2 { font-size:18px; font-weight:bold; color:#0060A9; }
-.ref p { font-size:11px; color:#6B7280; margin-top:3px; }
-.section-title { font-size:10px; font-weight:bold; text-transform:uppercase;
-  letter-spacing:.05em; color:#6B7280; margin-bottom:7px; margin-top:24px; }
-.client-block { background:#F3F5F6; border-radius:6px; padding:14px 18px;
-  font-size:13px; line-height:1.65; }
-.client-name { font-weight:bold; font-size:14px; color:#0060A9; }
-.payment-block { margin-top:24px; background:#EBF4FB; border:1px solid #2B8AD1;
-  border-radius:8px; padding:18px 22px; }
-.payment-label { font-size:11px; color:#2B8AD1; font-weight:bold;
-  text-transform:uppercase; letter-spacing:.05em; margin-bottom:7px; }
-.payment-amount { font-size:30px; font-weight:bold; color:#0060A9; }
-.payment-mode { font-size:11px; color:#6B7280; margin-top:5px; }
-.note { margin-top:24px; font-size:10.5px; color:#9CA3AF; line-height:1.55; }
-.divider { margin-top:24px; border-top:1px dashed #D1D5DB; }
-</style></head><body>
-<div class="header">
-  <img class="logo"
-    src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/Logo_Jardin_Confort_2022_BLEU.png?v=1666175474"
-    alt="Jardin-Confort" />
-  <div class="ref">
-    <h2>${offre.numero_affiche}</h2>
-    <p>Bulletin de paiement</p>
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family:'Raleway','Helvetica Neue',Arial,sans-serif;
+  font-size:13px; line-height:1.5; color:${GREY};
+  background:white;
+  width:210mm; min-height:180mm;
+  padding:14mm 16mm 80mm 14mm;
+  print-color-adjust:exact; -webkit-print-color-adjust:exact;
+}
+.doc-header {
+  display:flex; justify-content:space-between; gap:20px;
+  margin-bottom:6mm; padding-bottom:4mm;
+  border-bottom:2px solid ${THEME};
+}
+.doc-logo { max-width:175px; max-height:65px; object-fit:contain; display:block; }
+.doc-ref { text-align:right; }
+.doc-ref h2 { font-size:22px; font-weight:400; color:${THEME}; }
+.doc-ref p { font-size:11px; color:#888; margin-top:3px; }
+.doc-meta { margin-top:4mm; margin-bottom:5mm; }
+.doc-meta table { border-collapse:collapse; }
+.doc-meta td { padding:2px 8px 2px 0; font-size:12px; vertical-align:top; }
+.doc-meta .lbl { font-weight:700; color:${BLACK}; white-space:nowrap; min-width:130px; }
+.section-title {
+  font-size:10px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.06em; color:${THEME}; margin-bottom:6px; margin-top:5mm;
+}
+.client-block {
+  padding:10px 14px; background:#f9f9f9;
+  border-left:3px solid ${THEME}; font-size:13px; line-height:1.65;
+}
+.client-name { font-weight:700; font-size:15px; color:${BLACK}; }
+.payment-block {
+  margin-top:5mm; padding:14px 20px;
+  background:#EBF4FB; border:1px solid ${THEME}; border-radius:4px;
+}
+.payment-label {
+  font-size:10px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.06em; color:${THEME}; margin-bottom:6px;
+}
+.payment-amount { font-size:28px; font-weight:900; color:${BLACK}; }
+.payment-mode { font-size:11px; color:#666; margin-top:4px; }
+.note {
+  margin-top:5mm; font-size:10.5px; color:#999; line-height:1.55;
+  border-top:1px dashed #ddd; padding-top:4mm;
+}
+.doc-footer {
+  margin-top:6mm; border-top:1px solid #ddd; padding-top:5px;
+  text-align:center; font-size:10px; color:#888; line-height:1.7;
+}
+.doc-footer strong { color:${BLACK}; }
+.doc-footer-url { font-weight:700; color:${THEME}; }
+</style>
+</head><body>
+
+<div class="doc-header">
+  <img class="doc-logo"
+    src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
+    alt="Jardin-Confort"/>
+  <div class="doc-ref">
+    <h2>${isCommande ? "Commande" : "Offre"}</h2>
+    <p>${numero}</p>
+    <p style="margin-top:4px;font-size:11px;color:#aaa;">Bulletin de paiement</p>
   </div>
 </div>
+
+<div class="doc-meta">
+  <table><tbody>
+    <tr><td class="lbl">N° ${isCommande ? "de commande" : "d'offre"}</td><td>${numero}</td></tr>
+    ${offre.commercial ? `<tr><td class="lbl">Conseiller</td><td>${offre.commercial}</td></tr>` : ""}
+    <tr><td class="lbl">Mode de paiement</td><td>${offre.payment_mode || ""}</td></tr>
+  </tbody></table>
+</div>
+
 <div class="section-title">Destinataire</div>
 <div class="client-block">
   <div class="client-name">${nomClient}</div>
@@ -66,26 +121,34 @@ body { font-family:Arial,sans-serif; font-size:13px; color:#2A2B2A; background:w
   ${rue ? `<div>${rue}</div>` : ""}
   ${npaVille ? `<div>${npaVille}</div>` : ""}
 </div>
+
 <div class="payment-block">
   <div class="payment-label">${libelle}</div>
   <div class="payment-amount">${montantFormate}</div>
   <div class="payment-mode">${offre.payment_mode || ""}</div>
 </div>
+
 <div class="note">
-  Veuillez utiliser le bulletin de paiement ci-dessous pour effectuer votre virement.<br/>
-  Merci de mentionner la référence <strong>${offre.numero_affiche}</strong> lors de votre paiement.
+  Veuillez utiliser le bulletin de paiement ci-dessous pour effectuer votre virement.
+  Merci de mentionner la référence <strong>${numero}</strong> lors de votre paiement.<br/>
+  Coordonnées bancaires : Banque Cantonale Vaudoise · IBAN CH72 0076 7000 K033 3796 5 · SWIFT BCVLCH2LXXX
 </div>
-<div class="divider"></div>
+
+<div class="doc-footer">
+  <div><strong>Jardin-Confort SA</strong> · Route de Lavaux 425 · 1095 Lutry · Suisse</div>
+  <div>contact@jardinconfort.ch · +41 21 791 36 71 · TVA : CHE-100.142.327</div>
+  <div class="doc-footer-url">www.jardin-confort.ch</div>
+</div>
+
 </body></html>`
 }
 
-// ── Convertir HTML en PDF via pdf.co ─────────────────────────────────────
 async function htmlToPdfBase64(html: string): Promise<string> {
   const res = await fetch("https://api.pdf.co/v1/pdf/convert/from/html", {
     method: "POST",
     headers: { "x-api-key": PDFCO_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
-      html: html,
+      html,
       name: "qr_base.pdf",
       paperSize: "A4",
       orientation: "Portrait",
@@ -95,21 +158,13 @@ async function htmlToPdfBase64(html: string): Promise<string> {
     }),
   })
   const data = await res.json()
-  if (data.error || !data.url) {
-    throw new Error("pdf.co error: " + (data.message || JSON.stringify(data).slice(0, 200)))
-  }
-  // Télécharger le PDF et encoder en base64
+  if (data.error || !data.url) throw new Error("pdf.co error: " + (data.message || JSON.stringify(data).slice(0, 200)))
   const pdfRes = await fetch(data.url)
   const pdfBuffer = await pdfRes.arrayBuffer()
   return Buffer.from(pdfBuffer).toString("base64")
 }
 
-// ── Ajouter QR bill via pdf4me ────────────────────────────────────────────
-async function addSwissQrBill(
-  pdfBase64: string,
-  offre: Record<string,unknown>,
-  montant: number
-): Promise<ArrayBuffer> {
+async function addSwissQrBill(pdfBase64: string, offre: Record<string,unknown>, montant: number): Promise<ArrayBuffer> {
   const d = (offre.data as Record<string,unknown>) || {}
   const udName = ([offre.client_prenom, offre.client_nom].filter(Boolean).join(" ")
     || offre.client_societe || "Client").toString().slice(0, 70)
@@ -117,6 +172,7 @@ async function addSwissQrBill(
   const udNumber = ((d.numero as string) || "1").slice(0, 16)
   const udPostalCode = ((offre.client_npa as string) || "0000").slice(0, 16)
   const udCity = ((offre.client_ville as string) || "Suisse").slice(0, 35)
+  const reference = buildReference((offre.numero_affiche as string) || "")
 
   const payload = {
     docContent: pdfBase64,
@@ -137,6 +193,8 @@ async function addSwissQrBill(
     udPostalCode,
     udCity,
     referenceType: "NON",
+    reference,
+    unstructuredMessage: `Paiement ${offre.numero_affiche}`.slice(0, 140),
     languageType: "French",
     seperatorLine: "LineWithScissor",
     async: true,
@@ -144,10 +202,7 @@ async function addSwissQrBill(
 
   const res = await fetch("https://api.pdf4me.com/api/v2/CreateSwissQrBill", {
     method: "POST",
-    headers: {
-      "Authorization": `Basic ${PDF4ME_API_KEY}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Authorization": `Basic ${PDF4ME_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   })
 
@@ -156,12 +211,9 @@ async function addSwissQrBill(
   if (res.status === 202) {
     const locationUrl = res.headers.get("Location")
     if (!locationUrl) throw new Error("Pas de Location header 202")
-    // Polling max 30s
     for (let i = 0; i < 6; i++) {
       await new Promise(r => setTimeout(r, 5000))
-      const poll = await fetch(locationUrl, {
-        headers: { "Authorization": `Basic ${PDF4ME_API_KEY}` }
-      })
+      const poll = await fetch(locationUrl, { headers: { "Authorization": `Basic ${PDF4ME_API_KEY}` } })
       if (poll.status === 200) return await poll.arrayBuffer()
       if (poll.status !== 202) throw new Error(`Poll error: ${poll.status}`)
     }
@@ -172,7 +224,6 @@ async function addSwissQrBill(
   throw new Error(`pdf4me error ${res.status}: ${errText.slice(0, 300)}`)
 }
 
-// ── Stocker dans Supabase ─────────────────────────────────────────────────
 async function storeQrPdf(slug: string, pdfData: ArrayBuffer | Buffer): Promise<string> {
   const buffer = Buffer.isBuffer(pdfData) ? pdfData : Buffer.from(pdfData)
   const storagePath = `qr/${slug}_qr.pdf`
@@ -184,51 +235,37 @@ async function storeQrPdf(slug: string, pdfData: ArrayBuffer | Buffer): Promise<
   return qrUrl
 }
 
-// ── POST — générer QR ──────────────────────────────────────────────────────
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
     const { slug } = await params
-
     if (!PDF4ME_API_KEY || !PDFCO_API_KEY) {
       return NextResponse.json({ error: "Clés API manquantes" }, { status: 500 })
     }
 
     const { data: offre, error: readError } = await supabaseAdmin
       .from("offres").select("*").eq("slug", slug).single()
-
-    if (readError || !offre) {
-      return NextResponse.json({ error: "Offre non trouvée" }, { status: 404 })
-    }
+    if (readError || !offre) return NextResponse.json({ error: "Offre non trouvée" }, { status: 404 })
 
     const isAcompte = (offre.payment_mode || "").includes("50%")
     const montant = isAcompte
       ? Math.round(offre.total_ttc * 0.5 * 100) / 100
       : offre.total_ttc
 
-    // 1. Générer la page HTML de paiement
     const html = generateQrPageHtml(offre as Record<string,unknown>, montant, isAcompte)
-
-    // 2. Convertir en PDF via pdf.co
     const pdfBase64 = await htmlToPdfBase64(html)
-
-    // 3. Ajouter le QR bill Swiss via pdf4me
     const qrPdfBuffer = await addSwissQrBill(pdfBase64, offre as Record<string,unknown>, montant)
-
-    // 4. Stocker dans Supabase
     const qrUrl = await storeQrPdf(slug, qrPdfBuffer)
 
     return NextResponse.json({ success: true, qr_url: qrUrl, montant, isAcompte, slug })
-
   } catch (err) {
     console.error("QR generation error:", err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
 
-// ── GET — URL QR stockée ───────────────────────────────────────────────────
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -236,7 +273,6 @@ export async function GET(
   const { slug } = await params
   const { data } = await supabaseAdmin
     .from("offres").select("qr_url").eq("slug", slug).single()
-
   return NextResponse.json({
     qr_url: (data as Record<string,unknown>)?.qr_url || null,
     slug
