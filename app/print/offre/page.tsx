@@ -249,7 +249,7 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
           .doc-wrap { box-shadow: 0 0 20px rgba(0,0,0,0.08); }
           .print-btn { position: fixed; top: 16px; right: 16px; z-index: 100; background: ${THEME}; color: white; border: 0; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
         }
-        @media print { .print-btn { display: none !important; } }
+        @media print { .print-btn { display: none !important; } .preview-watermark { opacity: 1 !important; } }
       `}</style>
 
       {isPreview && (
@@ -265,7 +265,6 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
         </div>
       )}
       {!isPreview && (
-        {isPreview && (
         <div style={{
           position:"fixed", top:0, left:0, right:0, bottom:0,
           display:"flex", alignItems:"center", justifyContent:"center",
