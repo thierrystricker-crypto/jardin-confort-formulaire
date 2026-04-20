@@ -1,41 +1,51 @@
-// app/api/offres/[slug]/qr/route.ts — v2
-// POST — génère un QR paiement Swiss via pdf4me
-// et le stocke dans Supabase Storage bucket "pdfs"
+// app/api/offres/[slug]/qr/route.ts
+// Basé sur le sample officiel JavaScript pdf4me
+// Endpoint: /api/v2/CreateSwissQrBill
+// Auth: Basic YOUR_API_KEY (clé directe, pas encodée)
+// Réponse 200: binary PDF (arrayBuffer)
+// Réponse 202: async, polling via Location header
 
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 
 const PDF4ME_API_KEY = process.env.PDF4ME_API_KEY || ""
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+const API_ENDPOINT = "https://api.pdf4me.com/api/v2/CreateSwissQrBill"
 
-// Coordonnées bancaires Jardin-Confort
-const CREDITOR = {
-  name: "Jardin-Confort SA",
-  addressType: "S",
-  addressLine1: "Route de Lavaux 425",
-  addressLine2: "1095",  // NPA pour type S
-  city: "Lutry",
-  postalCode: "1095",
-  iban: "CH7200767000K033379650", // IBAN sans espaces
+const BLANK_PDF_BASE64 = "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPD4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQovUmVzb3VyY2VzIDw8Ci9Gb250IDw8Ci9GMSA0IDAgUgo+Pgo+PgovQ29udGVudHMgNSAwIFIKPj4KZW5kb2JqCjQgMCBvYmoKPDwKL1R5cGUgL0ZvbnQKL1N1YnR5cGUgL1R5cGUxCi9CYXNlRm9udCAvSGVsdmV0aWNhCj4+CmVuZG9iago1IDAgb2JqCjw8Ci9MZW5ndGggNDQKPj4Kc3RyZWFtCkJUCi9GMSAxMiBUZgoxMDAgNzAwIFRkCihIZWxsbyBXb3JsZCkgVGoKRVQKZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1NCAwMDAwMCBuIAowMDAwMDAwMTAxIDAwMDAwIG4gCjAwMDAwMDAxNzAgMDAwMDAgbiAKMDAwMDAwMDI0NCAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9TaXplIDYKL1Jvb3QgMSAwIFIKPj4Kc3RhcnR4cmVmCjM0MQolJUVPRg=="
+
+async function storeQrPdf(slug: string, pdfBuffer: Buffer): Promise<string> {
+  const storagePath = `qr/${slug}_qr.pdf`
+  await supabaseAdmin.storage.from("pdfs").upload(storagePath, pdfBuffer, {
+    contentType: "application/pdf", upsert: true,
+  })
+  const qrUrl = `${SUPABASE_URL}/storage/v1/object/public/pdfs/${storagePath}`
+  await supabaseAdmin.from("offres").update({ qr_url: qrUrl }).eq("slug", slug)
+  return qrUrl
 }
 
-// PDF vide 1 page en base64 (page blanche A4)
-// Utilisé comme base pour le QR bill
-const BLANK_PDF_BASE64 = "JVBERi0xLjQKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPJ4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA1OTUgODQyXQo+PgplbmRvYmoKeHJlZgowIDQKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9TaXplIDQKL1Jvb3QgMSAwIFIKPj4Kc3RhcnR4cmVmCjE5MAolJUVPRgo="
+async function processPdfResponse(result: ArrayBuffer, slug: string): Promise<string> {
+  const buffer = Buffer.from(result)
+  
+  // Vérifier si c'est un PDF binaire direct
+  if (buffer.length > 4 && buffer.toString("ascii", 0, 4) === "%PDF") {
+    return await storeQrPdf(slug, buffer)
+  }
 
-function formatAmount(amount: number): string {
-  // Format sans zéros en tête, avec 2 décimales
-  return amount.toFixed(2)
-}
-
-function formatIban(iban: string): string {
-  // Supprimer espaces et tirets
-  return iban.replace(/[\s-]/g, "")
-}
-
-function buildReference(numeroCommande: string): string {
-  // Référence max 27 caractères, sans caractères spéciaux
-  return numeroCommande.replace(/[^A-Z0-9]/g, "").slice(0, 27)
+  // Sinon essayer de parser comme JSON
+  try {
+    const json = JSON.parse(buffer.toString())
+    const b64 = json.document?.docData || json.docData || json.docContent || json.data
+    if (b64) {
+      return await storeQrPdf(slug, Buffer.from(b64, "base64"))
+    }
+    throw new Error("Pas de données PDF dans la réponse JSON: " + JSON.stringify(json).slice(0, 200))
+  } catch {
+    if (buffer.length > 1000) {
+      return await storeQrPdf(slug, buffer)
+    }
+    throw new Error("Réponse invalide: " + buffer.toString("hex", 0, 50))
+  }
 }
 
 export async function POST(
@@ -49,146 +59,82 @@ export async function POST(
       return NextResponse.json({ error: "PDF4ME_API_KEY non configurée" }, { status: 500 })
     }
 
-    // 1. Lire l'offre depuis Supabase
     const { data: offre, error: readError } = await supabaseAdmin
-      .from("offres")
-      .select("*")
-      .eq("slug", slug)
-      .single()
+      .from("offres").select("*").eq("slug", slug).single()
 
     if (readError || !offre) {
       return NextResponse.json({ error: "Offre non trouvée" }, { status: 404 })
     }
 
-    // 2. Calculer le montant selon le mode de paiement
     const isAcompte = (offre.payment_mode || "").includes("50%")
     const montant = isAcompte
       ? Math.round(offre.total_ttc * 0.5 * 100) / 100
       : offre.total_ttc
 
-    // 3. Infos débiteur (client)
-    const debtorName = [offre.client_prenom, offre.client_nom].filter(Boolean).join(" ")
-      || offre.client_societe
-      || "Client"
-    const debtorAddress1 = [offre.client_rue, (offre.data as Record<string,unknown>)?.numero || ""].filter(Boolean).join(" ") || "Adresse inconnue"
-    const debtorPostalCode = offre.client_npa || "0000"
-    const debtorCity = offre.client_ville || "Suisse"
+    const udName = ([offre.client_prenom, offre.client_nom].filter(Boolean).join(" ")
+      || offre.client_societe || "Client").slice(0, 70)
+    const udStreet = (offre.client_rue || "Rue inconnue").slice(0, 70)
+    const udNumber = (((offre.data as Record<string,unknown>)?.numero as string) || "1").slice(0, 16)
+    const udPostalCode = (offre.client_npa || "0000").slice(0, 16)
+    const udCity = (offre.client_ville || "Suisse").slice(0, 35)
 
-    // 4. Référence de paiement
-    const reference = buildReference(offre.numero_affiche)
-    const message = `Offre ${offre.numero_affiche}`.slice(0, 140)
+    const payload = {
+      docContent: BLANK_PDF_BASE64,
+      docName: `qr_${slug}.pdf`,
+      iban: "CH7200767000K033379650",
+      crName: "JARDIN CONFORT SA",
+      crAddressType: "S",
+      crStreetOrAddressLine1: "Route de Lavaux",
+      crStreetOrAddressLine2: "425",
+      crPostalCode: "1095",
+      crCity: "Lutry",
+      amount: montant.toFixed(2),
+      currency: "CHF",
+      udName,
+      udAddressType: "S",
+      udStreetOrAddressLine1: udStreet,
+      udStreetOrAddressLine2: udNumber,
+      udPostalCode,
+      udCity,
+      referenceType: "NON",
+      languageType: "French",
+      seperatorLine: "LineWithScissor",
+      async: true,
+    }
 
-    // 5. Appel API pdf4me
-    const pdf4meRes = await fetch("https://api.pdf4me.com/SwissQr/CreateSwissQrBill", {
+    const headers = {
+      "Authorization": `Basic ${PDF4ME_API_KEY}`,
+      "Content-Type": "application/json",
+    }
+
+    const pdf4meRes = await fetch(API_ENDPOINT, {
       method: "POST",
-      headers: {
-        "Authorization": PDF4ME_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        document: {
-          docData: BLANK_PDF_BASE64,
-          name: `qr_${slug}.pdf`,
-        },
-        swissQrCreatorAction: {
-          pageNumber: 1,
-          amount: formatAmount(montant),
-          currency: "CHF",
-          iban: formatIban(CREDITOR.iban),
-          referenceType: "NON",
-          reference: reference,
-          unstructuredMessage: message,
-          languageType: "French",
-          seperatorLine: "LineWithScissor",
-          // Créditeur — format S (structured)
-          creditorAddressType: "S",
-          creditorName: "JARDIN CONFORT SA",
-          creditorAddressLine1: "Route de Lavaux",
-          creditorAddressLine2: "425",
-          creditorPostalCode: "1095",
-          creditorCity: "Lutry",
-          // Débiteur
-          ultimateDebtorAddressType: "S",
-          ultimateDebtorName: debtorName.slice(0, 70),
-          ultimateDebtorAddressLine1: debtorAddress1.slice(0, 70),
-          ultimateDebtorAddressLine2: debtorPostalCode.slice(0, 16),
-          ultimateDebtorCity: debtorCity.slice(0, 35),
-          ultimateDebtorPostalCode: debtorPostalCode.slice(0, 16),
-          billingInfo: "",
-          aV1Parameters: "",
-          aV2Parameter: "",
-          async: false,
-        }
-      }),
+      headers,
+      body: JSON.stringify(payload),
     })
 
-    if (!pdf4meRes.ok) {
-      const errText = await pdf4meRes.text()
-      console.error("pdf4me error:", pdf4meRes.status, errText)
-      return NextResponse.json({
-        error: "Erreur pdf4me",
-        details: errText,
-        status: pdf4meRes.status
-      }, { status: 500 })
+    if (pdf4meRes.status === 200) {
+      const result = await pdf4meRes.arrayBuffer()
+      const qrUrl = await processPdfResponse(result, slug)
+      return NextResponse.json({ success: true, qr_url: qrUrl, montant, isAcompte, slug })
     }
 
-    const pdf4meData = await pdf4meRes.json()
-    const base64Content = pdf4meData.document?.docData
-
-    // Toujours async — retourner statusUrl pour polling côté client
-    const locationUrl = pdf4meRes.headers.get("Location") || pdf4meData.statusUrl
-    if (locationUrl || pdf4meData.jobId) {
-      return NextResponse.json({
-        async: true,
-        statusUrl: locationUrl,
-        jobId: pdf4meData.jobId,
-        slug,
-      })
+    if (pdf4meRes.status === 202) {
+      const locationUrl = pdf4meRes.headers.get("Location")
+      if (!locationUrl) {
+        return NextResponse.json({ error: "Pas de Location header dans la réponse 202" }, { status: 500 })
+      }
+      return NextResponse.json({ async: true, locationUrl, slug })
     }
 
-    if (!base64Content) {
-      return NextResponse.json({
-        error: "Pas de contenu PDF dans la réponse pdf4me",
-        responseKeys: Object.keys(pdf4meData),
-        responseSample: JSON.stringify(pdf4meData).slice(0, 300)
-      }, { status: 500 })
-    }
-
-    // 6. Décoder le PDF base64
-    const pdfBuffer = Buffer.from(base64Content, "base64")
-
-    // 7. Stocker dans Supabase Storage
-    const storagePath = `qr/${slug}_qr.pdf`
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from("pdfs")
-      .upload(storagePath, pdfBuffer, {
-        contentType: "application/pdf",
-        upsert: true,
-      })
-
-    if (uploadError) {
-      return NextResponse.json({ error: "Erreur stockage: " + uploadError?.message }, { status: 500 })
-    }
-
-    // 8. URL publique
-    const qrUrl = `${SUPABASE_URL}/storage/v1/object/public/pdfs/${storagePath}`
-
-    // 9. Stocker l'URL dans Supabase
-    await supabaseAdmin
-      .from("offres")
-      .update({ qr_url: qrUrl })
-      .eq("slug", slug)
-
+    const errText = await pdf4meRes.text()
     return NextResponse.json({
-      success: true,
-      qr_url: qrUrl,
-      montant,
-      isAcompte,
-      slug,
-    })
+      error: "Erreur pdf4me",
+      status: pdf4meRes.status,
+      details: errText.slice(0, 500)
+    }, { status: 500 })
 
   } catch (err) {
-    console.error("QR generation error:", err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
@@ -199,46 +145,38 @@ export async function GET(
 ) {
   const { slug } = await params
   const { searchParams } = new URL(request.url)
-  const statusUrl = searchParams.get("statusUrl")
-  const jobId = searchParams.get("jobId")
+  const locationUrl = searchParams.get("locationUrl")
 
-  // Mode polling — vérifier le statut d'un job pdf4me
-  const pollUrl = statusUrl || (jobId ? `https://api.pdf4me.com/SwissQr/GetJobResult?jobId=${jobId}` : null)
-  if (pollUrl) {
+  if (locationUrl) {
     try {
-      const statusRes = await fetch(pollUrl, {
-        headers: { "Authorization": PDF4ME_API_KEY }
-      })
-      const rawText = await statusRes.text()
-      if (!rawText) return NextResponse.json({ ready: false, rawEmpty: true, status: statusRes.status })
-      const statusData = JSON.parse(rawText)
-      const base64Content = statusData.document?.docData
-
-      if (!base64Content) {
-        return NextResponse.json({ ready: false, docStatus: statusData.document?.docStatus })
+      const headers = {
+        "Authorization": `Basic ${PDF4ME_API_KEY}`,
+        "Content-Type": "application/json",
       }
 
-      // PDF prêt — stocker dans Supabase
-      const pdfBuffer = Buffer.from(base64Content, "base64")
-      const storagePath = `qr/${slug}_qr.pdf`
-      await supabaseAdmin.storage.from("pdfs").upload(storagePath, pdfBuffer, {
-        contentType: "application/pdf", upsert: true,
-      })
-      const qrUrl = `${SUPABASE_URL}/storage/v1/object/public/pdfs/${storagePath}`
-      await supabaseAdmin.from("offres").update({ qr_url: qrUrl }).eq("slug", slug)
+      const statusRes = await fetch(locationUrl, { method: "GET", headers })
 
-      return NextResponse.json({ ready: true, qr_url: qrUrl, slug })
+      if (statusRes.status === 202) {
+        return NextResponse.json({ ready: false, status: 202 })
+      }
+
+      if (statusRes.status === 200) {
+        const result = await statusRes.arrayBuffer()
+        const qrUrl = await processPdfResponse(result, slug)
+        return NextResponse.json({ ready: true, qr_url: qrUrl, slug })
+      }
+
+      const errText = await statusRes.text()
+      return NextResponse.json({ ready: false, status: statusRes.status, error: errText.slice(0, 200) })
+
     } catch (err) {
       return NextResponse.json({ error: String(err) }, { status: 500 })
     }
   }
 
-  // Mode normal — retourner l'URL QR stockée
+  // URL QR stockée
   const { data } = await supabaseAdmin
-    .from("offres")
-    .select("qr_url, total_ttc, payment_mode")
-    .eq("slug", slug)
-    .single()
+    .from("offres").select("qr_url").eq("slug", slug).single()
 
   return NextResponse.json({
     qr_url: (data as Record<string,unknown>)?.qr_url || null,
