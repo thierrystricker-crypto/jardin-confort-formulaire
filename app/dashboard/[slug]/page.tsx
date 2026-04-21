@@ -79,6 +79,8 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [pdfGenerating,setPdfGenerating]=useState(false)
   const [qrUrl,setQrUrl]=useState<string|null>(null)
   const [qrGenerating,setQrGenerating]=useState(false)
+  const [relancing,setRelancing]=useState(false)
+  const [relanceStatus,setRelanceStatus]=useState("")
 
   useEffect(()=>{
     async function load() {
@@ -124,6 +126,50 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
       if(res.ok && json.qr_url) setQrUrl(json.qr_url)
     } catch { /* ignore */ }
     finally { setQrGenerating(false) }
+  }
+
+  async function enregistrerRelance() {
+    if(!slug) return
+    setRelancing(true); setRelanceStatus("")
+    try {
+      const res=await fetch(`/api/offres/${slug}/relance`,{method:"POST"})
+      const json=await res.json()
+      if(res.ok) {
+        setNoteCommerciale(json.note_commerciale||"")
+        setOffre(prev=>prev?{...prev, statut:"Envoyée", note_commerciale:json.note_commerciale}:prev)
+        setRelanceStatus(`✅ Relance #${json.nb_relances} enregistrée`)
+        setTimeout(()=>setRelanceStatus(""),4000)
+      } else { setRelanceStatus("Erreur: "+(json.error||res.status)) }
+    } catch { setRelanceStatus("Erreur réseau") }
+    finally { setRelancing(false) }
+  }
+
+  function copierOffre(avecClient: boolean) {
+    if(!offre) return
+    const offreData = offre.data as Record<string,unknown>
+    const prefill: Record<string,unknown> = {
+      commercial: offre.commercial||"",
+      lines: offreData.lines||[],
+      discount: offreData.discount||"0",
+      discountPercent: offreData.discountPercent||"0",
+      enabledServices: offreData.enabledServices||{},
+      servicePrices: offreData.servicePrices||{},
+      leadTime: offreData.leadTime||"",
+      paymentMode: offreData.paymentMode||"",
+      deliveryMode: offreData.deliveryMode||"",
+      remarks: offreData.remarks||"",
+    }
+    if(avecClient) {
+      Object.assign(prefill, {
+        nom: offre.client_nom||"", prenom: offre.client_prenom||"",
+        societe: offre.client_societe||"", email: offre.client_email||"",
+        telephone1: offre.client_tel1||"", rue: offre.client_rue||"",
+        npa: offre.client_npa||"", ville: offre.client_ville||"",
+      })
+    }
+    // Stocker dans localStorage pour éviter URL trop longue
+    localStorage.setItem("jc-offre-copy", JSON.stringify(prefill))
+    window.open(`/offres/nouveau?from_copy=1`, "_blank")
   }
 
   async function saveNotes() {
@@ -243,13 +289,8 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </a>
             ) : (
               <button onClick={generatePdf} disabled={pdfGenerating}
-                className="relative inline-flex items-center overflow-hidden rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-80">
-                {pdfGenerating && (
-                  <span className="absolute inset-0 overflow-hidden rounded-xl">
-                    <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30"/>
-                  </span>
-                )}
-                <span className="relative">{pdfGenerating ? "📄 Génération PDF…" : "📄 Générer PDF"}</span>
+                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-50">
+                {pdfGenerating ? "⏳ Génération…" : "📄 Générer PDF"}
               </button>
             )}
             {qrUrl ? (
@@ -259,13 +300,8 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </a>
             ) : (
               <button onClick={generateQr} disabled={qrGenerating}
-                className="relative inline-flex items-center overflow-hidden rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-80">
-                {qrGenerating && (
-                  <span className="absolute inset-0 overflow-hidden rounded-xl">
-                    <span className="absolute inset-y-0 left-0 animate-[progress_12s_ease-in-out_forwards] bg-[#2B8AD1]/30"/>
-                  </span>
-                )}
-                <span className="relative">{qrGenerating ? "🧾 Génération QR…" : "🧾 Générer QR paiement"}</span>
+                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-50">
+                {qrGenerating ? "⏳ Génération QR…" : "🧾 Générer QR paiement"}
               </button>
             )}
           </div>
@@ -396,6 +432,15 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                     ✉ Mail de relance
                   </a>
                 )}
+                {isOffre&&(
+                  <button type="button" onClick={enregistrerRelance} disabled={relancing}
+                    className="rounded-xl border border-amber-500/30 bg-amber-500/15 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-50">
+                    {relancing ? "Enregistrement…" : "📧 Enregistrer relance"}
+                  </button>
+                )}
+                {relanceStatus&&(
+                  <div className="w-full rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300">{relanceStatus}</div>
+                )}
               </div>
 
               {saveStatus&&(
@@ -411,9 +456,12 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                     className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-4 py-3 text-sm text-zinc-100 outline-none"/>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm text-zinc-400">Notes internes</label>
+                  <label className="mb-2 flex items-center gap-2 text-sm">
+                    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">🔒 Interne</span>
+                    <span className="text-zinc-400">Notes internes <span className="text-zinc-600 text-xs">(non visibles par le client)</span></span>
+                  </label>
                   <textarea value={notesInternes} onChange={e=>setNotesInternes(e.target.value)} rows={4}
-                    className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-4 py-3 text-sm text-zinc-100 outline-none"/>
+                    className="w-full rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm text-zinc-100 outline-none focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/10"/>
                 </div>
               </div>
             </section>
@@ -452,6 +500,18 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                 className="inline-flex items-center rounded-xl border border-[#2B8AD1]/40 bg-[#2B8AD1]/15 px-4 py-2 text-sm text-sky-300 hover:bg-[#2B8AD1]/25">
                 👤 Nouvelle offre même client
               </Link>
+            )}
+            {offre&&(
+              <button onClick={()=>copierOffre(true)}
+                className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-500/20">
+                📋 Copier offre complète
+              </button>
+            )}
+            {offre&&(
+              <button onClick={()=>copierOffre(false)}
+                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 hover:bg-[#40454b]">
+                📋 Copier sans client
+              </button>
             )}
           </div>
         </div>

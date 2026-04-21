@@ -576,6 +576,33 @@ export default function JardinConfortV7() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
+
+    // Copie complète depuis dashboard (localStorage)
+    if (params.get("from_copy") === "1") {
+      const copyRaw = localStorage.getItem("jc-offre-copy")
+      localStorage.removeItem("jc-offre-copy")
+      if (copyRaw) {
+        try {
+          const p = JSON.parse(copyRaw)
+          if (p.nom) setNom(p.nom); if (p.prenom) setPrenom(p.prenom)
+          if (p.societe) setSociete(p.societe); if (p.email) setEmail(p.email)
+          if (p.telephone1) setTelephone1(p.telephone1); if (p.rue) setRue(p.rue)
+          if (p.npa) setNpa(p.npa); if (p.ville) setVille(p.ville)
+          if (p.commercial) setCommercial(p.commercial)
+          if (p.lines) setLines(p.lines.map((l: QuoteLine) => ({...l, id:`copy-${Date.now()}-${Math.random()}`})))
+          if (p.discount) setDiscount(p.discount)
+          if (p.discountPercent) setDiscountPercent(p.discountPercent)
+          if (p.enabledServices) setEnabledServices({...initialEnabledServices, ...p.enabledServices})
+          if (p.servicePrices) setServicePrices({...initialServicePrices, ...p.servicePrices})
+          if (p.leadTime) setLeadTime(p.leadTime)
+          if (p.paymentMode) setPaymentMode(p.paymentMode)
+          if (p.deliveryMode) setDeliveryMode(p.deliveryMode as DeliveryMode)
+          if (p.remarks) setRemarks(p.remarks)
+        } catch { /* ignore */ }
+      }
+      return
+    }
+
     const prefillRaw = params.get("prefill");
     if (!prefillRaw) return;
     try {
