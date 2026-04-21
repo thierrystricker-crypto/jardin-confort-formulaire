@@ -399,10 +399,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">Suivi commercial</h2>
-                <button type="button" onClick={saveNotes} disabled={saving}
-                  className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b] disabled:opacity-50">
-                  {saving?"Enregistrement…":"Enregistrer"}
-                </button>
               </div>
 
               <div className="mb-4 flex flex-wrap gap-2 rounded-xl border border-white/10 bg-black/10 p-4">
@@ -457,6 +453,10 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   <label className="mb-2 block text-sm text-zinc-400">Note commerciale</label>
                   <textarea value={noteCommerciale} onChange={e=>setNoteCommerciale(e.target.value)} rows={4}
                     className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-4 py-3 text-sm text-zinc-100 outline-none"/>
+                  <button type="button" onClick={saveNotes} disabled={saving}
+                    className="mt-2 rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b] disabled:opacity-50">
+                    {saving ? "Enregistrement…" : "💾 Enregistrer"}
+                  </button>
                 </div>
                 <div>
                   <label className="mb-2 flex items-center gap-2 text-sm">
@@ -465,6 +465,10 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   </label>
                   <textarea value={notesInternes} onChange={e=>setNotesInternes(e.target.value)} rows={4}
                     className="w-full rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm text-zinc-100 outline-none focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/10"/>
+                  <button type="button" onClick={saveNotes} disabled={saving}
+                    className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-50">
+                    {saving ? "Enregistrement…" : "💾 Enregistrer"}
+                  </button>
                 </div>
               </div>
             </section>
