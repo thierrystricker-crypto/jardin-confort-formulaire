@@ -25,7 +25,7 @@ type Client = {
 }
 
 function nomClient(c: Client) {
-  return [c.prenom, c.nom].filter(Boolean).join(" ") || c.societe || "—"
+  return [c.nom, c.prenom].filter(Boolean).join(" ") || c.societe || "—"
 }
 function fmtDate(iso: string | null) {
   if (!iso) return "—"

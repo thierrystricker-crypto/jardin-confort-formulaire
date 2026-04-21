@@ -116,7 +116,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </main>
   )
 
-  const nomComplet = [client.prenom, client.nom].filter(Boolean).join(" ") || client.societe || "—"
+  const nomComplet = [client.nom, client.prenom].filter(Boolean).join(" ") || client.societe || "—"
   const caTotal = offres.filter(o => o.type_document === "Commande" || o.statut === "Acceptée").reduce((s, o) => s + (o.total_ttc || 0), 0)
 
   return (
@@ -222,7 +222,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               ) : (
                 <div className="space-y-2 text-sm">
                   {([
-                    ["Nom", [client.prenom, client.nom].filter(Boolean).join(" ")],
+                    ["Nom", [client.nom, client.prenom].filter(Boolean).join(" ")],
                     ["Société", client.societe],
                     ["Rue", [client.rue, client.numero_rue].filter(Boolean).join(" ")],
                     ["NPA / Ville", [client.npa, client.ville].filter(Boolean).join(" ")],
