@@ -439,7 +439,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   </button>
                 )}
                 {relanceStatus&&(
-                  <div className="w-full rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300">{relanceStatus}</div>
+                  <div className={`w-full rounded-xl px-4 py-2 text-sm ${relanceStatus.startsWith("✅") ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : "border border-rose-500/20 bg-rose-500/10 text-rose-300"}`}>{relanceStatus}</div>
                 )}
               </div>
 
