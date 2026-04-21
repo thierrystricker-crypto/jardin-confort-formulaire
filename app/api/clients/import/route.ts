@@ -12,64 +12,121 @@ type ClientRow = {
   tel1?: string
   tel2?: string
   rue?: string
+  rue2?: string
   numero_rue?: string
   npa?: string
   ville?: string
   pays?: string
+  livr_societe?: string
+  livr_nom?: string
+  livr_prenom?: string
+  livr_rue?: string
+  livr_rue2?: string
+  livr_npa?: string
+  livr_ville?: string
+  livr_tel?: string
   source: string
+}
+
+// Formater numéro de téléphone au format suisse +41 XX XXX XX XX
+function formatSwissPhone(raw: string | undefined): string | undefined {
+  if (!raw) return undefined
+  const digits = raw.replace(/[^\d+]/g, "").replace(/^\+/, "")
+  if (!digits) return undefined
+  let n = digits
+  if (n.startsWith("0041")) n = "41" + n.slice(4)
+  else if (n.startsWith("00")) n = n.slice(2)
+  if (n.startsWith("0")) n = "41" + n.slice(1)
+  if (!n.startsWith("41") && n.length <= 9) n = "41" + n
+  // Format +41 XX XXX XX XX
+  if (n.startsWith("41") && n.length >= 10) {
+    const local = n.slice(2)
+    if (local.length === 9) {
+      return `+41 ${local.slice(0,2)} ${local.slice(2,5)} ${local.slice(5,7)} ${local.slice(7,9)}`
+    }
+  }
+  return raw // retourner l'original si on ne peut pas formater
+}
+
+function parseCols(line: string, sep: string = ","): string[] {
+  const cols: string[] = []
+  let inQuote = false, cur = ""
+  for (const ch of line) {
+    if (ch === '"') { inQuote = !inQuote }
+    else if (ch === sep && !inQuote) { cols.push(cur.trim()); cur = "" }
+    else cur += ch
+  }
+  cols.push(cur.trim())
+  return cols.map(c => c.replace(/^"|"$/g, "").trim())
 }
 
 function parseShopifyCSV(text: string): ClientRow[] {
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean)
   if (lines.length < 2) return []
-  const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase())
+  const headers = parseCols(lines[0]).map(h => h.toLowerCase())
+  const get = (cols: string[], key: string) => (cols[headers.indexOf(key)] || "").trim()
 
   return lines.slice(1).map(line => {
-    const cols: string[] = []
-    let inQuote = false, cur = ""
-    for (const ch of line) {
-      if (ch === '"') { inQuote = !inQuote }
-      else if (ch === "," && !inQuote) { cols.push(cur.trim()); cur = "" }
-      else cur += ch
-    }
-    cols.push(cur.trim())
+    const cols = parseCols(line)
+    const g = (key: string) => get(cols, key)
 
-    const get = (key: string) => (cols[headers.indexOf(key)] || "").replace(/"/g, "").trim()
-
-    const firstName = get("first name") || get("billing first name") || get("prenom") || get("prénom")
-    const lastName  = get("last name")  || get("billing last name")  || get("nom")
-    const email     = get("email")
+    const firstName = g("first name")
+    const lastName  = g("last name")
+    const email     = g("email")
 
     if (!lastName && !firstName && !email) return null
     if (firstName === "Guest" && lastName === "Customer") return null
 
+    // Adresse facturation
+    const rue  = g("default address address1") || g("billing address1")
+    const rue2 = g("default address address2") || g("billing address2")
+
+    // Adresse livraison (différente si renseignée)
+    const livrRue   = g("shipping address address1") || g("shipping address1")
+    const livrRue2  = g("shipping address address2") || g("shipping address2")
+    const livrNpa   = g("shipping address zip")  || g("shipping zip")
+    const livrVille = g("shipping address city") || g("shipping city")
+    const livrNom   = g("shipping address last name")
+    const livrPrenom= g("shipping address first name")
+    const livrSoc   = g("shipping address company")
+
+    const hasLivr = livrRue && livrRue !== rue
+
     return {
-      nom:        lastName  || firstName || "",
-      prenom:     lastName  ? firstName || undefined : undefined,
-      societe:    get("default address company") || get("company") || get("billing company") || undefined,
-      email:      email || undefined,
-      tel1:       get("phone") || get("default address phone") || get("billing phone") || undefined,
-      rue:        get("default address address1") || get("billing address1") || undefined,
-      npa:        get("default address zip") || get("billing zip") || undefined,
-      ville:      get("default address city") || get("billing city") || undefined,
-      pays:       get("default address country code") || get("billing country code") || "CH",
-      source:     "shopify",
+      nom:         lastName  || firstName || "",
+      prenom:      lastName  ? firstName || undefined : undefined,
+      societe:     g("default address company") || g("company") || undefined,
+      email:       email || undefined,
+      tel1:        formatSwissPhone(g("phone") || g("default address phone")),
+      rue:         rue || undefined,
+      rue2:        rue2 || undefined,
+      npa:         g("default address zip") || g("billing zip") || undefined,
+      ville:       g("default address city") || g("billing city") || undefined,
+      pays:        g("default address country code") || "CH",
+      ...(hasLivr ? {
+        livr_nom:    livrNom || undefined,
+        livr_prenom: livrPrenom || undefined,
+        livr_societe:livrSoc || undefined,
+        livr_rue:    livrRue || undefined,
+        livr_rue2:   livrRue2 || undefined,
+        livr_npa:    livrNpa || undefined,
+        livr_ville:  livrVille || undefined,
+      } : {}),
+      source: "shopify",
     }
   }).filter(Boolean) as ClientRow[]
 }
 
 function parseWinBizCSV(text: string): ClientRow[] {
-  // WinBiz utilise souvent ; comme séparateur
   const sep = text.includes(";") ? ";" : ","
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean)
   if (lines.length < 2) return []
-  const headers = lines[0].split(sep).map(h => h.replace(/"/g, "").trim().toLowerCase())
+  const headers = parseCols(lines[0], sep).map(h => h.toLowerCase())
 
   return lines.slice(1).map(line => {
-    const cols = line.split(sep).map(c => c.replace(/"/g, "").trim())
-    const get = (key: string) => cols[headers.indexOf(key)] || ""
+    const cols = parseCols(line, sep)
+    const get = (key: string) => (cols[headers.indexOf(key)] || "").trim()
 
-    // WinBiz : essayer plusieurs noms de colonnes possibles
     const nom     = get("nom") || get("name") || get("lastname") || get("raison sociale")
     const prenom  = get("prénom") || get("prenom") || get("firstname") || get("first name")
     const societe = get("société") || get("societe") || get("company") || get("raison sociale")
@@ -77,17 +134,18 @@ function parseWinBizCSV(text: string): ClientRow[] {
     if (!nom && !prenom && !societe) return null
 
     return {
-      nom:        nom || societe || prenom,
-      prenom:     nom ? prenom || undefined : undefined,
-      societe:    societe !== nom ? societe || undefined : undefined,
-      email:      get("email") || get("e-mail") || undefined,
-      tel1:       get("téléphone") || get("telephone") || get("tel") || get("phone") || undefined,
-      tel2:       get("mobile") || get("natel") || undefined,
-      rue:        get("rue") || get("adresse") || get("address") || undefined,
-      npa:        get("npa") || get("cp") || get("zip") || undefined,
-      ville:      get("ville") || get("localité") || get("city") || undefined,
-      pays:       get("pays") || get("country") || "CH",
-      source:     "winbiz",
+      nom:     nom || societe || prenom,
+      prenom:  nom ? prenom || undefined : undefined,
+      societe: societe !== nom ? societe || undefined : undefined,
+      email:   get("email") || get("e-mail") || undefined,
+      tel1:    formatSwissPhone(get("téléphone") || get("telephone") || get("tel") || get("phone")),
+      tel2:    formatSwissPhone(get("mobile") || get("natel")),
+      rue:     get("rue") || get("adresse") || get("address") || undefined,
+      rue2:    get("complément") || get("complement") || get("adresse2") || undefined,
+      npa:     get("npa") || get("cp") || get("zip") || undefined,
+      ville:   get("ville") || get("localité") || get("city") || undefined,
+      pays:    get("pays") || get("country") || "CH",
+      source:  "winbiz",
     }
   }).filter(Boolean) as ClientRow[]
 }
@@ -99,10 +157,8 @@ export async function POST(request: NextRequest) {
 
     if (!csv) return NextResponse.json({ error: "CSV vide" }, { status: 400 })
 
-    // Détection auto du format
     const detectedFormat = format === "auto"
-      ? csv.toLowerCase().includes("billing first name") || csv.toLowerCase().includes("first name")
-        ? "shopify" : "winbiz"
+      ? csv.toLowerCase().includes("first name") ? "shopify" : "winbiz"
       : format
 
     const rows = detectedFormat === "shopify"
@@ -111,7 +167,6 @@ export async function POST(request: NextRequest) {
 
     if (!rows.length) return NextResponse.json({ error: "Aucune ligne valide trouvée" }, { status: 400 })
 
-    // Insérer par batch de 50, ignorer les doublons sur email
     let inserted = 0, skipped = 0, errors = 0
     const batchSize = 50
 
@@ -119,14 +174,10 @@ export async function POST(request: NextRequest) {
       const batch = rows.slice(i, i + batchSize)
       const { data, error } = await supabaseAdmin
         .from("clients")
-        .upsert(batch, {
-          onConflict: "email",
-          ignoreDuplicates: true,
-        })
+        .upsert(batch, { onConflict: "email", ignoreDuplicates: true })
         .select()
 
       if (error) {
-        // Si pas de contrainte unique sur email, insérer un par un
         for (const row of batch) {
           const { error: e } = await supabaseAdmin.from("clients").insert(row)
           if (e) errors++

@@ -16,12 +16,21 @@ type Client = {
   tel1: string | null
   tel2: string | null
   rue: string | null
+  rue2: string | null
   numero_rue: string | null
   npa: string | null
   ville: string | null
   pays: string | null
   notes: string | null
   source: string | null
+  livr_societe: string | null
+  livr_nom: string | null
+  livr_prenom: string | null
+  livr_rue: string | null
+  livr_rue2: string | null
+  livr_npa: string | null
+  livr_ville: string | null
+  livr_tel: string | null
   created_at: string
   updated_at: string
 }
@@ -116,7 +125,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </main>
   )
 
-  const nomComplet = [client.nom, client.prenom].filter(Boolean).join(" ") || client.societe || "—"
+  const nomComplet = [client.prenom, client.nom].filter(Boolean).join(" ") || client.societe || "—"
   const caTotal = offres.filter(o => o.type_document === "Commande" || o.statut === "Acceptée").reduce((s, o) => s + (o.total_ttc || 0), 0)
 
   return (
@@ -196,7 +205,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 <div className="space-y-3">
                   {([
                     ["Nom *", "nom"], ["Prénom", "prenom"], ["Société", "societe"],
-                    ["Rue", "rue"], ["N°", "numero_rue"], ["NPA", "npa"], ["Ville", "ville"],
+                    ["Rue", "rue"], ["Complément", "rue2"], ["N°", "numero_rue"],
+                    ["NPA", "npa"], ["Ville", "ville"],
                     ["Téléphone 1", "tel1"], ["Téléphone 2", "tel2"],
                   ] as [string, keyof Client][]).map(([label, key]) => (
                     <div key={key}>
@@ -212,6 +222,22 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                       onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
                       className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                   </div>
+                  <div className="pt-2 border-t border-white/5">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">📦 Adresse de livraison (si différente)</div>
+                    {([
+                      ["Nom livraison", "livr_nom"], ["Prénom", "livr_prenom"],
+                      ["Société", "livr_societe"], ["Rue", "livr_rue"],
+                      ["Complément", "livr_rue2"], ["NPA", "livr_npa"],
+                      ["Ville", "livr_ville"], ["Tél.", "livr_tel"],
+                    ] as [string, keyof Client][]).map(([label, key]) => (
+                      <div key={key} className="mb-2">
+                        <label className="mb-1 block text-xs text-zinc-500">{label}</label>
+                        <input type="text" value={(form[key] as string) || ""}
+                          onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+                          className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                      </div>
+                    ))}
+                  </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Notes</label>
                     <textarea value={(form.notes as string) || ""} rows={3}
@@ -225,16 +251,17 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     ["Nom", [client.nom, client.prenom].filter(Boolean).join(" ")],
                     ["Société", client.societe],
                     ["Rue", [client.rue, client.numero_rue].filter(Boolean).join(" ")],
+                    ["Complément", client.rue2],
                     ["NPA / Ville", [client.npa, client.ville].filter(Boolean).join(" ")],
                     ["Pays", client.pays],
                     ["Téléphone 1", client.tel1],
                     ["Téléphone 2", client.tel2],
-                  ] as [string, string | null][]).map(([k, v]) => (
+                  ] as [string, string | null][]).map(([k, v]) => v ? (
                     <div key={k} className="flex gap-2">
                       <span className="w-28 shrink-0 text-zinc-400">{k} :</span>
-                      <span>{v || "—"}</span>
+                      <span>{v}</span>
                     </div>
-                  ))}
+                  ) : null)}
                   <div className="flex gap-2 items-center">
                     <span className="w-28 shrink-0 text-zinc-400">Email :</span>
                     <span className="flex-1">{client.email || "—"}</span>
@@ -245,6 +272,27 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                       </button>
                     )}
                   </div>
+
+                  {/* Adresse de livraison si différente */}
+                  {client.livr_rue && (
+                    <div className="mt-3 rounded-xl border border-white/10 bg-black/10 p-3 space-y-1">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">📦 Adresse de livraison</div>
+                      {([
+                        ["Nom", [client.livr_nom, client.livr_prenom].filter(Boolean).join(" ")],
+                        ["Société", client.livr_societe],
+                        ["Rue", client.livr_rue],
+                        ["Complément", client.livr_rue2],
+                        ["NPA / Ville", [client.livr_npa, client.livr_ville].filter(Boolean).join(" ")],
+                        ["Tél.", client.livr_tel],
+                      ] as [string, string | null][]).map(([k, v]) => v ? (
+                        <div key={k} className="flex gap-2 text-xs">
+                          <span className="w-24 shrink-0 text-zinc-500">{k} :</span>
+                          <span className="text-zinc-300">{v}</span>
+                        </div>
+                      ) : null)}
+                    </div>
+                  )}
+
                   {client.notes && (
                     <div className="mt-3 rounded-xl border border-white/10 bg-black/10 p-3 text-xs text-zinc-400 whitespace-pre-wrap">
                       {client.notes}
