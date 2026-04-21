@@ -56,7 +56,7 @@ export default function ClientsPage() {
   const [showImport, setShowImport] = useState(false)
   const [showNew, setShowNew] = useState(false)
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
+const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Import state
   const [csvText, setCsvText] = useState("")
   const [csvFormat, setCsvFormat] = useState<"auto"|"shopify"|"winbiz">("auto")
