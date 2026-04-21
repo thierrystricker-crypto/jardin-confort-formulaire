@@ -1,2 +1,324 @@
 "use client";
-export default function ClientsPage() { return <div>Chargement...</div> }
+// app/dashboard/clients/page.tsx
+
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+
+type Client = {
+  id: number
+  numero_client: string
+  nom: string
+  prenom: string | null
+  societe: string | null
+  email: string | null
+  tel1: string | null
+  tel2: string | null
+  rue: string | null
+  numero_rue: string | null
+  npa: string | null
+  ville: string | null
+  pays: string | null
+  notes: string | null
+  source: string | null
+  created_at: string
+  updated_at: string
+}
+
+function nomClient(c: Client) {
+  return [c.prenom, c.nom].filter(Boolean).join(" ") || c.societe || "—"
+}
+function fmtDate(iso: string | null) {
+  if (!iso) return "—"
+  return new Date(iso).toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" })
+}
+function sourceLabel(s: string | null) {
+  if (s === "shopify") return { label: "Shopify", cls: "bg-emerald-500/15 text-emerald-300" }
+  if (s === "winbiz")  return { label: "WinBiz",  cls: "bg-sky-500/15 text-sky-300" }
+  if (s === "offre")   return { label: "Offre",   cls: "bg-amber-500/15 text-amber-300" }
+  return { label: "Manuel", cls: "bg-white/5 text-zinc-400" }
+}
+
+export default function ClientsPage() {
+  const [clients, setClients] = useState<Client[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [showImport, setShowImport] = useState(false)
+  const [showNew, setShowNew] = useState(false)
+  const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Import state
+  const [csvText, setCsvText] = useState("")
+  const [csvFormat, setCsvFormat] = useState<"auto"|"shopify"|"winbiz">("auto")
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{inserted:number;skipped:number;errors:number;total:number}|null>(null)
+  const [importError, setImportError] = useState("")
+
+  // Nouveau client state
+  const [newClient, setNewClient] = useState({
+    nom:"", prenom:"", societe:"", email:"", tel1:"", tel2:"",
+    rue:"", numero_rue:"", npa:"", ville:"", notes:""
+  })
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState("")
+
+  const fetchClients = useCallback(async (q: string) => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/clients?q=${encodeURIComponent(q)}&limit=100`)
+      const json = await res.json()
+      setClients(json.clients || [])
+    } catch { /* ignore */ }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchClients("") }, [fetchClients])
+
+  useEffect(() => {
+    if (searchRef.current) clearTimeout(searchRef.current)
+    searchRef.current = setTimeout(() => fetchClients(search), 300)
+    return () => { if (searchRef.current) clearTimeout(searchRef.current) }
+  }, [search, fetchClients])
+
+  async function handleImport() {
+    if (!csvText.trim()) return
+    setImporting(true); setImportError(""); setImportResult(null)
+    try {
+      const res = await fetch("/api/clients/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv: csvText, format: csvFormat })
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Erreur import")
+      setImportResult(json)
+      setCsvText("")
+      fetchClients(search)
+    } catch (e) { setImportError((e as Error).message) }
+    finally { setImporting(false) }
+  }
+
+  async function handleNewClient() {
+    if (!newClient.nom.trim()) { setSaveError("Nom requis"); return }
+    setSaving(true); setSaveError("")
+    try {
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newClient)
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Erreur")
+      setShowNew(false)
+      setNewClient({ nom:"", prenom:"", societe:"", email:"", tel1:"", tel2:"", rue:"", numero_rue:"", npa:"", ville:"", notes:"" })
+      fetchClients(search)
+    } catch (e) { setSaveError((e as Error).message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
+      <div className="mx-auto max-w-[1600px] space-y-6">
+
+        {/* HEADER */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">← Dashboard</Link>
+            <div>
+              <h1 className="text-2xl font-semibold">Fichier clients</h1>
+              <p className="text-sm text-zinc-400">{clients.length} client{clients.length !== 1 ? "s" : ""}</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setShowImport(v => !v)}
+              className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/15 px-4 py-2 text-sm text-sky-300 hover:bg-sky-500/20">
+              📥 Importer CSV
+            </button>
+            <button onClick={() => setShowNew(v => !v)}
+              className="inline-flex items-center rounded-xl bg-[#2B8AD1] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2478b8]">
+              + Nouveau client
+            </button>
+          </div>
+        </div>
+
+        {/* IMPORT CSV */}
+        {showImport && (
+          <div className="rounded-2xl border border-sky-500/20 bg-[#2a2d31] p-6">
+            <h2 className="mb-4 text-lg font-semibold">Import CSV clients</h2>
+            <div className="mb-4 flex gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-zinc-400">Format :</label>
+                {(["auto","shopify","winbiz"] as const).map(f => (
+                  <button key={f} onClick={() => setCsvFormat(f)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${csvFormat === f ? "bg-[#2B8AD1] border-[#2B8AD1] text-white" : "border-white/10 bg-[#34383d] text-zinc-300 hover:bg-[#40454b]"}`}>
+                    {f === "auto" ? "Détection auto" : f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mb-3 rounded-xl border border-white/10 bg-[#1f2125] p-3 text-xs text-zinc-500 space-y-1">
+              <div><strong className="text-zinc-400">Shopify :</strong> colonnes attendues — First Name, Last Name, Email, Phone, Billing Address1, Billing Zip, Billing City, Company</div>
+              <div><strong className="text-zinc-400">WinBiz :</strong> colonnes attendues — Nom, Prénom, Société, Email, Téléphone, Rue, NPA, Ville (séparateur ; ou ,)</div>
+              <div><strong className="text-zinc-400">Détection auto :</strong> détecte le format selon les en-têtes</div>
+            </div>
+            <textarea
+              value={csvText}
+              onChange={e => setCsvText(e.target.value)}
+              rows={8}
+              placeholder="Collez ici le contenu CSV ou déposez le fichier..."
+              className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-4 py-3 text-sm text-zinc-100 outline-none font-mono mb-3"
+            />
+            {/* Drop zone pour fichier */}
+            <label className="mb-3 flex cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-white/10 p-4 text-sm text-zinc-500 hover:border-sky-500/40 hover:text-zinc-300 transition">
+              <input type="file" accept=".csv,.txt" className="hidden"
+                onChange={e => {
+                  const f = e.target.files?.[0]
+                  if (!f) return
+                  const reader = new FileReader()
+                  reader.onload = ev => setCsvText(ev.target?.result as string)
+                  reader.readAsText(f, "utf-8")
+                  e.target.value = ""
+                }}
+              />
+              📁 Ou cliquez pour sélectionner un fichier CSV
+            </label>
+            {importError && <div className="mb-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">{importError}</div>}
+            {importResult && (
+              <div className="mb-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                ✅ Import terminé — {importResult.inserted} insérés · {importResult.skipped} ignorés (doublons) · {importResult.errors} erreurs · {importResult.total} lignes traitées
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button onClick={handleImport} disabled={importing || !csvText.trim()}
+                className="rounded-xl bg-[#2B8AD1] px-6 py-2 text-sm font-semibold text-white hover:bg-[#2478b8] disabled:opacity-50">
+                {importing ? "Import en cours…" : "Importer"}
+              </button>
+              <button onClick={() => { setShowImport(false); setImportResult(null); setCsvText("") }}
+                className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 hover:bg-[#40454b]">
+                Fermer
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* NOUVEAU CLIENT */}
+        {showNew && (
+          <div className="rounded-2xl border border-emerald-500/20 bg-[#2a2d31] p-6">
+            <h2 className="mb-4 text-lg font-semibold">Nouveau client</h2>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {([
+                ["Nom *","nom","text"],["Prénom","prenom","text"],["Société","societe","text"],
+                ["Email","email","email"],["Téléphone 1","tel1","text"],["Téléphone 2","tel2","text"],
+                ["Rue","rue","text"],["N°","numero_rue","text"],["NPA","npa","text"],["Ville","ville","text"],
+              ] as [string, keyof typeof newClient, string][]).map(([label, key, type]) => (
+                <div key={key} className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{label}</label>
+                  <input type={type} value={newClient[key]}
+                    onChange={e => setNewClient(p => ({ ...p, [key]: e.target.value }))}
+                    className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                </div>
+              ))}
+              <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
+                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Notes</label>
+                <textarea value={newClient.notes} onChange={e => setNewClient(p => ({ ...p, notes: e.target.value }))} rows={2}
+                  className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+              </div>
+            </div>
+            {saveError && <div className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">{saveError}</div>}
+            <div className="mt-4 flex gap-3">
+              <button onClick={handleNewClient} disabled={saving}
+                className="rounded-xl bg-[#2B8AD1] px-6 py-2 text-sm font-semibold text-white hover:bg-[#2478b8] disabled:opacity-50">
+                {saving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+              <button onClick={() => setShowNew(false)}
+                className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 hover:bg-[#40454b]">
+                Annuler
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* RECHERCHE */}
+        <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-4">
+          <input
+            type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="🔍 Rechercher par nom, prénom, société, email, NPA, ville, n° client…"
+            className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-4 py-3 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"
+          />
+        </div>
+
+        {/* LISTE */}
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#2a2d31]">
+          {loading ? (
+            <div className="p-8 text-center text-zinc-400">Chargement…</div>
+          ) : clients.length === 0 ? (
+            <div className="p-8 text-center text-zinc-500">Aucun client trouvé.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-sm">
+                <thead className="bg-black/10 text-left text-zinc-400">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">N° client</th>
+                    <th className="px-4 py-3 font-medium">Nom</th>
+                    <th className="px-4 py-3 font-medium">Société</th>
+                    <th className="px-4 py-3 font-medium">Email</th>
+                    <th className="px-4 py-3 font-medium">Téléphone</th>
+                    <th className="px-4 py-3 font-medium">Ville</th>
+                    <th className="px-4 py-3 font-medium">Source</th>
+                    <th className="px-4 py-3 font-medium">Créé le</th>
+                    <th className="px-4 py-3 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clients.map((c, idx) => {
+                    const src = sourceLabel(c.source)
+                    return (
+                      <tr key={c.id}
+                        className={`border-t border-white/5 text-zinc-200 transition hover:bg-white/5 ${idx % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.04]"}`}>
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-xs font-semibold text-[#2B8AD1]">{c.numero_client}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-zinc-100">{nomClient(c)}</div>
+                          {c.prenom && c.nom && <div className="text-xs text-zinc-500">{c.prenom} {c.nom}</div>}
+                        </td>
+                        <td className="px-4 py-3 text-zinc-400">{c.societe || "—"}</td>
+                        <td className="px-4 py-3">
+                          {c.email
+                            ? <a href={`mailto:${c.email}`} className="text-sky-400 hover:underline text-xs">{c.email}</a>
+                            : <span className="text-zinc-600">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-zinc-400">{c.tel1 || "—"}</td>
+                        <td className="px-4 py-3 text-zinc-400">{[c.npa, c.ville].filter(Boolean).join(" ") || "—"}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${src.cls}`}>{src.label}</span>
+                        </td>
+                        <td className="px-4 py-3 text-zinc-500 text-xs">{fmtDate(c.created_at)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            <Link href={`/dashboard/clients/${c.id}`}
+                              className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">
+                              Voir
+                            </Link>
+                            <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
+                              nom: c.nom, prenom: c.prenom||"", societe: c.societe||"",
+                              email: c.email||"", telephone1: c.tel1||"",
+                              rue: c.rue||"", npa: c.npa||"", ville: c.ville||"",
+                            }))}`} target="_blank" rel="noopener noreferrer"
+                              className="rounded-lg border border-[#2B8AD1]/30 bg-[#2B8AD1]/10 px-3 py-1.5 text-xs text-sky-300 hover:bg-[#2B8AD1]/20">
+                              + Offre
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </main>
+  )
+}
