@@ -278,8 +278,14 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
           <div className="mb-5 flex flex-wrap items-center gap-3">
             <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">← Retour</Link>
             {offre.client_email&&(
-              <a href={`mailto:${offre.client_email}?subject=${encodeURIComponent(`Suivi offre ${offre.numero_affiche}`)}&body=${encodeURIComponent(mailBody)}`}
-                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">✉ Email relance</a>
+              <button type="button" disabled={relancing}
+                onClick={async()=>{
+                  await enregistrerRelance()
+                  window.location.href=`mailto:${offre.client_email}?subject=${encodeURIComponent(`Suivi offre ${offre.numero_affiche}`)}&body=${encodeURIComponent(mailBody)}`
+                }}
+                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b] disabled:opacity-50">
+                ✉ Email relance
+              </button>
             )}
             <a href={urlPublique} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">👁 Page client</a>
@@ -426,10 +432,14 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   </>
                 )}
                 {offre.client_email&&(
-                  <a href={`mailto:${offre.client_email}?subject=${encodeURIComponent(`Suivi offre ${offre.numero_affiche}`)}&body=${encodeURIComponent(mailBody)}`}
-                    className="rounded-xl border border-sky-500/30 bg-sky-500/15 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
+                  <button type="button" disabled={relancing}
+                    onClick={async()=>{
+                      await enregistrerRelance()
+                      window.location.href=`mailto:${offre.client_email}?subject=${encodeURIComponent(`Suivi offre ${offre.numero_affiche}`)}&body=${encodeURIComponent(mailBody)}`
+                    }}
+                    className="rounded-xl border border-sky-500/30 bg-sky-500/15 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-50">
                     ✉ Mail de relance
-                  </a>
+                  </button>
                 )}
                 {isOffre&&(
                   <button type="button" onClick={enregistrerRelance} disabled={relancing}
