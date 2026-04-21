@@ -24,6 +24,17 @@ type Client = {
   updated_at: string
 }
 
+function normalizeSwissPhone(raw: string) {
+  const digits = raw.replace(/[^\d]/g, "")
+  if (!digits) return ""
+  let n = digits
+  if (n.startsWith("0041")) n = "41" + n.slice(4)
+  else if (n.startsWith("0")) n = "41" + n.slice(1)
+  else if (!n.startsWith("41")) n = "41" + n
+  const t = n.slice(0, 11)
+  return ["+" + t.slice(0, 2), t.slice(2, 4), t.slice(4, 7), t.slice(7, 9), t.slice(9, 11)].filter(Boolean).join(" ")
+}
+
 function nomClient(c: Client) {
   return [c.nom, c.prenom].filter(Boolean).join(" ") || c.societe || "—"
 }
@@ -206,17 +217,42 @@ export default function ClientsPage() {
             <h2 className="mb-4 text-lg font-semibold">Nouveau client</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {([
-                ["Nom *","nom","text"],["Prénom","prenom","text"],["Société","societe","text"],
-                ["Email","email","email"],["Téléphone 1","tel1","text"],["Téléphone 2","tel2","text"],
-                ["Rue","rue","text"],["N°","numero_rue","text"],["NPA","npa","text"],["Ville","ville","text"],
-              ] as [string, keyof typeof newClient, string][]).map(([label, key, type]) => (
-                <div key={key} className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{label}</label>
-                  <input type={type} value={newClient[key]}
-                    onChange={e => setNewClient(p => ({ ...p, [key]: e.target.value }))}
+                  ["Nom *","nom","text"],["Prénom","prenom","text"],["Société","societe","text"],
+                  ["Email","email","email"],["Téléphone 1","tel1","text"],["Téléphone 2","tel2","text"],
+                  ["N°","numero_rue","text"],["NPA","npa","text"],["Ville","ville","text"],
+                ] as [string, keyof typeof newClient, string][]).map(([label, key, type]) => (
+                  <div key={key} className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{label}</label>
+                    <input type={type} value={newClient[key]}
+                      onChange={e => {
+                        const val = (key === "tel1" || key === "tel2") ? normalizeSwissPhone(e.target.value) : e.target.value
+                        setNewClient(p => ({ ...p, [key]: val }))
+                      }}
+                      className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                  </div>
+                ))}
+                {/* Champ Rue avec autocomplete Google */}
+                <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1" style={{position:"relative"}}>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Rue</label>
+                  <input type="text" value={newClient.rue}
+                    onChange={e => {
+                      setNewClient(p => ({...p, rue: e.target.value}))
+                      if (addrDebounceRef.current) clearTimeout(addrDebounceRef.current)
+                      addrDebounceRef.current = setTimeout(() => fetchSuggestions(e.target.value), 400)
+                    }}
+                    placeholder="Commencez à taper…"
                     className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                  {addrSuggestions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-white/10 bg-[#2a2d31] shadow-xl">
+                      {addrSuggestions.map((s,i) => (
+                        <div key={i} onClick={() => applyAddrSuggestion(s)}
+                          className="cursor-pointer px-4 py-2 text-sm text-zinc-200 hover:bg-white/5 border-b border-white/5 last:border-0">
+                          {s.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
               <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
                 <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Notes</label>
                 <textarea value={newClient.notes} onChange={e => setNewClient(p => ({ ...p, notes: e.target.value }))} rows={2}
