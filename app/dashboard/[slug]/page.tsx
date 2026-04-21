@@ -36,7 +36,6 @@ function nomClient(o: OffreRecord) {
 }
 function getDaysOpen(o: OffreRecord): number|null {
   if (["Acceptée","Convertie","Abandonnée"].includes(o.statut)) return null
-  // Si une relance a été faite, compter depuis la dernière relance
   const ref = (o as unknown as Record<string,unknown>).date_derniere_relance as string|null
   const baseDate = ref || o.date_document
   if (!baseDate) return null
@@ -84,6 +83,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [qrGenerating,setQrGenerating]=useState(false)
   const [relancing,setRelancing]=useState(false)
   const [relanceStatus,setRelanceStatus]=useState("")
+  const [emailCopied,setEmailCopied]=useState(false)
 
   useEffect(()=>{
     async function load() {
@@ -170,7 +170,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         npa: offre.client_npa||"", ville: offre.client_ville||"",
       })
     }
-    // Stocker dans localStorage pour éviter URL trop longue
     localStorage.setItem("jc-offre-copy", JSON.stringify(prefill))
     window.open(`/offres/nouveau?from_copy=1`, "_blank")
   }
@@ -246,8 +245,8 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
 
   const mailBody=useMemo(()=>{
     if(!offre) return ""
-    const prenom=offre.client_prenom||""
-    const greeting=prenom?`Bonjour ${prenom},`:"Bonjour,"
+    const nomComplet=[offre.client_prenom, offre.client_nom].filter(Boolean).join(" ")
+    const greeting=nomComplet?`Bonjour ${nomComplet},`:"Bonjour,"
     return `\n${greeting}\n\nJe me permets de reprendre contact avec vous suite à notre offre concernant votre mobilier d'extérieur.\n\nEst-ce que vous avez eu l'occasion de consulter notre offre ?\n\nLien vers votre offre : ${APP_URL}/offre/${offre.slug}\n\nCordialement,\n${offre.commercial||"L'équipe Jardin-Confort"}`
   },[offre])
 
@@ -276,7 +275,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         {/* TOP */}
         <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
           <div className="mb-5 flex flex-wrap items-center gap-3">
-            <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">← Retour</Link>
+            <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">← Retour au dashboard</Link>
             {offre.client_email&&(
               <button type="button" disabled={relancing}
                 onClick={async()=>{
@@ -298,8 +297,13 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </a>
             ) : (
               <button onClick={generatePdf} disabled={pdfGenerating}
-                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-50">
-                {pdfGenerating ? "⏳ Génération…" : "📄 Générer PDF"}
+                className="relative inline-flex items-center overflow-hidden rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-80">
+                {pdfGenerating && (
+                  <span className="absolute inset-0 overflow-hidden rounded-xl">
+                    <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30"/>
+                  </span>
+                )}
+                <span className="relative">{pdfGenerating ? "📄 Génération PDF…" : "📄 Générer PDF"}</span>
               </button>
             )}
             {qrUrl ? (
@@ -309,8 +313,13 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </a>
             ) : (
               <button onClick={generateQr} disabled={qrGenerating}
-                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-50">
-                {qrGenerating ? "⏳ Génération QR…" : "🧾 Générer QR paiement"}
+                className="relative inline-flex items-center overflow-hidden rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-80">
+                {qrGenerating && (
+                  <span className="absolute inset-0 overflow-hidden rounded-xl">
+                    <span className="absolute inset-y-0 left-0 animate-[progress_12s_ease-in-out_forwards] bg-[#2B8AD1]/30"/>
+                  </span>
+                )}
+                <span className="relative">{qrGenerating ? "⏳ Génération QR…" : "🧾 Générer QR paiement"}</span>
               </button>
             )}
           </div>
@@ -348,7 +357,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
                 <h2 className="mb-4 text-xl font-semibold">Client</h2>
                 <div className="space-y-2 text-sm">
-                  {([["Nom",nomClient(offre)],["Société",offre.client_societe],["Email",offre.client_email],["Tél.",offre.client_tel1],
+                  {([["Nom",nomClient(offre)],["Société",offre.client_societe],["Tél.",offre.client_tel1],
                     ["Rue",[offre.client_rue,(d.numero as string)||""].filter(Boolean).join(" ")],
                     ["NPA / Ville",[offre.client_npa,offre.client_ville].filter(Boolean).join(" ")],
                   ] as [string,string|null][]).map(([k,v])=>(
@@ -357,6 +366,23 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                       <span>{v||"—"}</span>
                     </div>
                   ))}
+                  {/* Email avec bouton copier */}
+                  <div className="flex gap-2 items-center">
+                    <span className="w-24 shrink-0 text-zinc-400">Email :</span>
+                    <span className="flex-1">{offre.client_email||"—"}</span>
+                    {offre.client_email&&(
+                      <button
+                        onClick={()=>{
+                          navigator.clipboard.writeText(offre.client_email!)
+                          setEmailCopied(true)
+                          setTimeout(()=>setEmailCopied(false),2000)
+                        }}
+                        className="rounded-lg border border-white/10 bg-[#34383d] px-2 py-0.5 text-xs text-zinc-400 hover:bg-[#40454b] hover:text-zinc-100 transition"
+                        title="Copier l'email">
+                        {emailCopied ? "✓ Copié" : "📋"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </section>
 
@@ -403,7 +429,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             )}
 
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-              <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="mb-4">
                 <h2 className="text-xl font-semibold">Suivi commercial</h2>
               </div>
 
@@ -489,23 +515,41 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             </section>
           </div>
 
-          {/* Droite — aperçu iframe */}
-          <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6 xl:sticky xl:top-6 xl:self-start">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Aperçu de l&apos;offre</h2>
-              <a href={urlPublique} target="_blank" rel="noopener noreferrer"
-                className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">Ouvrir ↗</a>
-            </div>
-            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-              <iframe src={urlPublique} title="Aperçu" className="h-[900px] w-full border-0"/>
-            </div>
-          </section>
+          {/* Droite — aperçus */}
+          <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
+
+            {/* Aperçu PDF si disponible */}
+            {pdfUrl && (
+              <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Aperçu PDF</h2>
+                  <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
+                    className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">Télécharger ↓</a>
+                </div>
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                  <iframe src={pdfUrl} title="Aperçu PDF" className="h-[600px] w-full border-0"/>
+                </div>
+              </section>
+            )}
+
+            {/* Aperçu page client */}
+            <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-semibold">Aperçu page client</h2>
+                <a href={urlPublique} target="_blank" rel="noopener noreferrer"
+                  className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">Ouvrir ↗</a>
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                <iframe src={urlPublique} title="Aperçu" className="h-[900px] w-full border-0"/>
+              </div>
+            </section>
+          </div>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-4">
           <div className="flex flex-wrap gap-3">
-            <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">← Retour</Link>
-            <Link href="/offres/nouveau" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">+ Nouvelle offre</Link>
+            <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">← Retour au dashboard</Link>
+            <Link href="/offres/nouveau" target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">+ Nouvelle offre</Link>
             {offre && (
               <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
                 nom: offre.client_nom||"", prenom: offre.client_prenom||"",
@@ -513,7 +557,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                 telephone1: offre.client_tel1||"", rue: offre.client_rue||"",
                 npa: offre.client_npa||"", ville: offre.client_ville||"",
                 commercial: offre.commercial||"",
-              }))}`}
+              }))}`} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center rounded-xl border border-[#2B8AD1]/40 bg-[#2B8AD1]/15 px-4 py-2 text-sm text-sky-300 hover:bg-[#2B8AD1]/25">
                 👤 Nouvelle offre même client
               </Link>
@@ -527,7 +571,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             {offre&&(
               <button onClick={()=>copierOffre(false)}
                 className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 hover:bg-[#40454b]">
-                📋 Copier sans client
+                📋 Copie offre sans client
               </button>
             )}
           </div>
