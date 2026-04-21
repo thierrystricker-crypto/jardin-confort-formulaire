@@ -56,7 +56,38 @@ export default function ClientsPage() {
   const [showImport, setShowImport] = useState(false)
   const [showNew, setShowNew] = useState(false)
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+const [addrSuggestions, setAddrSuggestions] = useState<{placeId:string;label:string}[]>([])
+
+  async function fetchSuggestions(q: string) {
+    if (q.length < 3) { setAddrSuggestions([]); return }
+    try {
+      const res = await fetch(`/api/places?type=autocomplete&q=${encodeURIComponent(q)}`)
+      const json = await res.json()
+      setAddrSuggestions((json.predictions||[]).map((p:{place_id:string;description:string}) => ({
+        placeId: p.place_id,
+        label: p.description.replace(", Suisse","").replace(", Switzerland","")
+      })))
+    } catch { setAddrSuggestions([]) }
+  }
+
+  async function applyAddrSuggestion(s: {placeId:string;label:string}) {
+    setAddrSuggestions([])
+    try {
+      const res = await fetch(`/api/places?type=details&place_id=${encodeURIComponent(s.placeId)}`)
+      const json = await res.json()
+      if (json.status !== "OK") return
+      const comps = json.result?.address_components || []
+      const get = (type: string) => comps.find((c:{types:string[];long_name:string}) => c.types.includes(type))?.long_name || ""
+      const getShort = (type: string) => comps.find((c:{types:string[];short_name:string}) => c.types.includes(type))?.short_name || ""
+      setNewClient(p => ({
+        ...p,
+        rue: get("route"),
+        numero_rue: get("street_number"),
+        npa: getShort("postal_code").slice(0,4),
+        ville: get("locality") || get("administrative_area_level_2"),
+      }))
+    } catch { /* ignore */ }
+  }
   // Import state
   const [csvText, setCsvText] = useState("")
   const [csvFormat, setCsvFormat] = useState<"auto"|"shopify"|"winbiz">("auto")
