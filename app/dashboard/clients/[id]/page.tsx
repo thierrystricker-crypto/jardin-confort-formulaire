@@ -250,8 +250,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                       {client.notes}
                     </div>
                   )}
-                  <div className="mt-3 pt-3 border-t border-white/5 text-xs text-zinc-600">
-                    Source : {client.source || "manuel"} · Créé le {fmtDate(client.created_at)} · Modifié le {fmtDate(client.updated_at)}
+                  <div className="mt-3 pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-medium ${
+                      client.source === "shopify" ? "bg-emerald-500/15 text-emerald-300" :
+                      client.source === "winbiz"  ? "bg-sky-500/15 text-sky-300" :
+                      client.source === "offre"   ? "bg-amber-500/15 text-amber-300" :
+                      "bg-white/5 text-zinc-400"
+                    }`}>
+                      {client.source === "shopify" ? "🛍 Shopify" :
+                       client.source === "winbiz"  ? "📊 WinBiz" :
+                       client.source === "offre"   ? "📄 Offre" : "✏️ Manuel"}
+                    </span>
+                    <span>Créé le {fmtDate(client.created_at)}</span>
+                    <span>· Modifié le {fmtDate(client.updated_at)}</span>
                   </div>
                 </div>
               )}
