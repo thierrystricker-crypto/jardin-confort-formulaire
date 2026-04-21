@@ -527,7 +527,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                     className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">Télécharger ↓</a>
                 </div>
                 <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                  <iframe src={pdfUrl} title="Aperçu PDF" className="h-[2400px] w-full border-0"/>
+                  <iframe src={pdfUrl} title="Aperçu PDF" className="h-[800px] w-full border-0"/>
                 </div>
               </section>
             )}
