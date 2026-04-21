@@ -32,9 +32,12 @@ function nomClient(o: OffreRecord) {
   return [o.client_prenom, o.client_nom].filter(Boolean).join(" ") || "—"
 }
 function getDaysOpen(o: OffreRecord): number|null {
-  if (!o.date_document) return null
   if (["Acceptée","Convertie","Abandonnée"].includes(o.statut)) return null
-  return Math.floor((Date.now()-new Date(o.date_document).getTime())/86400000)
+  // Si une relance a été faite, compter depuis la dernière relance
+  const ref = (o as unknown as Record<string,unknown>).date_derniere_relance as string|null
+  const baseDate = ref || o.date_document
+  if (!baseDate) return null
+  return Math.floor((Date.now()-new Date(baseDate).getTime())/86400000)
 }
 function getStatusColor(statut: string, type: string) {
   if (type==="Commande"||statut==="Acceptée"||statut==="Convertie") return "bg-emerald-500/15 text-emerald-300"
