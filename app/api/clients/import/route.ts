@@ -25,7 +25,6 @@ function parseShopifyCSV(text: string): ClientRow[] {
   const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase())
 
   return lines.slice(1).map(line => {
-    // Gérer les virgules dans les champs entre guillemets
     const cols: string[] = []
     let inQuote = false, cur = ""
     for (const ch of line) {
@@ -39,18 +38,21 @@ function parseShopifyCSV(text: string): ClientRow[] {
 
     const firstName = get("first name") || get("billing first name") || get("prenom") || get("prénom")
     const lastName  = get("last name")  || get("billing last name")  || get("nom")
-    if (!lastName && !firstName) return null
+    const email     = get("email")
+
+    if (!lastName && !firstName && !email) return null
+    if (firstName === "Guest" && lastName === "Customer") return null
 
     return {
-      nom:        lastName  || firstName,
-      prenom:     lastName ? firstName : undefined,
-      societe:    get("company") || get("billing company") || get("société") || undefined,
-      email:      get("email") || undefined,
-      tel1:       get("phone") || get("billing phone") || get("téléphone") || undefined,
-      rue:        get("billing address1") || get("adresse") || undefined,
-      npa:        get("billing zip") || get("npa") || undefined,
-      ville:      get("billing city") || get("ville") || undefined,
-      pays:       get("billing country code") || get("pays") || "CH",
+      nom:        lastName  || firstName || "",
+      prenom:     lastName  ? firstName || undefined : undefined,
+      societe:    get("default address company") || get("company") || get("billing company") || undefined,
+      email:      email || undefined,
+      tel1:       get("phone") || get("default address phone") || get("billing phone") || undefined,
+      rue:        get("default address address1") || get("billing address1") || undefined,
+      npa:        get("default address zip") || get("billing zip") || undefined,
+      ville:      get("default address city") || get("billing city") || undefined,
+      pays:       get("default address country code") || get("billing country code") || "CH",
       source:     "shopify",
     }
   }).filter(Boolean) as ClientRow[]
