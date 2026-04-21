@@ -17,6 +17,7 @@ type OffreRecord = {
   sous_total: number; remise_chf: number; services_total: number
   tva_montant: number; total_ttc: number; nb_articles: number
   remarques: string|null; notes_internes: string|null; note_commerciale: string|null
+  date_abandon: string|null; date_derniere_relance: string|null; nb_relances: number|null
   data: Record<string,unknown>; created_at: string; updated_at: string|null
 }
 
@@ -32,12 +33,14 @@ function nomClient(o: OffreRecord) {
   return [o.client_prenom, o.client_nom].filter(Boolean).join(" ") || "—"
 }
 function getDaysOpen(o: OffreRecord): number|null {
+  if (!o.date_document) return null
   if (["Acceptée","Convertie","Abandonnée"].includes(o.statut)) return null
-  // Si une relance a été faite, compter depuis la dernière relance
-  const ref = (o as unknown as Record<string,unknown>).date_derniere_relance as string|null
-  const baseDate = ref || o.date_document
-  if (!baseDate) return null
-  return Math.floor((Date.now()-new Date(baseDate).getTime())/86400000)
+  return Math.floor((Date.now()-new Date(o.date_document).getTime())/86400000)
+}
+function getDaysSinceRelance(o: OffreRecord): number|null {
+  if (!o.date_derniere_relance) return null
+  if (["Acceptée","Convertie","Abandonnée"].includes(o.statut)) return null
+  return Math.floor((Date.now()-new Date(o.date_derniere_relance).getTime())/86400000)
 }
 function getStatusColor(statut: string, type: string) {
   if (type==="Commande"||statut==="Acceptée"||statut==="Convertie") return "bg-emerald-500/15 text-emerald-300"
@@ -135,15 +138,8 @@ export default function DashboardPage() {
     if(search.trim()){
       const q=search.toLowerCase()
       list=list.filter(o=>
-        nomClient(o).toLowerCase().includes(q)||
-        (o.client_prenom||"").toLowerCase().includes(q)||
-        (o.client_nom||"").toLowerCase().includes(q)||
-        (o.numero_affiche||"").toLowerCase().includes(q)||
-        (o.client_email||"").toLowerCase().includes(q)||
-        (o.client_ville||"").toLowerCase().includes(q)||
-        (o.client_rue||"").toLowerCase().includes(q)||
-        (o.client_npa||"").toLowerCase().includes(q)||
-        (o.client_societe||"").toLowerCase().includes(q)||
+        nomClient(o).toLowerCase().includes(q)||(o.numero_affiche||"").toLowerCase().includes(q)||
+        (o.client_email||"").toLowerCase().includes(q)||(o.client_ville||"").toLowerCase().includes(q)||
         (o.commercial||"").toLowerCase().includes(q))
     }
     return [...list].sort((a,b)=>{
@@ -190,7 +186,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="flex gap-3 flex-wrap">
-              <Link href="/offres/nouveau" target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-2xl bg-[#2B8AD1] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#2478b8]">+ Nouvelle offre</Link>
+              <Link href="/offres/nouveau" className="inline-flex items-center rounded-2xl bg-[#2B8AD1] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#2478b8]">+ Nouvelle offre</Link>
               <button onClick={loadOffres} className="inline-flex items-center rounded-2xl border border-white/10 bg-[#2a2d31] px-4 py-3 text-sm text-zinc-300 transition hover:bg-[#34383d]">🔄 Actualiser</button>
             </div>
           </div>
@@ -256,7 +252,16 @@ export default function DashboardPage() {
                     return (
                       <tr key={o.id} onClick={()=>window.location.href=`/dashboard/${o.slug}`}
                         className={`${rowBg} cursor-pointer border-t border-white/5 text-zinc-200 transition hover:bg-white/10`}>
-                        <td className="px-4 py-4"><div className="font-semibold text-zinc-100">{o.numero_affiche}</div><div className="text-xs text-zinc-500">{o.type_document}</div></td>
+                        <td className="px-4 py-4">
+                          <div className="font-semibold text-zinc-100">{o.numero_affiche}</div>
+                          <div className="text-xs text-zinc-500">{o.type_document}</div>
+                          {o.statut==="Convertie" && o.numero_commande && (
+                            <div className="text-xs text-emerald-400 mt-0.5">→ {o.numero_commande}</div>
+                          )}
+                          {o.offre_origine && (
+                            <div className="text-xs text-sky-400 mt-0.5">← {o.offre_origine}</div>
+                          )}
+                        </td>
                         <td className="px-4 py-4">
                           <div>{nomClient(o)}</div>
                           {o.client_societe&&<div className="text-xs text-zinc-400">{o.client_societe}</div>}
@@ -269,9 +274,21 @@ export default function DashboardPage() {
                           <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(o.statut,o.type_document)}`}>{o.statut}</span>
                         </td>
                         <td className="px-4 py-4">
-                          {days!==null?(
-                            <span className={`inline-flex min-w-8 items-center justify-center rounded-full px-3 py-1 text-xs font-medium ${getDaysBadgeColor(days)}`}>{days}j</span>
-                          ):<span className="text-zinc-600">—</span>}
+                          <div className="flex flex-col gap-1">
+                            {days!==null?(
+                              <span className={`inline-flex min-w-8 items-center justify-center rounded-full px-3 py-1 text-xs font-medium ${getDaysBadgeColor(days)}`} title="Jours depuis création">📅 {days}j</span>
+                            ):<span className="text-zinc-600">—</span>}
+                            {(()=>{
+                              const dr=getDaysSinceRelance(o)
+                              if(dr===null) return null
+                              const nb=o.nb_relances||0
+                              return (
+                                <span className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-medium ${dr>=14?"bg-rose-500/15 text-rose-300":dr>=7?"bg-amber-500/15 text-amber-300":"bg-sky-500/15 text-sky-300"}`} title={`Jours depuis relance #${nb}`}>
+                                  📧 R{nb} · {dr}j
+                                </span>
+                              )
+                            })()}
+                          </div>
                         </td>
                         <td className="px-4 py-4 text-zinc-400">{fmtDate(o.date_document)}</td>
                         <td className="px-4 py-4">
