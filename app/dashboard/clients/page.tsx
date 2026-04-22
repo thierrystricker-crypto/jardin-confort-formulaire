@@ -14,6 +14,7 @@ type Client = {
   tel1: string | null
   tel2: string | null
   rue: string | null
+  rue2: string | null
   numero_rue: string | null
   npa: string | null
   ville: string | null

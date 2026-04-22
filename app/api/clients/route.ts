@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { nom, prenom, societe, email, tel1, tel2, rue, numero_rue, npa, ville, pays, notes, source } = body
+    const { nom, prenom, societe, email, tel1, tel2, rue, rue2, numero_rue, npa, ville, pays, notes, source } = body
 
     if (!nom?.trim()) return NextResponse.json({ error: "Nom requis" }, { status: 400 })
 
@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
         tel1: tel1?.trim() || null,
         tel2: tel2?.trim() || null,
         rue: rue?.trim() || null,
+        rue2: body.rue2?.trim() || null,
         numero_rue: numero_rue?.trim() || null,
         npa: npa?.trim() || null,
         ville: ville?.trim() || null,
