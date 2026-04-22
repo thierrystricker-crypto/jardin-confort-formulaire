@@ -251,7 +251,7 @@ export default function ClientsPage() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {([
                   ["Nom *","nom","text"],["Prénom","prenom","text"],["Société","societe","text"],
-                  ["Email","email","email"],["Téléphone 1","tel1","text"],["Téléphone 2","tel2","text"],
+                  ["Téléphone 1","tel1","text"],["Téléphone 2","tel2","text"],["Email","email","email"],
                 ] as [string, keyof typeof newClient, string][]).map(([label, key, type]) => (
                   <div key={key} className="flex flex-col gap-1">
                     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{label}</label>
