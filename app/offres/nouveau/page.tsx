@@ -245,8 +245,48 @@ export default function JardinConfortV7() {
 
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const remarksEditorRef = useRef<HTMLDivElement | null>(null);
-  const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const livrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clientSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [clientSuggestions, setClientSuggestions] = useState<{
+    id: number; numero_client: string; nom: string; prenom: string | null;
+    societe: string | null; email: string | null; tel1: string | null; tel2: string | null;
+    rue: string | null; rue2: string | null; numero_rue: string | null;
+    npa: string | null; ville: string | null;
+  }[]>([]);
+  const [clientSearchField, setClientSearchField] = useState<"nom"|"email"|"tel"|null>(null)
+  const [selectedClientId, setSelectedClientId] = useState<number|null>(null)
+
+  async function searchClients(q: string, field: "nom"|"email"|"tel") {
+    if (q.length < 2) { setClientSuggestions([]); return }
+    try {
+      const res = await fetch(`/api/clients?q=${encodeURIComponent(q)}&limit=5`)
+      const json = await res.json()
+      setClientSuggestions(json.clients || [])
+      setClientSearchField(field)
+    } catch { setClientSuggestions([]) }
+  }
+
+  function applyClient(c: typeof clientSuggestions[0]) {
+    setNom(c.nom || "")
+    setPrenom(c.prenom || "")
+    setSociete(c.societe || "")
+    setEmail(c.email || "")
+    setTelephone1(c.tel1 || "")
+    setTelephone2(c.tel2 || "")
+    const rueComplete = [c.rue, c.numero_rue].filter(Boolean).join(" ")
+    setRue(rueComplete)
+    setRue2(c.rue2 || "")
+    setNpa(c.npa || "")
+    setVille(c.ville || "")
+    setSelectedClientId(c.id)
+    setClientSuggestions([])
+  }
+
+  function onClientFieldChange(val: string, field: "nom"|"email"|"tel", setter: (v:string)=>void) {
+    setter(val)
+    setSelectedClientId(null)
+    if (clientSearchRef.current) clearTimeout(clientSearchRef.current)
+    clientSearchRef.current = setTimeout(() => searchClients(val, field), 300)
+  }
 
   // ── Google Places Autocomplete ──
   // State pour les deux champs d'adresse
@@ -822,9 +862,21 @@ export default function JardinConfortV7() {
             </div>
           </div>
           <div className="jc-grid jc-g2 mt12">
-            <div className="jc-field">
+            <div className="jc-field" style={{position:"relative"}}>
               <label>Nom *</label>
-              <input className={missingRequired.nom ? "jc-error" : ""} autoComplete="new-password" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Dupont" />
+              <input className={missingRequired.nom ? "jc-error" : ""} autoComplete="new-password" value={nom}
+                onChange={(e) => onClientFieldChange(e.target.value, "nom", setNom)}
+                placeholder="Dupont" />
+              {clientSuggestions.length > 0 && clientSearchField === "nom" && (
+                <div className="jc-client-dropdown">
+                  {clientSuggestions.map(c => (
+                    <div key={c.id} className="jc-client-item" onClick={() => applyClient(c)}>
+                      <div className="jc-client-item-name">{c.nom} {c.prenom} {c.societe && <span className="jc-client-item-soc">· {c.societe}</span>}</div>
+                      <div className="jc-client-item-detail">{[c.npa, c.ville, c.email].filter(Boolean).join(" · ")}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="jc-field">
               <label>Prénom</label>
@@ -872,7 +924,21 @@ export default function JardinConfortV7() {
           <div className="jc-grid jc-g3 mt12">
             <div className="jc-field">
               <label>Téléphone 1</label>
-              <input autoComplete="new-password" placeholder="+41 79 000 00 00" value={telephone1} onChange={(e) => setTelephone1(normalizeSwissPhone(e.target.value))} />
+              <div className="jc-field" style={{position:"relative"}}>
+                <label>Téléphone 1</label>
+                <input autoComplete="new-password" placeholder="+41 79 000 00 00" value={telephone1}
+                  onChange={(e) => { const v = normalizeSwissPhone(e.target.value); onClientFieldChange(v, "tel", setTelephone1) }} />
+                {clientSuggestions.length > 0 && clientSearchField === "tel" && (
+                  <div className="jc-client-dropdown">
+                    {clientSuggestions.map(c => (
+                      <div key={c.id} className="jc-client-item" onClick={() => applyClient(c)}>
+                        <div className="jc-client-item-name">{c.nom} {c.prenom} {c.societe && <span className="jc-client-item-soc">· {c.societe}</span>}</div>
+                        <div className="jc-client-item-detail">{[c.npa, c.ville, c.email].filter(Boolean).join(" · ")}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="jc-field">
               <label>Téléphone 2</label>
@@ -880,8 +946,35 @@ export default function JardinConfortV7() {
             </div>
             <div className="jc-field">
               <label>Email *</label>
-              <input autoComplete="new-password" className={missingRequired.email ? "jc-error" : ""} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jean@exemple.ch" />
+              <div className="jc-field" style={{position:"relative", gridColumn:"1/-1"}}>
+                <label>Email *</label>
+                <input autoComplete="new-password" className={missingRequired.email ? "jc-error" : ""} type="email" value={email}
+                  onChange={(e) => onClientFieldChange(e.target.value, "email", setEmail)}
+                  placeholder="jean@exemple.ch" />
+                {clientSuggestions.length > 0 && clientSearchField === "email" && (
+                  <div className="jc-client-dropdown">
+                    {clientSuggestions.map(c => (
+                      <div key={c.id} className="jc-client-item" onClick={() => applyClient(c)}>
+                        <div className="jc-client-item-name">{c.nom} {c.prenom} {c.societe && <span className="jc-client-item-soc">· {c.societe}</span>}</div>
+                        <div className="jc-client-item-detail">{[c.npa, c.ville, c.email].filter(Boolean).join(" · ")}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
+          {selectedClientId && (
+            <div className="mt12" style={{display:"flex", alignItems:"center", gap:10, padding:"8px 14px", borderRadius:10, background:"rgba(74,222,128,0.08)", border:"1px solid rgba(74,222,128,0.25)"}}>
+              <span style={{fontSize:13, color:"#4ade80", fontWeight:600}}>👤 Client existant sélectionné</span>
+              <a href={`/dashboard/clients/${selectedClientId}`} target="_blank" rel="noopener noreferrer"
+                style={{fontSize:12, color:"#60a5fa", textDecoration:"underline"}}>Voir la fiche →</a>
+              <button onClick={() => setSelectedClientId(null)}
+                style={{marginLeft:"auto", background:"transparent", border:0, color:"#71717a", cursor:"pointer", fontSize:13}}>✕</button>
+            </div>
+          )}
+          <div className="jc-grid jc-g2 mt12">
+            <div className="jc-field">
+              <label>N° client (auto via email)</label>
           </div>
           <div className="jc-grid jc-g2 mt12">
             <div className="jc-field">
