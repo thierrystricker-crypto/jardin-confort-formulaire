@@ -168,25 +168,33 @@ export async function POST(request: NextRequest) {
     if (!rows.length) return NextResponse.json({ error: "Aucune ligne valide trouvée" }, { status: 400 })
 
     let inserted = 0, skipped = 0, errors = 0
-    const batchSize = 50
 
-    for (let i = 0; i < rows.length; i += batchSize) {
-      const batch = rows.slice(i, i + batchSize)
-      const { data, error } = await supabaseAdmin
-        .from("clients")
-        .upsert(batch, { onConflict: "email", ignoreDuplicates: true })
-        .select()
-
-      if (error) {
-        for (const row of batch) {
-          const { error: e } = await supabaseAdmin.from("clients").insert(row)
-          if (e) errors++
-          else inserted++
+    for (const row of rows) {
+      try {
+        // 1. Déduplication par email
+        if (row.email) {
+          const { data: existing } = await supabaseAdmin
+            .from("clients").select("id").eq("email", row.email).maybeSingle()
+          if (existing) { skipped++; continue }
+        } else {
+          // 2. Déduplication par nom + prénom + ville
+          const nom   = (row.nom   || "").trim()
+          const prenom = (row.prenom || "").trim()
+          const ville  = (row.ville  || "").trim()
+          if (nom && ville) {
+            let query = supabaseAdmin
+              .from("clients").select("id")
+              .ilike("nom", nom)
+            if (prenom) query = query.ilike("prenom", prenom)
+            query = query.ilike("ville", ville)
+            const { data: existing } = await query.maybeSingle()
+            if (existing) { skipped++; continue }
+          }
         }
-      } else {
-        inserted += (data?.length || 0)
-        skipped += batch.length - (data?.length || 0)
-      }
+        const { error: e } = await supabaseAdmin.from("clients").insert(row)
+        if (e) errors++
+        else inserted++
+      } catch { errors++ }
     }
 
     return NextResponse.json({ success: true, inserted, skipped, errors, total: rows.length })
