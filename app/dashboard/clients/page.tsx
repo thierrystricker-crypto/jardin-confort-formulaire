@@ -289,7 +289,7 @@ export default function ClientsPage() {
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">N°</label>
-                    <<input type="text" value={newClient.numero_rue}
+                    <input type="text" value={newClient.numero_rue}
                       onChange={e => setNewClient(p => ({...p, numero_rue: e.target.value}))}
                       autoComplete="new-password"
                       className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
@@ -314,6 +314,7 @@ export default function ClientsPage() {
                 <input type="text" value={newClient.rue2 || ""}
                   onChange={e => setNewClient(p => ({...p, rue2: e.target.value}))}
                   placeholder="Bâtiment, case postale, lieu-dit…"
+                  autoComplete="new-password"
                   className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
               </div>
               <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
