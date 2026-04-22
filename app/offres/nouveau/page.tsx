@@ -53,6 +53,7 @@ type DraftSnapshot = {
   nom: string;
   prenom: string;
   rue: string;
+  rue2: string;
   numero: string;
   npa: string;
   ville: string;
@@ -174,6 +175,7 @@ export default function JardinConfortV7() {
   const [prenom, setPrenom]           = useState("");
   const [rue, setRue]                 = useState("");
   const [numero, setNumero]           = useState("");
+  const [rue2, setRue2]               = useState("");
   const [npa, setNpa]                 = useState("");
   const [ville, setVille]             = useState("");
   const [telephone1, setTelephone1]   = useState("");
@@ -469,7 +471,7 @@ export default function JardinConfortV7() {
   }
 
   function makeSnapshot(): DraftSnapshot {
-    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
+    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
   // ── Sauvegarder dans Supabase + générer numéro + URL publique ──
@@ -530,7 +532,7 @@ export default function JardinConfortV7() {
     setOfferStatus(s.offerStatus || "En cours"); setDate(s.date); setCommercial(s.commercial);
     setOfferNumber(s.offerNumber); setReference(s.reference || "");
     setSociete(s.societe); setNom(s.nom); setPrenom(s.prenom);
-    setRue(s.rue); setNumero(s.numero); setNpa(s.npa); setVille(s.ville);
+    setRue(s.rue); setRue2((s as any).rue2 || ""); setNumero(s.numero); setNpa(s.npa); setVille(s.ville);
     setTelephone1(s.telephone1); setTelephone2(s.telephone2); setEmail(s.email);
     setLivrDiff(s.livrDiff || false); setLivrSociete(s.livrSociete || "");
     setLivrNom(s.livrNom || ""); setLivrPrenom(s.livrPrenom || "");
@@ -547,7 +549,7 @@ export default function JardinConfortV7() {
   function resetForm() {
     setFormType("Offre"); setClientType("Privé (prix TTC)"); setPaymentMode("Paiement d'avance à la commande");
     setOfferStatus("En cours"); setDate(todayForInput()); setOfferNumber(generateOfferNumber());
-    setReference(""); setSociete(""); setNom(""); setPrenom(""); setRue(""); setNumero(""); setNpa(""); setVille("");
+    setReference(""); setSociete(""); setNom(""); setPrenom(""); setRue(""); setRue2(""); setNumero(""); setNpa(""); setVille("");
     setTelephone1(""); setTelephone2(""); setEmail(""); setDeliveryMode("Livraison à domicile");
     setLivrDiff(false); setLivrSociete(""); setLivrNom(""); setLivrPrenom("");
     setLivrTel(""); setLivrRue(""); setLivrNumero(""); setLivrNpa(""); setLivrVille("");
@@ -857,6 +859,12 @@ export default function JardinConfortV7() {
             <div className="jc-field">
               <label>Ville *</label>
               <input autoComplete="new-password" className={missingRequired.ville ? "jc-error" : ""} value={ville} onChange={(e) => setVille(e.target.value)} placeholder="Lausanne" />
+            </div>
+          </div>
+          <div className="jc-grid jc-g1 mt12">
+            <div className="jc-field">
+              <label>Complément d&apos;adresse</label>
+              <input autoComplete="new-password" value={rue2} onChange={(e) => setRue2(e.target.value)} placeholder="Bâtiment, case postale, lieu-dit…" />
             </div>
           </div>
           <div className="jc-grid jc-g3 mt12">
