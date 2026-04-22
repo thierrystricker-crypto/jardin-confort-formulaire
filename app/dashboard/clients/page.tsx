@@ -99,7 +99,7 @@ export default function ClientsPage() {
   // Nouveau client state
   const [newClient, setNewClient] = useState({
     nom:"", prenom:"", societe:"", email:"", tel1:"", tel2:"",
-    rue:"", numero_rue:"", npa:"", ville:"", notes:""
+    rue:"", rue2:"", numero_rue:"", npa:"", ville:"", notes:""
   })
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
@@ -152,7 +152,7 @@ export default function ClientsPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Erreur")
       setShowNew(false)
-      setNewClient({ nom:"", prenom:"", societe:"", email:"", tel1:"", tel2:"", rue:"", numero_rue:"", npa:"", ville:"", notes:"" })
+      setNewClient({ nom:"", prenom:"", societe:"", email:"", tel1:"", tel2:"", rue:"", rue2:"", numero_rue:"", npa:"", ville:"", notes:"" })
       fetchClients(search)
     } catch (e) { setSaveError((e as Error).message) }
     finally { setSaving(false) }
@@ -304,6 +304,13 @@ export default function ClientsPage() {
                       className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                   </div>
                 </div>
+                <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
+                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Complément d&apos;adresse</label>
+                <input type="text" value={newClient.rue2 || ""}
+                  onChange={e => setNewClient(p => ({...p, rue2: e.target.value}))}
+                  placeholder="Bâtiment, case postale, lieu-dit…"
+                  className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+              </div>
               <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
                 <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Notes</label>
                 <textarea value={newClient.notes} onChange={e => setNewClient(p => ({ ...p, notes: e.target.value }))} rows={2}
