@@ -967,6 +967,12 @@ export default function JardinConfortV7() {
                   <input value={livrVille} onChange={(e) => setLivrVille(e.target.value)} placeholder="Genève" />
                 </div>
               </div>
+              <div className="jc-grid jc-g1 mt12">
+                <div className="jc-field">
+                  <label>Complément d&apos;adresse livraison</label>
+                  <input autoComplete="new-password" value={livrRue2} onChange={(e) => setLivrRue2(e.target.value)} placeholder="Complément livraison…" />
+                </div>
+              </div>
               <div className="jc-grid jc-g2 mt12">
                 <div className="jc-field">
                   <label>Téléphone livraison</label>
@@ -2717,3 +2723,4 @@ export default function JardinConfortV7() {
     </div>
   );
 }
+
