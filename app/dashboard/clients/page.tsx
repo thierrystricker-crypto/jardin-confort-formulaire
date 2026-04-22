@@ -251,7 +251,6 @@ export default function ClientsPage() {
               {([
                   ["Nom *","nom","text"],["Prénom","prenom","text"],["Société","societe","text"],
                   ["Email","email","email"],["Téléphone 1","tel1","text"],["Téléphone 2","tel2","text"],
-                  ["N°","numero_rue","text"],["NPA","npa","text"],["Ville","ville","text"],
                 ] as [string, keyof typeof newClient, string][]).map(([label, key, type]) => (
                   <div key={key} className="flex flex-col gap-1">
                     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{label}</label>
@@ -263,27 +262,47 @@ export default function ClientsPage() {
                       className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                   </div>
                 ))}
-                {/* Champ Rue avec autocomplete Google */}
-                <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1" style={{position:"relative"}}>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Rue</label>
-                  <input type="text" value={newClient.rue}
-                    onChange={e => {
-                      setNewClient(p => ({...p, rue: e.target.value}))
-                      if (addrDebounceRef.current) clearTimeout(addrDebounceRef.current)
-                      addrDebounceRef.current = setTimeout(() => fetchSuggestions(e.target.value), 400)
-                    }}
-                    placeholder="Commencez à taper…"
-                    className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
-                  {addrSuggestions.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-white/10 bg-[#2a2d31] shadow-xl">
-                      {addrSuggestions.map((s,i) => (
-                        <div key={i} onClick={() => applyAddrSuggestion(s)}
-                          className="cursor-pointer px-4 py-2 text-sm text-zinc-200 hover:bg-white/5 border-b border-white/5 last:border-0">
-                          {s.label}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                {/* Adresse sur une ligne : Rue + N° + NPA + Ville */}
+                <div className="sm:col-span-2 lg:col-span-3 grid grid-cols-[1fr_80px_80px_1fr] gap-2">
+                  <div className="flex flex-col gap-1" style={{position:"relative"}}>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Rue</label>
+                    <input type="text" value={newClient.rue}
+                      onChange={e => {
+                        setNewClient(p => ({...p, rue: e.target.value}))
+                        if (addrDebounceRef.current) clearTimeout(addrDebounceRef.current)
+                        addrDebounceRef.current = setTimeout(() => fetchSuggestions(e.target.value), 400)
+                      }}
+                      placeholder="Commencez à taper…"
+                      className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    {addrSuggestions.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-white/10 bg-[#2a2d31] shadow-xl">
+                        {addrSuggestions.map((s,i) => (
+                          <div key={i} onClick={() => applyAddrSuggestion(s)}
+                            className="cursor-pointer px-4 py-2 text-sm text-zinc-200 hover:bg-white/5 border-b border-white/5 last:border-0">
+                            {s.label}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">N°</label>
+                    <input type="text" value={newClient.numero_rue}
+                      onChange={e => setNewClient(p => ({...p, numero_rue: e.target.value}))}
+                      className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">NPA</label>
+                    <input type="text" value={newClient.npa}
+                      onChange={e => setNewClient(p => ({...p, npa: e.target.value}))}
+                      className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Ville</label>
+                    <input type="text" value={newClient.ville}
+                      onChange={e => setNewClient(p => ({...p, ville: e.target.value}))}
+                      className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                  </div>
                 </div>
               <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
                 <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Notes</label>
