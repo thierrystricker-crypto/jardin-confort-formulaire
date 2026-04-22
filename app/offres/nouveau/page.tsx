@@ -66,6 +66,7 @@ type DraftSnapshot = {
   livrPrenom: string;
   livrTel: string;
   livrRue: string;
+  livrRue2: string;
   livrNumero: string;
   livrNpa: string;
   livrVille: string;
@@ -189,6 +190,7 @@ export default function JardinConfortV7() {
   const [livrPrenom, setLivrPrenom]   = useState("");
   const [livrTel, setLivrTel]         = useState("");
   const [livrRue, setLivrRue]         = useState("");
+  const [livrRue2, setLivrRue2]       = useState("");
   const [livrNumero, setLivrNumero]   = useState("");
   const [livrNpa, setLivrNpa]         = useState("");
   const [livrVille, setLivrVille]     = useState("");
@@ -471,7 +473,7 @@ export default function JardinConfortV7() {
   }
 
   function makeSnapshot(): DraftSnapshot {
-    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
+    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
   // ── Sauvegarder dans Supabase + générer numéro + URL publique ──
@@ -536,7 +538,7 @@ export default function JardinConfortV7() {
     setTelephone1(s.telephone1); setTelephone2(s.telephone2); setEmail(s.email);
     setLivrDiff(s.livrDiff || false); setLivrSociete(s.livrSociete || "");
     setLivrNom(s.livrNom || ""); setLivrPrenom(s.livrPrenom || "");
-    setLivrTel(s.livrTel || ""); setLivrRue(s.livrRue || "");
+    setLivrTel(s.livrTel || ""); setLivrRue(s.livrRue || ""); setLivrRue2((s as any).livrRue2 || "");
     setLivrNumero(s.livrNumero || ""); setLivrNpa(s.livrNpa || ""); setLivrVille(s.livrVille || "");
     setLines(cloneLines(s.lines)); setDiscount(s.discount); setDiscountPercent(s.discountPercent || "0");
     setRemarks(s.remarks); setNotesInternes(s.notesInternes || "");
@@ -552,7 +554,7 @@ export default function JardinConfortV7() {
     setReference(""); setSociete(""); setNom(""); setPrenom(""); setRue(""); setRue2(""); setNumero(""); setNpa(""); setVille("");
     setTelephone1(""); setTelephone2(""); setEmail(""); setDeliveryMode("Livraison à domicile");
     setLivrDiff(false); setLivrSociete(""); setLivrNom(""); setLivrPrenom("");
-    setLivrTel(""); setLivrRue(""); setLivrNumero(""); setLivrNpa(""); setLivrVille("");
+    setLivrTel(""); setLivrRue(""); setLivrRue2(""); setLivrNumero(""); setLivrNpa(""); setLivrVille("");
     setLines([]); setDiscount("0");
     setDiscountPercent("0"); setRemarks(""); setNotesInternes(""); setAmbianceImages([]);
     setLeadTime("25-30 jours"); setRoundingStr("");
