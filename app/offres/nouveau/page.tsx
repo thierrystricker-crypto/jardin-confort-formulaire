@@ -2028,7 +2028,7 @@ export default function JardinConfortV7() {
         /* Placeholder plus visible mais clairement pas une vraie valeur */
         input::placeholder, textarea::placeholder {
           color: var(--text-dim);
-          opacity: 0.45;
+          opacity: 0.55;
           font-style: italic;
         }
         /* Empêcher le flash blanc des selects sur Chrome/Edge */
