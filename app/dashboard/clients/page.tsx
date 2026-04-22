@@ -274,6 +274,7 @@ export default function ClientsPage() {
                         addrDebounceRef.current = setTimeout(() => fetchSuggestions(e.target.value), 400)
                       }}
                       placeholder="Commencez à taper…"
+                      autoComplete="new-password"
                       className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     {addrSuggestions.length > 0 && (
                       <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-white/10 bg-[#2a2d31] shadow-xl">
@@ -288,20 +289,23 @@ export default function ClientsPage() {
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">N°</label>
-                    <input type="text" value={newClient.numero_rue}
+                    <<input type="text" value={newClient.numero_rue}
                       onChange={e => setNewClient(p => ({...p, numero_rue: e.target.value}))}
+                      autoComplete="new-password"
                       className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">NPA</label>
                     <input type="text" value={newClient.npa}
                       onChange={e => setNewClient(p => ({...p, npa: e.target.value}))}
+                      autoComplete="new-password"
                       className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Ville</label>
                     <input type="text" value={newClient.ville}
                       onChange={e => setNewClient(p => ({...p, ville: e.target.value}))}
+                      autoComplete="new-password"
                       className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                   </div>
                 </div>
