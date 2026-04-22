@@ -265,8 +265,7 @@ export default function ClientsPage() {
                   </div>
                 ))}
                 {{/* Trick pour bloquer l'autocomplete navigateur */}
-                <input type="text" style={{display:"none"}} autoComplete="new-password" readOnly/>
-                <input type="password" style={{display:"none"}} autoComplete="new-password" readOnly/>
+                <><input type="text" style={{display:"none"}} autoComplete="new-password" readOnly/><input type="password" style={{display:"none"}} autoComplete="new-password" readOnly/></>
                 <div className="sm:col-span-2 lg:col-span-3 grid grid-cols-[1fr_80px_80px_1fr] gap-2">
                   <div className="flex flex-col gap-1" style={{position:"relative"}}>
                     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Rue</label>
