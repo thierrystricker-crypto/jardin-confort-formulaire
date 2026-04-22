@@ -56,7 +56,8 @@ export default function ClientsPage() {
   const [showImport, setShowImport] = useState(false)
   const [showNew, setShowNew] = useState(false)
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-const [addrSuggestions, setAddrSuggestions] = useState<{placeId:string;label:string}[]>([])
+  const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [addrSuggestions, setAddrSuggestions] = useState<{placeId:string;label:string}[]>([])
 
   async function fetchSuggestions(q: string) {
     if (q.length < 3) { setAddrSuggestions([]); return }
