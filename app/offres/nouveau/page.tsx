@@ -245,6 +245,8 @@ export default function JardinConfortV7() {
 
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const remarksEditorRef = useRef<HTMLDivElement | null>(null);
+  const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const livrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clientSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [clientSuggestions, setClientSuggestions] = useState<{
     id: number; numero_client: string; nom: string; prenom: string | null;
