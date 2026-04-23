@@ -290,6 +290,10 @@ export default function JardinConfortV7() {
     clientSearchRef.current = setTimeout(() => searchClients(val, field), 300)
   }
 
+  function closeClientDropdown() {
+    setTimeout(() => setClientSuggestions([]), 200)
+  }
+
   // ── Google Places Autocomplete ──
   // State pour les deux champs d'adresse
   const [addrSuggestions, setAddrSuggestions]         = useState<PlaceSuggestion[]>([]);
@@ -874,7 +878,8 @@ export default function JardinConfortV7() {
               <label>Nom *</label>
               <input className={missingRequired.nom ? "jc-error" : ""} autoComplete="new-password" value={nom}
                 onChange={(e) => onClientFieldChange(e.target.value, "nom", setNom)}
-                placeholder="Dupont" />
+              onBlur={closeClientDropdown}
+              placeholder="Dupont" />
               {clientSuggestions.length > 0 && clientSearchField === "nom" && (
                 <div className="jc-client-dropdown">
                   {clientSuggestions.map(c => (
@@ -927,7 +932,7 @@ export default function JardinConfortV7() {
               <label>Téléphone 1</label>
               <input autoComplete="new-password" placeholder="+41 79 000 00 00" value={telephone1}
                 onChange={(e) => onClientFieldChange(e.target.value, "tel", setTelephone1)}
-              onBlur={(e) => setTelephone1(normalizeSwissPhone(e.target.value))} />
+              onBlur={(e) => { setTelephone1(normalizeSwissPhone(e.target.value)); closeClientDropdown(); }} />
               {clientSuggestions.length > 0 && clientSearchField === "tel" && (
                 <div className="jc-client-dropdown">
                   {clientSuggestions.map(c => (
@@ -947,7 +952,8 @@ export default function JardinConfortV7() {
               <label>Email *</label>
               <input autoComplete="new-password" className={missingRequired.email ? "jc-error" : ""} type="email" value={email}
                 onChange={(e) => onClientFieldChange(e.target.value, "email", setEmail)}
-                placeholder="jean@exemple.ch" />
+              onBlur={closeClientDropdown}
+              placeholder="jean@exemple.ch" />
               {clientSuggestions.length > 0 && clientSearchField === "email" && (
                 <div className="jc-client-dropdown">
                   {clientSuggestions.map(c => (
