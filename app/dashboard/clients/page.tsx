@@ -90,6 +90,7 @@ export default function ClientsPage() {
       }))
     } catch { /* ignore */ }
   }
+
   // Import state
   const [csvText, setCsvText] = useState("")
   const [csvFormat, setCsvFormat] = useState<"auto"|"shopify"|"winbiz">("auto")
@@ -104,6 +105,51 @@ export default function ClientsPage() {
   })
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
+
+  // Recherche client live
+  const [clientSuggestions, setClientSuggestions] = useState<Client[]>([])
+  const [clientSearchField, setClientSearchField] = useState<"nom"|"email"|"tel"|null>(null)
+  const clientSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  async function searchClientSuggestions(q: string, field: "nom"|"email"|"tel") {
+    if (q.length < 2) { setClientSuggestions([]); return }
+    try {
+      let searchQ = q
+      if (field === "tel") {
+        let digits = q.replace(/[^\d]/g, "")
+        if (digits.startsWith("0041")) digits = digits.slice(4)
+        else if (digits.startsWith("41") && digits.length > 6) digits = digits.slice(2)
+        else if (digits.startsWith("0")) digits = digits.slice(1)
+        searchQ = digits.length >= 2 ? digits : q
+      }
+      const res = await fetch(`/api/clients?q=${encodeURIComponent(searchQ)}&limit=5`)
+      const json = await res.json()
+      setClientSuggestions(json.clients || [])
+      setClientSearchField(field)
+    } catch { setClientSuggestions([]) }
+  }
+
+  function applyClientSuggestion(c: Client) {
+    setNewClient({
+      nom: c.nom || "",
+      prenom: c.prenom || "",
+      societe: c.societe || "",
+      email: c.email || "",
+      tel1: c.tel1 || "",
+      tel2: c.tel2 || "",
+      rue: c.rue || "",
+      rue2: c.rue2 || "",
+      numero_rue: c.numero_rue || "",
+      npa: c.npa || "",
+      ville: c.ville || "",
+      notes: c.notes || "",
+    })
+    setClientSuggestions([])
+  }
+
+  function closeClientDropdown() {
+    setTimeout(() => setClientSuggestions([]), 200)
+  }
 
   const fetchClients = useCallback(async (q: string) => {
     setLoading(true)
@@ -211,7 +257,6 @@ export default function ClientsPage() {
               placeholder="Collez ici le contenu CSV ou déposez le fichier..."
               className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-4 py-3 text-sm text-zinc-100 outline-none font-mono mb-3"
             />
-            {/* Drop zone pour fichier */}
             <label className="mb-3 flex cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-white/10 p-4 text-sm text-zinc-500 hover:border-sky-500/40 hover:text-zinc-300 transition">
               <input type="file" accept=".csv,.txt" className="hidden"
                 onChange={e => {
@@ -249,69 +294,155 @@ export default function ClientsPage() {
           <div className="rounded-2xl border border-emerald-500/20 bg-[#2a2d31] p-6">
             <h2 className="mb-4 text-lg font-semibold">Nouveau client</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {([
-                  ["Nom *","nom","text"],["Prénom","prenom","text"],["Société","societe","text"],
-                  ["Téléphone 1","tel1","text"],["Téléphone 2","tel2","text"],["Email","email","email"],
-                ] as [string, keyof typeof newClient, string][]).map(([label, key, type]) => (
-                  <div key={key} className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{label}</label>
-                    <input type={type} value={newClient[key]}
-                      autoComplete="new-password"
-                      onChange={e => {
-                        const val = (key === "tel1" || key === "tel2") ? normalizeSwissPhone(e.target.value) : e.target.value
-                        setNewClient(p => ({ ...p, [key]: val }))
-                      }}
-                      className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
-                  </div>
-                ))}
-                {/* Trick pour bloquer l'autocomplete navigateur */}
-                <><input type="text" style={{display:"none"}} autoComplete="new-password" readOnly/><input type="password" style={{display:"none"}} autoComplete="new-password" readOnly/></>
-                <div className="sm:col-span-2 lg:col-span-3 grid grid-cols-[1fr_80px_80px_1fr] gap-2">
-                  <div className="flex flex-col gap-1" style={{position:"relative"}}>
-                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Rue</label>
-                    <input type="text" value={newClient.rue}
-                      onChange={e => {
-                        setNewClient(p => ({...p, rue: e.target.value}))
-                        if (addrDebounceRef.current) clearTimeout(addrDebounceRef.current)
-                        addrDebounceRef.current = setTimeout(() => fetchSuggestions(e.target.value), 400)
-                      }}
-                      placeholder="Commencez à taper…"
-                      autoComplete="new-password"
-                      className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
-                    {addrSuggestions.length > 0 && (
-                      <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-white/10 bg-[#2a2d31] shadow-xl">
-                        {addrSuggestions.map((s,i) => (
-                          <div key={i} onClick={() => applyAddrSuggestion(s)}
-                            className="cursor-pointer px-4 py-2 text-sm text-zinc-200 hover:bg-white/5 border-b border-white/5 last:border-0">
-                            {s.label}
-                          </div>
-                        ))}
+
+              {/* Nom */}
+              <div className="flex flex-col gap-1" style={{position:"relative"}}>
+                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Nom *</label>
+                <input type="text" value={newClient.nom} autoComplete="new-password"
+                  onChange={e => {
+                    setNewClient(p => ({...p, nom: e.target.value}))
+                    if (clientSearchRef.current) clearTimeout(clientSearchRef.current)
+                    clientSearchRef.current = setTimeout(() => searchClientSuggestions(e.target.value, "nom"), 300)
+                  }}
+                  onBlur={closeClientDropdown}
+                  className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                {clientSuggestions.length > 0 && clientSearchField === "nom" && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
+                    {clientSuggestions.map(c => (
+                      <div key={c.id} onClick={() => applyClientSuggestion(c)}
+                        className="cursor-pointer px-4 py-2.5 hover:bg-white/5 border-b border-white/5 last:border-0">
+                        <div className="text-sm font-semibold text-zinc-100">{c.nom} {c.prenom} {c.societe && <span className="font-normal text-zinc-400">· {c.societe}</span>}</div>
+                        <div className="text-xs text-zinc-500 mt-0.5">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
                       </div>
-                    )}
+                    ))}
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">N°</label>
-                    <input type="text" value={newClient.numero_rue}
-                      onChange={e => setNewClient(p => ({...p, numero_rue: e.target.value}))}
-                      autoComplete="new-password"
-                      className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                )}
+              </div>
+
+              {/* Prénom */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Prénom</label>
+                <input type="text" value={newClient.prenom} autoComplete="new-password"
+                  onChange={e => setNewClient(p => ({...p, prenom: e.target.value}))}
+                  className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+              </div>
+
+              {/* Société */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Société</label>
+                <input type="text" value={newClient.societe} autoComplete="new-password"
+                  onChange={e => setNewClient(p => ({...p, societe: e.target.value}))}
+                  className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+              </div>
+
+              {/* Téléphone 1 */}
+              <div className="flex flex-col gap-1" style={{position:"relative"}}>
+                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Téléphone 1</label>
+                <input type="text" value={newClient.tel1} autoComplete="new-password"
+                  onChange={e => {
+                    setNewClient(p => ({...p, tel1: e.target.value}))
+                    if (clientSearchRef.current) clearTimeout(clientSearchRef.current)
+                    clientSearchRef.current = setTimeout(() => searchClientSuggestions(e.target.value, "tel"), 300)
+                  }}
+                  onBlur={e => { setNewClient(p => ({...p, tel1: normalizeSwissPhone(e.target.value)})); closeClientDropdown(); }}
+                  className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                {clientSuggestions.length > 0 && clientSearchField === "tel" && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
+                    {clientSuggestions.map(c => (
+                      <div key={c.id} onClick={() => applyClientSuggestion(c)}
+                        className="cursor-pointer px-4 py-2.5 hover:bg-white/5 border-b border-white/5 last:border-0">
+                        <div className="text-sm font-semibold text-zinc-100">{c.nom} {c.prenom} {c.societe && <span className="font-normal text-zinc-400">· {c.societe}</span>}</div>
+                        <div className="text-xs text-zinc-500 mt-0.5">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">NPA</label>
-                    <input type="text" value={newClient.npa}
-                      onChange={e => setNewClient(p => ({...p, npa: e.target.value}))}
-                      autoComplete="new-password"
-                      className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                )}
+              </div>
+
+              {/* Téléphone 2 */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Téléphone 2</label>
+                <input type="text" value={newClient.tel2} autoComplete="new-password"
+                  onChange={e => setNewClient(p => ({...p, tel2: e.target.value}))}
+                  onBlur={e => setNewClient(p => ({...p, tel2: normalizeSwissPhone(e.target.value)}))}
+                  className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+              </div>
+
+              {/* Email */}
+              <div className="flex flex-col gap-1" style={{position:"relative"}}>
+                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Email</label>
+                <input type="email" value={newClient.email} autoComplete="new-password"
+                  onChange={e => {
+                    setNewClient(p => ({...p, email: e.target.value}))
+                    if (clientSearchRef.current) clearTimeout(clientSearchRef.current)
+                    clientSearchRef.current = setTimeout(() => searchClientSuggestions(e.target.value, "email"), 300)
+                  }}
+                  onBlur={closeClientDropdown}
+                  className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                {clientSuggestions.length > 0 && clientSearchField === "email" && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
+                    {clientSuggestions.map(c => (
+                      <div key={c.id} onClick={() => applyClientSuggestion(c)}
+                        className="cursor-pointer px-4 py-2.5 hover:bg-white/5 border-b border-white/5 last:border-0">
+                        <div className="text-sm font-semibold text-zinc-100">{c.nom} {c.prenom} {c.societe && <span className="font-normal text-zinc-400">· {c.societe}</span>}</div>
+                        <div className="text-xs text-zinc-500 mt-0.5">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Ville</label>
-                    <input type="text" value={newClient.ville}
-                      onChange={e => setNewClient(p => ({...p, ville: e.target.value}))}
-                      autoComplete="new-password"
-                      className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
-                  </div>
+                )}
+              </div>
+
+              {/* Trick pour bloquer l'autocomplete navigateur */}
+              <><input type="text" style={{display:"none"}} autoComplete="new-password" readOnly/><input type="password" style={{display:"none"}} autoComplete="new-password" readOnly/></>
+
+              {/* Adresse */}
+              <div className="sm:col-span-2 lg:col-span-3 grid grid-cols-[1fr_80px_80px_1fr] gap-2">
+                <div className="flex flex-col gap-1" style={{position:"relative"}}>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Rue</label>
+                  <input type="text" value={newClient.rue}
+                    onChange={e => {
+                      setNewClient(p => ({...p, rue: e.target.value}))
+                      if (addrDebounceRef.current) clearTimeout(addrDebounceRef.current)
+                      addrDebounceRef.current = setTimeout(() => fetchSuggestions(e.target.value), 400)
+                    }}
+                    placeholder="Commencez à taper…"
+                    autoComplete="new-password"
+                    className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                  {addrSuggestions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-white/10 bg-[#2a2d31] shadow-xl">
+                      {addrSuggestions.map((s,i) => (
+                        <div key={i} onClick={() => applyAddrSuggestion(s)}
+                          className="cursor-pointer px-4 py-2 text-sm text-zinc-200 hover:bg-white/5 border-b border-white/5 last:border-0">
+                          {s.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">N°</label>
+                  <input type="text" value={newClient.numero_rue}
+                    onChange={e => setNewClient(p => ({...p, numero_rue: e.target.value}))}
+                    autoComplete="new-password"
+                    className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">NPA</label>
+                  <input type="text" value={newClient.npa}
+                    onChange={e => setNewClient(p => ({...p, npa: e.target.value}))}
+                    autoComplete="new-password"
+                    className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Ville</label>
+                  <input type="text" value={newClient.ville}
+                    onChange={e => setNewClient(p => ({...p, ville: e.target.value}))}
+                    autoComplete="new-password"
+                    className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
                 <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Complément d&apos;adresse</label>
                 <input type="text" value={newClient.rue2 || ""}
                   onChange={e => setNewClient(p => ({...p, rue2: e.target.value}))}
@@ -319,6 +450,7 @@ export default function ClientsPage() {
                   autoComplete="new-password"
                   className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
               </div>
+
               <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
                 <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Notes</label>
                 <textarea value={newClient.notes} onChange={e => setNewClient(p => ({ ...p, notes: e.target.value }))} rows={2}
