@@ -260,7 +260,13 @@ export default function JardinConfortV7() {
   async function searchClients(q: string, field: "nom"|"email"|"tel") {
     if (q.length < 2) { setClientSuggestions([]); return }
     try {
-      const res = await fetch(`/api/clients?q=${encodeURIComponent(q)}&limit=5`)
+      // Pour le tel, chercher aussi avec les chiffres bruts
+      let searchQ = q
+      if (field === "tel") {
+        const digits = q.replace(/[^\d]/g, "")
+        searchQ = digits.length >= 2 ? digits : q
+      }
+      const res = await fetch(`/api/clients?q=${encodeURIComponent(searchQ)}&limit=5`)
       const json = await res.json()
       setClientSuggestions(json.clients || [])
       setClientSearchField(field)
