@@ -856,7 +856,13 @@ export default function JardinConfortV7() {
 
         {/* ── COORDONNÉES ── */}
         <section className="jc-card">
-          <div className="jc-section-title">Adresse de facturation</div>
+          <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14}}>
+            <div className="jc-section-title" style={{marginBottom:0}}>Adresse de facturation</div>
+            <button className="jc-btn jc-btn-ghost" style={{fontSize:11, padding:"4px 10px"}}
+              onClick={() => { setNom(""); setPrenom(""); setSociete(""); setEmail(""); setTelephone1(""); setTelephone2(""); setRue(""); setRue2(""); setNumero(""); setNpa(""); setVille(""); setSelectedClientId(null); setClientSuggestions([]); }}>
+              🗑 Effacer coordonnées
+            </button>
+          </div>
           <div className="jc-grid jc-g1">
             <div className="jc-field">
               <label>Société</label>
@@ -920,7 +926,8 @@ export default function JardinConfortV7() {
             <div className="jc-field" style={{position:"relative"}}>
               <label>Téléphone 1</label>
               <input autoComplete="new-password" placeholder="+41 79 000 00 00" value={telephone1}
-                onChange={(e) => { const v = normalizeSwissPhone(e.target.value); onClientFieldChange(v, "tel", setTelephone1) }} />
+                onChange={(e) => onClientFieldChange(e.target.value, "tel", setTelephone1)}
+              onBlur={(e) => setTelephone1(normalizeSwissPhone(e.target.value))} />
               {clientSuggestions.length > 0 && clientSearchField === "tel" && (
                 <div className="jc-client-dropdown">
                   {clientSuggestions.map(c => (
@@ -980,9 +987,9 @@ export default function JardinConfortV7() {
               <input type="checkbox" checked={livrDiff} onChange={(e) => {
                 setLivrDiff(e.target.checked);
                 if (e.target.checked) {
-                  setLivrSociete(societe); setLivrNom(nom); setLivrPrenom(prenom);
-                  setLivrTel(telephone1); setLivrRue(rue); setLivrNumero(numero);
-                  setLivrNpa(npa); setLivrVille(ville);
+                  setLivrNom(nom); setLivrPrenom(prenom);
+                  setLivrSociete(""); setLivrTel(""); setLivrRue("");
+                  setLivrNumero(""); setLivrNpa(""); setLivrVille(""); setLivrRue2("");
                 }
               }} />
               <span>Adresse de livraison différente de l'adresse de facturation</span>
