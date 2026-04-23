@@ -129,21 +129,9 @@ export default function ClientsPage() {
     } catch { setClientSuggestions([]) }
   }
 
+  // Ne pas appliquer — juste naviguer vers la fiche
   function applyClientSuggestion(c: Client) {
-    setNewClient({
-      nom: c.nom || "",
-      prenom: c.prenom || "",
-      societe: c.societe || "",
-      email: c.email || "",
-      tel1: c.tel1 || "",
-      tel2: c.tel2 || "",
-      rue: c.rue || "",
-      rue2: c.rue2 || "",
-      numero_rue: c.numero_rue || "",
-      npa: c.npa || "",
-      ville: c.ville || "",
-      notes: c.notes || "",
-    })
+    window.open(`/dashboard/clients/${c.id}`, "_blank")
     setClientSuggestions([])
   }
 
@@ -309,10 +297,24 @@ export default function ClientsPage() {
                 {clientSuggestions.length > 0 && clientSearchField === "nom" && (
                   <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
                     {clientSuggestions.map(c => (
-                      <div key={c.id} onClick={() => applyClientSuggestion(c)}
-                        className="cursor-pointer px-4 py-2.5 hover:bg-white/5 border-b border-white/5 last:border-0">
-                        <div className="text-sm font-semibold text-zinc-100">{c.nom} {c.prenom} {c.societe && <span className="font-normal text-zinc-400">· {c.societe}</span>}</div>
-                        <div className="text-xs text-zinc-500 mt-0.5">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
+                      <div key={c.id} className="border-b border-white/5 last:border-0">
+                        <div className="px-4 pt-2.5 pb-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-amber-400">⚠ Client existant</span>
+                          </div>
+                          <div className="text-sm font-semibold text-zinc-100">{c.nom} {c.prenom} {c.societe && <span className="font-normal text-zinc-400">· {c.societe}</span>}</div>
+                          <div className="text-xs text-zinc-500 mt-0.5">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
+                        </div>
+                        <div className="px-4 pb-2.5 flex gap-2">
+                          <button onClick={() => applyClientSuggestion(c)}
+                            className="rounded-lg bg-[#2B8AD1]/15 border border-[#2B8AD1]/30 px-3 py-1 text-xs text-sky-300 hover:bg-[#2B8AD1]/25">
+                            Voir la fiche →
+                          </button>
+                          <button onClick={() => setClientSuggestions([])}
+                            className="rounded-lg bg-white/5 border border-white/10 px-3 py-1 text-xs text-zinc-400 hover:bg-white/10">
+                            Créer quand même
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -349,10 +351,24 @@ export default function ClientsPage() {
                 {clientSuggestions.length > 0 && clientSearchField === "tel" && (
                   <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
                     {clientSuggestions.map(c => (
-                      <div key={c.id} onClick={() => applyClientSuggestion(c)}
-                        className="cursor-pointer px-4 py-2.5 hover:bg-white/5 border-b border-white/5 last:border-0">
-                        <div className="text-sm font-semibold text-zinc-100">{c.nom} {c.prenom} {c.societe && <span className="font-normal text-zinc-400">· {c.societe}</span>}</div>
-                        <div className="text-xs text-zinc-500 mt-0.5">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
+                      <div key={c.id} className="border-b border-white/5 last:border-0">
+                        <div className="px-4 pt-2.5 pb-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-amber-400">⚠ Client existant</span>
+                          </div>
+                          <div className="text-sm font-semibold text-zinc-100">{c.nom} {c.prenom} {c.societe && <span className="font-normal text-zinc-400">· {c.societe}</span>}</div>
+                          <div className="text-xs text-zinc-500 mt-0.5">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
+                        </div>
+                        <div className="px-4 pb-2.5 flex gap-2">
+                          <button onClick={() => applyClientSuggestion(c)}
+                            className="rounded-lg bg-[#2B8AD1]/15 border border-[#2B8AD1]/30 px-3 py-1 text-xs text-sky-300 hover:bg-[#2B8AD1]/25">
+                            Voir la fiche →
+                          </button>
+                          <button onClick={() => setClientSuggestions([])}
+                            className="rounded-lg bg-white/5 border border-white/10 px-3 py-1 text-xs text-zinc-400 hover:bg-white/10">
+                            Créer quand même
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -382,10 +398,24 @@ export default function ClientsPage() {
                 {clientSuggestions.length > 0 && clientSearchField === "email" && (
                   <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
                     {clientSuggestions.map(c => (
-                      <div key={c.id} onClick={() => applyClientSuggestion(c)}
-                        className="cursor-pointer px-4 py-2.5 hover:bg-white/5 border-b border-white/5 last:border-0">
-                        <div className="text-sm font-semibold text-zinc-100">{c.nom} {c.prenom} {c.societe && <span className="font-normal text-zinc-400">· {c.societe}</span>}</div>
-                        <div className="text-xs text-zinc-500 mt-0.5">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
+                      <div key={c.id} className="border-b border-white/5 last:border-0">
+                        <div className="px-4 pt-2.5 pb-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-amber-400">⚠ Client existant</span>
+                          </div>
+                          <div className="text-sm font-semibold text-zinc-100">{c.nom} {c.prenom} {c.societe && <span className="font-normal text-zinc-400">· {c.societe}</span>}</div>
+                          <div className="text-xs text-zinc-500 mt-0.5">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
+                        </div>
+                        <div className="px-4 pb-2.5 flex gap-2">
+                          <button onClick={() => applyClientSuggestion(c)}
+                            className="rounded-lg bg-[#2B8AD1]/15 border border-[#2B8AD1]/30 px-3 py-1 text-xs text-sky-300 hover:bg-[#2B8AD1]/25">
+                            Voir la fiche →
+                          </button>
+                          <button onClick={() => setClientSuggestions([])}
+                            className="rounded-lg bg-white/5 border border-white/10 px-3 py-1 text-xs text-zinc-400 hover:bg-white/10">
+                            Créer quand même
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
