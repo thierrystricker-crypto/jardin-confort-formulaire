@@ -263,7 +263,11 @@ export default function JardinConfortV7() {
       // Pour le tel, chercher aussi avec les chiffres bruts
       let searchQ = q
       if (field === "tel") {
-        const digits = q.replace(/[^\d]/g, "")
+        let digits = q.replace(/[^\d]/g, "")
+        // Normaliser : enlever le préfixe 0041 ou 41
+        if (digits.startsWith("0041")) digits = digits.slice(4)
+        else if (digits.startsWith("41") && digits.length > 8) digits = digits.slice(2)
+        else if (digits.startsWith("0")) digits = digits.slice(1)
         searchQ = digits.length >= 2 ? digits : q
       }
       const res = await fetch(`/api/clients?q=${encodeURIComponent(searchQ)}&limit=5`)
