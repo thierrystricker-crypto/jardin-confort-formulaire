@@ -891,7 +891,7 @@ export default function JardinConfortV7() {
                   {clientSuggestions.map(c => (
                     <div key={c.id} className="jc-client-item" onClick={() => applyClient(c)}>
                       <div className="jc-client-item-name">{c.nom} {c.prenom} {c.societe && <span className="jc-client-item-soc">· {c.societe}</span>}</div>
-                      <div className="jc-client-item-detail">{[c.npa, c.ville, c.email].filter(Boolean).join(" · ")}</div>
+                      <div className="jc-client-item-detail">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
                     </div>
                   ))}
                 </div>
@@ -944,7 +944,7 @@ export default function JardinConfortV7() {
                   {clientSuggestions.map(c => (
                     <div key={c.id} className="jc-client-item" onClick={() => applyClient(c)}>
                       <div className="jc-client-item-name">{c.nom} {c.prenom} {c.societe && <span className="jc-client-item-soc">· {c.societe}</span>}</div>
-                      <div className="jc-client-item-detail">{[c.npa, c.ville, c.email].filter(Boolean).join(" · ")}</div>
+                      <div className="jc-client-item-detail">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
                     </div>
                   ))}
                 </div>
@@ -965,7 +965,7 @@ export default function JardinConfortV7() {
                   {clientSuggestions.map(c => (
                     <div key={c.id} className="jc-client-item" onClick={() => applyClient(c)}>
                       <div className="jc-client-item-name">{c.nom} {c.prenom} {c.societe && <span className="jc-client-item-soc">· {c.societe}</span>}</div>
-                      <div className="jc-client-item-detail">{[c.npa, c.ville, c.email].filter(Boolean).join(" · ")}</div>
+                      <div className="jc-client-item-detail">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
                     </div>
                   ))}
                 </div>
