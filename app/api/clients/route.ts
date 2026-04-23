@@ -17,6 +17,25 @@ export async function GET(request: NextRequest) {
       .limit(limit)
 
     if (q) {
+      const qDigits = q.replace(/[^\d]/g, "")
+
+      if (qDigits.length >= 3) {
+        const { data: d1 } = await supabaseAdmin.from("clients").select("*")
+          .or(`nom.ilike.%${q}%,prenom.ilike.%${q}%,societe.ilike.%${q}%,email.ilike.%${q}%,npa.ilike.%${q}%,ville.ilike.%${q}%,numero_client.ilike.%${q}%`)
+          .order("updated_at", { ascending: false }).limit(limit)
+
+        const { data: d2 } = await supabaseAdmin.rpc("search_clients_by_phone", {
+          phone_digits: qDigits,
+          max_results: limit
+        })
+
+        const merged = [...(d1 || [])]
+        for (const c of (d2 || [])) {
+          if (!merged.find((m: {id: number}) => m.id === c.id)) merged.push(c)
+        }
+        return NextResponse.json({ clients: merged.slice(0, limit) })
+      }
+
       query = query.or(
         `nom.ilike.%${q}%,prenom.ilike.%${q}%,societe.ilike.%${q}%,email.ilike.%${q}%,npa.ilike.%${q}%,ville.ilike.%${q}%,numero_client.ilike.%${q}%,tel1.ilike.%${q}%,tel2.ilike.%${q}%`
       )
