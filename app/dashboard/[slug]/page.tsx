@@ -264,8 +264,74 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const mailBody=useMemo(()=>{
     if(!offre) return ""
     const nomComplet=[offre.client_prenom, offre.client_nom].filter(Boolean).join(" ")
-    const greeting=nomComplet?`Bonjour ${nomComplet},`:"Bonjour,"
-    return `\n${greeting}\n\nJe me permets de reprendre contact avec vous suite à notre offre concernant votre mobilier d'extérieur.\n\nEst-ce que vous avez eu l'occasion de consulter notre offre ?\n\nLien vers votre offre : ${APP_URL}/offre/${offre.slug}\n\nCordialement,\n${offre.commercial||"L'équipe Jardin-Confort"}`
+    const pdfUrl=`${APP_URL}/print/offre/${offre.slug}`
+    const validationUrl=`${APP_URL}/offre/${offre.slug}`
+    const total=new Intl.NumberFormat("fr-CH",{minimumFractionDigits:2,maximumFractionDigits:2}).format(offre.total_ttc||0)
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#F3F5F6;font-family:Verdana,Arial,Helvetica,sans-serif;">
+<table border="0" width="100%" cellspacing="0" cellpadding="0" bgcolor="#F3F5F6"><tbody><tr><td align="center" style="padding:28px 16px;">
+
+<table style="border-radius:16px;border:1px solid #E8EAF3;max-width:600px;width:100%;" border="0" cellspacing="0" cellpadding="0" bgcolor="#FFFFFF"><tbody>
+
+<tr><td style="padding:28px 28px 6px 28px;text-align:center;">
+  <img style="display:block;width:260px;max-width:100%;height:auto;margin:0 auto 18px auto;"
+    src="https://www.jotform.com/uploads/Lutry/form_files/logo%20jardin%20confort%202025%20bleu%20comme%20instagram.698a4ad6553317.03187337.png"
+    alt="Jardin-Confort"/>
+  <div style="font-size:20px;font-weight:bold;color:#0a1551;">${offre.type_document} ${offre.numero_affiche}</div>
+</td></tr>
+
+<tr><td style="padding:4px 28px 18px 28px;text-align:center;font-size:13px;color:#5e678f;line-height:1.6;">
+  ${nomComplet}${offre.client_societe?`<br>${offre.client_societe}`:""}<br>
+  CHF ${total} &middot; ${offre.payment_mode||""}
+</td></tr>
+
+<tr><td style="padding:0 28px 12px 28px;" align="center">
+  <table border="0" cellspacing="0" cellpadding="0"><tbody><tr>
+    <td style="border-radius:26px;" align="center" bgcolor="#2B8AD1">
+      <a style="display:inline-block;padding:14px 24px;font-family:Verdana,Arial,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:26px;"
+        href="${pdfUrl}" target="_blank">
+        🖨 Voir / Imprimer le PDF
+      </a>
+    </td>
+  </tr></tbody></table>
+</td></tr>
+
+<tr><td style="padding:0 28px 22px 28px;" align="center">
+  <table border="0" cellspacing="0" cellpadding="0"><tbody><tr>
+    <td style="border-radius:26px;border:1px solid #D1D5DB;" align="center" bgcolor="#FFFFFF">
+      <a style="display:inline-block;padding:14px 24px;font-family:Verdana,Arial,sans-serif;font-size:15px;font-weight:bold;color:#2a2b2a;text-decoration:none;border-radius:26px;"
+        href="${validationUrl}" target="_blank">
+        ✅ Valider votre ${offre.type_document.toLowerCase()} en ligne
+      </a>
+    </td>
+  </tr></tbody></table>
+</td></tr>
+
+<tr><td style="padding:0 28px 32px 28px;">
+  <table style="border-collapse:collapse;" border="0" width="100%" cellspacing="0" cellpadding="0"><tbody>
+    ${[
+      ["Client", nomComplet],
+      ["Conseiller·ère", offre.commercial||"—"],
+      ["Date", offre.date_document ? new Date(offre.date_document).toLocaleDateString("fr-CH",{day:"2-digit",month:"2-digit",year:"numeric"}) : "—"],
+      ["Montant total", `CHF ${total}`],
+      ["Mode de paiement", offre.payment_mode||"—"],
+      ["Lien validation", `<a style="color:#4573e3;text-decoration:underline;" href="${validationUrl}">${validationUrl}</a>`],
+    ].map(([k,v])=>`
+    <tr>
+      <td style="padding:10px 0;border-top:1px solid #ecedf2;font-size:13px;color:#6f76a7;width:38%;">${k}</td>
+      <td style="padding:10px 0;border-top:1px solid #ecedf2;font-size:13px;font-weight:bold;color:#0a1551;">${v}</td>
+    </tr>`).join("")}
+  </tbody></table>
+</td></tr>
+
+<tr><td style="padding:16px 28px;background:#F8FAFC;border-top:1px solid #E8EAF3;border-radius:0 0 16px 16px;text-align:center;font-size:11px;color:#9ca3af;line-height:1.7;">
+  <strong style="color:#0a1551;">Jardin-Confort SA</strong><br>
+  Route de Lavaux 425 · 1095 Lutry · Suisse<br>
+  +41 21 791 36 71 · <a href="https://www.jardin-confort.ch" style="color:#2B8AD1;">www.jardin-confort.ch</a>
+</td></tr>
+
+</tbody></table>
+</td></tr></tbody></table>
+</body></html>`
   },[offre])
 
   if(loading) return (
@@ -556,7 +622,9 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   📋 Copier
                 </button>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300 whitespace-pre-wrap">{mailBody}</div>
+             <div className="rounded-xl border border-white/10 bg-white overflow-hidden" style={{minHeight:200}}>
+                <iframe srcDoc={mailBody} title="Aperçu email" className="w-full border-0" style={{height:520}}/>
+              </div>
             </section>
           </div>
 
