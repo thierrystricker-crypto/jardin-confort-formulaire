@@ -153,12 +153,23 @@ export async function GET(
 
     // Si on demande le snapshot figé (pour l'impression)
     if (useSnapshot && offre.data_snapshot) {
+      let numeroClient = null
+      const clientEmail = (offre.data as Record<string,unknown>)?.email as string || offre.client_email
+      if (clientEmail) {
+        const { data: clientData } = await supabase
+          .from("clients")
+          .select("numero_client")
+          .eq("email", clientEmail)
+          .single()
+        if (clientData) numeroClient = clientData.numero_client
+      }
       return NextResponse.json({
         offre: {
           ...offre,
           data: offre.data_snapshot,
           isSnapshot: true,
           snapshotAt: offre.snapshot_at,
+          numero_client: numeroClient,
         },
       });
     }
@@ -173,12 +184,25 @@ export async function GET(
       lines: freshLines,
     };
 
+    // Chercher le numéro client en base
+    let numeroClient = null
+    const clientEmail = (offre.data as Record<string,unknown>)?.email as string || offre.client_email
+    if (clientEmail) {
+      const { data: clientData } = await supabase
+        .from("clients")
+        .select("numero_client")
+        .eq("email", clientEmail)
+        .single()
+      if (clientData) numeroClient = clientData.numero_client
+    }
+
     return NextResponse.json({
       offre: {
         ...offre,
         data: freshData,
         isSnapshot: false,
         stockRefreshedAt: new Date().toISOString(),
+        numero_client: numeroClient,
       },
     });
 

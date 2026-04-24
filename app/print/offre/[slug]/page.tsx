@@ -49,10 +49,10 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
           const offreData = json.offre?.data;
           if (offreData) {
             setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber || slug);
-            setData({
+           setData({
               ...EMPTY,
               ...offreData,
-              customerNumber: generateCustomerNumber(offreData.email || ""),
+              customerNumber: json.offre?.numero_client || "",
               ambianceImages: offreData.ambianceImages || [],
             });
           }
@@ -299,6 +299,9 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                 </tr>
                 {data.leadTime && (
                   <tr><td className="doc-meta-label">Délai de livraison</td><td>{data.leadTime}</td></tr>
+                )}
+                {(data as any).validiteDuree && (
+                  <tr><td className="doc-meta-label">Validité de l&apos;offre</td><td>{(data as any).validiteDuree}</td></tr>
                 )}
                 {(data as any).deliveryMode && (
                   <tr><td className="doc-meta-label">Mode de livraison</td><td>{(data as any).deliveryMode}</td></tr>
