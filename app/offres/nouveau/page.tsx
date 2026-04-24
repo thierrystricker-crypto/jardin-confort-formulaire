@@ -1021,8 +1021,17 @@ export default function JardinConfortV7() {
                   <option value="custom">Personnalisé…</option>
                 </select>
                 {!["10 jours","30 jours","60 jours"].includes(validiteDuree) && (
-                  <input value={validiteDuree} onChange={(e) => setValiditeDuree(e.target.value)}
-                    placeholder="Ex: 45 jours" style={{flex:1}} />
+                  <input
+                    type="number" min="1" max="365"
+                    value={validiteDuree.replace(/[^\d]/g, "")}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value)
+                      if (!isNaN(n) && n > 0) setValiditeDuree(`${n} jours`)
+                      else if (e.target.value === "") setValiditeDuree("")
+                    }}
+                    placeholder="45"
+                    style={{flex:1, width:80}}
+                  />
                 )}
               </div>
             </div>
