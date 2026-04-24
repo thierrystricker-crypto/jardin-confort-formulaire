@@ -84,6 +84,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [relancing,setRelancing]=useState(false)
   const [relanceStatus,setRelanceStatus]=useState("")
   const [emailCopied,setEmailCopied]=useState(false)
+  const [clientId,setClientId]=useState<number|null>(null)
 
   useEffect(()=>{
     async function load() {
@@ -102,6 +103,23 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         }
         if ((o as unknown as Record<string,unknown>).qr_url) {
           setQrUrl((o as unknown as Record<string,unknown>).qr_url as string)
+        }
+        // Chercher le client en base par email ou téléphone
+        if (o.client_email || o.client_tel1) {
+          try {
+            const q = o.client_email || o.client_tel1 || ""
+            let searchQ = q
+            if (!o.client_email && o.client_tel1) {
+              let digits = o.client_tel1.replace(/[^\d]/g, "")
+              if (digits.startsWith("0041")) digits = digits.slice(4)
+              else if (digits.startsWith("41")) digits = digits.slice(2)
+              else if (digits.startsWith("0")) digits = digits.slice(1)
+              searchQ = digits
+            }
+            const cRes = await fetch(`/api/clients?q=${encodeURIComponent(searchQ)}&limit=1`)
+            const cJson = await cRes.json()
+            if (cJson.clients?.length > 0) setClientId(cJson.clients[0].id)
+          } catch { /* ignore */ }
         }
       } catch(e) { setError((e as Error).message) }
       finally { setLoading(false) }
@@ -355,7 +373,22 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
 
             <div className="grid gap-6 lg:grid-cols-2">
               <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-                <h2 className="mb-4 text-xl font-semibold">Client</h2>
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Client</h2>
+                  {clientId ? (
+                    <a href={`/dashboard/clients/${clientId}`} target="_blank" rel="noopener noreferrer"
+                      className="rounded-xl border border-[#2B8AD1]/30 bg-[#2B8AD1]/10 px-3 py-1.5 text-xs text-sky-300 hover:bg-[#2B8AD1]/20">
+                      👤 Voir la fiche →
+                    </a>
+                  ) : (
+                    <a href={`/dashboard/clients?q=${encodeURIComponent(offre.client_email||offre.client_nom||"")}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-400 hover:bg-[#40454b]"
+                      title="Aucune fiche client trouvée">
+                      👤 Pas de fiche
+                    </a>
+                  )}
+                </div>
                 <div className="space-y-2 text-sm">
                   {([["Nom",nomClient(offre)],["Société",offre.client_societe],["Tél.",offre.client_tel1],
                     ["Rue",[offre.client_rue,(d.numero as string)||""].filter(Boolean).join(" ")],
