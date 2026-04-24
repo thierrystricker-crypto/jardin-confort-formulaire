@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
 const MAKE_WEBHOOK = process.env.MAKE_WEBHOOK_VALIDATION_URL ||
-  "https://hook.eu1.make.com/gox5xdaoiwkpotf5ws1aervn76ulnfdg";
+  "https://hook.eu1.make.com/tqqhnrzkcwfhybguktd75drtmqv9ah49";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ||
   "https://offres.jardin-confort.ch";
