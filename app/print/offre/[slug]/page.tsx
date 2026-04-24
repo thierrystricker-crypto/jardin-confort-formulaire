@@ -61,7 +61,6 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         console.error("Erreur chargement offre:", e);
       }
       setReady(true);
-      setTimeout(() => window.print(), 800);
     }
     load();
   }, [params]);
