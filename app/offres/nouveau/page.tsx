@@ -118,12 +118,7 @@ function generateOfferNumber() {
   return "";
 }
 
-function generateCustomerNumber(email: string) {
-  if (!email.trim()) return "";
-  let hash = 0;
-  for (let i = 0; i < email.length; i++) hash = (hash * 31 + email.charCodeAt(i)) % 100000;
-  return `CL-${String(hash).padStart(5, "0")}`;
-}
+
 
 function normalizeSwissPhone(raw: string) {
   const digits = raw.replace(/[^\d]/g, "");
@@ -387,7 +382,7 @@ export default function JardinConfortV7() {
       setLivrRue(s.label);
     }
   }
-  const customerNumber = useMemo(() => generateCustomerNumber(email), [email]);
+  
 
   // ── Recherche Shopify avec debounce 250ms + AbortController ──
   useEffect(() => {
@@ -541,6 +536,30 @@ export default function JardinConfortV7() {
       const snap = { ...makeSnapshot(), ambianceImages };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
       setDraftSavedAt(new Date().toLocaleString("fr-CH"));
+
+      // Créer le client en base s'il n'est pas déjà sélectionné
+      if (!selectedClientId && nom.trim()) {
+        try {
+          await fetch("/api/clients", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              nom: nom.trim(),
+              prenom: prenom.trim() || null,
+              societe: societe.trim() || null,
+              email: email.trim() || null,
+              tel1: telephone1.trim() || null,
+              tel2: telephone2.trim() || null,
+              rue: rue.trim() || null,
+              rue2: rue2.trim() || null,
+              numero_rue: numero.trim() || null,
+              npa: npa.trim() || null,
+              ville: ville.trim() || null,
+              source: "offre",
+            })
+          })
+        } catch { /* non bloquant */ }
+      }
 
       const res = await fetch("/api/offres/save", {
         method: "POST",
@@ -983,11 +1002,7 @@ export default function JardinConfortV7() {
                 style={{marginLeft:"auto", background:"transparent", border:0, color:"#71717a", cursor:"pointer", fontSize:13}}>✕</button>
             </div>
           )}
-          <div className="jc-grid jc-g2 mt12">
-            <div className="jc-field">
-              <label>N° client (auto via email)</label>
-              <input value={customerNumber} readOnly />
-            </div>
+          <div className="jc-grid jc-g1 mt12">
             <div className="jc-field">
               <label>Délai de livraison</label>
               <input value={leadTime} onChange={(e) => setLeadTime(e.target.value)} />
