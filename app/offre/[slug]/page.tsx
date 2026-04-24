@@ -429,11 +429,18 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
               </Card>
             )}
 
-            {/* Statut acceptée */}
+            {/* Statut acceptée — offre déjà validée */}
             {isAcceptee && (
-              <Card style={{ padding: 20, background: "#E8F5E9", border: `1px solid ${C.green}` }}>
-                <div style={{ fontWeight: 700, color: C.green, fontSize: 15, marginBottom: 4 }}>✅ Offre acceptée</div>
-                <div style={{ fontSize: 13, color: "#2e7d32" }}>Merci pour votre confiance !</div>
+              <Card style={{ padding: 24, background: "#E8F5E9", border: `1px solid ${C.green}` }}>
+                <div style={{ fontWeight: 700, color: C.green, fontSize: 18, marginBottom: 8 }}>✅ Offre déjà validée</div>
+                <div style={{ fontSize: 14, color: "#2e7d32", lineHeight: 1.8, marginBottom: 16 }}>
+                  Cette offre a déjà été acceptée et confirmée. Merci pour votre confiance !<br/>
+                  Votre commande est en cours de traitement par notre équipe.
+                </div>
+                <a href={`/offre/${slug}/confirmation`}
+                  style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.green, color:"white", padding:"10px 20px", borderRadius:20, fontSize:14, fontWeight:600, textDecoration:"none" }}>
+                  📋 Voir ma confirmation de commande →
+                </a>
               </Card>
             )}
           </div>
@@ -685,7 +692,7 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
                 </div>
               </Card>
             )}
-            {isEnCours && !isExpire && (
+            {isEnCours && !isExpire && !isAcceptee && (
               <Card id="bloc-signature" style={{ padding: 28 }}>
                 <div style={{ fontSize: 20, fontWeight: 600, color: C.blue, marginBottom: 20 }}>
                   Valider et signer votre offre
