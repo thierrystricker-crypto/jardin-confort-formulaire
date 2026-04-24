@@ -441,7 +441,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
             )}
             {/* Signature client — alignée au bas = niveau du total */}
             <div className="doc-sign-block">
-              <div className="doc-sign-name">Client — {data.nom} {data.prenom}</div>
+              <div className="doc-sign-name">Bon pour accord — {data.nom} {data.prenom}</div>
               <div className="doc-sign-line" />
               <div className="doc-sign-sub">Signature &amp; date</div>
             </div>
