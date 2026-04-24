@@ -76,6 +76,7 @@ type DraftSnapshot = {
   remarks: string;
   notesInternes: string;
   leadTime: string;
+  validiteDuree: string;
   manualRounding: string; // stocké pour compatibilité
   enabledServices: Record<string, boolean>;
   servicePrices: Record<string, string>;
@@ -213,6 +214,7 @@ export default function JardinConfortV7() {
   const [notesInternes, setNotesInternes] = useState("");
   const [ambianceImages, setAmbianceImages] = useState<{id: string; dataUrl: string; legende: string}[]>([]);
   const [leadTime, setLeadTime]         = useState("25-30 jours");
+  const [validiteDuree, setValiditeDuree] = useState("30 jours");
   // arrondi : toujours stocké comme string, toujours <= 0
   const [roundingStr, setRoundingStr]   = useState("");
   // Autocomplétion adresse — Google Places
@@ -522,7 +524,7 @@ export default function JardinConfortV7() {
   }
 
   function makeSnapshot(): DraftSnapshot {
-    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
+    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, validiteDuree, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
   // ── Sauvegarder dans Supabase + générer numéro + URL publique ──
@@ -615,7 +617,7 @@ export default function JardinConfortV7() {
     setLivrNumero(s.livrNumero || ""); setLivrNpa(s.livrNpa || ""); setLivrVille(s.livrVille || "");
     setLines(cloneLines(s.lines)); setDiscount(s.discount); setDiscountPercent(s.discountPercent || "0");
     setRemarks(s.remarks); setNotesInternes(s.notesInternes || "");
-    setLeadTime(s.leadTime); setRoundingStr(s.manualRounding || "");
+    setLeadTime(s.leadTime); setValiditeDuree((s as any).validiteDuree || "30 jours"); setRoundingStr(s.manualRounding || "");
     setEnabledServices({ ...initialEnabledServices, ...s.enabledServices });
     setServicePrices({ ...initialServicePrices, ...s.servicePrices });
     setDraftSavedAt(new Date().toLocaleString("fr-CH"));
@@ -630,7 +632,7 @@ export default function JardinConfortV7() {
     setLivrTel(""); setLivrRue(""); setLivrRue2(""); setLivrNumero(""); setLivrNpa(""); setLivrVille("");
     setLines([]); setDiscount("0");
     setDiscountPercent("0"); setRemarks(""); setNotesInternes(""); setAmbianceImages([]);
-    setLeadTime("25-30 jours"); setRoundingStr("");
+    setLeadTime("25-30 jours"); setValiditeDuree("30 jours"); setRoundingStr("");
     setEnabledServices({ ...initialEnabledServices }); setServicePrices({ ...initialServicePrices });
     setUndoSnapshot(null); setShowResetConfirm(false);
   }
@@ -1002,10 +1004,27 @@ export default function JardinConfortV7() {
                 style={{marginLeft:"auto", background:"transparent", border:0, color:"#71717a", cursor:"pointer", fontSize:13}}>✕</button>
             </div>
           )}
-          <div className="jc-grid jc-g1 mt12">
+          <div className="jc-grid jc-g2 mt12">
             <div className="jc-field">
               <label>Délai de livraison</label>
               <input value={leadTime} onChange={(e) => setLeadTime(e.target.value)} />
+            </div>
+            <div className="jc-field">
+              <label>Validité de l&apos;offre</label>
+              <div style={{display:"flex", gap:6}}>
+                <select value={["10 jours","30 jours","60 jours"].includes(validiteDuree) ? validiteDuree : "custom"}
+                  onChange={(e) => { if (e.target.value !== "custom") setValiditeDuree(e.target.value) }}
+                  style={{flex:"0 0 auto", width:130}}>
+                  <option value="10 jours">10 jours</option>
+                  <option value="30 jours">30 jours</option>
+                  <option value="60 jours">60 jours</option>
+                  <option value="custom">Personnalisé…</option>
+                </select>
+                {!["10 jours","30 jours","60 jours"].includes(validiteDuree) && (
+                  <input value={validiteDuree} onChange={(e) => setValiditeDuree(e.target.value)}
+                    placeholder="Ex: 45 jours" style={{flex:1}} />
+                )}
+              </div>
             </div>
           </div>
 

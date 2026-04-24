@@ -59,6 +59,7 @@ type OffreRow = {
   total_ttc: number;
   payment_mode: string | null;
   stockRefreshedAt?: string;
+  validite_duree: string | null;
   data: {
     lines?: QuoteLine[];
     clientType?: string;
@@ -236,6 +237,14 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
   const isEnCours = ["En cours", "Envoyée"].includes(offre.statut);
   const isAcceptee = offre.statut === "Acceptée";
 
+  // Calcul expiration
+  const validiteDuree = offre.validite_duree || d.validiteDuree || "30 jours"
+  const joursValidite = parseInt(validiteDuree) || 30
+  const dateDocument = offre.date_document ? new Date(offre.date_document) : null
+  const dateExpiration = dateDocument ? new Date(dateDocument.getTime() + joursValidite * 86400000) : null
+  const isExpire = dateExpiration ? new Date() > dateExpiration : false
+  const joursRestants = dateExpiration ? Math.ceil((dateExpiration.getTime() - Date.now()) / 86400000) : null
+
   const lines = d.lines || [];
   const subTotal = lines.reduce((s, l) => l.type === "comment" ? s : s + l.qty * l.unitPrice - (l.lineDiscount || 0), 0);
   const discountPct = Number(d.discountPercent || 0);
@@ -387,6 +396,17 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
                 <div><strong style={{ fontWeight: 700 }}>Paiement : </strong>{payMode}</div>
                 <div><strong style={{ fontWeight: 700 }}>Conseiller : </strong>{offre.commercial}</div>
                 <div><strong style={{ fontWeight: 700 }}>Date : </strong>{fmtDate(offre.date_document)}</div>
+                {dateExpiration && (
+                  <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 12,
+                    background: isExpire ? "#FEF2F2" : joursRestants !== null && joursRestants <= 7 ? "#FFF8E1" : "#E8F5E9",
+                    border: `1px solid ${isExpire ? "#FECACA" : joursRestants !== null && joursRestants <= 7 ? "#FFE082" : "#A5D6A7"}`,
+                    fontSize: 13, fontWeight: 600,
+                    color: isExpire ? "#991B1B" : joursRestants !== null && joursRestants <= 7 ? "#7B5E00" : C.green }}>
+                    {isExpire
+                      ? `⚠️ Offre expirée le ${fmtDate(dateExpiration.toISOString())}`
+                      : `✓ Valide jusqu'au ${fmtDate(dateExpiration.toISOString())} (${joursRestants}j)`}
+                  </div>
+                )}
               </div>
             </Card>
 
@@ -638,7 +658,33 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
             </div>
 
             {/* 7. Bloc signature — uniquement si offre en cours */}
-            {isEnCours && (
+            {isEnCours && isExpire && (
+              <Card id="bloc-signature" style={{ padding: 28, background: "#FEF2F2", border: "1px solid #FECACA" }}>
+                <div style={{ fontSize: 20, fontWeight: 600, color: "#991B1B", marginBottom: 16 }}>
+                  ⚠️ Cette offre a expiré
+                </div>
+                <div style={{ fontSize: 15, color: "#7F1D1D", lineHeight: 1.8, marginBottom: 20 }}>
+                  La durée de validité de cette offre ({validiteDuree}) est dépassée depuis le{" "}
+                  <strong>{fmtDate(dateExpiration!.toISOString())}</strong>.
+                  Les prix et disponibilités peuvent avoir changé.
+                </div>
+                <div style={{ background: "white", border: "1px solid #FECACA", borderRadius: 16, padding: "16px 20px", fontSize: 14, color: "#991B1B", lineHeight: 1.8 }}>
+                  Pour réactiver cette offre ou obtenir une mise à jour des prix,<br />
+                  veuillez contacter Jardin-Confort :
+                  <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 12 }}>
+                    <a href="tel:+41217913671"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 8, background: C.blueBtn, color: "white", padding: "10px 20px", borderRadius: 20, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+                      📞 +41 21 791 36 71
+                    </a>
+                    <a href={`mailto:info@jardin-confort.ch?subject=Réactivation offre ${offre.numero_affiche}&body=Bonjour, je souhaite réactiver l'offre ${offre.numero_affiche}.`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "white", color: C.blueBtn, border: `1px solid ${C.blueBtn}`, padding: "10px 20px", borderRadius: 20, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+                      ✉️ Envoyer un email
+                    </a>
+                  </div>
+                </div>
+              </Card>
+            )}
+            {isEnCours && !isExpire && (
               <Card id="bloc-signature" style={{ padding: 28 }}>
                 <div style={{ fontSize: 20, fontWeight: 600, color: C.blue, marginBottom: 20 }}>
                   Valider et signer votre offre
@@ -700,7 +746,7 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
                   {submitting ? "Validation en cours…" : "Valider mon offre"}
                 </button>
               </Card>
-            )}
+            )}{/* fin !isExpire */}
 
           </div>{/* fin colonne droite */}
         </div>{/* fin two-col */}

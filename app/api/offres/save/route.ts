@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
       payment_mode: data.paymentMode || null,
       delivery_mode: (data as Record<string, unknown>).deliveryMode as string || null,
       lead_time: data.leadTime || null,
+      validite_duree: data.validiteDuree || "30 jours",
       client_societe: data.societe || null,
       client_nom: data.nom || null,
       client_prenom: data.prenom || null,
