@@ -152,6 +152,7 @@ export async function POST(
     }
 
     // 5. Envoyer webhook Make
+    const offreData = offre.data as Record<string, unknown>
     const webhookPayload = {
       source: "jardin_confort_formulaire",
       event: "offre_validee",
@@ -180,18 +181,37 @@ export async function POST(
       mode_paiement: offre.payment_mode || "",
       montant_total: offre.total_ttc,
       montant_total_affiche: "CHF " + new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2 }).format(offre.total_ttc),
+      montant_acompte: offre.payment_mode?.includes("50%")
+        ? "CHF " + new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2 }).format(Math.round(offre.total_ttc * 0.5 * 100) / 100)
+        : "CHF " + new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2 }).format(offre.total_ttc),
+      is_acompte: offre.payment_mode?.includes("50%") || false,
+      remarques: offre.remarques || "",
+      lead_time: offre.lead_time || (offreData.leadTime as string) || "",
+      reference: offre.reference || (offreData.reference as string) || "",
 
       // Signature
       signataire,
       date_signature,
-      signature_base64: signature_base64 ? "data:image/png;base64,[inclus]" : "",
-      // Note: on n'envoie pas le base64 complet au webhook pour la taille
 
       // URLs
       url_offre: `${BASE_URL}/offre/${slug}`,
-      url_commande: `${BASE_URL}/offre/${cmdSlug}/confirmation`,
+      url_commande: `${BASE_URL}/offre/${cmdSlug}`,
+      url_confirmation: `${BASE_URL}/offre/${cmdSlug}/confirmation`,
       url_print_offre: `${BASE_URL}/print/offre/${slug}`,
       url_print_commande: `${BASE_URL}/print/offre/${cmdSlug}`,
+      url_pdf_commande: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/commandes/${cmdSlug}.pdf`,
+
+      // Infos bancaires pour email client
+      iban: "CH72 0076 7000 K033 3796 5",
+      banque: "BCV – Banque Cantonale Vaudoise",
+      beneficiaire: "Jardin-Confort SA",
+
+      // Pour l'email équipe
+      nb_articles: offre.nb_articles,
+      sous_total: offre.sous_total,
+      remise_chf: offre.remise_chf,
+      tva_montant: offre.tva_montant,
+      total_ttc: offre.total_ttc,
     };
 
     try {
