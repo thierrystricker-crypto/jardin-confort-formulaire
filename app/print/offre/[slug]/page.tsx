@@ -427,7 +427,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
               Vous pouvez valider et signer cette offre directement en ligne depuis votre smartphone ou ordinateur, sans impression nécessaire.
             </div>
             
-              href={validationUrl}
+            <a href={validationUrl}
               target="_blank"
               rel="noopener noreferrer"
               style={{
