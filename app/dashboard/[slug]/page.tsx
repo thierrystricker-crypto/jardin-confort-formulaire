@@ -543,7 +543,19 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             </section>
 
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-              <h2 className="mb-2 text-xl font-semibold">Brouillon mail de relance</h2>
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-xl font-semibold">Brouillon mail de relance</h2>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(mailBody)
+                    setSaveStatus("📋 Brouillon copié !")
+                    setSaveKind("success")
+                    setTimeout(() => setSaveStatus(""), 2000)
+                  }}
+                  className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 hover:bg-[#40454b]">
+                  📋 Copier
+                </button>
+              </div>
               <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300 whitespace-pre-wrap">{mailBody}</div>
             </section>
           </div>
