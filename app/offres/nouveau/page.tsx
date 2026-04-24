@@ -1012,8 +1012,8 @@ export default function JardinConfortV7() {
             <div className="jc-field">
               <label>Validité de l&apos;offre</label>
               <div style={{display:"flex", gap:6}}>
-                <select value={["10 jours","30 jours","60 jours"].includes(validiteDuree) ? validiteDuree : "custom"}
-                  onChange={(e) => { if (e.target.value !== "custom") setValiditeDuree(e.target.value) }}
+                <<select value={["10 jours","30 jours","60 jours"].includes(validiteDuree) ? validiteDuree : "custom"}
+                  onChange={(e) => { if (e.target.value !== "custom") setValiditeDuree(e.target.value); else setValiditeDuree("") }}
                   style={{flex:"0 0 auto", width:130}}>
                   <option value="10 jours">10 jours</option>
                   <option value="30 jours">30 jours</option>
