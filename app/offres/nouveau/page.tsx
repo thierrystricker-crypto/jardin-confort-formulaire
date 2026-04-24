@@ -1301,6 +1301,16 @@ export default function JardinConfortV7() {
                   highlightAdded(id);
                 }}
               >💬 Ligne commentaire</button>
+              <button
+                className="jc-btn jc-btn-ghost screenOnly"
+                style={{fontSize:12, padding:"5px 12px"}}
+                onClick={() => {
+                  captureUndo();
+                  const id = `custom-${Date.now()}`;
+                  setLines((c) => [...c, { id, type: "custom", sku: "", title: "", unitPrice: 0, qty: 1, stock: null }]);
+                  highlightAdded(id);
+                }}
+              >✏️ Article à la volée</button>
               <span className="jc-badge screenOnly">{lines.filter(l => l.type !== "comment").length} article{lines.filter(l => l.type !== "comment").length !== 1 ? "s" : ""}</span>
             </div>
           </div>
