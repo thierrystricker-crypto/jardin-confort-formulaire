@@ -434,6 +434,93 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
           </tbody>
         </table>
 
+        {/* LIEN VALIDATION EN LIGNE */}
+        <div style={{
+          margin: "0 0 6mm 0",
+          background: "linear-gradient(135deg, #EEF6FF 0%, #E8F4FF 100%)",
+          border: "1.5px solid #2b8ad1",
+          borderRadius: 12,
+          padding: "14px 20px",
+          display: "flex",
+          alignItems: "center",
+          gap: 20,
+        }}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13, fontWeight:700, color:"#0a1551", marginBottom:4}}>
+              ✍️ Signature électronique disponible
+            </div>
+            <div style={{fontSize:11, color:"#5e678f", lineHeight:1.6, marginBottom:10}}>
+              Vous pouvez valider et signer cette offre directement en ligne depuis votre smartphone ou ordinateur, sans impression nécessaire.
+            </div>
+            <div style={{
+              display:"inline-block",
+              background:"#2b8ad1",
+              color:"white",
+              borderRadius:20,
+              padding:"8px 18px",
+              fontSize:12,
+              fontWeight:700,
+              letterSpacing:"0.02em",
+            }}>
+              👉 {typeof window !== "undefined" ? window.location.origin : "https://offres.jardin-confort.ch"}/offre/{numeroAffiche.toLowerCase().replace(/\s+/g,"-")}
+            </div>
+          </div>
+          {/* QR code via API publique */}
+          <div style={{flexShrink:0, textAlign:"center"}}>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(`https://offres.jardin-confort.ch/offre/${numeroAffiche.toLowerCase().replace(/\s+/g,"-")}`)}`}
+              alt="QR Code validation"
+              style={{width:110, height:110, borderRadius:8, border:"1px solid #c7dff5"}}
+            />
+            <div style={{fontSize:9, color:"#5e678f", marginTop:4}}>Scanner pour valider</div>
+          </div>
+        </div>
+
+{/* LIEN VALIDATION EN LIGNE */}
+        <div style={{
+          margin: "0 0 6mm 0",
+          background: "linear-gradient(135deg, #EEF6FF 0%, #E8F4FF 100%)",
+          border: "1.5px solid #2b8ad1",
+          borderRadius: 12,
+          padding: "14px 20px",
+          display: "flex",
+          alignItems: "center",
+          gap: 20,
+        }}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13, fontWeight:700, color:"#0a1551", marginBottom:4}}>
+              ✍️ Signature électronique disponible
+            </div>
+            <div style={{fontSize:11, color:"#5e678f", lineHeight:1.6, marginBottom:10}}>
+              Vous pouvez valider et signer cette offre directement en ligne depuis votre smartphone ou ordinateur, sans impression nécessaire.
+            </div>
+            <div style={{
+              display:"inline-block",
+              background:"#2b8ad1",
+              color:"white",
+              borderRadius:20,
+              padding:"8px 18px",
+              fontSize:12,
+              fontWeight:700,
+              letterSpacing:"0.02em",
+            }}>
+              👉 {typeof window !== "undefined" ? window.location.origin : "https://offres.jardin-confort.ch"}/offre/{numeroAffiche.toLowerCase().replace(/\s+/g,"-")}
+            </div>
+          </div>
+          {/* QR code via API publique */}
+          <div style={{flexShrink:0, textAlign:"center"}}>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(`https://offres.jardin-confort.ch/offre/${numeroAffiche.toLowerCase().replace(/\s+/g,"-")}`)}`}
+              alt="QR Code validation"
+              style={{width:110, height:110, borderRadius:8, border:"1px solid #c7dff5"}}
+            />
+            <div style={{fontSize:9, color:"#5e678f", marginTop:4}}>Scanner pour valider</div>
+          </div>
+        </div>
+
+        {/* NOTES + TOTAUX + SIGNATURE CLIENT */}
+        <div className="doc-bottom-wrap"></div>
+
         {/* NOTES + TOTAUX + SIGNATURE CLIENT */}
         <div className="doc-bottom-wrap">
 
