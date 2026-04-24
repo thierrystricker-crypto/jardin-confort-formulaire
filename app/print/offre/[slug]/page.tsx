@@ -212,10 +212,16 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         .doc-notes-text { font-size: 12px; color: ${GREY}; line-height: 1.55; white-space: pre-wrap; margin-bottom: 12px; }
 
         /* Signature client seulement */
-        .doc-sign-block { margin-top: auto; }
-        .doc-sign-name { font-weight: 600; color: ${BLACK}; font-size: 12px; margin-bottom: 28px; }
-        .doc-sign-line { border-bottom: 1px solid #aaa; margin-bottom: 4px; }
-        .doc-sign-sub { font-size: 10px; color: #aaa; }
+        .doc-sign-block {
+          margin-top: auto;
+          background: #f0faf2;
+          border: 1.5px solid #a7d9b0;
+          border-radius: 10px;
+          padding: 14px 18px 12px;
+        }
+        .doc-sign-name { font-weight: 700; color: ${BLACK}; font-size: 12px; margin-bottom: 24px; }
+        .doc-sign-line { border-bottom: 1.5px solid #5a9e6a; margin-bottom: 5px; }
+        .doc-sign-sub { font-size: 10px; color: #5a9e6a; font-style: italic; }
 
         /* Pricing table */
         .doc-pricing { width: 100%; border-collapse: collapse; }
