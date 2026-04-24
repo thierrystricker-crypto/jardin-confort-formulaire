@@ -78,6 +78,7 @@ type OffreRow = {
     discount?: string; discountPercent?: string; manualRounding?: string;
     enabledServices?: Record<string, boolean>;
     servicePrices?: Record<string, string>;
+    validiteDuree?: string;
   };
 };
 
