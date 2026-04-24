@@ -452,17 +452,23 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
             <div style={{fontSize:11, color:"#5e678f", lineHeight:1.6, marginBottom:10}}>
               Vous pouvez valider et signer cette offre directement en ligne depuis votre smartphone ou ordinateur, sans impression nécessaire.
             </div>
-            <div style={{
-              display:"inline-block",
-              background:"#2b8ad1",
-              color:"white",
-              borderRadius:20,
-              padding:"8px 18px",
-              fontSize:12,
-              fontWeight:700,
-              letterSpacing:"0.02em",
-            }}>
-              👉 {typeof window !== "undefined" ? window.location.origin : "https://offres.jardin-confort.ch"}/offre/{numeroAffiche.toLowerCase().replace(/\s+/g,"-")}
+            href={`https://offres.jardin-confort.ch/offre/${numeroAffiche.toLowerCase().replace(/\s+/g,"-")}`}
+              target="_blank" rel="noopener noreferrer"
+              style={{
+                display:"inline-block",
+                background:"#2b8ad1",
+                color:"white",
+                borderRadius:20,
+                padding:"8px 18px",
+                fontSize:12,
+                fontWeight:700,
+                letterSpacing:"0.02em",
+                textDecoration:"none",
+              }}>
+              ✅ Valider mon offre en ligne →
+            </a>
+            <div style={{marginTop:6, fontSize:10, color:"#5e678f", wordBreak:"break-all"}}>
+              https://offres.jardin-confort.ch/offre/{numeroAffiche.toLowerCase().replace(/\s+/g,"-")}
             </div>
           </div>
           {/* QR code via API publique */}
