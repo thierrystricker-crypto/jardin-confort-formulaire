@@ -1021,17 +1021,25 @@ export default function JardinConfortV7() {
                   <option value="custom">Personnalisé…</option>
                 </select>
                 {!["10 jours","30 jours","60 jours"].includes(validiteDuree) && (
-                  <input
-                    type="number" min="1" max="365"
-                    value={validiteDuree.replace(/[^\d]/g, "")}
-                    onChange={(e) => {
-                      const n = parseInt(e.target.value)
-                      if (!isNaN(n) && n > 0) setValiditeDuree(`${n} jours`)
-                      else if (e.target.value === "") setValiditeDuree("")
-                    }}
-                    placeholder="45"
-                    style={{flex:1, width:80}}
-                  />
+                  <div style={{display:"flex", alignItems:"center", gap:6, flex:1,
+                    background:"var(--card-2)", border:"1px solid var(--border-2)",
+                    borderRadius:"var(--radius)", padding:"9px 12px"}}>
+                    <input
+                      type="number" min="1" max="365"
+                      value={validiteDuree.replace(/[^\d]/g, "")}
+                      onChange={(e) => {
+                        const n = parseInt(e.target.value)
+                        if (!isNaN(n) && n > 0) setValiditeDuree(`${n} jours`)
+                        else if (e.target.value === "") setValiditeDuree("")
+                      }}
+                      placeholder="45"
+                      style={{width:50, background:"transparent", border:"none",
+                        outline:"none", color:"var(--text)", fontSize:14,
+                        MozAppearance:"textfield"}}
+                      className="no-spin"
+                    />
+                    <span style={{color:"var(--text-muted)", fontSize:14}}>jours</span>
+                  </div>
                 )}
               </div>
             </div>
