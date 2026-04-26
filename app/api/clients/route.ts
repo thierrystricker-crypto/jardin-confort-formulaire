@@ -33,7 +33,10 @@ export async function GET(request: NextRequest) {
         for (const c of (d2 || [])) {
           if (!merged.find((m: {id: number}) => m.id === c.id)) merged.push(c)
         }
-        return NextResponse.json({ clients: merged.slice(0, limit) })
+        const { count } = await supabaseAdmin
+          .from("clients")
+          .select("*", { count: "exact", head: true })
+        return NextResponse.json({ clients: merged.slice(0, limit), total: count || 0 })
       }
 
       query = query.or(
@@ -43,7 +46,13 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ clients: data || [] })
+
+    // Compter le total en base (sans filtre de limite)
+    const { count } = await supabaseAdmin
+      .from("clients")
+      .select("*", { count: "exact", head: true })
+
+    return NextResponse.json({ clients: data || [], total: count || 0 })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

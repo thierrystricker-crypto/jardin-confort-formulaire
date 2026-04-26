@@ -52,6 +52,7 @@ function sourceLabel(s: string | null) {
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
+  const [totalClients, setTotalClients] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [showImport, setShowImport] = useState(false)
@@ -142,9 +143,10 @@ export default function ClientsPage() {
   const fetchClients = useCallback(async (q: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/clients?q=${encodeURIComponent(q)}&limit=100`)
+      const res = await fetch(`/api/clients?q=${encodeURIComponent(q)}&limit=2000`)
       const json = await res.json()
       setClients(json.clients || [])
+      if (json.total !== undefined) setTotalClients(json.total)
     } catch { /* ignore */ }
     finally { setLoading(false) }
   }, [])
@@ -203,7 +205,10 @@ export default function ClientsPage() {
             <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">← Dashboard</Link>
             <div>
               <h1 className="text-2xl font-semibold">Fichier clients</h1>
-              <p className="text-sm text-zinc-400">{clients.length} client{clients.length !== 1 ? "s" : ""}</p>
+              <p className="text-sm text-zinc-400">
+                {clients.length} client{clients.length !== 1 ? "s" : ""}
+                {totalClients !== null && totalClients > clients.length && ` / ${totalClients.toLocaleString("fr-CH")}`}
+              </p>
             </div>
           </div>
           <div className="flex gap-3">
