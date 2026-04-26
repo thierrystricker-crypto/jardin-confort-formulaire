@@ -148,8 +148,12 @@ function parseWinBizCSV(text: string): ClientRow[] {
       // Normaliser casse : DUPONT → Dupont, mais pas toucher si déjà mixte
       const normaliseCasse = (s: string) => {
         if (!s) return ""
-        if (s === s.toUpperCase() && s.length > 1)
-          return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        // Si tous les caractères alphabétiques sont en majuscules → normaliser
+        const alpha = s.replace(/[^a-zA-ZÀ-ÿ]/g, "")
+        if (alpha.length > 1 && alpha === alpha.toUpperCase()) {
+          // Capitaliser chaque mot
+          return s.toLowerCase().replace(/(?:^|\s|-)(\S)/g, c => c.toUpperCase())
+        }
         return s
       }
 
@@ -157,6 +161,7 @@ function parseWinBizCSV(text: string): ClientRow[] {
         // Particulier avec nom de contact
         nom     = normaliseCasse(adNom)
         prenom  = normaliseCasse(adPrenom)
+        // Société uniquement si adSociete présent (pas la civilité)
         societe = [adTitre, adSociete, complementSociete].filter(Boolean).join(" ")
       } else {
         // Société sans contact nominatif
@@ -185,7 +190,7 @@ function parseWinBizCSV(text: string): ClientRow[] {
     return {
       nom:     nom || societe || prenom,
       prenom:  nom && prenom ? prenom : undefined,
-      societe: societe && societe !== nom ? societe : undefined,
+      societe: societe && societe !== nom && !CIVILITES.includes(societe.toLowerCase()) ? societe : undefined,
       email:   get("email") || get("e-mail") || get("ad_email") || undefined,
       tel1:    formatSwissPhone(get("téléphone") || get("telephone") || get("tel") || get("phone") || get("ad_tel")),
       tel2:    formatSwissPhone(get("mobile") || get("natel") || get("ad_mobile")),

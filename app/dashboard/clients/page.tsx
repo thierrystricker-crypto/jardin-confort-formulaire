@@ -543,7 +543,6 @@ export default function ClientsPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="font-medium text-zinc-100">{nomClient(c)}</div>
-                          {c.prenom && c.nom && <div className="text-xs text-zinc-500">{c.prenom} {c.nom}</div>}
                         </td>
                         <td className="px-4 py-3 text-zinc-400">{c.societe || "—"}</td>
                         <td className="px-4 py-3">
