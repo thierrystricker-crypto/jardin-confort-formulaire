@@ -28,6 +28,12 @@ type ClientRow = {
   source: string
 }
 
+const CIVILITES = [
+  "m.", "m", "mme", "mme.", "monsieur", "madame", "dr.", "dr",
+  "prof.", "prof", "me", "me.", "monsieur et madame",
+  "m. et mme", "m et mme", "m. & mme", "m & mme"
+]
+
 // Formater numéro de téléphone au format suisse +41 XX XXX XX XX
 function formatSwissPhone(raw: string | undefined): string | undefined {
   if (!raw) return undefined
@@ -38,14 +44,13 @@ function formatSwissPhone(raw: string | undefined): string | undefined {
   else if (n.startsWith("00")) n = n.slice(2)
   if (n.startsWith("0")) n = "41" + n.slice(1)
   if (!n.startsWith("41") && n.length <= 9) n = "41" + n
-  // Format +41 XX XXX XX XX
   if (n.startsWith("41") && n.length >= 10) {
     const local = n.slice(2)
     if (local.length === 9) {
       return `+41 ${local.slice(0,2)} ${local.slice(2,5)} ${local.slice(5,7)} ${local.slice(7,9)}`
     }
   }
-  return raw // retourner l'original si on ne peut pas formater
+  return raw
 }
 
 function parseCols(line: string, sep: string = ","): string[] {
@@ -77,11 +82,9 @@ function parseShopifyCSV(text: string): ClientRow[] {
     if (!lastName && !firstName && !email) return null
     if (firstName === "Guest" && lastName === "Customer") return null
 
-    // Adresse facturation
     const rue  = g("default address address1") || g("billing address1")
     const rue2 = g("default address address2") || g("billing address2")
 
-    // Adresse livraison (différente si renseignée)
     const livrRue   = g("shipping address address1") || g("shipping address1")
     const livrRue2  = g("shipping address address2") || g("shipping address2")
     const livrNpa   = g("shipping address zip")  || g("shipping zip")
@@ -117,15 +120,12 @@ function parseShopifyCSV(text: string): ClientRow[] {
   }).filter(Boolean) as ClientRow[]
 }
 
-const CIVILITES = ["m.", "m", "mme", "mme.", "monsieur", "madame", "dr.", "dr", "prof.", "prof", "me", "me."]
-
 function parseWinBizCSV(text: string): ClientRow[] {
   const sep = text.includes(";") ? ";" : ","
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean)
   if (lines.length < 2) return []
   const headers = parseCols(lines[0], sep).map(h => h.toLowerCase().trim())
 
-  // Détecter si c'est le format ad_xxx de WinBiz
   const isAdFormat = headers.some(h => h.startsWith("ad_"))
 
   return lines.slice(1).map(line => {
@@ -135,42 +135,42 @@ function parseWinBizCSV(text: string): ClientRow[] {
     let nom: string, prenom: string, societe: string, rue: string, rue2: string, npa: string, ville: string
 
     if (isAdFormat) {
-      const adTitre  = get("ad_titre").trim()
+      const adTitre   = get("ad_titre").trim()
       const adSociete = get("ad_societe").trim()
-      const adTitre2 = get("ad_titre2").trim()
-      const adNom    = get("ad_nom").trim()
-      const adPrenom = get("ad_prenom").trim()
+      const adTitre2  = get("ad_titre2").trim()
+      const adNom     = get("ad_nom").trim()
+      const adPrenom  = get("ad_prenom").trim()
 
-      // ad_titre est une civilité (M., Mme) ou un complément de société
-      const isCivilite = CIVILITES.includes(adTitre.toLowerCase())
+      // ad_titre2 peut être civilité OU complément société
+      const isCivilite2 = CIVILITES.includes(adTitre2.toLowerCase())
+      const complementSociete = !isCivilite2 && adTitre2 ? adTitre2 : ""
 
-      if (adNom) {
-        // Particulier
-        nom     = adNom
-        prenom  = adPrenom
-        // Société éventuelle
-        societe = isCivilite
-          ? adSociete || ""
-          : [adTitre, adSociete].filter(Boolean).join(" ")
-      } else {
-        // Société sans nom de personne
-        nom     = isCivilite
-          ? adSociete || adTitre2 || adPrenom || ""
-          : [adTitre, adSociete].filter(Boolean).join(" ") || adTitre2 || adPrenom || ""
-        prenom  = ""
-        societe = isCivilite
-          ? adSociete || ""
-          : [adTitre, adSociete].filter(Boolean).join(" ")
+      // Normaliser casse : DUPONT → Dupont, mais pas toucher si déjà mixte
+      const normaliseCasse = (s: string) => {
+        if (!s) return ""
+        if (s === s.toUpperCase() && s.length > 1)
+          return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        return s
       }
 
-      // ad_titre2 → complément société ou rue2
-      rue  = get("ad_rue_1")
-      rue2 = get("ad_rue_2") || adTitre2
-      npa  = get("ad_npa")
+      if (adNom) {
+        // Particulier avec nom de contact
+        nom     = normaliseCasse(adNom)
+        prenom  = normaliseCasse(adPrenom)
+        societe = [adTitre, adSociete, complementSociete].filter(Boolean).join(" ")
+      } else {
+        // Société sans contact nominatif
+        nom     = [adTitre, adSociete, complementSociete].filter(Boolean).join(" ") || normaliseCasse(adPrenom) || ""
+        prenom  = ""
+        societe = [adTitre, adSociete, complementSociete].filter(Boolean).join(" ")
+      }
+
+      rue   = get("ad_rue_1")
+      rue2  = get("ad_rue_2")
+      npa   = get("ad_npa")
       ville = get("ad_ville")
 
     } else {
-      // Ancien format WinBiz avec colonnes françaises
       nom     = get("nom") || get("name") || get("lastname") || get("raison sociale")
       prenom  = get("prénom") || get("prenom") || get("firstname")
       societe = get("société") || get("societe") || get("company") || get("raison sociale")
@@ -216,34 +216,37 @@ export async function POST(request: NextRequest) {
 
     if (!rows.length) return NextResponse.json({ error: "Aucune ligne valide trouvée" }, { status: 400 })
 
+    const BATCH_SIZE = 50
     let inserted = 0, skipped = 0, errors = 0
 
-    for (const row of rows) {
-      try {
-        // 1. Déduplication par email
-        if (row.email) {
-          const { data: existing } = await supabaseAdmin
-            .from("clients").select("id").eq("email", row.email).maybeSingle()
-          if (existing) { skipped++; continue }
-        } else {
-          // 2. Déduplication par nom + prénom + ville
-          const nom   = (row.nom   || "").trim()
-          const prenom = (row.prenom || "").trim()
-          const ville  = (row.ville  || "").trim()
-          if (nom && ville) {
-            let query = supabaseAdmin
-              .from("clients").select("id")
-              .ilike("nom", nom)
-            if (prenom) query = query.ilike("prenom", prenom)
-            query = query.ilike("ville", ville)
-            const { data: existing } = await query.maybeSingle()
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, i + BATCH_SIZE)
+
+      for (const row of batch) {
+        try {
+          if (row.email) {
+            const { data: existing } = await supabaseAdmin
+              .from("clients").select("id").eq("email", row.email).maybeSingle()
             if (existing) { skipped++; continue }
+          } else {
+            const nomR   = (row.nom   || "").trim()
+            const prenomR = (row.prenom || "").trim()
+            const villeR  = (row.ville  || "").trim()
+            if (nomR && villeR) {
+              let query = supabaseAdmin
+                .from("clients").select("id")
+                .ilike("nom", nomR)
+              if (prenomR) query = query.ilike("prenom", prenomR)
+              query = query.ilike("ville", villeR)
+              const { data: existing } = await query.maybeSingle()
+              if (existing) { skipped++; continue }
+            }
           }
-        }
-        const { error: e } = await supabaseAdmin.from("clients").insert(row)
-        if (e) errors++
-        else inserted++
-      } catch { errors++ }
+          const { error: e } = await supabaseAdmin.from("clients").insert(row)
+          if (e) errors++
+          else inserted++
+        } catch { errors++ }
+      }
     }
 
     return NextResponse.json({ success: true, inserted, skipped, errors, total: rows.length })
