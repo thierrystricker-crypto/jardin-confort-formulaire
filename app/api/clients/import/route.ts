@@ -30,8 +30,11 @@ type ClientRow = {
 
 const CIVILITES = [
   "m.", "m", "mme", "mme.", "monsieur", "madame", "dr.", "dr",
-  "prof.", "prof", "me", "me.", "monsieur et madame",
-  "m. et mme", "m et mme", "m. & mme", "m & mme"
+  "prof.", "prof", "me", "me.",
+  "monsieur et madame", "madame et monsieur",
+  "m. et mme", "m et mme", "m. & mme", "m & mme",
+  "mme et m.", "mme. et m", "mme et monsieur",
+  "monsieur et mme", "m. et madame",
 ]
 
 // Formater numéro de téléphone au format suisse +41 XX XXX XX XX
@@ -161,8 +164,8 @@ function parseWinBizCSV(text: string): ClientRow[] {
         // Particulier avec nom de contact
         nom     = normaliseCasse(adNom)
         prenom  = normaliseCasse(adPrenom)
-        // Société uniquement si adSociete présent (pas la civilité)
-        societe = [adTitre, adSociete, complementSociete].filter(Boolean).join(" ")
+        // Société uniquement si adSociete présent
+        societe = adSociete ? [adTitre, adSociete, complementSociete].filter(Boolean).join(" ") : ""
       } else {
         // Société sans contact nominatif
         nom     = [adTitre, adSociete, complementSociete].filter(Boolean).join(" ") || normaliseCasse(adPrenom) || ""
@@ -190,7 +193,7 @@ function parseWinBizCSV(text: string): ClientRow[] {
     return {
       nom:     nom || societe || prenom,
       prenom:  nom && prenom ? prenom : undefined,
-      societe: societe && societe !== nom && !CIVILITES.includes(societe.toLowerCase()) ? societe : undefined,
+      societe: societe && societe !== nom && !CIVILITES.includes(societe.toLowerCase().trim()) ? societe || undefined : undefined,
       email:   get("email") || get("e-mail") || get("ad_email") || undefined,
       tel1:    formatSwissPhone(get("téléphone") || get("telephone") || get("tel") || get("phone") || get("ad_tel")),
       tel2:    formatSwissPhone(get("mobile") || get("natel") || get("ad_mobile")),
