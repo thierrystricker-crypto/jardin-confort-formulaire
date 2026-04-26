@@ -117,34 +117,83 @@ function parseShopifyCSV(text: string): ClientRow[] {
   }).filter(Boolean) as ClientRow[]
 }
 
+const CIVILITES = ["m.", "m", "mme", "mme.", "monsieur", "madame", "dr.", "dr", "prof.", "prof", "me", "me."]
+
 function parseWinBizCSV(text: string): ClientRow[] {
   const sep = text.includes(";") ? ";" : ","
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean)
   if (lines.length < 2) return []
-  const headers = parseCols(lines[0], sep).map(h => h.toLowerCase())
+  const headers = parseCols(lines[0], sep).map(h => h.toLowerCase().trim())
+
+  // Détecter si c'est le format ad_xxx de WinBiz
+  const isAdFormat = headers.some(h => h.startsWith("ad_"))
 
   return lines.slice(1).map(line => {
     const cols = parseCols(line, sep)
     const get = (key: string) => (cols[headers.indexOf(key)] || "").trim()
 
-    const nom     = get("nom") || get("name") || get("lastname") || get("raison sociale")
-    const prenom  = get("prénom") || get("prenom") || get("firstname") || get("first name")
-    const societe = get("société") || get("societe") || get("company") || get("raison sociale")
+    let nom: string, prenom: string, societe: string, rue: string, rue2: string, npa: string, ville: string
+
+    if (isAdFormat) {
+      const adTitre  = get("ad_titre").trim()
+      const adSociete = get("ad_societe").trim()
+      const adTitre2 = get("ad_titre2").trim()
+      const adNom    = get("ad_nom").trim()
+      const adPrenom = get("ad_prenom").trim()
+
+      // ad_titre est une civilité (M., Mme) ou un complément de société
+      const isCivilite = CIVILITES.includes(adTitre.toLowerCase())
+
+      if (adNom) {
+        // Particulier
+        nom     = adNom
+        prenom  = adPrenom
+        // Société éventuelle
+        societe = isCivilite
+          ? adSociete || ""
+          : [adTitre, adSociete].filter(Boolean).join(" ")
+      } else {
+        // Société sans nom de personne
+        nom     = isCivilite
+          ? adSociete || adTitre2 || adPrenom || ""
+          : [adTitre, adSociete].filter(Boolean).join(" ") || adTitre2 || adPrenom || ""
+        prenom  = ""
+        societe = isCivilite
+          ? adSociete || ""
+          : [adTitre, adSociete].filter(Boolean).join(" ")
+      }
+
+      // ad_titre2 → complément société ou rue2
+      rue  = get("ad_rue_1")
+      rue2 = get("ad_rue_2") || adTitre2
+      npa  = get("ad_npa")
+      ville = get("ad_ville")
+
+    } else {
+      // Ancien format WinBiz avec colonnes françaises
+      nom     = get("nom") || get("name") || get("lastname") || get("raison sociale")
+      prenom  = get("prénom") || get("prenom") || get("firstname")
+      societe = get("société") || get("societe") || get("company") || get("raison sociale")
+      rue     = get("rue") || get("adresse") || get("address")
+      rue2    = get("complément") || get("complement") || get("adresse2")
+      npa     = get("npa") || get("cp") || get("zip")
+      ville   = get("ville") || get("localité") || get("city")
+    }
 
     if (!nom && !prenom && !societe) return null
 
     return {
       nom:     nom || societe || prenom,
-      prenom:  nom ? prenom || undefined : undefined,
-      societe: societe !== nom ? societe || undefined : undefined,
-      email:   get("email") || get("e-mail") || undefined,
-      tel1:    formatSwissPhone(get("téléphone") || get("telephone") || get("tel") || get("phone")),
-      tel2:    formatSwissPhone(get("mobile") || get("natel")),
-      rue:     get("rue") || get("adresse") || get("address") || undefined,
-      rue2:    get("complément") || get("complement") || get("adresse2") || undefined,
-      npa:     get("npa") || get("cp") || get("zip") || undefined,
-      ville:   get("ville") || get("localité") || get("city") || undefined,
-      pays:    get("pays") || get("country") || "CH",
+      prenom:  nom && prenom ? prenom : undefined,
+      societe: societe && societe !== nom ? societe : undefined,
+      email:   get("email") || get("e-mail") || get("ad_email") || undefined,
+      tel1:    formatSwissPhone(get("téléphone") || get("telephone") || get("tel") || get("phone") || get("ad_tel")),
+      tel2:    formatSwissPhone(get("mobile") || get("natel") || get("ad_mobile")),
+      rue:     rue || undefined,
+      rue2:    rue2 || undefined,
+      npa:     npa || undefined,
+      ville:   ville || undefined,
+      pays:    get("pays") || get("country") || get("ad_pays") || "CH",
       source:  "winbiz",
     }
   }).filter(Boolean) as ClientRow[]
