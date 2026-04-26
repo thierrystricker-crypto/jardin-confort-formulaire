@@ -232,27 +232,54 @@ export async function POST(request: NextRequest) {
 
       for (const row of batch) {
         try {
+          // Chercher doublon par email ou par nom+prénom+ville
+          let existingId: number | null = null
+
           if (row.email) {
             const { data: existing } = await supabaseAdmin
-              .from("clients").select("id").eq("email", row.email).maybeSingle()
-            if (existing) { skipped++; continue }
-          } else {
-            const nomR   = (row.nom   || "").trim()
+              .from("clients").select("id, email, tel1").eq("email", row.email).maybeSingle()
+            if (existing) existingId = existing.id
+          }
+
+          if (!existingId) {
+            const nomR    = (row.nom    || "").trim()
             const prenomR = (row.prenom || "").trim()
             const villeR  = (row.ville  || "").trim()
             if (nomR && villeR) {
               let query = supabaseAdmin
-                .from("clients").select("id")
+                .from("clients").select("id, email, tel1")
                 .ilike("nom", nomR)
               if (prenomR) query = query.ilike("prenom", prenomR)
               query = query.ilike("ville", villeR)
               const { data: existing } = await query.maybeSingle()
-              if (existing) { skipped++; continue }
+              if (existing) existingId = existing.id
             }
           }
-          const { error: e } = await supabaseAdmin.from("clients").insert(row)
-          if (e) errors++
-          else inserted++
+
+          if (existingId) {
+            // Client existant — enrichir avec les nouvelles infos si manquantes
+            const { data: existingData } = await supabaseAdmin
+              .from("clients").select("email, tel1, tel2, rue, npa")
+              .eq("id", existingId).single()
+            
+            const updates: Record<string, unknown> = {}
+            if (!existingData?.email && row.email) updates.email = row.email
+            if (!existingData?.tel1  && row.tel1)  updates.tel1  = row.tel1
+            if (!existingData?.tel2  && row.tel2)  updates.tel2  = row.tel2
+            if (!existingData?.rue   && row.rue)   updates.rue   = row.rue
+            if (!existingData?.npa   && row.npa)   updates.npa   = row.npa
+
+            if (Object.keys(updates).length > 0) {
+              await supabaseAdmin.from("clients").update(updates).eq("id", existingId)
+              inserted++ // compté comme enrichissement
+            } else {
+              skipped++
+            }
+          } else {
+            const { error: e } = await supabaseAdmin.from("clients").insert(row)
+            if (e) errors++
+            else inserted++
+          }
         } catch { errors++ }
       }
     }
