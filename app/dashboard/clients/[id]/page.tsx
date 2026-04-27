@@ -47,6 +47,16 @@ type Offre = {
   payment_mode: string | null
 }
 
+type Facture = {
+  id: number
+  numero_facture: string
+  date_facture: string | null
+  montant: number | null
+  pdf_url: string | null
+  match_confiance: string | null
+  created_at: string
+}
+
 function fmtDate(iso: string | null) {
   if (!iso) return "—"
   return new Date(iso).toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" })
@@ -65,13 +75,14 @@ function getStatusColor(statut: string, type: string) {
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [client, setClient] = useState<Client | null>(null)
   const [offres, setOffres] = useState<Offre[]>([])
-  const [loading, setLoading] = useState(true)
+  cconst [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState("")
   const [saveKind, setSaveKind] = useState<"success" | "error">("success")
   const [form, setForm] = useState<Partial<Client>>({})
   const [emailCopied, setEmailCopied] = useState(false)
+const [factures, setFactures] = useState<Facture[]>([])
 
   useEffect(() => {
     async function load() {
@@ -83,6 +94,16 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         setClient(json.client)
         setForm(json.client)
         setOffres(json.offres || [])
+
+        // Charger les factures WinBiz
+        try {
+          const fRes = await fetch(`/api/clients/${id}/factures`)
+          if (fRes.ok) {
+            const fJson = await fRes.json()
+            setFactures(fJson.factures || [])
+          }
+        } catch { /* ignore */ }
+
       } catch { /* ignore */ }
       finally { setLoading(false) }
     }
@@ -399,7 +420,51 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               </div>
             )}
           </section>
-        </div>
+        </div>{/* fin grid */}
+
+        {/* FACTURES WINBIZ */}
+          <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Factures WinBiz</h2>
+              <span className="text-sm text-zinc-400">{factures.length} facture{factures.length !== 1 ? "s" : ""}</span>
+            </div>
+            {factures.length === 0 ? (
+              <div className="rounded-xl border border-white/10 bg-black/10 p-6 text-center text-zinc-500">
+                Aucune facture WinBiz importée pour ce client.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse text-sm">
+                  <thead className="bg-black/10 text-left text-zinc-400">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">N° Facture</th>
+                      <th className="px-4 py-3 font-medium">Date</th>
+                      <th className="px-4 py-3 font-medium text-right">Montant</th>
+                      <th className="px-4 py-3 font-medium text-right">PDF</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {factures.sort((a, b) => (b.numero_facture > a.numero_facture ? 1 : -1)).map((f, idx) => (
+                      <tr key={f.id}
+                        className={`border-t border-white/5 text-zinc-200 ${idx % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.04]"}`}>
+                        <td className="px-4 py-3 font-mono text-xs font-semibold text-[#2B8AD1]">#{f.numero_facture}</td>
+                        <td className="px-4 py-3 text-zinc-400">{fmtDate(f.date_facture)}</td>
+                        <td className="px-4 py-3 text-right font-medium text-zinc-100">{fmtMoney(f.montant)}</td>
+                        <td className="px-4 py-3 text-right">
+                          {f.pdf_url ? (
+                            <a href={f.pdf_url} target="_blank" rel="noopener noreferrer"
+                              className="rounded-lg border border-sky-500/30 bg-sky-500/15 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/20">
+                              📄 Ouvrir
+                            </a>
+                          ) : <span className="text-zinc-600">—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
 
       </div>
     </main>
