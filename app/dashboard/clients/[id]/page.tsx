@@ -75,7 +75,7 @@ function getStatusColor(statut: string, type: string) {
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [client, setClient] = useState<Client | null>(null)
   const [offres, setOffres] = useState<Offre[]>([])
-  cconst [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState("")
