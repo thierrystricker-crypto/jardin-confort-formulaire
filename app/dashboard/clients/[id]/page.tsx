@@ -142,6 +142,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     if (!client || !newFacture.numero_facture.trim()) { setAddFactureError("Numéro requis"); return }
     setAddingFacture(true); setAddFactureError("")
     try {
+      let pdfUrl: string | null = null
+      if (factureFile) {
+        const formData = new FormData()
+        formData.append("file", factureFile)
+        formData.append("numero_facture", newFacture.numero_facture.trim())
+        const upRes = await fetch(`/api/clients/${client.id}/factures/upload`, {
+          method: "POST",
+          body: formData,
+        })
+        const upJson = await upRes.json()
+        if (!upRes.ok) throw new Error(upJson.error || "Erreur upload PDF")
+        pdfUrl = upJson.pdf_url
+      }
       const res = await fetch(`/api/clients/${client.id}/factures`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -149,12 +162,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           numero_facture: newFacture.numero_facture.trim(),
           date_facture: newFacture.date_facture || null,
           montant: newFacture.montant ? parseFloat(newFacture.montant) : null,
+          pdf_url: pdfUrl,
         })
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Erreur")
       setFactures(prev => [json.facture, ...prev])
       setNewFacture({ numero_facture: "", date_facture: "", montant: "" })
+      setFactureFile(null)
       setShowAddFacture(false)
     } catch (e) { setAddFactureError((e as Error).message) }
     finally { setAddingFacture(false) }
@@ -491,65 +506,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                 </div>
               </div>
-              {/* Zone upload PDF */}
-              <div
-                onDragOver={e => { e.preventDefault(); setFactureDragOver(true) }}
-                onDragLeave={() => setFactureDragOver(false)}
-                onDrop={e => {
-                  e.preventDefault(); setFactureDragOver(false)
-                  const f = e.dataTransfer.files?.[0]
-                  if (f && f.type === "application/pdf") setFactureFile(f)
-                  else setAddFactureError("Fichier PDF uniquement")
-                }}
-                className={`rounded-xl border-2 border-dashed p-4 text-center text-sm transition cursor-pointer ${factureDragOver ? "border-sky-400 bg-sky-500/10" : "border-white/10 bg-[#2a2d31]"}`}>
-                <input type="file" accept=".pdf" className="hidden" id="facture-pdf-input"
-                  onChange={e => {
-                    const f = e.target.files?.[0]
-                    if (f) setFactureFile(f)
-                    e.target.value = ""
-                  }}
-                />
-                <label htmlFor="facture-pdf-input" className="cursor-pointer">
-                  {factureFile ? (
-                    <div className="flex items-center justify-center gap-2 text-emerald-300">
-                      <span>📄 {factureFile.name}</span>
-                      <button type="button" onClick={e => { e.preventDefault(); setFactureFile(null) }}
-                        className="text-zinc-500 hover:text-rose-300">✕</button>
-                    </div>
-                  ) : (
-                    <span className="text-zinc-500">📎 Glissez un PDF ici ou <span className="text-sky-400 underline">cliquez pour sélectionner</span></span>
-                  )}
-                </label>
-              </div>
-             {/* Zone upload PDF */}
-              <div
-                onDragOver={e => { e.preventDefault(); setFactureDragOver(true) }}
-                onDragLeave={() => setFactureDragOver(false)}
-                onDrop={e => {
-                  e.preventDefault(); setFactureDragOver(false)
-                  const f = e.dataTransfer.files?.[0]
-                  if (f && f.type === "application/pdf") setFactureFile(f)
-                  else setAddFactureError("Fichier PDF uniquement")
-                }}
-                className={`rounded-xl border-2 border-dashed p-4 text-center text-sm transition cursor-pointer ${factureDragOver ? "border-sky-400 bg-sky-500/10" : "border-white/10 bg-[#2a2d31]"}`}>
-                <input type="file" accept=".pdf" className="hidden" id="facture-pdf-input"
-                  onChange={e => {
-                    const f = e.target.files?.[0]
-                    if (f) setFactureFile(f)
-                    e.target.value = ""
-                  }}
-                />
-                <label htmlFor="facture-pdf-input" className="cursor-pointer">
-                  {factureFile ? (
-                    <div className="flex items-center justify-center gap-2 text-emerald-300">
-                      <span>📄 {factureFile.name}</span>
-                      <button type="button" onClick={e => { e.preventDefault(); setFactureFile(null) }}
-                        className="text-zinc-500 hover:text-rose-300">✕</button>
-                    </div>
-                  ) : (
-                    <span className="text-zinc-500">📎 Glissez un PDF ici ou <span className="text-sky-400 underline">cliquez pour sélectionner</span></span>
-                  )}
-                </label>
+              
               </div>
               {addFactureError && <div className="text-xs text-rose-300">{addFactureError}</div>}
               <div className="flex gap-2">
