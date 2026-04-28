@@ -165,11 +165,6 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         .doc-footer-url { font-weight: 700; color: ${THEME}; }
         .doc-footer-social { margin-top: 5px; text-align: center; display: block; width: 100%; }
         .doc-footer-social img { width: 18px; height: 18px; margin: 0 4px; vertical-align: middle; display: inline-block; }
-        .doc-page2 { page-break-before: always; break-before: page; padding-top: 4mm; }
-        .doc-page2-header { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 5mm; border-bottom: 2px solid ${THEME}; padding-bottom: 4mm; }
-        .doc-page2-titles { flex: 1; }
-        .doc-page2-type { font-size: 18px; font-weight: 700; color: ${THEME}; }
-        .doc-page2-sub { font-size: 11px; color: #aaa; font-style: italic; margin-top: 2px; }
         .doc-ambiance-grid { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8mm; }
         .doc-ambiance-item { flex: 0 0 calc(50% - 7px); page-break-inside: avoid; break-inside: avoid; text-align: center; }
         .doc-ambiance-item img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; }
@@ -485,16 +480,27 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
           </div>
         </div>
 
-        {/* PAGE 2 — IMAGES D'AMBIANCE */}
+ {/* IMAGES D'AMBIANCE — à la suite sans saut de page */}
         {data.ambianceImages.length > 0 && (
-          <div className="doc-page2">
-            <div className="doc-page2-header">
-              <img className="doc-logo" style={{maxWidth:130, maxHeight:50}}
+          <div style={{marginTop: "8mm"}}>
+            <div style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 16,
+              marginBottom: "5mm",
+              borderBottom: `2px solid ${THEME}`,
+              paddingBottom: "4mm",
+            }}>
+              <img style={{maxWidth:130, maxHeight:50, objectFit:"contain"}}
                 src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
                 alt="Jardin-Confort" />
-              <div className="doc-page2-titles">
-                <div className="doc-page2-type">Images d&apos;illustration — {numeroAffiche || data.offerNumber}</div>
-                <div className="doc-page2-sub">Images non contractuelles · {data.nom} {data.prenom} · {formatDate(data.date)}</div>
+              <div>
+                <div style={{fontSize:18, fontWeight:700, color:THEME}}>
+                  Images d&apos;illustration — {numeroAffiche || data.offerNumber}
+                </div>
+                <div style={{fontSize:11, color:"#aaa", fontStyle:"italic", marginTop:2}}>
+                  Images non contractuelles · {data.nom} {data.prenom} · {formatDate(data.date)}
+                </div>
               </div>
             </div>
             <div className="doc-ambiance-grid">
@@ -504,10 +510,6 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                   {img.legende && <div className="doc-ambiance-caption">{img.legende}</div>}
                 </div>
               ))}
-            </div>
-            <div className="doc-footer">
-              <div><strong>Jardin-Confort SA</strong> · Route de Lavaux 425 · 1095 Lutry · contact@jardinconfort.ch · +41 21 791 36 71</div>
-              <div className="doc-footer-url">www.jardin-confort.ch</div>
             </div>
           </div>
         )}
