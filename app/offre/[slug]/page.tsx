@@ -117,6 +117,7 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [signatureVisible, setSignatureVisible] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const hasSignature = useRef(false);
@@ -156,6 +157,17 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
     ctx.strokeStyle = C.blueBtn;
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, rect.width, rect.height);
+  }, [offre]);
+
+useEffect(() => {
+    const el = document.getElementById("bloc-signature");
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setSignatureVisible(entry.isIntersecting),
+      { threshold: 0.2 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [offre]);
 
   function getPos(e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) {
@@ -378,7 +390,7 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
 
         {/* Titre */}
         <h1 style={{ fontSize: 36, fontWeight: 500, color: C.text, letterSpacing: "-0.02em", marginBottom: 28 }}>
-          Validation de votre offre
+          Confirmez ici votre offre en 1 clic !
         </h1>
 
         {/* ── LAYOUT 2 COLONNES ── */}
@@ -414,11 +426,13 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
             {/* Boutons actions */}
             {isEnCours && (
               <Card style={{ padding: 20 }}>
-                <button
-                  onClick={() => document.getElementById("bloc-signature")?.scrollIntoView({ behavior: "smooth", block: "center" })}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", minHeight: 48, borderRadius: 24, background: C.blueBtn, color: "white", border: "none", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: FONT, marginBottom: 10 }}>
-                  ✅ Accepter &amp; signer
-                </button>
+                {!signatureVisible && (
+                  <button
+                    onClick={() => document.getElementById("bloc-signature")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", minHeight: 48, borderRadius: 24, background: C.blueBtn, color: "white", border: "none", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: FONT, marginBottom: 10 }}>
+                    ✅ Accepter &amp; signer
+                  </button>
+                )}
                 <a href={`/print/offre/${slug}`} target="_blank" rel="noopener noreferrer"
                   style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", minHeight: 44, borderRadius: 24, background: "white", color: C.text, border: `1px solid ${C.border}`, fontSize: 14, fontWeight: 600 }}>
                   <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -702,7 +716,10 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
                 <label style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 24, fontSize: 15, cursor: "pointer", lineHeight: 1.5 }}>
                   <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)}
                     style={{ marginTop: 3, transform: "scale(1.3)", accentColor: C.blueBtn, flexShrink: 0 }} />
-                  Je confirme avoir lu le document et j&apos;accepte l&apos;offre telle que présentée.
+                  Je confirme avoir lu le document ainsi que les{" "}
+                  <a href="https://www.jardin-confort.ch/pages/conditions-generales" target="_blank" rel="noopener noreferrer"
+                    style={{ color: C.blueBtn, textDecoration: "underline" }}>conditions générales</a>
+                  {" "}et j&apos;accepte l&apos;offre telle que présentée.
                 </label>
 
                 {/* Canvas signature */}
