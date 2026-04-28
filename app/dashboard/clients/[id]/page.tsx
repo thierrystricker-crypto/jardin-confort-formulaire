@@ -150,7 +150,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           method: "POST",
           body: formData,
         })
-        const upJson = await upRes.json()
+        const upText = await upRes.text()
+        console.log("Upload response:", upRes.status, upText)
+        const upJson = upText ? JSON.parse(upText) : {}
         if (!upRes.ok) throw new Error(upJson.error || "Erreur upload PDF")
         pdfUrl = upJson.pdf_url
       }
