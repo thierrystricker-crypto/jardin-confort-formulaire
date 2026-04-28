@@ -19,7 +19,7 @@ type OffreRecord = {
   remarques: string|null; notes_internes: string|null; note_commerciale: string|null
   date_abandon: string|null; date_derniere_relance: string|null; nb_relances: number|null
   probabilite: string|null
-  data: Record<string,unknown>; created_at: string; updated_at: string|null
+  created_at: string; updated_at: string|null
 }
 
 function fmtDate(iso: string|null) {
