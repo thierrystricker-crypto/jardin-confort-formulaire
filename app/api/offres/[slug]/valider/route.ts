@@ -227,11 +227,12 @@ export async function POST(
       console.error("Webhook error:", webhookErr);
     }
 
-    // Générer les PDFs en arrière-plan (offre originale + nouvelle commande)
+    // Générer les PDFs et QR en arrière-plan
     Promise.all([
       fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" }),
       fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST" }),
-    ]).catch(err => console.error("PDF generation error:", err));
+      fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST" }),
+    ]).catch(err => console.error("PDF/QR generation error:", err));
 
     return NextResponse.json({
       success: true,
