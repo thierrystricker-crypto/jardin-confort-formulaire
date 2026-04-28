@@ -536,7 +536,11 @@ export default function JardinConfortV7() {
     setIsSaving(true); setSaveError("");
     try {
       const snap = { ...makeSnapshot(), ambianceImages };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
+      // Sauvegarder sans les images d'ambiance pour éviter le quota localStorage
+      try {
+        const snapSansImages = { ...snap, ambianceImages: [] };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(snapSansImages));
+      } catch { /* quota dépassé, on ignore */ }
       setDraftSavedAt(new Date().toLocaleString("fr-CH"));
 
       // Créer le client en base s'il n'est pas déjà sélectionné
