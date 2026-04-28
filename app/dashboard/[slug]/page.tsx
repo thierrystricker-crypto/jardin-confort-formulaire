@@ -85,6 +85,9 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [relanceStatus,setRelanceStatus]=useState("")
   const [emailCopied,setEmailCopied]=useState(false)
   const [clientId,setClientId]=useState<number|null>(null)
+  const [probabilite,setProbabilite]=useState<string>("neutre")
+  const [probSaving,setProbSaving]=useState(false)
+  const [converting,setConverting]=useState(false)
 
   async function pollPdf(slugToCheck: string) {
     for (let i = 0; i < 15; i++) {
@@ -94,17 +97,13 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         if (res.ok) {
           const json = await res.json()
           const url = (json.offre as Record<string,unknown>)?.pdf_url as string|null
-          if (url) {
-            setPdfUrl(url)
-            setPdfGenerating(false)
-            return
-          }
+          if (url) { setPdfUrl(url); setPdfGenerating(false); return }
         }
       } catch { /* ignore */ }
     }
-    setPdfGenerating(false) // timeout après 45s
+    setPdfGenerating(false)
   }
-  
+
   useEffect(()=>{
     async function load() {
       const {slug:s}=await params
@@ -121,14 +120,15 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         if (existingPdfUrl) {
           setPdfUrl(existingPdfUrl)
         } else {
-          // PDF pas encore prêt — polling automatique
           setPdfGenerating(true)
           pollPdf(s)
         }
         if ((o as unknown as Record<string,unknown>).qr_url) {
           setQrUrl((o as unknown as Record<string,unknown>).qr_url as string)
         }
-        // Chercher le client en base par email ou téléphone
+        if ((o as unknown as Record<string,unknown>).probabilite) {
+          setProbabilite((o as unknown as Record<string,unknown>).probabilite as string)
+        }
         if (o.client_email || o.client_tel1) {
           try {
             const q = o.client_email || o.client_tel1 || ""
@@ -171,6 +171,19 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
       if(res.ok && json.qr_url) setQrUrl(json.qr_url)
     } catch { /* ignore */ }
     finally { setQrGenerating(false) }
+  }
+
+  async function saveProbabilite(val: string) {
+    setProbSaving(true)
+    try {
+      await fetch(`/api/offres/${slug}/probabilite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ probabilite: val })
+      })
+      setProbabilite(val)
+    } catch { /* ignore */ }
+    finally { setProbSaving(false) }
   }
 
   async function enregistrerRelance() {
@@ -256,8 +269,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
       alert("Erreur réseau: " + (e as Error).message)
     }
   }
-
-  const [converting, setConverting] = useState(false)
 
   async function convertirEnCommande() {
     if (!offre || !confirm("Confirmer la conversion de cette offre en commande ?")) return
@@ -444,6 +455,12 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   {days!==null&&(
                     <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getDaysBadgeColor(days)}`}>{days} jour{days>1?"s":""} ouvert</span>
                   )}
+                  {/* Badge probabilité dans le header */}
+                  {probabilite!=="neutre"&&(
+                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${probabilite==="forte"?"bg-emerald-500/15 text-emerald-300":probabilite==="moyenne"?"bg-amber-500/15 text-amber-300":"bg-rose-500/15 text-rose-300"}`}>
+                      {probabilite==="forte"?"🟢 Forte":probabilite==="moyenne"?"🟡 Moyenne":"🔴 Faible"}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -489,7 +506,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                       <span>{v||"—"}</span>
                     </div>
                   ))}
-                  {/* Email avec bouton copier */}
                   <div className="flex gap-2 items-center">
                     <span className="w-24 shrink-0 text-zinc-400">Email :</span>
                     <span className="flex-1">{offre.client_email||"—"}</span>
@@ -525,6 +541,24 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                 </div>
               </section>
             </div>
+
+            {/* PROBABILITÉ DE CLOSING */}
+            <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+              <h2 className="mb-4 text-xl font-semibold">Probabilité de closing</h2>
+              <div className="flex gap-3">
+                {[
+                  { val: "forte",   label: "🟢 Forte",   bg: "bg-emerald-500/15 border-emerald-500/40 text-emerald-300" },
+                  { val: "moyenne", label: "🟡 Moyenne", bg: "bg-amber-500/15 border-amber-500/40 text-amber-300" },
+                  { val: "faible",  label: "🔴 Faible",  bg: "bg-rose-500/15 border-rose-500/40 text-rose-300" },
+                  { val: "neutre",  label: "⚪ Neutre",  bg: "bg-white/5 border-white/20 text-zinc-400" },
+                ].map(({ val, label, bg }) => (
+                  <button key={val} onClick={() => saveProbabilite(val)} disabled={probSaving}
+                    className={`flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition ${probabilite === val ? bg + " ring-2 ring-offset-1 ring-offset-[#2a2d31] ring-white/20 scale-105" : "border-white/10 bg-[#34383d] text-zinc-400 hover:bg-[#40454b]"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </section>
 
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
               <h2 className="mb-4 text-xl font-semibold">Montants</h2>
@@ -646,7 +680,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   📋 Copier
                 </button>
               </div>
-             <div className="rounded-xl border border-white/10 bg-white overflow-hidden" style={{minHeight:200}}>
+              <div className="rounded-xl border border-white/10 bg-white overflow-hidden" style={{minHeight:200}}>
                 <iframe srcDoc={mailBody} title="Aperçu email" className="w-full border-0" style={{height:520}}/>
               </div>
             </section>
@@ -655,7 +689,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
           {/* Droite — aperçus */}
           <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
 
-            {/* Aperçu PDF si disponible */}
             {pdfUrl && (
               <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
                 <div className="mb-4 flex items-center justify-between">
@@ -669,7 +702,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </section>
             )}
 
-            {/* Aperçu page client */}
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-semibold">Aperçu page client</h2>

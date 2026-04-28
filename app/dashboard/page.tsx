@@ -18,6 +18,7 @@ type OffreRecord = {
   tva_montant: number; total_ttc: number; nb_articles: number
   remarques: string|null; notes_internes: string|null; note_commerciale: string|null
   date_abandon: string|null; date_derniere_relance: string|null; nb_relances: number|null
+  probabilite: string|null
   data: Record<string,unknown>; created_at: string; updated_at: string|null
 }
 
@@ -68,7 +69,7 @@ function computeStats(offres: OffreRecord[]) {
 }
 const COMMERCIAUX = ["Brice Chappé","Alejandro Gallegos","Fabian Coquoz","Michel Gédéon","Sabrina Striberni","Team Jardin-Confort","Thierry Stricker"]
 
-type SortKey = "date"|"client"|"montant"|"statut"|"commercial"|"jours"|"numero"
+type SortKey = "date"|"client"|"montant"|"statut"|"commercial"|"jours"|"numero"|"probabilite"
 type SortDir = "asc"|"desc"
 type QuickFilter = "all"|"offres"|"commandes"|"abandonnes"|"relance"
 
@@ -105,6 +106,8 @@ function SortTh({label,k,cur,dir,onSort}:{label:string;k:SortKey;cur:SortKey;dir
     </th>
   )
 }
+
+const PROB_ORDER: Record<string,number> = { forte:0, moyenne:1, neutre:2, faible:3 }
 
 export default function DashboardPage() {
   const [offres,setOffres]=useState<OffreRecord[]>([])
@@ -151,6 +154,10 @@ export default function DashboardPage() {
       else if(sortKey==="statut"){av=a.statut;bv=b.statut}
       else if(sortKey==="commercial"){av=a.commercial||"";bv=b.commercial||""}
       else if(sortKey==="jours"){av=getDaysOpen(a)??-1;bv=getDaysOpen(b)??-1}
+      else if(sortKey==="probabilite"){
+        av=PROB_ORDER[a.probabilite||"neutre"]??2
+        bv=PROB_ORDER[b.probabilite||"neutre"]??2
+      }
       if(av<bv) return sortDir==="asc"?-1:1
       if(av>bv) return sortDir==="asc"?1:-1
       return 0
@@ -160,6 +167,7 @@ export default function DashboardPage() {
   const statsFiltered=useMemo(()=>computeStats(
     commercial==="all" ? offres : offres.filter(o=>o.commercial===commercial)
   ),[offres,commercial])
+
   const quickFilters:{label:string;value:QuickFilter}[] = [
     {label:"Toutes",value:"all"},{label:"Offres actives",value:"offres"},
     {label:"Commandes",value:"commandes"},{label:"Abandonnées",value:"abandonnes"},
@@ -241,6 +249,7 @@ export default function DashboardPage() {
                     <SortTh label="Conseiller" k="commercial" cur={sortKey} dir={sortDir} onSort={handleSort}/>
                     <SortTh label="Montant" k="montant" cur={sortKey} dir={sortDir} onSort={handleSort}/>
                     <SortTh label="Statut" k="statut" cur={sortKey} dir={sortDir} onSort={handleSort}/>
+                    <SortTh label="Prob." k="probabilite" cur={sortKey} dir={sortDir} onSort={handleSort}/>
                     <SortTh label="Jours" k="jours" cur={sortKey} dir={sortDir} onSort={handleSort}/>
                     <SortTh label="Date" k="date" cur={sortKey} dir={sortDir} onSort={handleSort}/>
                     <th className="px-4 py-3 text-right font-medium text-zinc-400">Actions</th>
@@ -248,7 +257,7 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {filtered.length===0?(
-                    <tr><td colSpan={9} className="px-4 py-10 text-center text-zinc-500">Aucun dossier trouvé.</td></tr>
+                    <tr><td colSpan={10} className="px-4 py-10 text-center text-zinc-500">Aucun dossier trouvé.</td></tr>
                   ):filtered.map((o,idx)=>{
                     const days=getDaysOpen(o)
                     const rowBg=idx%2===0?"bg-white/[0.02]":"bg-white/[0.05]"
@@ -275,6 +284,12 @@ export default function DashboardPage() {
                         <td className="px-4 py-4 font-medium text-zinc-100">{fmtMoney(o.total_ttc)}</td>
                         <td className="px-4 py-4">
                           <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(o.statut,o.type_document)}`}>{o.statut}</span>
+                        </td>
+                        <td className="px-4 py-4 text-center text-lg">
+                          {o.probabilite==="forte"  ? <span title="Forte">🟢</span>
+                          :o.probabilite==="moyenne" ? <span title="Moyenne">🟡</span>
+                          :o.probabilite==="faible"  ? <span title="Faible">🔴</span>
+                          :<span title="Neutre" className="text-zinc-600">⚪</span>}
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex flex-col gap-1">
