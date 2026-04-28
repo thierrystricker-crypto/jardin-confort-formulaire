@@ -2004,16 +2004,16 @@ export default function JardinConfortV7() {
           transition: background 0.25s, color 0.25s;
         }
 
-        /* ── MODE CLAIR — tons adoucis, pas de blanc pur ── */
+        /* ── MODE CLAIR — couleurs Jotform Jardin-Confort ── */
         .light-mode {
-          --bg:         #e8eaed;
-          --card:       #f2f3f5;
-          --card-2:     #e8eaed;
-          --border:     rgba(0,0,0,0.1);
-          --border-2:   rgba(0,0,0,0.16);
-          --text:       #1a1d23;
-          --text-muted: #52576b;
-          --text-dim:   #8a90a0;
+          --bg:         #ccdeff;
+          --card:       #e6e6e6;
+          --card-2:     #d8d8d8;
+          --border:     rgba(44,51,69,0.15);
+          --border-2:   rgba(44,51,69,0.22);
+          --text:       #2C3345;
+          --text-muted: #4a5268;
+          --text-dim:   #7a8099;
         }
         /* Forcer la couleur de TOUS les textes en mode clair */
         .light-mode,
@@ -2032,26 +2032,26 @@ export default function JardinConfortV7() {
         .light-mode .jc-brand,
         .light-mode .jc-product-title,
         .light-mode .td-money,
-        .light-mode .jc-price-tag { color: #111827; }
+        .light-mode .jc-price-tag { color: #2C3345; }
         .light-mode .jc-brand-sub,
         .light-mode .jc-product-sku,
         .light-mode .jc-product-variant,
         .light-mode .jc-tva-incl,
         .light-mode .jc-arrondi-hint,
         .light-mode .jc-drag-hint,
-        .light-mode .jc-section-title { color: #6b7280; }
+        .light-mode .jc-section-title { color: #4a5268; }
         .light-mode .jc-discount-amt { color: #16a34a; }
         .light-mode .jc-tva-add-amt  { color: #d97706; }
         .light-mode input, .light-mode select, .light-mode textarea {
-          background: #f9fafb !important;
-          color: #111827 !important;
-          border-color: rgba(0,0,0,0.15) !important;
+          background: #ffffff !important;
+          color: #2C3345 !important;
+          border-color: rgba(44,51,69,0.2) !important;
         }
         .light-mode input:focus, .light-mode select:focus, .light-mode textarea:focus {
           border-color: var(--accent) !important;
         }
-        .light-mode .jc-btn-ghost { background: #e5e7eb; color: #111827; border-color: rgba(0,0,0,0.12); }
-        .light-mode .jc-btn-ghost:hover { background: #d1d5db; }
+        .light-mode .jc-btn-ghost { background: #d0d0d0; color: #2C3345; border-color: rgba(44,51,69,0.2); }
+        .light-mode .jc-btn-ghost:hover { background: #c0c0c0; }
         .light-mode .tr-even td { background: rgba(0,0,0,0.02); }
         .light-mode .tr-odd  td { background: rgba(0,0,0,0.04); }
         .light-mode .jc-table td,
