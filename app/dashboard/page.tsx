@@ -218,11 +218,11 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <KpiCard title="Offres actives" value={statsFiltered.totalOffres} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caOffres)} potentiel`}
+          <KpiCard title="Offres actives" value={statsFiltered.totalOffres} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(statsFiltered.caOffres)} potentiel`}
             onClick={()=>setQuickFilter(quickFilter==="offres"?"all":"offres")} active={quickFilter==="offres"}/>
-          <KpiCard title="Commandes" value={statsFiltered.totalCommandes} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caCommandes)} confirmé`}
+          <KpiCard title="Commandes" value={statsFiltered.totalCommandes} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(statsFiltered.caCommandes)} confirmé`}
             onClick={()=>setQuickFilter(quickFilter==="commandes"?"all":"commandes")} active={quickFilter==="commandes"}/>
-          <KpiCard title="À relancer" value={statsFiltered.aRelancer} sub="Offres ouvertes ≥ 7 jours" extra={stats.aRelancer>0?"⚠ Action requise":"✓ À jour"}
+          <KpiCard title="À relancer" value={statsFiltered.aRelancer} sub="Offres ouvertes ≥ 7 jours" extra={statsFiltered.aRelancer>0?"⚠ Action requise":"✓ À jour"}
             onClick={()=>setQuickFilter(quickFilter==="relance"?"all":"relance")} active={quickFilter==="relance"}/>
           <KpiCard title="Abandonnées" value={statsFiltered.totalAbandonnes} sub={`${offres.length} dossiers total`}
             onClick={()=>setQuickFilter(quickFilter==="abandonnes"?"all":"abandonnes")} active={quickFilter==="abandonnes"}/>
