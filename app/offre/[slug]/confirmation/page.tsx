@@ -51,6 +51,8 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
   const [cmd, setCmd] = useState<CmdData | null>(null);
   const [loading, setLoading] = useState(true);
   const [slug, setSlug] = useState("");
+const [pdfUrl, setPdfUrl] = useState("");
+  const [qrUrl, setQrUrl] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -61,6 +63,8 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
         if (res.ok) {
           const json = await res.json();
           setCmd(json.offre as CmdData);
+          setPdfUrl(json.offre?.pdf_url || "");
+          setQrUrl(json.offre?.qr_url || "");
         }
       } catch { /* ignore */ }
       finally { setLoading(false); }
@@ -147,17 +151,40 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
             </div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
-            <a href={`/print/offre/${slug}`} target="_blank" rel="noopener noreferrer"
+            {pdfUrl ? (
+              <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
+                style={{
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+                  minHeight:52,padding:"0 20px",borderRadius:26,
+                  background:C.blueBtn,color:"white",fontWeight:600,fontSize:15,
+                }}>
+                <svg width="16" height="16" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Télécharger la confirmation PDF
+              </a>
+            ) : (
+              <a href={`/print/offre/${slug}`} target="_blank" rel="noopener noreferrer"
+                style={{
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+                  minHeight:52,padding:"0 20px",borderRadius:26,
+                  background:C.blueBtn,color:"white",fontWeight:600,fontSize:15,
+                }}>
+                <svg width="16" height="16" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                  <rect x="6" y="14" width="12" height="8"/>
+                </svg>
+                Voir la confirmation
+              </a>
+            )}
+            <a href={`/offre/${slug}`} target="_blank" rel="noopener noreferrer"
               style={{
                 display:"flex",alignItems:"center",justifyContent:"center",gap:8,
                 minHeight:52,padding:"0 20px",borderRadius:26,
-                background:C.blueBtn,color:"white",fontWeight:600,fontSize:15,
+                background:"white",color:C.blueBtn,fontWeight:600,fontSize:15,
+                border:`1px solid ${C.blueBtn}`,
               }}>
-              <svg width="16" height="16" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-                <rect x="6" y="14" width="12" height="8"/>
-              </svg>
-              Télécharger la confirmation
+              👁 Voir le détail de la commande
             </a>
             <a href="mailto:contact@jardinconfort.ch"
               style={{
@@ -200,7 +227,7 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
               {[
                 ["Nom du client", nomComplet],
                 ["Email", cmd.client_email || "–"],
-                ["Téléphone", cmd.client_tel1 || "–"],
+                ["Téléphone", cmd.client_tel1 ? cmd.client_tel1.replace(/^(\+41|0041|41)(\d{2})(\d{3})(\d{2})(\d{2})$/, "+41 $2 $3 $4 $5") : "–"],
                 ["Adresse", [cmd.client_rue, `${cmd.client_npa||""} ${cmd.client_ville||""}`].filter(Boolean).join(", ")],
               ].map(([k,v]) => (
                 <div key={k} style={{marginBottom:8,fontSize:15,lineHeight:1.55}}>
@@ -243,16 +270,16 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
             Le montant à inscrire est : <strong>{fmt(isAcompte ? Math.round(cmd.total_ttc * 0.5 * 100) / 100 : cmd.total_ttc)}</strong>
           </p>
           <div style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:20,marginBottom:20,textAlign:"center"}}>
-            <img src={QR_STATIC} alt="QR Paiement Jardin-Confort"
-              style={{maxWidth:500,width:"100%",height:"auto"}}
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-                (e.target as HTMLImageElement).nextElementSibling?.setAttribute("style", "display:block");
-              }}
-            />
-            <div style={{display:"none",padding:40,color:C.grey,fontSize:14}}>
-              QR code disponible prochainement
-            </div>
+            {qrUrl ? (
+              <a href={qrUrl} target="_blank" rel="noopener noreferrer" download>
+                <img src={qrUrl} alt="QR Paiement Jardin-Confort"
+                  style={{maxWidth:500,width:"100%",height:"auto",borderRadius:8}}/>
+              </a>
+            ) : (
+              <div style={{padding:40,color:C.grey,fontSize:14}}>
+                QR code en cours de génération — revenez dans quelques instants ou rechargez la page.
+              </div>
+            )}
           </div>
           {/* Coordonnées bancaires */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
