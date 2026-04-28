@@ -5,12 +5,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { computeTotals } from "@/lib/jc-print-types";
 
-function makeSlug(numero: string): string {
-  return numero.toLowerCase()
+function makeSlug(numero: string, withToken = false): string {
+  const base = numero.toLowerCase()
     .replace(/\s+/g, "-")
     .replace(/[^a-z0-9-]/g, "")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+  if (!withToken) return base;
+  const token = Math.random().toString(36).slice(2, 7); // ex: "x7k2m"
+  return `${base}-${token}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -49,14 +52,14 @@ export async function POST(request: NextRequest) {
         if (error) throw new Error("Erreur génération CMD: " + error.message);
         numeroCommande = cmdNum as string;
         numeroAffiche = numeroCommande;
-        slug = makeSlug(numeroCommande);
+        slug = makeSlug(numeroCommande, true);
       } else {
         const annee = new Date().getFullYear();
         const { data: devNum, error } = await supabaseAdmin.rpc("next_dev_numero", { annee });
         if (error) throw new Error("Erreur génération DEV: " + error.message);
         numeroOffre = devNum as string;
         numeroAffiche = numeroOffre;
-        slug = makeSlug(numeroOffre);
+        slug = makeSlug(numeroOffre, true);
       }
     }
 
