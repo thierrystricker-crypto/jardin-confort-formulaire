@@ -63,7 +63,7 @@ function fmtDate(iso: string | null) {
 }
 function fmtMoney(v: number | null | undefined) {
   if (!v) return "—"
-  return new Intl.NumberFormat("fr-CH", { style: "currency", currency: "CHF", maximumFractionDigits: 0 }).format(v)
+  return "CHF\u00a0" + new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
 }
 function getStatusColor(statut: string, type: string) {
   if (type === "Commande" || statut === "Acceptée" || statut === "Convertie") return "bg-emerald-500/15 text-emerald-300"
