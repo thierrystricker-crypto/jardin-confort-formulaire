@@ -334,11 +334,13 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                 <div className="doc-notes-text">{data.remarks}</div>
               </>
             )}
-            <div className="doc-sign-block">
-              <div className="doc-sign-name">Bon pour accord — {data.nom} {data.prenom}</div>
-              <div className="doc-sign-line" />
-              <div className="doc-sign-sub">Signature &amp; date</div>
-            </div>
+            {data.formType === "Offre" && (
+              <div className="doc-sign-block">
+                <div className="doc-sign-name">Bon pour accord — {data.nom} {data.prenom}</div>
+                <div className="doc-sign-line" />
+                <div className="doc-sign-sub">Signature &amp; date</div>
+              </div>
+            )}
           </div>
 
           <div className="doc-totals-col">
@@ -408,7 +410,8 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
           </div>
         </div>
 
-        {/* LIEN VALIDATION EN LIGNE — sous les totaux */}
+        {/* LIEN VALIDATION EN LIGNE — sous les totaux, offres uniquement */}
+        {data.formType === "Offre" && (
         <div style={{
           margin: "0 0 6mm 0",
           background: "linear-gradient(135deg, #EEF6FF 0%, #E8F4FF 100%)",
@@ -426,7 +429,6 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
             <div style={{fontSize:11, color:"#5e678f", lineHeight:1.6, marginBottom:10}}>
               Vous pouvez valider et signer cette offre directement en ligne depuis votre smartphone ou ordinateur, sans impression nécessaire.
             </div>
-            
             <a href={validationUrl}
               target="_blank"
               rel="noopener noreferrer"
@@ -456,6 +458,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
             <div style={{fontSize:9, color:"#5e678f", marginTop:4}}>Scanner pour valider</div>
           </div>
         </div>
+        )}
 
         {/* REMERCIEMENTS */}
         <p className="doc-thanks">
