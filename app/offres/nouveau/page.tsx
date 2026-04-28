@@ -581,6 +581,11 @@ export default function JardinConfortV7() {
 
       setPublicUrl(json.publicUrl);
       setShowUrlBanner(true);
+      // Ouvrir automatiquement la page dashboard de l'offre/commande
+      if (json.numeroAffiche) {
+        const dashSlug = json.numeroAffiche.toLowerCase().replace(/[^a-z0-9-]/g, "-")
+        window.open(`/dashboard/${dashSlug}`, "_blank")
+      }
     } catch (err) {
       setSaveError((err as Error).message);
     } finally {
@@ -777,15 +782,15 @@ export default function JardinConfortV7() {
       {showUrlBanner && publicUrl && (
         <div className="jc-url-banner screenOnly">
           <div className="jc-url-banner-content">
-            <span className="jc-url-banner-label">✅ Offre enregistrée · URL publique :</span>
-            <a className="jc-url-banner-link" href={publicUrl} target="_blank" rel="noopener noreferrer">
-              {publicUrl}
+            <span className="jc-url-banner-label">✅ {formType} enregistrée</span>
+            <a className="jc-url-banner-link" href={`/dashboard/${offerNumber.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`} target="_blank" rel="noopener noreferrer">
+              📊 Voir dans le dashboard →
             </a>
             <button
               className="jc-url-copy-btn"
               onClick={() => { navigator.clipboard.writeText(publicUrl); }}
-              title="Copier l'URL"
-            >📋 Copier</button>
+              title="Copier l'URL client"
+            >📋 Copier URL client</button>
             <button className="jc-url-close-btn" onClick={() => setShowUrlBanner(false)}>✕</button>
           </div>
           {saveError && <div className="jc-url-error">{saveError}</div>}
