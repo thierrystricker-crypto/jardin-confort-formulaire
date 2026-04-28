@@ -357,11 +357,11 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                     <td className="pt-value">{formatMoney(subTotal - discountValue)}</td>
                   </tr>
                 )}
-                {activeServices.length > 0 && (
+               {activeServices.length > 0 && (
                   <>
                     <tr>
                       <td className="pt-label">Services</td>
-                      <td className="pt-value">{serviceTotal > 0 ? formatMoney(serviceTotal) : "Offert"}</td>
+                      <td className="pt-value" style={{fontSize:11, fontStyle:"italic", color:"#888"}}>inclus</td>
                     </tr>
                     {activeServices.map((srv, i) => (
                       <tr key={i}>
