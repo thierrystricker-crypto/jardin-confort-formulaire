@@ -585,6 +585,8 @@ export default function JardinConfortV7() {
       if (json.numeroAffiche) {
         const dashSlug = json.numeroAffiche.toLowerCase().replace(/[^a-z0-9-]/g, "-")
         window.open(`/dashboard/${dashSlug}`, "_blank")
+        // Générer le PDF en arrière-plan
+        fetch(`/api/offres/${dashSlug}/pdf`, { method: "POST" }).catch(() => {})
       }
     } catch (err) {
       setSaveError((err as Error).message);
