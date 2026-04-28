@@ -47,6 +47,33 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+function QrPoller({ slug, onReady }: { slug: string; onReady: (url: string) => void }) {
+  const [attempts, setAttempts] = useState(0);
+
+  useEffect(() => {
+    if (!slug || attempts >= 10) return;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/offres/${slug}/qr`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.qr_url) { onReady(json.qr_url); return; }
+        }
+      } catch { /* ignore */ }
+      setAttempts(a => a + 1);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [slug, attempts, onReady]);
+
+  return (
+    <div style={{padding:40,color:C.grey,fontSize:14,lineHeight:1.8}}>
+      <div style={{fontSize:24,marginBottom:12}}>⏳</div>
+      QR code en cours de génération…<br/>
+      <span style={{fontSize:13}}>Cette page se met à jour automatiquement ({attempts}/10)</span>
+    </div>
+  );
+}
+
 export default function ConfirmationPage({ params }: { params: Promise<{ slug: string }> }) {
   const [cmd, setCmd] = useState<CmdData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,7 +179,7 @@ const [pdfUrl, setPdfUrl] = useState("");
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             {pdfUrl ? (
-              <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
+              <a href={pdfUrl} target="_blank" rel="noopener noreferrer"
                 style={{
                   display:"flex",alignItems:"center",justifyContent:"center",gap:8,
                   minHeight:52,padding:"0 20px",borderRadius:26,
@@ -161,7 +188,7 @@ const [pdfUrl, setPdfUrl] = useState("");
                 <svg width="16" height="16" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
-                Télécharger la confirmation PDF
+                📄 Télécharger la confirmation PDF
               </a>
             ) : (
               <a href={`/print/offre/${slug}`} target="_blank" rel="noopener noreferrer"
@@ -170,22 +197,32 @@ const [pdfUrl, setPdfUrl] = useState("");
                   minHeight:52,padding:"0 20px",borderRadius:26,
                   background:C.blueBtn,color:"white",fontWeight:600,fontSize:15,
                 }}>
-                <svg width="16" height="16" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24">
-                  <path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-                  <rect x="6" y="14" width="12" height="8"/>
-                </svg>
-                Voir la confirmation
+                🖨 Imprimer la confirmation
               </a>
             )}
-            <a href={`/offre/${slug}`} target="_blank" rel="noopener noreferrer"
-              style={{
-                display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+            {qrUrl ? (
+              <a href={qrUrl} target="_blank" rel="noopener noreferrer"
+                style={{
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+                  minHeight:52,padding:"0 20px",borderRadius:26,
+                  background:"white",color:C.blueBtn,fontWeight:600,fontSize:15,
+                  border:`1px solid ${C.blueBtn}`,
+                }}>
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                📥 Télécharger le QR paiement
+              </a>
+            ) : (
+              <div style={{
+                display:"flex",alignItems:"center",justifyContent:"center",
                 minHeight:52,padding:"0 20px",borderRadius:26,
-                background:"white",color:C.blueBtn,fontWeight:600,fontSize:15,
-                border:`1px solid ${C.blueBtn}`,
+                background:"white",color:C.grey,fontWeight:600,fontSize:14,
+                border:`1px solid ${C.border}`,
               }}>
-              👁 Voir le détail de la commande
-            </a>
+                ⏳ QR paiement en cours de génération…
+              </div>
+            )}
             <a href="mailto:contact@jardinconfort.ch"
               style={{
                 display:"flex",alignItems:"center",justifyContent:"center",
@@ -193,7 +230,7 @@ const [pdfUrl, setPdfUrl] = useState("");
                 background:"white",color:C.text,fontWeight:600,fontSize:15,
                 border:`1px solid ${C.border}`,
               }}>
-              Contacter Jardin-Confort
+              ✉️ Contacter Jardin-Confort
             </a>
           </div>
         </div>
@@ -271,14 +308,12 @@ const [pdfUrl, setPdfUrl] = useState("");
           </p>
           <div style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:20,marginBottom:20,textAlign:"center"}}>
             {qrUrl ? (
-              <a href={qrUrl} target="_blank" rel="noopener noreferrer" download>
+              <a href={qrUrl} target="_blank" rel="noopener noreferrer">
                 <img src={qrUrl} alt="QR Paiement Jardin-Confort"
                   style={{maxWidth:500,width:"100%",height:"auto",borderRadius:8}}/>
               </a>
             ) : (
-              <div style={{padding:40,color:C.grey,fontSize:14}}>
-                QR code en cours de génération — revenez dans quelques instants ou rechargez la page.
-              </div>
+              <QrPoller slug={slug} onReady={setQrUrl} />
             )}
           </div>
           {/* Coordonnées bancaires */}
