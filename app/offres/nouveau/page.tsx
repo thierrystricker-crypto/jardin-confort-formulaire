@@ -134,12 +134,25 @@ function normalizeSwissPhone(raw: string) {
 
 function sanitizeNpa(v: string) { return v.replace(/[^\d]/g, "").slice(0, 4); }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ""));
-    r.onerror = reject;
-    r.readAsDataURL(file);
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 800; // max 800px
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d")?.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", 0.7)); // qualité 70%
+    };
+    img.onerror = reject;
+    img.src = url;
   });
 }
 
@@ -536,11 +549,12 @@ export default function JardinConfortV7() {
     setIsSaving(true); setSaveError("");
     try {
       const snap = { ...makeSnapshot(), ambianceImages };
-      // Sauvegarder sans les images d'ambiance pour éviter le quota localStorage
       try {
-        const snapSansImages = { ...snap, ambianceImages: [] };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(snapSansImages));
-      } catch { /* quota dépassé, on ignore */ }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
+      } catch {
+        // Trop volumineux — sauvegarder sans images mais continuer l'envoi Supabase
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({...snap, ambianceImages: []})); } catch { /* ignore */ }
+      }
       setDraftSavedAt(new Date().toLocaleString("fr-CH"));
 
       // Créer le client en base s'il n'est pas déjà sélectionné
@@ -607,8 +621,12 @@ export default function JardinConfortV7() {
   }
 
   function saveDraftLocal() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(makeSnapshot()));
-    setDraftSavedAt(new Date().toLocaleString("fr-CH"));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(makeSnapshot()));
+      setDraftSavedAt(new Date().toLocaleString("fr-CH"));
+    } catch {
+      setSaveError("⚠️ Brouillon trop volumineux — réduisez le nombre d'images d'ambiance.");
+    }
   }
 
   function loadDraftLocal() {
