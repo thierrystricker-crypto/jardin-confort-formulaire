@@ -157,7 +157,9 @@ export default function DashboardPage() {
     })
   },[offres,quickFilter,commercial,search,sortKey,sortDir])
 
-  const stats=useMemo(()=>computeStats(offres),[offres])
+  const statsFiltered=useMemo(()=>computeStats(
+    commercial==="all" ? offres : offres.filter(o=>o.commercial===commercial)
+  ),[offres,commercial])
   const quickFilters:{label:string;value:QuickFilter}[] = [
     {label:"Toutes",value:"all"},{label:"Offres actives",value:"offres"},
     {label:"Commandes",value:"commandes"},{label:"Abandonnées",value:"abandonnes"},
@@ -216,13 +218,13 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <KpiCard title="Offres actives" value={stats.totalOffres} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caOffres)} potentiel`}
+          <KpiCard title="Offres actives" value={statsFiltered.totalOffres} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caOffres)} potentiel`}
             onClick={()=>setQuickFilter(quickFilter==="offres"?"all":"offres")} active={quickFilter==="offres"}/>
-          <KpiCard title="Commandes" value={stats.totalCommandes} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caCommandes)} confirmé`}
+          <KpiCard title="Commandes" value={statsFiltered.totalCommandes} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(stats.caCommandes)} confirmé`}
             onClick={()=>setQuickFilter(quickFilter==="commandes"?"all":"commandes")} active={quickFilter==="commandes"}/>
-          <KpiCard title="À relancer" value={stats.aRelancer} sub="Offres ouvertes ≥ 7 jours" extra={stats.aRelancer>0?"⚠ Action requise":"✓ À jour"}
+          <KpiCard title="À relancer" value={statsFiltered.aRelancer} sub="Offres ouvertes ≥ 7 jours" extra={stats.aRelancer>0?"⚠ Action requise":"✓ À jour"}
             onClick={()=>setQuickFilter(quickFilter==="relance"?"all":"relance")} active={quickFilter==="relance"}/>
-          <KpiCard title="Abandonnées" value={stats.totalAbandonnes} sub={`${offres.length} dossiers total`}
+          <KpiCard title="Abandonnées" value={statsFiltered.totalAbandonnes} sub={`${offres.length} dossiers total`}
             onClick={()=>setQuickFilter(quickFilter==="abandonnes"?"all":"abandonnes")} active={quickFilter==="abandonnes"}/>
         </div>
 
