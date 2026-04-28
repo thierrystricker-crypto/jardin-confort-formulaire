@@ -86,6 +86,25 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [emailCopied,setEmailCopied]=useState(false)
   const [clientId,setClientId]=useState<number|null>(null)
 
+  async function pollPdf(slugToCheck: string) {
+    for (let i = 0; i < 15; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+      try {
+        const res = await fetch(`/api/offres/${slugToCheck}`)
+        if (res.ok) {
+          const json = await res.json()
+          const url = (json.offre as Record<string,unknown>)?.pdf_url as string|null
+          if (url) {
+            setPdfUrl(url)
+            setPdfGenerating(false)
+            return
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    setPdfGenerating(false) // timeout après 45s
+  }
+  
   useEffect(()=>{
     async function load() {
       const {slug:s}=await params
@@ -98,8 +117,13 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         setOffre(o)
         setNoteCommerciale(o.note_commerciale||"")
         setNotesInternes(o.notes_internes||"")
-        if ((o as unknown as Record<string,unknown>).pdf_url) {
-          setPdfUrl((o as unknown as Record<string,unknown>).pdf_url as string)
+        const existingPdfUrl = (o as unknown as Record<string,unknown>).pdf_url as string|null
+        if (existingPdfUrl) {
+          setPdfUrl(existingPdfUrl)
+        } else {
+          // PDF pas encore prêt — polling automatique
+          setPdfGenerating(true)
+          pollPdf(s)
         }
         if ((o as unknown as Record<string,unknown>).qr_url) {
           setQrUrl((o as unknown as Record<string,unknown>).qr_url as string)
