@@ -39,9 +39,55 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ clients: merged.slice(0, limit), total: count || 0 })
       }
 
-      query = query.or(
-        `nom.ilike.%${q}%,prenom.ilike.%${q}%,societe.ilike.%${q}%,email.ilike.%${q}%,npa.ilike.%${q}%,ville.ilike.%${q}%,numero_client.ilike.%${q}%,tel1.ilike.%${q}%,tel2.ilike.%${q}%`
-      )
+      // Si la recherche contient un espace → chercher nom+prénom séparément aussi
+      const parts = q.split(/\s+/).filter(Boolean)
+      
+      let clients: any[] = []
+
+      if (parts.length >= 2) {
+        // Recherche multi-mots : chaque mot doit matcher nom OU prénom OU société
+        const { data: d1 } = await supabaseAdmin
+          .from("clients")
+          .select("*")
+          .ilike("nom", `%${parts[0]}%`)
+          .or(`prenom.ilike.%${parts[1]}%,nom.ilike.%${parts[1]}%`)
+          .order("updated_at", { ascending: false })
+          .limit(limit)
+
+        const { data: d2 } = await supabaseAdmin
+          .from("clients")
+          .select("*")
+          .ilike("prenom", `%${parts[0]}%`)
+          .or(`nom.ilike.%${parts[1]}%,prenom.ilike.%${parts[1]}%`)
+          .order("updated_at", { ascending: false })
+          .limit(limit)
+
+        const { data: d3 } = await supabaseAdmin
+          .from("clients")
+          .select("*")
+          .or(`nom.ilike.%${q}%,prenom.ilike.%${q}%,societe.ilike.%${q}%,email.ilike.%${q}%`)
+          .order("updated_at", { ascending: false })
+          .limit(limit)
+
+        const merged: any[] = []
+        for (const c of [...(d1 || []), ...(d2 || []), ...(d3 || [])]) {
+          if (!merged.find((m: {id: number}) => m.id === c.id)) merged.push(c)
+        }
+        clients = merged.slice(0, limit)
+      } else {
+        const { data } = await supabaseAdmin
+          .from("clients")
+          .select("*")
+          .or(`nom.ilike.%${q}%,prenom.ilike.%${q}%,societe.ilike.%${q}%,email.ilike.%${q}%,npa.ilike.%${q}%,ville.ilike.%${q}%,numero_client.ilike.%${q}%,tel1.ilike.%${q}%,tel2.ilike.%${q}%`)
+          .order("updated_at", { ascending: false })
+          .limit(limit)
+        clients = data || []
+      }
+
+      const { count } = await supabaseAdmin
+        .from("clients")
+        .select("*", { count: "exact", head: true })
+      return NextResponse.json({ clients, total: count || 0 })
     }
 
     const { data, error } = await query
