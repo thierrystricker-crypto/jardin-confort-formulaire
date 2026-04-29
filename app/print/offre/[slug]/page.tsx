@@ -34,6 +34,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
   const [data, setData] = useState<PrintData>(EMPTY);
   const [ready, setReady] = useState(false);
   const [numeroAffiche, setNumeroAffiche] = useState("");
+  const [offreSlug, setOffreSlug] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -45,6 +46,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
           const offreData = json.offre?.data;
           if (offreData) {
             setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber || slug);
+            setOffreSlug(slug);
             setData({
               ...EMPTY,
               ...offreData,
@@ -78,7 +80,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
       : []),
   ];
 
-  const validationUrl = `https://offres.jardin-confort.ch/offre/${numeroAffiche.toLowerCase().replace(/\s+/g, "-")}`;
+  const validationUrl = `https://offres.jardin-confort.ch/offre/${offreSlug || numeroAffiche.toLowerCase().replace(/\s+/g, "-")}`;
 
   return (
     <>
