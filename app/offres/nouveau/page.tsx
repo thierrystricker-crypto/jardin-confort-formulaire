@@ -252,7 +252,7 @@ export default function JardinConfortV7() {
   const [isSaving, setIsSaving]             = useState(false);
   const [saveError, setSaveError]           = useState("");
   const [showUrlBanner, setShowUrlBanner]   = useState(false);
-
+const [savedSlug, setSavedSlug]           = useState("");
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const remarksEditorRef = useRef<HTMLDivElement | null>(null);
   const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -600,8 +600,7 @@ export default function JardinConfortV7() {
       setPublicUrl(json.publicUrl);
       setShowUrlBanner(true);
 
-      const [showUrlBanner, setShowUrlBanner]   = useState(false);
-  const [savedSlug, setSavedSlug]           = useState("");
+      
 
       // Ouvrir automatiquement la page dashboard de l'offre/commande
       if (json.slug) {
