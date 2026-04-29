@@ -599,13 +599,15 @@ export default function JardinConfortV7() {
 
       setPublicUrl(json.publicUrl);
       setShowUrlBanner(true);
+
+      const [showUrlBanner, setShowUrlBanner]   = useState(false);
+  const [savedSlug, setSavedSlug]           = useState("");
+
       // Ouvrir automatiquement la page dashboard de l'offre/commande
       if (json.slug) {
+        setSavedSlug(json.slug)
         window.open(`/dashboard/${json.slug}`, "_blank")
         fetch(`/api/offres/${json.slug}/pdf`, { method: "POST" }).catch(() => {})
-      }
-        // Générer le PDF en arrière-plan
-        fetch(`/api/offres/${dashSlug}/pdf`, { method: "POST" }).catch(() => {})
       }
     } catch (err) {
       setSaveError((err as Error).message);
@@ -808,7 +810,7 @@ export default function JardinConfortV7() {
         <div className="jc-url-banner screenOnly">
           <div className="jc-url-banner-content">
             <span className="jc-url-banner-label">✅ {formType} enregistrée</span>
-            <a className="jc-url-banner-link" href={`/dashboard/${offerNumber.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`} target="_blank" rel="noopener noreferrer">
+           <a className="jc-url-banner-link" href={`/dashboard/${savedSlug}`} target="_blank" rel="noopener noreferrer">
               📊 Voir dans le dashboard →
             </a>
             <button
