@@ -600,9 +600,10 @@ export default function JardinConfortV7() {
       setPublicUrl(json.publicUrl);
       setShowUrlBanner(true);
       // Ouvrir automatiquement la page dashboard de l'offre/commande
-      if (json.numeroAffiche) {
-        const dashSlug = json.numeroAffiche.toLowerCase().replace(/[^a-z0-9-]/g, "-")
-        window.open(`/dashboard/${dashSlug}`, "_blank")
+      if (json.slug) {
+        window.open(`/dashboard/${json.slug}`, "_blank")
+        fetch(`/api/offres/${json.slug}/pdf`, { method: "POST" }).catch(() => {})
+      }
         // Générer le PDF en arrière-plan
         fetch(`/api/offres/${dashSlug}/pdf`, { method: "POST" }).catch(() => {})
       }
