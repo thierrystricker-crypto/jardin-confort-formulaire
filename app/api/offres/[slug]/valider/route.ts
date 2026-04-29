@@ -68,7 +68,8 @@ export async function POST(
     }
 
     const numeroCommande = cmdNum as string;
-    const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    const token = Math.random().toString(36).slice(2, 7);
+const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" + token;
 
     // 3. Compléter la mise à jour de l'offre avec numéro commande + signature
     // On ne modifie PAS numero_affiche — l'offre garde son numéro DEV-XXXX
