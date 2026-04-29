@@ -201,6 +201,7 @@ const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" +
       url_print_offre: `${BASE_URL}/print/offre/${slug}`,
       url_print_commande: `${BASE_URL}/print/offre/${cmdSlug}`,
       url_pdf_commande: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/commandes/${cmdSlug}.pdf`,
+      url_qr_paiement: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/qr/${cmdSlug}_qr.pdf`,
 
       // Infos bancaires pour email client
       iban: "CH72 0076 7000 K033 3796 5",
