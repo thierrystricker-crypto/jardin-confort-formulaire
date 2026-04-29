@@ -1990,7 +1990,7 @@ export default function JardinConfortV7() {
         html, body {
           background: var(--bg);
           color: var(--text);
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           font-size: 14px;
           line-height: 1.5;
           -webkit-font-smoothing: antialiased;
