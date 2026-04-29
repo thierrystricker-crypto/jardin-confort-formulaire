@@ -862,7 +862,7 @@ const [savedSlug, setSavedSlug]           = useState("");
                   value={offerNumber}
                   onChange={(e) => setOfferNumber(e.target.value)}
                   placeholder={formType === "Offre" ? "DEV-2026-001 (auto)" : "CMD-80500 (auto)"}
-                  readOnly={!!offerNumber && (offerNumber.startsWith("DEV-") || offerNumber.startsWith("CMD-"))}
+                  readOnly={true}
                   style={offerNumber && (offerNumber.startsWith("DEV-") || offerNumber.startsWith("CMD-"))
                     ? {opacity:1, fontWeight:700, color:"var(--accent)", cursor:"default"}
                     : {}}
