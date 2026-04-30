@@ -318,6 +318,20 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
           </div>
         </div>
 
+
+{/* Message */}
+        <div style={{ background: "#EEF7FF", border: "1px solid #B7D8F0", borderRadius: 22, padding: "22px 24px", marginBottom: 24, color: C.blue, lineHeight: 1.75, fontSize: 16 }}>
+          <p style={{ marginBottom: 14 }}>Merci beaucoup <strong>{nomComplet}</strong> pour la validation de votre commande.</p>
+          <p style={{ marginBottom: 14 }}>Notre équipe a été avertie de votre confirmation et va prendre contact avec vous au plus vite.</p>
+          <p style={{ marginBottom: 14 }}>
+            {isAcompte
+              ? "Veuillez à présent procéder au paiement de l'acompte convenu (50%) sur notre compte bancaire selon les détails de paiement ci-dessous."
+              : "Veuillez à présent procéder au paiement du montant convenu sur notre compte bancaire selon les détails de paiement ci-dessous."}
+          </p>
+          <p>Pour toute question : <a href="mailto:contact@jardinconfort.ch" style={{ color: C.blue, fontWeight: 700 }}>contact@jardinconfort.ch</a></p>
+        </div>
+
+
         {/* Infos commande + client */}
         <div style={{ background: "white", border: `1px solid ${C.border}`, borderRadius: 26, padding: 28, marginBottom: 24, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
@@ -360,17 +374,7 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
           </div>
         </div>
 
-        {/* Message */}
-        <div style={{ background: "#EEF7FF", border: "1px solid #B7D8F0", borderRadius: 22, padding: "22px 24px", marginBottom: 24, color: C.blue, lineHeight: 1.75, fontSize: 16 }}>
-          <p style={{ marginBottom: 14 }}>Merci beaucoup <strong>{nomComplet}</strong> pour la validation de votre commande.</p>
-          <p style={{ marginBottom: 14 }}>Notre équipe a été avertie de votre confirmation et va prendre contact avec vous au plus vite.</p>
-          <p style={{ marginBottom: 14 }}>
-            {isAcompte
-              ? "Veuillez à présent procéder au paiement de l'acompte convenu (50%) sur notre compte bancaire selon les détails de paiement ci-dessous."
-              : "Veuillez à présent procéder au paiement du montant convenu sur notre compte bancaire selon les détails de paiement ci-dessous."}
-          </p>
-          <p>Pour toute question : <a href="mailto:contact@jardinconfort.ch" style={{ color: C.blue, fontWeight: 700 }}>contact@jardinconfort.ch</a></p>
-        </div>
+        
 
         {/* ── QR Paiement ── */}
         <div style={{ background: "white", border: `1px solid ${C.border}`, borderRadius: 26, padding: 28, marginBottom: 24, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
