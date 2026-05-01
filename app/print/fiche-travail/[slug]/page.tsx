@@ -711,7 +711,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           border-radius: 4px;
           padding: 12px 14px 14px;
           page-break-inside: avoid;
-          background: #fafbfc;
+          background: #f0faf2; /* vert très clair (rappel "OK") */
         }
         .doc-final-sign-text {
           font-size: 11.5px;
