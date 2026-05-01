@@ -1,5 +1,7 @@
 // app/api/offres/save/route.ts
 // Sauvegarde une offre/commande — génère DEV-2026-XXX ou CMD-XXXXX automatiquement
+// + Génère le PDF en arrière-plan
+// + Si commande (directe ou édition) : génère AUSSI la fiche de travail initiale + courante
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -15,6 +17,8 @@ function makeSlug(numero: string, withToken = false): string {
   const token = Math.random().toString(36).slice(2, 7); // ex: "x7k2m"
   return `${base}-${token}`;
 }
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,6 +39,7 @@ export async function POST(request: NextRequest) {
     let numeroCommande: string | null = null;
     let slug: string;
     let numeroAffiche: string;
+    let isNewDocument = false;
 
     // Si le numéro existe déjà (édition)
     if (data.offerNumber && (data.offerNumber.startsWith("DEV-") || data.offerNumber.startsWith("CMD-"))) {
@@ -47,6 +52,7 @@ export async function POST(request: NextRequest) {
       slug = makeSlug(data.offerNumber);
     } else {
       // Nouveau document — générer le numéro via Supabase
+      isNewDocument = true;
       if (isCommande) {
         const { data: cmdNum, error } = await supabaseAdmin.rpc("next_cmd_numero");
         if (error) throw new Error("Erreur génération CMD: " + error.message);
@@ -121,12 +127,42 @@ export async function POST(request: NextRequest) {
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://jardin-confort-formulaire.vercel.app";
 
-    // Générer le PDF en arrière-plan (non bloquant)
-    // On lance la génération sans attendre pour ne pas ralentir la réponse
-    fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    }).catch(err => console.error("PDF generation background error:", err));
+    // ─── Génération PDFs en arrière-plan ───
+    // Toujours : PDF du document
+    // Si commande nouvellement créée : + fiche de travail initiale + courante
+    ;(async () => {
+      try {
+        // 1. PDF du document principal (offre ou commande)
+        await fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }).catch(err => console.error("PDF generation error:", err))
+
+        // 2. Si c'est une commande nouvellement créée → fiches de travail
+        if (isCommande && isNewDocument) {
+          // Délai pour ne pas saturer pdf.co
+          await sleep(6000)
+
+          // Fiche INITIALE (figée à l'état actuel = stock du moment)
+          await fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: "initial" }),
+          }).catch(err => console.error("Fiche travail initiale error:", err))
+
+          await sleep(5000)
+
+          // Fiche COURANTE (identique au début mais dans le slot regenérable)
+          await fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: "current" }),
+          }).catch(err => console.error("Fiche travail courante error:", err))
+        }
+      } catch (err) {
+        console.error("Background generation error:", err)
+      }
+    })()
 
     return NextResponse.json({
       success: true,

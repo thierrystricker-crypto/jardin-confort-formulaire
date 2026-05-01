@@ -1,6 +1,8 @@
 // app/api/offres/[slug]/valider/route.ts
 // POST /api/offres/[slug]/valider
 // Valide une offre, crée une commande CMD, envoie webhook Make
+// + Auto-génère le PDF commande, le QR paiement
+// + Auto-génère la fiche de travail INITIALE (figée, stock du moment) + COURANTE
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -10,6 +12,9 @@ const MAKE_WEBHOOK = process.env.MAKE_WEBHOOK_VALIDATION_URL ||
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ||
   "https://offres.jardin-confort.ch";
+
+// Petit helper pour temporiser entre les appels pdf.co (évite la saturation)
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 export async function POST(
   request: NextRequest,
@@ -37,7 +42,6 @@ export async function POST(
 
     // Protection anti-doublon : vérifier TOUS les statuts finaux
     if (["Acceptée", "Convertie", "Commande"].includes(offre.statut) || offre.numero_commande) {
-      // Récupérer le slug de la commande existante pour rediriger
       const existingCmdSlug = offre.numero_commande
         ? offre.numero_commande.toLowerCase().replace(/[^a-z0-9-]/g, "-")
         : null;
@@ -48,12 +52,12 @@ export async function POST(
       }, { status: 409 });
     }
 
-    // Verrouillage immédiat avant toute opération — évite les doubles clics simultanés
+    // Verrouillage immédiat avant toute opération
     const { error: lockError } = await supabaseAdmin
       .from("offres")
       .update({ statut: "Convertie" })
       .eq("slug", slug)
-      .eq("statut", offre.statut); // condition atomique : échoue si déjà modifié
+      .eq("statut", offre.statut);
 
     if (lockError) {
       return NextResponse.json({ error: "Offre déjà en cours de validation" }, { status: 409 });
@@ -69,16 +73,12 @@ export async function POST(
 
     const numeroCommande = cmdNum as string;
     const token = Math.random().toString(36).slice(2, 7);
-const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" + token;
+    const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" + token;
 
-    // 3. Compléter la mise à jour de l'offre avec numéro commande + signature
-    // On ne modifie PAS numero_affiche — l'offre garde son numéro DEV-XXXX
+    // 3. Mise à jour de l'offre originale
     await supabaseAdmin
       .from("offres")
       .update({
-        // Ne pas mettre numero_commande sur l'offre originale
-        // car numero_affiche est généré et prendrait le numéro CMD
-        // L'offre garde son numéro DEV grâce à offre_origine sur la commande
         data: {
           ...(offre.data as Record<string, unknown>),
           signataire,
@@ -89,8 +89,7 @@ const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" +
       })
       .eq("slug", slug);
 
-    // 4. Créer la nouvelle ligne commande dans Supabase
-    // offre_origine = numéro d'offre original (DEV-XXXX), pas le CMD
+    // 4. Créer la nouvelle ligne commande
     const offreNumero = offre.numero_offre || offre.numero_affiche
     const cmdRow = {
       slug: cmdSlug,
@@ -152,19 +151,17 @@ const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" +
       return NextResponse.json({ error: "Erreur création commande: " + insertError.message }, { status: 500 });
     }
 
-    // 5. Envoyer webhook Make
+    // 5. Webhook Make
     const offreData = offre.data as Record<string, unknown>
     const webhookPayload = {
       source: "jardin_confort_formulaire",
       event: "offre_validee",
 
-      // Numéros
       numero_offre: offre.numero_affiche,
       numero_commande: numeroCommande,
       offre_slug: slug,
       commande_slug: cmdSlug,
 
-      // Client
       societe: offre.client_societe || "",
       nom: offre.client_nom || "",
       prenom: offre.client_prenom || "",
@@ -175,7 +172,6 @@ const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" +
       npa: offre.client_npa || "",
       localite: offre.client_ville || "",
 
-      // Offre
       date_offre: offre.date_document || "",
       date_validation: new Date().toLocaleDateString("fr-CH"),
       conseiller: offre.commercial || "",
@@ -190,11 +186,9 @@ const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" +
       lead_time: offre.lead_time || (offreData.leadTime as string) || "",
       reference: offre.reference || (offreData.reference as string) || "",
 
-      // Signature
       signataire,
       date_signature,
 
-      // URLs
       url_offre: `${BASE_URL}/offre/${slug}`,
       url_commande: `${BASE_URL}/offre/${cmdSlug}`,
       url_confirmation: `${BASE_URL}/offre/${cmdSlug}/confirmation`,
@@ -202,13 +196,13 @@ const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" +
       url_print_commande: `${BASE_URL}/print/offre/${cmdSlug}`,
       url_pdf_commande: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/commandes/${cmdSlug}.pdf`,
       url_qr_paiement: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/qr/${cmdSlug}_qr.pdf`,
+      url_fiche_travail_initiale: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/fiches-travail/${cmdSlug}_initial.pdf`,
+      url_fiche_travail: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/fiches-travail/${cmdSlug}.pdf`,
 
-      // Infos bancaires pour email client
       iban: "CH72 0076 7000 K033 3796 5",
       banque: "BCV – Banque Cantonale Vaudoise",
       beneficiaire: "Jardin-Confort SA",
 
-      // Pour l'email équipe
       nb_articles: offre.nb_articles,
       sous_total: offre.sous_total,
       remise_chf: offre.remise_chf,
@@ -229,12 +223,43 @@ const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" +
       console.error("Webhook error:", webhookErr);
     }
 
-    // Générer les PDFs et QR en arrière-plan
-    Promise.all([
-      fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" }),
-      fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST" }),
-      fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST" }),
-    ]).catch(err => console.error("PDF/QR generation error:", err));
+    // ─── Génération PDFs en arrière-plan, séquentielle pour ne pas saturer pdf.co ───
+    // 1) PDF offre + PDF commande en // (urgent pour le client)
+    // 2) Puis QR paiement
+    // 3) Puis fiche de travail INITIALE (figée à l'instant T = stock vu par le client)
+    // 4) Puis fiche de travail COURANTE (identique au début, mais dans le slot regenérable)
+    ;(async () => {
+      try {
+        // Étape 1 : PDFs commande + offre en parallèle
+        await Promise.allSettled([
+          fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" }),
+          fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST" }),
+        ])
+
+        // Étape 2 : QR paiement (5s plus tard pour ne pas saturer pdf.co)
+        await sleep(5000)
+        await fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST" }).catch(() => {})
+
+        // Étape 3 : Fiche de travail INITIALE (figée)
+        await sleep(5000)
+        await fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "initial" }),
+        }).catch(() => {})
+
+        // Étape 4 : Fiche de travail COURANTE (idem au début, mais re-génerable)
+        await sleep(5000)
+        await fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "current" }),
+        }).catch(() => {})
+
+      } catch (err) {
+        console.error("Background PDF generation error:", err)
+      }
+    })()
 
     return NextResponse.json({
       success: true,

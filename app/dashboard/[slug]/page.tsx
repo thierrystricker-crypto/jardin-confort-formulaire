@@ -68,6 +68,85 @@ function appendTs(cur: string, prev: string) {
   return c
 }
 
+// ─── Composant Aperçu fiche de travail (initiale OU actuelle) ───
+function FicheTravailPreview({
+  initialUrl, currentUrl, initialAt,
+}: {
+  initialUrl: string | null
+  currentUrl: string | null
+  initialAt: string | null
+}) {
+  // Par défaut on affiche l'initiale (figée) car c'est la référence officielle
+  const defaultMode: "initial" | "current" =
+    initialUrl ? "initial" : "current"
+  const [mode, setMode] = React.useState<"initial" | "current">(defaultMode)
+
+  const url = mode === "initial" ? initialUrl : currentUrl
+
+  return (
+    <section className="rounded-2xl border border-amber-500/20 bg-[#2a2d31] p-6">
+      <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+        <h2 className="text-xl font-semibold flex items-center gap-2">
+          📋 Fiche de travail
+          <span className="text-xs font-normal text-amber-300/70 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-0.5">Interne</span>
+        </h2>
+        <div className="flex items-center gap-2">
+          {/* Toggle initiale / actuelle */}
+          <div className="inline-flex rounded-xl border border-white/10 bg-[#34383d] p-1 text-xs">
+            <button
+              onClick={() => setMode("initial")}
+              disabled={!initialUrl}
+              className={`rounded-lg px-3 py-1 font-medium transition ${
+                mode === "initial"
+                  ? "bg-blue-500/25 text-blue-200"
+                  : "text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed"
+              }`}
+              title={initialAt ? `Figée le ${new Date(initialAt).toLocaleString("fr-CH")}` : ""}>
+              Initiale
+            </button>
+            <button
+              onClick={() => setMode("current")}
+              disabled={!currentUrl}
+              className={`rounded-lg px-3 py-1 font-medium transition ${
+                mode === "current"
+                  ? "bg-amber-500/25 text-amber-200"
+                  : "text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed"
+              }`}>
+              Actuelle
+            </button>
+          </div>
+          {url && (
+            <a href={url} target="_blank" rel="noopener noreferrer" download
+              className="rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/20">
+              Télécharger ↓
+            </a>
+          )}
+        </div>
+      </div>
+      {mode === "initial" && initialAt && (
+        <div className="mb-3 text-xs text-blue-300/80 bg-blue-500/5 border border-blue-500/20 rounded-lg px-3 py-2">
+          🔵 Stock figé à la commande · {new Date(initialAt).toLocaleString("fr-CH")}
+        </div>
+      )}
+      {mode === "current" && (
+        <div className="mb-3 text-xs text-amber-300/80 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
+          🟡 Stock actuel — re-générée à chaque clic sur le bouton du haut
+        </div>
+      )}
+      {url ? (
+        <div className="overflow-hidden rounded-2xl border border-amber-500/20 bg-black/20">
+          <iframe src={url} title="Aperçu fiche de travail" className="h-[600px] w-full border-0"/>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-white/10 bg-black/10 p-8 text-center text-sm text-zinc-500">
+          Cette version n&apos;a pas encore été générée
+        </div>
+      )}
+    </section>
+  )
+}
+// ──────────────────────────────────────────────────────────────────
+
 export default function DashboardDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const [offre,setOffre]=useState<OffreRecord|null>(null)
   const [loading,setLoading]=useState(true)
@@ -85,11 +164,14 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   // ─── NOUVEAU : state pour la fiche de travail ───
   const [ficheTravailUrl, setFicheTravailUrl] = useState<string|null>(null)
   const [ficheTravailGenerating, setFicheTravailGenerating] = useState(false)
+  const [ficheTravailInitialUrl, setFicheTravailInitialUrl] = useState<string|null>(null)
+  const [ficheTravailInitialAt, setFicheTravailInitialAt] = useState<string|null>(null)
   // ────────────────────────────────────────────────
   const [relancing,setRelancing]=useState(false)
   const [relanceStatus,setRelanceStatus]=useState("")
   const [emailCopied,setEmailCopied]=useState(false)
   const [clientId,setClientId]=useState<number|null>(null)
+  const [offreOrigineSlug, setOffreOrigineSlug] = useState<string|null>(null)
   const [probabilite,setProbabilite]=useState<string>("neutre")
   const [probSaving,setProbSaving]=useState(false)
   const [converting,setConverting]=useState(false)
@@ -131,14 +213,34 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         if ((o as unknown as Record<string,unknown>).qr_url) {
           setQrUrl((o as unknown as Record<string,unknown>).qr_url as string)
         }
-        // ─── NOUVEAU : charger l'URL fiche travail si déjà générée ───
+        // ─── NOUVEAU : charger les URL fiche travail (initiale + courante) ───
         if ((o as unknown as Record<string,unknown>).fiche_travail_pdf_url) {
           setFicheTravailUrl((o as unknown as Record<string,unknown>).fiche_travail_pdf_url as string)
         }
-        // ──────────────────────────────────────────────────────────────
+        if ((o as unknown as Record<string,unknown>).fiche_travail_initial_url) {
+          setFicheTravailInitialUrl((o as unknown as Record<string,unknown>).fiche_travail_initial_url as string)
+        }
+        if ((o as unknown as Record<string,unknown>).fiche_travail_initial_at) {
+          setFicheTravailInitialAt((o as unknown as Record<string,unknown>).fiche_travail_initial_at as string)
+        }
+        // ──────────────────────────────────────────────────────────────────────────────────
         if ((o as unknown as Record<string,unknown>).probabilite) {
           setProbabilite((o as unknown as Record<string,unknown>).probabilite as string)
         }
+        // ─── Si commande issue d'une offre, récupérer le slug de l'offre via l'API dashboard ───
+        if (o.offre_origine && o.type_document === "Commande") {
+          try {
+            const oRes = await fetch(`/api/dashboard/offres?q=${encodeURIComponent(o.offre_origine)}&limit=1`)
+            if (oRes.ok) {
+              const oJson = await oRes.json()
+              const found = (oJson.offres || []).find((x: {numero_affiche?: string; slug?: string}) =>
+                x.numero_affiche === o.offre_origine
+              )
+              if (found?.slug) setOffreOrigineSlug(found.slug)
+            }
+          } catch { /* ignore */ }
+        }
+        // ──────────────────────────────────────────────────────────────────────────────────────
         if (o.client_email || o.client_tel1) {
           try {
             const q = o.client_email || o.client_tel1 || ""
@@ -184,16 +286,29 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   }
 
   // ─── NOUVEAU : fonction de génération de la fiche de travail ───
-  async function generateFicheTravail() {
+  // mode "current" → regénère avec stock à jour (écrase la version courante)
+  // mode "initial" → fige la version initiale (ne se regénère normalement qu'une fois)
+  async function generateFicheTravail(mode: "initial" | "current" = "current", force = false) {
     if(!slug) return
     setFicheTravailGenerating(true)
     try {
-      const res = await fetch(`/api/offres/${slug}/fiche-travail-pdf`, { method: "POST" })
+      const res = await fetch(`/api/offres/${slug}/fiche-travail-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, force }),
+      })
       const json = await res.json()
       if (res.ok && json.pdf_url) {
-        setFicheTravailUrl(json.pdf_url)
-        // Ouvrir directement le PDF dans un nouvel onglet
-        window.open(json.pdf_url, "_blank")
+        const freshUrl = `${json.pdf_url}?t=${Date.now()}`
+        if (mode === "initial") {
+          setFicheTravailInitialUrl(freshUrl)
+          if (!json.already_exists) {
+            setFicheTravailInitialAt(new Date().toISOString())
+          }
+        } else {
+          setFicheTravailUrl(freshUrl)
+        }
+        window.open(freshUrl, "_blank")
       } else {
         alert("Erreur génération fiche de travail : " + (json.error || res.status))
       }
@@ -476,34 +591,41 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </button>
             )}
 
-            {/* ─── NOUVEAU : bouton Fiche de travail (commandes uniquement) ─── */}
+            {/* ─── Boutons Fiche de travail (commandes uniquement) ─── */}
+            {/* Bouton 1 : fiche INITIALE (figée à la commande, stock vu par le client) */}
+            {/* Bouton 2 : fiche ACTUELLE (regénérée avec stock du moment) */}
             {isCommande && (
               <>
-                {ficheTravailUrl ? (
-                  <a href={ficheTravailUrl} target="_blank" rel="noopener noreferrer" download
-                    className="inline-flex items-center rounded-xl border border-amber-500/30 bg-amber-500/15 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/20">
-                    📋 Fiche de travail
+                {ficheTravailInitialUrl ? (
+                  <a href={ficheTravailInitialUrl} target="_blank" rel="noopener noreferrer" download
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-blue-500/40 bg-blue-500/15 px-4 py-2 text-sm text-blue-300 transition hover:bg-blue-500/25"
+                    title={ficheTravailInitialAt ? `Figée le ${new Date(ficheTravailInitialAt).toLocaleString("fr-CH")} — stock vu par le client à la commande` : "Stock figé à la commande"}>
+                    📋 Fiche initiale (commande)
                   </a>
                 ) : (
-                  <button onClick={generateFicheTravail} disabled={ficheTravailGenerating}
-                    className="relative inline-flex items-center overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-80">
-                    {ficheTravailGenerating && (
-                      <span className="absolute inset-0 overflow-hidden rounded-xl">
-                        <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-amber-500/30"/>
-                      </span>
-                    )}
-                    <span className="relative">
-                      {ficheTravailGenerating ? "📋 Génération…" : "📋 Générer fiche de travail"}
+                  <button onClick={() => generateFicheTravail("initial")} disabled={ficheTravailGenerating}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-80"
+                    title="Générer la fiche initiale avec le stock du jour de la commande">
+                    {ficheTravailGenerating ? "📋 Génération…" : "📋 Générer fiche initiale"}
+                  </button>
+                )}
+
+                <button onClick={() => generateFicheTravail("current")} disabled={ficheTravailGenerating}
+                  className="relative inline-flex items-center gap-1.5 overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/15 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/25 disabled:opacity-80"
+                  title="Génère une nouvelle fiche avec le stock actuel — pour la préparation/livraison">
+                  {ficheTravailGenerating && (
+                    <span className="absolute inset-0 overflow-hidden rounded-xl">
+                      <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-amber-500/30"/>
                     </span>
-                  </button>
-                )}
-                {ficheTravailUrl && (
-                  <button onClick={generateFicheTravail} disabled={ficheTravailGenerating}
-                    className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-3 py-2 text-xs text-zinc-400 transition hover:bg-[#40454b] disabled:opacity-50"
-                    title="Régénérer la fiche avec le stock à jour">
-                    {ficheTravailGenerating ? "⏳" : "🔄"}
-                  </button>
-                )}
+                  )}
+                  <span className="relative">
+                    {ficheTravailGenerating
+                      ? "🔄 Génération…"
+                      : ficheTravailUrl
+                        ? "🔄 Nouvelle fiche (stock actuel)"
+                        : "🔄 Générer fiche stock actuel"}
+                  </span>
+                </button>
               </>
             )}
             {/* ───────────────────────────────────────────────────────────────── */}
@@ -517,7 +639,22 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(offre.statut,offre.type_document)}`}>{offre.statut}</span>
                   <span className="text-sm text-zinc-400">{offre.type_document}</span>
-                  {offre.offre_origine&&<span className="text-sm text-zinc-500">Issu de : {offre.offre_origine}</span>}
+                  {offre.offre_origine && (
+                    offreOrigineSlug ? (
+                      <a href={`/dashboard/${offreOrigineSlug}`}
+                        title={`Voir l'offre d'origine ${offre.offre_origine}`}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/15 px-3 py-1 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/25 hover:border-violet-400/60">
+                        <span>📄 Issu de l&apos;offre</span>
+                        <span className="font-bold">{offre.offre_origine}</span>
+                        <span className="text-violet-400/70">→</span>
+                      </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-300/80">
+                        <span>📄 Issu de l&apos;offre</span>
+                        <span className="font-bold">{offre.offre_origine}</span>
+                      </span>
+                    )
+                  )}
                   {days!==null&&(
                     <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getDaysBadgeColor(days)}`}>{days} jour{days>1?"s":""} ouvert</span>
                   )}
@@ -768,23 +905,16 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </section>
             )}
 
-            {/* ─── NOUVEAU : aperçu Fiche de travail (commandes uniquement) ─── */}
-            {isCommande && ficheTravailUrl && (
-              <section className="rounded-2xl border border-amber-500/20 bg-[#2a2d31] p-6">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
-                    📋 Fiche de travail
-                    <span className="text-xs font-normal text-amber-300/70 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-0.5">Interne</span>
-                  </h2>
-                  <a href={ficheTravailUrl} target="_blank" rel="noopener noreferrer" download
-                    className="rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/20">Télécharger ↓</a>
-                </div>
-                <div className="overflow-hidden rounded-2xl border border-amber-500/20 bg-black/20">
-                  <iframe src={ficheTravailUrl} title="Aperçu fiche de travail" className="h-[600px] w-full border-0"/>
-                </div>
-              </section>
+            {/* ─── Aperçu Fiche de travail (commandes uniquement) ─── */}
+            {/* Affiche la fiche INITIALE par défaut, sinon la courante */}
+            {isCommande && (ficheTravailInitialUrl || ficheTravailUrl) && (
+              <FicheTravailPreview
+                initialUrl={ficheTravailInitialUrl}
+                currentUrl={ficheTravailUrl}
+                initialAt={ficheTravailInitialAt}
+              />
             )}
-            {/* ──────────────────────────────────────────────────────────────── */}
+            {/* ──────────────────────────────────────────────────── */}
 
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
               <div className="mb-4 flex items-center justify-between">

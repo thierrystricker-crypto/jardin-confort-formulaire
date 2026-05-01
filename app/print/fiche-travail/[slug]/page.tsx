@@ -200,8 +200,8 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           try {
             JsBarcode(el, sku, {
               format: "CODE128",
-              width: 1.6,
-              height: 26,
+              width: 1.5,
+              height: 22,            // ▼ encore réduit (avant 26)
               displayValue: false,
               margin: 0,
               lineColor: "#000000",
@@ -272,7 +272,25 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           print-color-adjust: exact;
           -webkit-print-color-adjust: exact;
         }
-        @page { size: A4 portrait; margin: 12mm 12mm 12mm 12mm; }
+        @page {
+          size: A4 portrait;
+          margin: 11mm 11mm 14mm 11mm;
+          /* Pagination en bas à droite : Page X / N */
+          @bottom-right {
+            content: "Page " counter(page) " / " counter(pages);
+            font-family: 'Raleway', Arial, sans-serif;
+            font-size: 9px;
+            color: #888;
+            padding-right: 2mm;
+          }
+          @bottom-left {
+            content: "Fiche de travail · Document interne";
+            font-family: 'Raleway', Arial, sans-serif;
+            font-size: 9px;
+            color: #888;
+            padding-left: 2mm;
+          }
+        }
         @media screen {
           .doc-wrap { max-width: 794px; margin: 0 auto; padding: 20px 28px; box-shadow: 0 0 20px rgba(0,0,0,0.08); }
           .print-btn { position: fixed; top: 16px; right: 16px; z-index: 100; background: ${THEME}; color: white; border: 0; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
@@ -283,60 +301,60 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .doc-banner {
           background: ${THEME};
           color: white;
-          padding: 6px 14px;
-          margin-bottom: 4mm;
+          padding: 5px 12px;
+          margin-bottom: 3mm;
           border-radius: 4px;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 700;
           letter-spacing: 0.05em;
         }
-        .doc-banner-printed { font-size: 11px; font-weight: 400; opacity: 0.9; }
+        .doc-banner-printed { font-size: 10px; font-weight: 400; opacity: 0.9; }
 
         /* ══ HEADER : 3 colonnes ══ */
         .doc-header {
           display: flex;
           justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 4mm;
+          gap: 10px;
+          margin-bottom: 3mm;
           width: 100%;
           align-items: flex-start;
         }
         .doc-header-left { flex: 0 0 42%; }
         .doc-header-qr {
-          flex: 0 0 90px;
+          flex: 0 0 80px;
           display: flex;
           flex-direction: column;
           align-items: center;
-          padding-top: 4px;
+          padding-top: 2px;
         }
         .doc-header-qr img { display: block; }
         .doc-header-qr .qr-label {
           font-size: 8px;
           color: #666;
-          margin-top: 3px;
+          margin-top: 2px;
           letter-spacing: 0.04em;
           text-transform: uppercase;
           text-align: center;
         }
         .doc-header-right { flex: 1; min-width: 0; }
 
-        .doc-logo { max-width: 165px; max-height: 60px; object-fit: contain; display: block; margin-bottom: 6px; }
+        .doc-logo { max-width: 150px; max-height: 52px; object-fit: contain; display: block; margin-bottom: 4px; }
         .doc-type {
-          font-size: 22px; font-weight: 900;
-          color: ${THEME}; margin-bottom: 6px;
-          line-height: 1.1; letter-spacing: 0.02em;
+          font-size: 20px; font-weight: 900;
+          color: ${THEME}; margin-bottom: 4px;
+          line-height: 1.05; letter-spacing: 0.02em;
           text-transform: uppercase;
         }
         .doc-meta-table { border-collapse: collapse; width: 100%; }
-        .doc-meta-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 11.5px; line-height: 1.35; }
+        .doc-meta-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 11px; line-height: 1.3; }
         .doc-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 50%; }
 
         /* ══ FENÊTRE ADRESSE LIVRAISON ══ */
         .doc-addr-window {
-          padding: 10px 14px 10px 16px;
+          padding: 8px 12px 9px 14px;
           background: white;
           border: 2px solid ${THEME};
           border-radius: 6px;
@@ -350,14 +368,14 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           font-size: 10px;
           font-weight: 700;
           letter-spacing: 0.06em;
-          margin-bottom: 6px;
+          margin-bottom: 5px;
           text-transform: uppercase;
         }
-        .doc-addr-ref { font-size: 11px; color: #666; font-weight: 400; margin-bottom: 4px; }
-        .doc-addr-name { font-size: 17px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin-bottom: 3px; }
-        .doc-addr-line { font-size: 15px; color: ${BLACK}; line-height: 1.35; font-weight: 400; }
-        .doc-addr-tel { margin-top: 4px; font-size: 13px; font-weight: 600; }
-        .doc-addr-email { font-size: 12px; color: #555; }
+        .doc-addr-ref { font-size: 10.5px; color: #666; font-weight: 400; margin-bottom: 3px; }
+        .doc-addr-name { font-size: 16px; font-weight: 700; color: ${BLACK}; line-height: 1.25; margin-bottom: 2px; }
+        .doc-addr-line { font-size: 14px; color: ${BLACK}; line-height: 1.3; font-weight: 400; }
+        .doc-addr-tel { margin-top: 3px; font-size: 12.5px; font-weight: 600; }
+        .doc-addr-email { font-size: 11.5px; color: #555; }
 
         .doc-pickup-badge {
           display: inline-block;
@@ -422,9 +440,9 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         }
 
         /* ══ TABLEAU ══ */
-        .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 4mm; }
+        .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 3mm; }
         .doc-table thead th {
-          padding: 7px 4px;
+          padding: 6px 4px;
           border-top: 2px solid ${THEME};
           border-bottom: 2px solid ${THEME};
           font-weight: 700;
@@ -437,10 +455,10 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .doc-table thead th.th-center { text-align: center; }
         .doc-table thead th.th-right { text-align: right; }
         .doc-table tbody tr td {
-          padding: 8px 4px;
+          padding: 5px 4px;
           border-bottom: 1px solid #d1d5db;
           vertical-align: middle;
-          font-size: 12px;
+          font-size: 11.5px;
         }
         .doc-table tbody tr.row-product:nth-child(even) td { background: ${LIGHT}; }
 
@@ -607,27 +625,22 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           white-space: nowrap;
         }
 
-        /* ── Acompte / Solde fillable — alignés à DROITE sous le TOTAL ── */
+        /* ── Acompte / Solde fillable — cellules vides à remplir à la main ── */
         .pt-fillable td {
-          padding: 9px 4px !important;
+          padding: 14px 4px !important;
           background: #fffbea !important;
           border-bottom: 1px dashed #f59e0b !important;
         }
-        /* La cellule de la valeur : largeur fixe pour cadrer avec le total au-dessus */
+        /* La cellule de la valeur : juste "CHF" en gris discret, le reste vide pour écrire */
         .pt-fillable .pt-value {
           text-align: right;
-          font-size: 12px !important;
-          color: #555 !important;
-          letter-spacing: 0.05em;
-          padding-right: 4px !important;
+          padding-right: 6px !important;
         }
-        /* Trait sous la valeur (pour écrire dessus) */
-        .pt-fillable .pt-fill-line {
-          display: inline-block;
-          width: 110px;
-          border-bottom: 1.5px solid #888;
-          height: 1px;
-          vertical-align: middle;
+        .pt-fill-empty {
+          font-size: 12px;
+          color: #999;
+          font-weight: 400;
+          letter-spacing: 0.05em;
         }
 
         .pt-paymentmode td {
@@ -638,51 +651,44 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
         /* ══ ZONE SIGNATURE FINALE ══ */
         .doc-final-sign {
-          margin-top: 5mm;
+          margin-top: 3mm;
           border: 2px solid #000;
           border-radius: 4px;
-          padding: 14px 18px;
+          padding: 10px 14px;
           page-break-inside: avoid;
           background: #fafbfc;
         }
         .doc-final-sign-text {
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 700;
           color: ${BLACK};
           letter-spacing: 0.03em;
           text-transform: uppercase;
-          margin-bottom: 14px;
+          margin-bottom: 10px;
           text-align: center;
         }
         .doc-final-sign-row {
           display: flex;
-          gap: 30px;
+          gap: 24px;
           align-items: flex-end;
         }
         .doc-final-sign-field { flex: 0 0 30%; }
         .doc-final-sign-field-large { flex: 1; }
         .doc-final-sign-line {
-          height: 28px;
+          height: 22px;
           border-bottom: 1.5px solid #555;
         }
         .doc-final-sign-label {
-          font-size: 10px;
+          font-size: 9.5px;
           color: #555;
-          margin-top: 3px;
+          margin-top: 2px;
           text-transform: uppercase;
           letter-spacing: 0.05em;
           text-align: left;
         }
 
-        .doc-footer-mini {
-          margin-top: 4mm;
-          padding-top: 5px;
-          border-top: 1px solid #d1d5db;
-          text-align: center;
-          font-size: 9px;
-          color: #888;
-          line-height: 1.5;
-        }
+        /* Footer remplacé par @page @bottom-left+@bottom-right qui s'affiche sur chaque page */
+        .doc-footer-mini { display: none; }
       `}</style>
 
       <button className="print-btn" onClick={() => window.print()}>🖨 Imprimer</button>
@@ -773,7 +779,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           <thead>
             <tr>
               <th style={{width:56}}></th>
-              <th className="th-center" style={{width:54}}>Cmd / Rés</th>
+              <th className="th-center" style={{width:54}}></th>
               <th className="th-center" style={{width:60}}>Qté</th>
               <th className="th-left">Description / SKU / Code-barres</th>
               <th className="th-right" style={{width:70}}>Prix/pce</th>
@@ -950,17 +956,17 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                   <td className="pt-total-value">{formatMoney(totals.finalTotal)}</td>
                 </tr>
 
-                {/* ─── Acompte / Solde — alignés à droite (dans la colonne value) ─── */}
+                {/* ─── Acompte / Solde — cellules vides à remplir à la main ─── */}
                 <tr className="pt-fillable">
                   <td className="pt-label">Acompte versé</td>
                   <td className="pt-value">
-                    CHF&nbsp;<span className="pt-fill-line"></span>
+                    <span className="pt-fill-empty">CHF</span>
                   </td>
                 </tr>
                 <tr className="pt-fillable">
                   <td className="pt-label">Solde à percevoir</td>
                   <td className="pt-value">
-                    CHF&nbsp;<span className="pt-fill-line"></span>
+                    <span className="pt-fill-empty">CHF</span>
                   </td>
                 </tr>
 
