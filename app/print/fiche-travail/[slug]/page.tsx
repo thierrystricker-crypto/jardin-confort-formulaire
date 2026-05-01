@@ -2,7 +2,9 @@
 // ═══════════════════════════════════════════════════════════════
 //  app/print/fiche-travail/[slug]/page.tsx
 //  Template d'impression — FICHE DE TRAVAIL (interne entrepôt)
-//  v2 : QR en haut, prix complets, ajustements UI
+//  v3 : utilise les colonnes Supabase (numero_affiche, date_document)
+//        + remarques bien visibles + acompte/solde alignés droite
+//        + lignes custom (à la volée) et comment correctement gérées
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState, useRef } from "react";
@@ -16,7 +18,7 @@ const QTY_HIGHLIGHT = "#dc2626"; // rouge pour qty > 1
 
 const TVA_RATE = 0.081;
 
-type ServiceItem = { code: string; label: string; defaultPrice?: number };
+type ServiceItem = { code: string; label: string };
 const serviceOptions: ServiceItem[] = [
   { code: "montage",       label: "Frais de montage" },
   { code: "poste",         label: "Livraison des colis par La Poste" },
@@ -95,7 +97,7 @@ function formatMoney(value: number) {
   return `CHF ${formatted}`;
 }
 
-// ── Calcul des totaux (réplique de la logique du formulaire) ──
+// ── Calcul des totaux ──
 function computeTotals(d: PrintData) {
   const isPrivateTTC = d.clientType === "Privé (prix TTC)";
 
@@ -138,7 +140,11 @@ function computeTotals(d: PrintData) {
 export default function PrintFicheTravail({ params }: { params: Promise<{ slug: string }> }) {
   const [data, setData] = useState<PrintData>(EMPTY);
   const [ready, setReady] = useState(false);
+  // ─── Récupérés depuis les COLONNES SUPABASE (pas du JSON data) ───
   const [numeroAffiche, setNumeroAffiche] = useState("");
+  const [dateDocument, setDateDocument] = useState<string>("");
+  const [typeDocument, setTypeDocument] = useState<string>("Commande");
+  // ──────────────────────────────────────────────────────────────────
   const [printedAt] = useState(formatDateTime());
   const barcodesRendered = useRef(false);
 
@@ -151,7 +157,10 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           const json = await res.json();
           const offreData = json.offre?.data;
           if (offreData) {
+            // Numéro et date depuis les colonnes Supabase, pas depuis data
             setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber || slug);
+            setDateDocument(json.offre?.date_document || offreData.date || "");
+            setTypeDocument(json.offre?.type_document || offreData.formType || "Commande");
             setData({ ...EMPTY, ...offreData });
           }
         }
@@ -192,8 +201,8 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
             JsBarcode(el, sku, {
               format: "CODE128",
               width: 1.6,
-              height: 26,            // ▼ réduit (avant 38)
-              displayValue: false,   // ▼ pas de SKU sous le code
+              height: 26,
+              displayValue: false,
               margin: 0,
               lineColor: "#000000",
             });
@@ -211,7 +220,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           const qr = qrcode(0, "M");
           qr.addData(numeroAffiche);
           qr.make();
-          qrEl.innerHTML = qr.createImgTag(3, 0); // 3px par module = QR plus petit
+          qrEl.innerHTML = qr.createImgTag(3, 0);
         }
       }
       barcodesRendered.current = true;
@@ -228,18 +237,14 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
   const livrNumero   = data.livrDiff ? data.livrNumero   : data.numero;
   const livrNpa      = data.livrDiff ? data.livrNpa      : data.npa;
   const livrVille    = data.livrDiff ? data.livrVille    : data.ville;
-  // Téléphone livraison sinon facturation
   const livrTelEffectif = (data.livrDiff && data.livrTel) ? data.livrTel : data.telephone1;
-  // Email du client (toujours celui de la facturation, c'est le seul saisi)
   const clientEmail = data.email;
 
   const isPickup = data.deliveryMode === "À l'emporter";
   const totalQty = data.lines.reduce((s, l) => l.type === "comment" ? s : s + l.qty, 0);
 
-  // Totaux
   const totals = computeTotals(data);
 
-  // Liste des services actifs
   const activeServices = [
     ...serviceOptions
       .filter((s) => data.enabledServices?.[s.code])
@@ -248,6 +253,10 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
       ? [{ label: data.servicePrices?.["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices?.["custom"] || 0) }]
       : []),
   ];
+
+  // Libellé contextuel pour le numéro de document
+  const numeroLabel = typeDocument === "Offre" ? "N° d'offre" : "N° de commande";
+  const dateLabel = typeDocument === "Offre" ? "Date offre" : "Date commande";
 
   return (
     <>
@@ -286,7 +295,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         }
         .doc-banner-printed { font-size: 11px; font-weight: 400; opacity: 0.9; }
 
-        /* ══ HEADER : 3 colonnes (logo+meta · QR · adresse livraison) ══ */
+        /* ══ HEADER : 3 colonnes ══ */
         .doc-header {
           display: flex;
           justify-content: space-between;
@@ -295,9 +304,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           width: 100%;
           align-items: flex-start;
         }
-        .doc-header-left {
-          flex: 0 0 42%;
-        }
+        .doc-header-left { flex: 0 0 42%; }
         .doc-header-qr {
           flex: 0 0 90px;
           display: flex;
@@ -314,10 +321,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           text-transform: uppercase;
           text-align: center;
         }
-        .doc-header-right {
-          flex: 1;
-          min-width: 0;
-        }
+        .doc-header-right { flex: 1; min-width: 0; }
 
         .doc-logo { max-width: 165px; max-height: 60px; object-fit: contain; display: block; margin-bottom: 6px; }
         .doc-type {
@@ -388,6 +392,35 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           flex-shrink: 0;
         }
 
+        /* ══ NOUVEAU : Bandeau remarques en haut (très visible) ══ */
+        .doc-remarks-top {
+          margin-bottom: 4mm;
+          background: linear-gradient(90deg, #fef3c7 0%, #fef9c3 100%);
+          border: 2px solid #f59e0b;
+          border-radius: 6px;
+          padding: 10px 14px;
+          page-break-inside: avoid;
+        }
+        .doc-remarks-top-title {
+          display: inline-block;
+          background: #f59e0b;
+          color: white;
+          padding: 3px 10px;
+          border-radius: 3px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          margin-bottom: 6px;
+        }
+        .doc-remarks-top-text {
+          font-size: 12px;
+          color: #1f2937;
+          line-height: 1.55;
+          white-space: pre-wrap;
+          font-weight: 500;
+        }
+
         /* ══ TABLEAU ══ */
         .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 4mm; }
         .doc-table thead th {
@@ -413,6 +446,14 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
         .td-img { width: 56px; vertical-align: middle; text-align: center; }
         .td-img img { max-width: 50px; max-height: 50px; object-fit: contain; }
+        .td-img-placeholder {
+          width: 50px; height: 50px;
+          margin: 0 auto;
+          border: 1px dashed #d1d5db;
+          border-radius: 4px;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 18px; color: #9ca3af;
+        }
         .td-circles { width: 54px; text-align: center; }
         .td-qty { width: 60px; text-align: center; vertical-align: middle; }
         .td-stock { width: 78px; text-align: center; vertical-align: middle; }
@@ -420,7 +461,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .td-total { width: 78px; text-align: right; vertical-align: middle; font-weight: 700; }
         .td-desc { padding-left: 6px !important; }
 
-        /* ── Cercles cmd/rés (▼ plus petits) ── */
+        /* ── Cercles cmd/rés ── */
         .check-circle {
           display: inline-block;
           width: 16px; height: 16px;
@@ -438,7 +479,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           text-transform: uppercase;
         }
 
-        /* ── Quantité (▼ pas en gras, couleur si > 1) ── */
+        /* ── Quantité ── */
         .qty-num {
           font-size: 24px;
           font-weight: 400;
@@ -458,8 +499,34 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         /* ── Description ── */
         .item-title { font-weight: 700; color: ${BLACK}; line-height: 1.3; font-size: 12px; }
         .item-sku-text { font-size: 10px; color: #555; margin-top: 1px; font-weight: 400; }
+        .item-no-sku {
+          display: inline-block;
+          font-size: 9px;
+          color: #92400e;
+          background: #fef3c7;
+          padding: 1px 6px;
+          border-radius: 3px;
+          margin-top: 2px;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+        }
         .item-barcode { margin-top: 3px; }
         .item-barcode svg { display: block; max-width: 100%; }
+        /* Badge "À LA VOLÉE" pour les lignes custom */
+        .item-custom-badge {
+          display: inline-block;
+          font-size: 9px;
+          color: #1e40af;
+          background: #dbeafe;
+          padding: 1px 6px;
+          border-radius: 3px;
+          margin-right: 5px;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+          vertical-align: middle;
+        }
 
         /* ── Stock ── */
         .stock-ok    { color: #2C7E3F; font-weight: 700; font-size: 12px; }
@@ -475,13 +542,15 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         /* ── Lignes commentaires ── */
         .tr-comment td {
           background: #eef4fb !important;
-          padding: 6px 10px !important;
+          padding: 8px 12px !important;
           font-style: italic;
-          color: #445 !important;
+          color: #1e3a5f !important;
           font-size: 12px;
+          font-weight: 600;
+          border-left: 3px solid ${THEME} !important;
         }
 
-        /* ══ NOTES + RÉCAP PRIX ══ */
+        /* ══ BOTTOM ══ */
         .doc-bottom-wrap {
           display: flex;
           gap: 14px;
@@ -491,23 +560,20 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .doc-notes-col { flex: 1; min-width: 0; }
         .doc-totals-col { flex: 0 0 46%; }
 
-        .doc-notes-title {
+        /* Notes complémentaires en bas (rappel) — bordure plus discrète */
+        .doc-notes-bottom-title {
           font-weight: 700;
-          color: ${BLACK};
-          margin-bottom: 5px;
-          font-size: 12px;
+          color: #555;
+          margin-bottom: 4px;
+          font-size: 11px;
           text-transform: uppercase;
           letter-spacing: 0.04em;
         }
-        .doc-notes-text {
-          font-size: 11.5px;
-          color: ${GREY};
+        .doc-notes-bottom-text {
+          font-size: 11px;
+          color: #555;
           line-height: 1.55;
-          white-space: pre-wrap;
-          padding: 7px 10px;
-          background: #fffbea;
-          border-left: 3px solid #f59e0b;
-          border-radius: 0 4px 4px 0;
+          font-style: italic;
         }
 
         /* ── Tableau récap prix ── */
@@ -541,17 +607,27 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           white-space: nowrap;
         }
 
-        /* ── Acompte / Solde fillable ── */
+        /* ── Acompte / Solde fillable — alignés à DROITE sous le TOTAL ── */
         .pt-fillable td {
           padding: 9px 4px !important;
           background: #fffbea !important;
           border-bottom: 1px dashed #f59e0b !important;
         }
+        /* La cellule de la valeur : largeur fixe pour cadrer avec le total au-dessus */
         .pt-fillable .pt-value {
-          border-bottom: 1.5px solid #999;
-          min-width: 100px;
+          text-align: right;
+          font-size: 12px !important;
+          color: #555 !important;
+          letter-spacing: 0.05em;
+          padding-right: 4px !important;
+        }
+        /* Trait sous la valeur (pour écrire dessus) */
+        .pt-fillable .pt-fill-line {
           display: inline-block;
-          font-size: 11px !important;
+          width: 110px;
+          border-bottom: 1.5px solid #888;
+          height: 1px;
+          vertical-align: middle;
         }
 
         .pt-paymentmode td {
@@ -560,7 +636,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           padding: 6px 4px !important;
         }
 
-        /* ══ ZONE SIGNATURE FINALE (réception) ══ */
+        /* ══ ZONE SIGNATURE FINALE ══ */
         .doc-final-sign {
           margin-top: 5mm;
           border: 2px solid #000;
@@ -583,12 +659,8 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           gap: 30px;
           align-items: flex-end;
         }
-        .doc-final-sign-field {
-          flex: 0 0 30%;
-        }
-        .doc-final-sign-field-large {
-          flex: 1;
-        }
+        .doc-final-sign-field { flex: 0 0 30%; }
+        .doc-final-sign-field-large { flex: 1; }
         .doc-final-sign-line {
           height: 28px;
           border-bottom: 1.5px solid #555;
@@ -602,7 +674,6 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           text-align: left;
         }
 
-        /* ══ FOOTER ══ */
         .doc-footer-mini {
           margin-top: 4mm;
           padding-top: 5px;
@@ -624,7 +695,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           <span className="doc-banner-printed">Imprimée le {printedAt}</span>
         </div>
 
-        {/* HEADER 3 colonnes : logo+meta · QR · adresse livraison */}
+        {/* HEADER 3 colonnes */}
         <div className="doc-header">
           <div className="doc-header-left">
             <img className="doc-logo"
@@ -634,13 +705,13 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
             <table className="doc-meta-table">
               <tbody>
                 <tr>
-                  <td className="doc-meta-label">N° {data.formType === "Offre" ? "d'offre" : "de commande"}</td>
-                  <td><strong>{numeroAffiche || data.offerNumber}</strong></td>
+                  <td className="doc-meta-label">{numeroLabel}</td>
+                  <td><strong>{numeroAffiche}</strong></td>
                 </tr>
                 {data.reference && (
                   <tr><td className="doc-meta-label">Référence</td><td>{data.reference}</td></tr>
                 )}
-                <tr><td className="doc-meta-label">Date commande</td><td>{formatDate(data.date)}</td></tr>
+                <tr><td className="doc-meta-label">{dateLabel}</td><td>{formatDate(dateDocument)}</td></tr>
                 <tr><td className="doc-meta-label">Commercial</td><td>{data.commercial}</td></tr>
                 {data.leadTime && (
                   <tr><td className="doc-meta-label">Délai de livraison</td><td>{data.leadTime}</td></tr>
@@ -653,17 +724,15 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
             </table>
           </div>
 
-          {/* QR Code colonne dédiée à côté du logo */}
           <div className="doc-header-qr">
             <div id="qr-commande"></div>
-            <div className="qr-label">Scan = N° cmd</div>
+            <div className="qr-label">Scan = N° {typeDocument === "Offre" ? "offre" : "cmd"}</div>
           </div>
 
-          {/* Adresse livraison */}
           <div className="doc-header-right">
             <div className="doc-addr-window">
               <span className="doc-addr-window-title">📦 Adresse de livraison</span>
-              <div className="doc-addr-ref">Réf : {numeroAffiche || data.offerNumber}</div>
+              <div className="doc-addr-ref">Réf : {numeroAffiche}</div>
 
               {isPickup && (
                 <div className="doc-pickup-badge">⚠ À L'EMPORTER</div>
@@ -691,7 +760,15 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           </div>
         )}
 
-        {/* TABLEAU ARTICLES — avec colonnes Prix et Total */}
+        {/* ══ REMARQUES EN HAUT — AVANT LES ARTICLES (très visibles) ══ */}
+        {data.remarks && data.remarks.trim() && (
+          <div className="doc-remarks-top">
+            <div className="doc-remarks-top-title">⚠ Notes / Instructions importantes</div>
+            <div className="doc-remarks-top-text">{data.remarks}</div>
+          </div>
+        )}
+
+        {/* TABLEAU ARTICLES */}
         <table className="doc-table">
           <thead>
             <tr>
@@ -709,13 +786,17 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               <tr><td colSpan={7} style={{textAlign:"center", padding:"20px", color:"#aaa", fontStyle:"italic"}}>Aucun article</td></tr>
             )}
             {data.lines.map((line) => {
+              // ─── Ligne COMMENTAIRE (bandeau bleu pâle, pleine largeur) ───
               if (line.type === "comment") {
                 return (
                   <tr key={line.id} className="tr-comment">
-                    <td colSpan={7}>💬 {line.title}</td>
+                    <td colSpan={7}>💬 {line.title || <em style={{opacity:0.6}}>(commentaire vide)</em>}</td>
                   </tr>
                 );
               }
+
+              // ─── Ligne ARTICLE (product OU custom à la volée) ───
+              const isCustom = line.type === "custom";
 
               // Stock
               let stockDisplay: React.ReactNode;
@@ -737,7 +818,11 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               return (
                 <tr key={line.id} className="row-product">
                   <td className="td-img">
-                    {line.image && <img src={line.image} alt="" />}
+                    {line.image ? (
+                      <img src={line.image} alt="" />
+                    ) : (
+                      <div className="td-img-placeholder">{isCustom ? "✏️" : "—"}</div>
+                    )}
                   </td>
 
                   <td className="td-circles">
@@ -754,14 +839,19 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                   </td>
 
                   <td className="td-desc">
-                    <div className="item-title">{line.title}</div>
-                    {line.sku && (
+                    <div className="item-title">
+                      {isCustom && <span className="item-custom-badge">À la volée</span>}
+                      {line.title}
+                    </div>
+                    {line.sku ? (
                       <>
                         <div className="item-sku-text">SKU : {line.sku}</div>
                         <div className="item-barcode">
                           <svg className="barcode-sku" data-sku={line.sku}></svg>
                         </div>
                       </>
+                    ) : (
+                      <span className="item-no-sku">⚠ Sans SKU</span>
                     )}
                   </td>
 
@@ -786,13 +876,13 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           </tbody>
         </table>
 
-        {/* NOTES + TOTAUX COMPLETS */}
+        {/* NOTES EN BAS (rappel discret) + TOTAUX COMPLETS */}
         <div className="doc-bottom-wrap">
           <div className="doc-notes-col">
-            {data.remarks && (
+            {data.remarks && data.remarks.trim() && (
               <>
-                <div className="doc-notes-title">⚠ Notes / Instructions</div>
-                <div className="doc-notes-text">{data.remarks}</div>
+                <div className="doc-notes-bottom-title">📌 Rappel des instructions</div>
+                <div className="doc-notes-bottom-text">{data.remarks}</div>
               </>
             )}
           </div>
@@ -860,14 +950,18 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                   <td className="pt-total-value">{formatMoney(totals.finalTotal)}</td>
                 </tr>
 
-                {/* Acompte / Solde à remplir à la main */}
+                {/* ─── Acompte / Solde — alignés à droite (dans la colonne value) ─── */}
                 <tr className="pt-fillable">
                   <td className="pt-label">Acompte versé</td>
-                  <td className="pt-value">_____________</td>
+                  <td className="pt-value">
+                    CHF&nbsp;<span className="pt-fill-line"></span>
+                  </td>
                 </tr>
                 <tr className="pt-fillable">
                   <td className="pt-label">Solde à percevoir</td>
-                  <td className="pt-value">_____________</td>
+                  <td className="pt-value">
+                    CHF&nbsp;<span className="pt-fill-line"></span>
+                  </td>
                 </tr>
 
                 {data.paymentMode && (
@@ -898,7 +992,6 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           </div>
         </div>
 
-        {/* FOOTER */}
         <div className="doc-footer-mini">
           Jardin-Confort SA · Route de Lavaux 425 · 1095 Lutry · +41 21 791 36 71 · Document interne — ne pas remettre au client
         </div>
