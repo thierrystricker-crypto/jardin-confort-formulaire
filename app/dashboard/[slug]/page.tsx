@@ -82,6 +82,10 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [pdfGenerating,setPdfGenerating]=useState(false)
   const [qrUrl,setQrUrl]=useState<string|null>(null)
   const [qrGenerating,setQrGenerating]=useState(false)
+  // ─── NOUVEAU : state pour la fiche de travail ───
+  const [ficheTravailUrl, setFicheTravailUrl] = useState<string|null>(null)
+  const [ficheTravailGenerating, setFicheTravailGenerating] = useState(false)
+  // ────────────────────────────────────────────────
   const [relancing,setRelancing]=useState(false)
   const [relanceStatus,setRelanceStatus]=useState("")
   const [emailCopied,setEmailCopied]=useState(false)
@@ -127,6 +131,11 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         if ((o as unknown as Record<string,unknown>).qr_url) {
           setQrUrl((o as unknown as Record<string,unknown>).qr_url as string)
         }
+        // ─── NOUVEAU : charger l'URL fiche travail si déjà générée ───
+        if ((o as unknown as Record<string,unknown>).fiche_travail_pdf_url) {
+          setFicheTravailUrl((o as unknown as Record<string,unknown>).fiche_travail_pdf_url as string)
+        }
+        // ──────────────────────────────────────────────────────────────
         if ((o as unknown as Record<string,unknown>).probabilite) {
           setProbabilite((o as unknown as Record<string,unknown>).probabilite as string)
         }
@@ -173,6 +182,28 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     } catch { /* ignore */ }
     finally { setQrGenerating(false) }
   }
+
+  // ─── NOUVEAU : fonction de génération de la fiche de travail ───
+  async function generateFicheTravail() {
+    if(!slug) return
+    setFicheTravailGenerating(true)
+    try {
+      const res = await fetch(`/api/offres/${slug}/fiche-travail-pdf`, { method: "POST" })
+      const json = await res.json()
+      if (res.ok && json.pdf_url) {
+        setFicheTravailUrl(json.pdf_url)
+        // Ouvrir directement le PDF dans un nouvel onglet
+        window.open(json.pdf_url, "_blank")
+      } else {
+        alert("Erreur génération fiche de travail : " + (json.error || res.status))
+      }
+    } catch (e) {
+      alert("Erreur réseau : " + (e as Error).message)
+    } finally {
+      setFicheTravailGenerating(false)
+    }
+  }
+  // ────────────────────────────────────────────────────────────────
 
   async function saveProbabilite(val: string) {
     setProbSaving(true)
@@ -387,6 +418,8 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const urlPrint=`${APP_URL}/print/offre/${offre.slug}`
   const isAbandonne=offre.statut==="Abandonnée"
   const isOffre=offre.type_document==="Offre"&&!["Convertie","Acceptée"].includes(offre.statut)
+  // ─── NOUVEAU : afficher le bouton fiche de travail uniquement pour les commandes ───
+  const isCommande = offre.type_document === "Commande" || ["Acceptée", "Convertie"].includes(offre.statut)
 
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
@@ -442,6 +475,38 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                 <span className="relative">{qrGenerating ? "⏳ Génération QR…" : "🧾 Générer QR paiement"}</span>
               </button>
             )}
+
+            {/* ─── NOUVEAU : bouton Fiche de travail (commandes uniquement) ─── */}
+            {isCommande && (
+              <>
+                {ficheTravailUrl ? (
+                  <a href={ficheTravailUrl} target="_blank" rel="noopener noreferrer" download
+                    className="inline-flex items-center rounded-xl border border-amber-500/30 bg-amber-500/15 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/20">
+                    📋 Fiche de travail
+                  </a>
+                ) : (
+                  <button onClick={generateFicheTravail} disabled={ficheTravailGenerating}
+                    className="relative inline-flex items-center overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-80">
+                    {ficheTravailGenerating && (
+                      <span className="absolute inset-0 overflow-hidden rounded-xl">
+                        <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-amber-500/30"/>
+                      </span>
+                    )}
+                    <span className="relative">
+                      {ficheTravailGenerating ? "📋 Génération…" : "📋 Générer fiche de travail"}
+                    </span>
+                  </button>
+                )}
+                {ficheTravailUrl && (
+                  <button onClick={generateFicheTravail} disabled={ficheTravailGenerating}
+                    className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-3 py-2 text-xs text-zinc-400 transition hover:bg-[#40454b] disabled:opacity-50"
+                    title="Régénérer la fiche avec le stock à jour">
+                    {ficheTravailGenerating ? "⏳" : "🔄"}
+                  </button>
+                )}
+              </>
+            )}
+            {/* ───────────────────────────────────────────────────────────────── */}
           </div>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex items-start gap-4">
@@ -702,6 +767,24 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                 </div>
               </section>
             )}
+
+            {/* ─── NOUVEAU : aperçu Fiche de travail (commandes uniquement) ─── */}
+            {isCommande && ficheTravailUrl && (
+              <section className="rounded-2xl border border-amber-500/20 bg-[#2a2d31] p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-semibold flex items-center gap-2">
+                    📋 Fiche de travail
+                    <span className="text-xs font-normal text-amber-300/70 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-0.5">Interne</span>
+                  </h2>
+                  <a href={ficheTravailUrl} target="_blank" rel="noopener noreferrer" download
+                    className="rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/20">Télécharger ↓</a>
+                </div>
+                <div className="overflow-hidden rounded-2xl border border-amber-500/20 bg-black/20">
+                  <iframe src={ficheTravailUrl} title="Aperçu fiche de travail" className="h-[600px] w-full border-0"/>
+                </div>
+              </section>
+            )}
+            {/* ──────────────────────────────────────────────────────────────── */}
 
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
               <div className="mb-4 flex items-center justify-between">
