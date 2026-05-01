@@ -492,9 +492,9 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           display: block;
           font-size: 7.5px;
           color: #555;
-          letter-spacing: 0.04em;
+          letter-spacing: 0.05em;
           margin-top: 2px;
-          text-transform: uppercase;
+          font-weight: 600;
         }
 
         /* ── Quantité ── */
@@ -654,6 +654,42 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           padding: 6px 4px !important;
         }
 
+        /* ══ BLOC ADRESSE DE FACTURATION (colonne gauche, au-dessus de la signature) ══ */
+        .doc-billing-block {
+          background: #f3f4f6;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          padding: 8px 12px 9px;
+        }
+        .doc-billing-block-title {
+          font-size: 10px;
+          font-weight: 700;
+          color: #555;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          margin-bottom: 4px;
+          padding-bottom: 3px;
+          border-bottom: 1px solid #d1d5db;
+        }
+        .doc-billing-block-content {
+          font-size: 11.5px;
+          color: ${BLACK};
+          line-height: 1.4;
+        }
+        .doc-billing-name {
+          font-weight: 700;
+          font-size: 12.5px;
+          margin: 1px 0;
+        }
+        .doc-billing-contact {
+          margin-top: 3px;
+          font-size: 10.5px;
+          color: #555;
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
         /* ══ ZONE SIGNATURE FINALE (déplacée dans la colonne gauche) ══ */
         .doc-final-sign {
           margin-top: auto; /* pousse en bas de la colonne notes pour aligner avec totaux */
@@ -759,17 +795,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           </div>
         </div>
 
-        {/* Adresse facturation si différente */}
-        {data.livrDiff && (
-          <div className="doc-billing-info">
-            <span className="doc-billing-info-label">Facturation :</span>
-            <span>
-              {data.societe && <>{data.societe} · </>}
-              {data.nom} {data.prenom} · {data.rue} {data.numero}, {data.npa} {data.ville}
-              {data.telephone1 && <> · {data.telephone1}</>}
-            </span>
-          </div>
-        )}
+        {/* (L'adresse de facturation est désormais affichée dans la colonne gauche en bas) */}
 
         {/* ══ REMARQUES EN HAUT — AVANT LES ARTICLES (très visibles) ══ */}
         {data.remarks && data.remarks.trim() && (
@@ -841,7 +867,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                       <span className="check-circle"></span>
                       <span className="check-circle"></span>
                     </div>
-                    <span className="check-circles-labels">cmd · rés</span>
+                    <span className="check-circles-labels">Rès · cdé</span>
                   </td>
 
                   <td className="td-qty">
@@ -896,6 +922,22 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                 <div className="doc-notes-bottom-text">{data.remarks}</div>
               </>
             )}
+
+            {/* ─── Bloc adresse de facturation (toujours visible) ─── */}
+            <div className="doc-billing-block">
+              <div className="doc-billing-block-title">💼 Adresse de facturation</div>
+              <div className="doc-billing-block-content">
+                {data.societe && <div>{data.societe}</div>}
+                <div className="doc-billing-name">{data.nom} {data.prenom}</div>
+                {data.rue && <div>{data.rue} {data.numero}</div>}
+                {data.npa && <div>{data.npa} {data.ville}</div>}
+                <div className="doc-billing-contact">
+                  {data.telephone1 && <span>📞 {data.telephone1}</span>}
+                  {data.email && <span>✉ {data.email}</span>}
+                </div>
+              </div>
+            </div>
+            {/* ──────────────────────────────────────────────────── */}
 
             {/* ─── ZONE SIGNATURE CLIENT — déplacée à gauche pour gagner de la hauteur ─── */}
             <div className="doc-final-sign">
