@@ -573,9 +573,14 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           display: flex;
           gap: 14px;
           margin-bottom: 4mm;
-          align-items: flex-start;
+          align-items: stretch; /* les 2 colonnes ont la même hauteur */
         }
-        .doc-notes-col { flex: 1; min-width: 0; }
+        .doc-notes-col {
+          flex: 1; min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
         .doc-totals-col { flex: 0 0 46%; }
 
         /* Notes complémentaires en bas (rappel) — bordure plus discrète */
@@ -649,33 +654,33 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           padding: 6px 4px !important;
         }
 
-        /* ══ ZONE SIGNATURE FINALE ══ */
+        /* ══ ZONE SIGNATURE FINALE (déplacée dans la colonne gauche) ══ */
         .doc-final-sign {
-          margin-top: 3mm;
+          margin-top: auto; /* pousse en bas de la colonne notes pour aligner avec totaux */
           border: 2px solid #000;
           border-radius: 4px;
-          padding: 10px 14px;
+          padding: 12px 14px 14px;
           page-break-inside: avoid;
           background: #fafbfc;
         }
         .doc-final-sign-text {
-          font-size: 12px;
+          font-size: 11.5px;
           font-weight: 700;
           color: ${BLACK};
           letter-spacing: 0.03em;
           text-transform: uppercase;
-          margin-bottom: 10px;
+          margin-bottom: 14px;
           text-align: center;
         }
         .doc-final-sign-row {
           display: flex;
-          gap: 24px;
+          gap: 18px;
           align-items: flex-end;
         }
-        .doc-final-sign-field { flex: 0 0 30%; }
+        .doc-final-sign-field { flex: 0 0 32%; }
         .doc-final-sign-field-large { flex: 1; }
         .doc-final-sign-line {
-          height: 22px;
+          height: 26px;
           border-bottom: 1.5px solid #555;
         }
         .doc-final-sign-label {
@@ -882,7 +887,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           </tbody>
         </table>
 
-        {/* NOTES EN BAS (rappel discret) + TOTAUX COMPLETS */}
+        {/* NOTES EN BAS + SIGNATURE (colonne gauche) + TOTAUX COMPLETS (colonne droite) */}
         <div className="doc-bottom-wrap">
           <div className="doc-notes-col">
             {data.remarks && data.remarks.trim() && (
@@ -891,6 +896,23 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                 <div className="doc-notes-bottom-text">{data.remarks}</div>
               </>
             )}
+
+            {/* ─── ZONE SIGNATURE CLIENT — déplacée à gauche pour gagner de la hauteur ─── */}
+            <div className="doc-final-sign">
+              <div className="doc-final-sign-text">
+                ✓ Marchandise contrôlée et reçue en parfait état
+              </div>
+              <div className="doc-final-sign-row">
+                <div className="doc-final-sign-field">
+                  <div className="doc-final-sign-line"></div>
+                  <div className="doc-final-sign-label">Date</div>
+                </div>
+                <div className="doc-final-sign-field-large">
+                  <div className="doc-final-sign-line"></div>
+                  <div className="doc-final-sign-label">Signature client</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="doc-totals-col">
@@ -959,15 +981,11 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                 {/* ─── Acompte / Solde — cellules vides à remplir à la main ─── */}
                 <tr className="pt-fillable">
                   <td className="pt-label">Acompte versé</td>
-                  <td className="pt-value">
-                    <span className="pt-fill-empty">CHF</span>
-                  </td>
+                  <td className="pt-value"></td>
                 </tr>
                 <tr className="pt-fillable">
                   <td className="pt-label">Solde à percevoir</td>
-                  <td className="pt-value">
-                    <span className="pt-fill-empty">CHF</span>
-                  </td>
+                  <td className="pt-value"></td>
                 </tr>
 
                 {data.paymentMode && (
@@ -981,26 +999,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           </div>
         </div>
 
-        {/* ZONE SIGNATURE CLIENT FINALE */}
-        <div className="doc-final-sign">
-          <div className="doc-final-sign-text">
-            ✓ Marchandise contrôlée et reçue en parfait état
-          </div>
-          <div className="doc-final-sign-row">
-            <div className="doc-final-sign-field">
-              <div className="doc-final-sign-line"></div>
-              <div className="doc-final-sign-label">Date</div>
-            </div>
-            <div className="doc-final-sign-field-large">
-              <div className="doc-final-sign-line"></div>
-              <div className="doc-final-sign-label">Signature client</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="doc-footer-mini">
-          Jardin-Confort SA · Route de Lavaux 425 · 1095 Lutry · +41 21 791 36 71 · Document interne — ne pas remettre au client
-        </div>
+        {/* (Le bloc signature a été déplacé dans la colonne gauche, à côté des totaux) */}
 
       </div>
     </>
