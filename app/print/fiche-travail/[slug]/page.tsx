@@ -2,8 +2,7 @@
 // ═══════════════════════════════════════════════════════════════
 //  app/print/fiche-travail/[slug]/page.tsx
 //  Template d'impression — FICHE DE TRAVAIL (interne entrepôt)
-//  Adresse de LIVRAISON principale + codes-barres SKU + QR commande
-//  Cercles ®© commandé/réservé · Big-qty · Stock · Acompte/Solde
+//  v2 : QR en haut, prix complets, ajustements UI
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState, useRef } from "react";
@@ -13,6 +12,19 @@ const BLACK  = "#000000";
 const GREY   = "#333333";
 const LIGHT  = "#f9f9f9";
 const ORANGE = "#e67e22";
+const QTY_HIGHLIGHT = "#dc2626"; // rouge pour qty > 1
+
+const TVA_RATE = 0.081;
+
+type ServiceItem = { code: string; label: string; defaultPrice?: number };
+const serviceOptions: ServiceItem[] = [
+  { code: "montage",       label: "Frais de montage" },
+  { code: "poste",         label: "Livraison des colis par La Poste" },
+  { code: "trottoir",      label: "Livraison colis franco trottoir" },
+  { code: "etage",         label: "Livraison à l'étage et déballage" },
+  { code: "etage_montage", label: "Livraison à l'étage, déballage et montage" },
+  { code: "reprise",       label: "Reprise et recyclage des anciens meubles" },
+];
 
 type QuoteLine = {
   id: string;
@@ -44,6 +56,11 @@ type PrintData = {
   remarks: string;
   leadTime: string;
   deliveryMode?: string;
+  discount?: string;
+  discountPercent?: string;
+  manualRounding?: string;
+  enabledServices?: Record<string, boolean>;
+  servicePrices?: Record<string, string>;
 };
 
 const EMPTY: PrintData = {
@@ -55,6 +72,8 @@ const EMPTY: PrintData = {
   livrTel: "", livrRue: "", livrNumero: "", livrNpa: "", livrVille: "",
   lines: [], remarks: "", leadTime: "",
   deliveryMode: "Livraison à domicile",
+  discount: "0", discountPercent: "0", manualRounding: "",
+  enabledServices: {}, servicePrices: {},
 };
 
 function formatDate(iso: string) {
@@ -69,6 +88,53 @@ function formatDateTime() {
   });
 }
 
+function formatMoney(value: number) {
+  const formatted = new Intl.NumberFormat("de-CH", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(value);
+  return `CHF ${formatted}`;
+}
+
+// ── Calcul des totaux (réplique de la logique du formulaire) ──
+function computeTotals(d: PrintData) {
+  const isPrivateTTC = d.clientType === "Privé (prix TTC)";
+
+  const subTotal = d.lines.reduce((s, l) => {
+    if (l.type === "comment") return s;
+    return s + (l.qty * l.unitPrice - (l.lineDiscount || 0));
+  }, 0);
+
+  const pct = Number(d.discountPercent || 0);
+  const discountValue = pct > 0 ? Math.round(subTotal * pct) / 100 : Number(d.discount || 0);
+
+  const enabled = d.enabledServices || {};
+  const prices = d.servicePrices || {};
+  const fixedServices = serviceOptions.reduce((s, srv) => {
+    if (!enabled[srv.code]) return s;
+    return s + Number(prices[srv.code] || 0);
+  }, 0);
+  const customService = enabled["custom"] ? Number(prices["custom"] || 0) : 0;
+  const serviceTotal = fixedServices + customService;
+
+  const totalAfterDiscount = subTotal - discountValue;
+  const totalPlusServices = totalAfterDiscount + serviceTotal;
+
+  const roundingValue = Math.min(0, Number(d.manualRounding) || 0);
+  const totalAfterRounding = totalPlusServices + roundingValue;
+
+  const tvaAmount = isPrivateTTC
+    ? totalAfterRounding - totalAfterRounding / (1 + TVA_RATE)
+    : totalAfterRounding * TVA_RATE;
+
+  const finalTotal = isPrivateTTC ? totalAfterRounding : totalAfterRounding + tvaAmount;
+
+  return {
+    isPrivateTTC, subTotal, discountValue, serviceTotal,
+    totalAfterDiscount, totalPlusServices, roundingValue,
+    totalAfterRounding, tvaAmount, finalTotal,
+  };
+}
+
 export default function PrintFicheTravail({ params }: { params: Promise<{ slug: string }> }) {
   const [data, setData] = useState<PrintData>(EMPTY);
   const [ready, setReady] = useState(false);
@@ -80,17 +146,13 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
     async function load() {
       const { slug } = await params;
       try {
-        // snapshot=false → on récupère le STOCK LIVE Shopify (cf. ton API)
         const res = await fetch(`/api/offres/${slug}?snapshot=false`);
         if (res.ok) {
           const json = await res.json();
           const offreData = json.offre?.data;
           if (offreData) {
             setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber || slug);
-            setData({
-              ...EMPTY,
-              ...offreData,
-            });
+            setData({ ...EMPTY, ...offreData });
           }
         }
       } catch (e) {
@@ -101,13 +163,11 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
     load();
   }, [params]);
 
-  // ── Génération des codes-barres CODE128 (JsBarcode) + QR Code ──
-  // On charge JsBarcode et qrcode-generator depuis CDN, on les dessine après render.
+  // Génération codes-barres + QR
   useEffect(() => {
     if (!ready || barcodesRendered.current) return;
     if (data.lines.length === 0 && !numeroAffiche) return;
 
-    // Charger JsBarcode + qrcode dynamiquement (1 seule fois)
     const loadScript = (src: string, id: string) =>
       new Promise<void>((resolve, reject) => {
         if (document.getElementById(id)) { resolve(); return; }
@@ -122,7 +182,6 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
       loadScript("https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js", "jsbarcode-script"),
       loadScript("https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js", "qrcode-script"),
     ]).then(() => {
-      // Codes-barres SKU
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const JsBarcode = (window as any).JsBarcode;
       if (JsBarcode) {
@@ -133,12 +192,9 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
             JsBarcode(el, sku, {
               format: "CODE128",
               width: 1.6,
-              height: 38,
-              displayValue: true,
-              fontSize: 11,
-              font: "Raleway, Arial, sans-serif",
+              height: 26,            // ▼ réduit (avant 38)
+              displayValue: false,   // ▼ pas de SKU sous le code
               margin: 0,
-              textMargin: 2,
               lineColor: "#000000",
             });
           } catch (e) {
@@ -147,7 +203,6 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         });
       }
 
-      // QR Code commande
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const qrcode = (window as any).qrcode;
       if (qrcode && numeroAffiche) {
@@ -156,7 +211,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           const qr = qrcode(0, "M");
           qr.addData(numeroAffiche);
           qr.make();
-          qrEl.innerHTML = qr.createImgTag(4, 0); // 4px par module, 0 marge
+          qrEl.innerHTML = qr.createImgTag(3, 0); // 3px par module = QR plus petit
         }
       }
       barcodesRendered.current = true;
@@ -165,7 +220,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
   if (!ready) return <div style={{padding:40, textAlign:"center", color:GREY}}>Chargement…</div>;
 
-  // ── Adresse de livraison à afficher en HAUT (principale) ──
+  // Adresse livraison
   const livrSociete  = data.livrDiff ? data.livrSociete  : data.societe;
   const livrNom      = data.livrDiff ? data.livrNom      : data.nom;
   const livrPrenom   = data.livrDiff ? data.livrPrenom   : data.prenom;
@@ -173,10 +228,26 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
   const livrNumero   = data.livrDiff ? data.livrNumero   : data.numero;
   const livrNpa      = data.livrDiff ? data.livrNpa      : data.npa;
   const livrVille    = data.livrDiff ? data.livrVille    : data.ville;
-  const livrTel      = data.livrDiff ? data.livrTel      : data.telephone1;
+  // Téléphone livraison sinon facturation
+  const livrTelEffectif = (data.livrDiff && data.livrTel) ? data.livrTel : data.telephone1;
+  // Email du client (toujours celui de la facturation, c'est le seul saisi)
+  const clientEmail = data.email;
 
   const isPickup = data.deliveryMode === "À l'emporter";
   const totalQty = data.lines.reduce((s, l) => l.type === "comment" ? s : s + l.qty, 0);
+
+  // Totaux
+  const totals = computeTotals(data);
+
+  // Liste des services actifs
+  const activeServices = [
+    ...serviceOptions
+      .filter((s) => data.enabledServices?.[s.code])
+      .map((s) => ({ label: s.label, amount: Number(data.servicePrices?.[s.code] || 0) })),
+    ...(data.enabledServices?.["custom"]
+      ? [{ label: data.servicePrices?.["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices?.["custom"] || 0) }]
+      : []),
+  ];
 
   return (
     <>
@@ -199,12 +270,12 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         }
         @media print { .print-btn { display: none !important; } }
 
-        /* ══ BANDEAU TITRE FICHE DE TRAVAIL ══ */
+        /* ══ BANDEAU TITRE ══ */
         .doc-banner {
           background: ${THEME};
           color: white;
           padding: 6px 14px;
-          margin-bottom: 5mm;
+          margin-bottom: 4mm;
           border-radius: 4px;
           display: flex;
           justify-content: space-between;
@@ -215,11 +286,40 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         }
         .doc-banner-printed { font-size: 11px; font-weight: 400; opacity: 0.9; }
 
-        /* ══ HEADER ══ */
-        .doc-header { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 5mm; width: 100%; }
-        .doc-header-left { flex: 0 0 46%; }
-        .doc-header-right { flex: 0 0 50%; }
-        .doc-logo { max-width: 165px; max-height: 60px; object-fit: contain; display: block; margin-bottom: 8px; }
+        /* ══ HEADER : 3 colonnes (logo+meta · QR · adresse livraison) ══ */
+        .doc-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 4mm;
+          width: 100%;
+          align-items: flex-start;
+        }
+        .doc-header-left {
+          flex: 0 0 42%;
+        }
+        .doc-header-qr {
+          flex: 0 0 90px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding-top: 4px;
+        }
+        .doc-header-qr img { display: block; }
+        .doc-header-qr .qr-label {
+          font-size: 8px;
+          color: #666;
+          margin-top: 3px;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          text-align: center;
+        }
+        .doc-header-right {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .doc-logo { max-width: 165px; max-height: 60px; object-fit: contain; display: block; margin-bottom: 6px; }
         .doc-type {
           font-size: 22px; font-weight: 900;
           color: ${THEME}; margin-bottom: 6px;
@@ -227,24 +327,12 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           text-transform: uppercase;
         }
         .doc-meta-table { border-collapse: collapse; width: 100%; }
-        .doc-meta-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 12px; line-height: 1.35; }
-        .doc-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 44%; }
+        .doc-meta-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 11.5px; line-height: 1.35; }
+        .doc-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 50%; }
 
-        /* QR Code à côté du logo */
-        .qr-wrap {
-          display: inline-flex; flex-direction: column; align-items: center;
-          margin-top: 8px;
-        }
-        .qr-wrap img { display: block; }
-        .qr-label {
-          font-size: 9px; color: #666; margin-top: 2px;
-          letter-spacing: 0.05em; text-transform: uppercase;
-        }
-
-        /* ══ FENÊTRE ADRESSE LIVRAISON (principale) ══ */
+        /* ══ FENÊTRE ADRESSE LIVRAISON ══ */
         .doc-addr-window {
           padding: 10px 14px 10px 16px;
-          min-height: 50mm;
           background: white;
           border: 2px solid ${THEME};
           border-radius: 6px;
@@ -262,34 +350,33 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           text-transform: uppercase;
         }
         .doc-addr-ref { font-size: 11px; color: #666; font-weight: 400; margin-bottom: 4px; }
-        .doc-addr-name { font-size: 18px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin-bottom: 3px; }
-        .doc-addr-line { font-size: 16px; color: ${BLACK}; line-height: 1.35; font-weight: 400; }
-        .doc-addr-tel { margin-top: 6px; font-size: 14px; font-weight: 600; }
+        .doc-addr-name { font-size: 17px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin-bottom: 3px; }
+        .doc-addr-line { font-size: 15px; color: ${BLACK}; line-height: 1.35; font-weight: 400; }
+        .doc-addr-tel { margin-top: 4px; font-size: 13px; font-weight: 600; }
+        .doc-addr-email { font-size: 12px; color: #555; }
 
         .doc-pickup-badge {
           display: inline-block;
           background: ${ORANGE};
           color: white;
-          padding: 5px 12px;
+          padding: 4px 10px;
           border-radius: 4px;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 800;
-          margin-bottom: 6px;
+          margin-bottom: 5px;
           letter-spacing: 0.05em;
         }
 
-        .doc-hr { border: 0; border-top: 2px solid ${THEME}; margin: 4mm 0; width: 100%; }
-
-        /* ══ ADRESSE FACTURATION (secondaire) ══ */
+        /* ══ Adresse facturation (info secondaire) ══ */
         .doc-billing-info {
           background: #f3f4f6;
-          padding: 8px 12px;
+          padding: 7px 12px;
           border-radius: 4px;
           margin-bottom: 4mm;
           font-size: 11px;
           color: #555;
           display: flex;
-          gap: 14px;
+          gap: 12px;
           align-items: baseline;
         }
         .doc-billing-info-label {
@@ -301,7 +388,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           flex-shrink: 0;
         }
 
-        /* ══ TABLEAU ARTICLES ══ */
+        /* ══ TABLEAU ══ */
         .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 4mm; }
         .doc-table thead th {
           padding: 7px 4px;
@@ -315,6 +402,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         }
         .doc-table thead th.th-left { text-align: left; }
         .doc-table thead th.th-center { text-align: center; }
+        .doc-table thead th.th-right { text-align: right; }
         .doc-table tbody tr td {
           padding: 8px 4px;
           border-bottom: 1px solid #d1d5db;
@@ -322,49 +410,55 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           font-size: 12px;
         }
         .doc-table tbody tr.row-product:nth-child(even) td { background: ${LIGHT}; }
+
         .td-img { width: 56px; vertical-align: middle; text-align: center; }
         .td-img img { max-width: 50px; max-height: 50px; object-fit: contain; }
-        .td-circles { width: 60px; text-align: center; }
-        .td-qty { width: 80px; text-align: center; vertical-align: middle; }
-        .td-stock { width: 80px; text-align: center; vertical-align: middle; }
+        .td-circles { width: 54px; text-align: center; }
+        .td-qty { width: 60px; text-align: center; vertical-align: middle; }
+        .td-stock { width: 78px; text-align: center; vertical-align: middle; }
+        .td-price { width: 70px; text-align: right; vertical-align: middle; }
+        .td-total { width: 78px; text-align: right; vertical-align: middle; font-weight: 700; }
         .td-desc { padding-left: 6px !important; }
 
-        /* ── Cercles commandé/réservé (style ®©) ── */
+        /* ── Cercles cmd/rés (▼ plus petits) ── */
         .check-circle {
           display: inline-block;
-          width: 22px; height: 22px;
-          border: 2px solid #000;
+          width: 16px; height: 16px;
+          border: 1.8px solid #000;
           border-radius: 50%;
-          margin: 0 2px;
+          margin: 0 1.5px;
           vertical-align: middle;
         }
         .check-circles-labels {
           display: block;
-          font-size: 8px;
+          font-size: 7.5px;
           color: #555;
           letter-spacing: 0.04em;
           margin-top: 2px;
           text-transform: uppercase;
         }
 
-        /* ── Big quantity ── */
-        .big-qty {
-          font-size: 26px;
-          font-weight: 900;
+        /* ── Quantité (▼ pas en gras, couleur si > 1) ── */
+        .qty-num {
+          font-size: 24px;
+          font-weight: 400;
           color: ${BLACK};
           line-height: 1;
         }
-        .big-qty-x {
-          font-size: 14px;
+        .qty-num-multi {
+          color: ${QTY_HIGHLIGHT};
           font-weight: 700;
-          color: #555;
+        }
+        .qty-x {
+          font-size: 13px;
+          color: #777;
           margin-left: 1px;
         }
 
         /* ── Description ── */
-        .item-title { font-weight: 700; color: ${BLACK}; line-height: 1.35; font-size: 12px; }
-        .item-sku-text { font-size: 10px; color: #555; margin-top: 2px; font-weight: 400; }
-        .item-barcode { margin-top: 4px; }
+        .item-title { font-weight: 700; color: ${BLACK}; line-height: 1.3; font-size: 12px; }
+        .item-sku-text { font-size: 10px; color: #555; margin-top: 1px; font-weight: 400; }
+        .item-barcode { margin-top: 3px; }
         .item-barcode svg { display: block; max-width: 100%; }
 
         /* ── Stock ── */
@@ -372,7 +466,11 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .stock-low   { color: ${ORANGE}; font-weight: 700; font-size: 12px; }
         .stock-cmd   { color: #dc2626; font-weight: 700; font-size: 11px; }
         .stock-na    { color: #999; font-style: italic; font-size: 11px; }
-        .stock-date  { display: block; font-size: 9px; color: #777; font-weight: 400; margin-top: 2px; }
+        .stock-date  { display: block; font-size: 9px; color: #777; font-weight: 400; margin-top: 1px; }
+
+        /* ── Prix ── */
+        .price-val { font-size: 11.5px; color: ${BLACK}; }
+        .line-discount { font-size: 10px; color: #2a8a2a; margin-top: 1px; }
 
         /* ── Lignes commentaires ── */
         .tr-comment td {
@@ -383,15 +481,15 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           font-size: 12px;
         }
 
-        /* ══ NOTES + TOTAUX ══ */
+        /* ══ NOTES + RÉCAP PRIX ══ */
         .doc-bottom-wrap {
           display: flex;
           gap: 14px;
-          margin-bottom: 5mm;
+          margin-bottom: 4mm;
           align-items: flex-start;
         }
-        .doc-notes-col { flex: 1; }
-        .doc-totals-col { flex: 0 0 42%; }
+        .doc-notes-col { flex: 1; min-width: 0; }
+        .doc-totals-col { flex: 0 0 46%; }
 
         .doc-notes-title {
           font-weight: 700;
@@ -402,92 +500,111 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           letter-spacing: 0.04em;
         }
         .doc-notes-text {
-          font-size: 12px;
+          font-size: 11.5px;
           color: ${GREY};
           line-height: 1.55;
           white-space: pre-wrap;
-          padding: 8px 10px;
+          padding: 7px 10px;
           background: #fffbea;
           border-left: 3px solid #f59e0b;
           border-radius: 0 4px 4px 0;
         }
 
-        /* ── Tableau récap (avec acompte/solde à remplir à la main) ── */
-        .doc-recap { width: 100%; border-collapse: collapse; }
-        .doc-recap td {
-          padding: 6px 8px;
-          font-size: 12px;
-          border-bottom: 1px solid #e5e7eb;
+        /* ── Tableau récap prix ── */
+        .doc-pricing { width: 100%; border-collapse: collapse; }
+        .doc-pricing td {
+          padding: 5px 4px;
+          font-size: 11.5px;
+          border-bottom: 1px solid #efefef;
         }
-        .doc-recap .recap-label { font-weight: 600; color: ${BLACK}; }
-        .doc-recap .recap-value { text-align: right; white-space: nowrap; color: ${BLACK}; font-weight: 600; }
-        .doc-recap .recap-total td {
-          border-top: 2px solid ${THEME};
-          border-bottom: 2px solid ${THEME};
-          padding: 9px 8px;
-          font-size: 14px;
-          font-weight: 900;
-          color: ${BLACK};
-          background: rgba(43, 138, 209, 0.06);
+        .doc-pricing tr:nth-child(even) td { background: ${LIGHT}; }
+        .doc-pricing .pt-label { font-weight: 600; color: ${BLACK}; }
+        .doc-pricing .pt-sub { font-size: 10.5px; padding-left: 14px !important; color: #555; font-weight: 400; }
+        .doc-pricing .pt-value { text-align: right; white-space: nowrap; color: ${BLACK}; }
+        .doc-pricing .pt-tva td { color: #666; font-size: 10.5px; }
+        .doc-pricing .pt-total td {
+          border-top: 2px solid ${THEME} !important;
+          border-bottom: 2px solid ${THEME} !important;
+          padding: 7px 4px !important;
+          background: rgba(43, 138, 209, 0.08) !important;
         }
-        .doc-recap .recap-fillable td {
-          padding: 12px 8px;
-          background: #fffbea;
-          border-bottom: 1px dashed #f59e0b;
+        .pt-total-label {
+          font-weight: 900 !important;
+          font-size: 14px !important;
+          color: ${BLACK} !important;
         }
-        .doc-recap .recap-fillable .recap-value {
-          border-bottom: 1.5px solid #999;
-          min-width: 90px;
-          display: inline-block;
-        }
-        .doc-recap .recap-final td {
-          border-top: 2px solid #000;
-          padding: 10px 8px;
-          font-size: 14px;
-          font-weight: 900;
-          color: ${BLACK};
-          background: #f3f4f6;
+        .pt-total-value {
+          font-weight: 900 !important;
+          font-size: 14px !important;
+          color: ${BLACK} !important;
+          text-align: right;
+          white-space: nowrap;
         }
 
-        /* ══ ZONE SIGNATURES PRÉPARATION/LIVRAISON ══ */
-        .doc-sign-row {
-          display: flex;
-          gap: 16px;
-          margin-top: 4mm;
-          page-break-inside: avoid;
+        /* ── Acompte / Solde fillable ── */
+        .pt-fillable td {
+          padding: 9px 4px !important;
+          background: #fffbea !important;
+          border-bottom: 1px dashed #f59e0b !important;
         }
-        .doc-sign-box {
-          flex: 1;
-          border: 1px solid #999;
+        .pt-fillable .pt-value {
+          border-bottom: 1.5px solid #999;
+          min-width: 100px;
+          display: inline-block;
+          font-size: 11px !important;
+        }
+
+        .pt-paymentmode td {
+          background: #f3f4f6 !important;
+          font-size: 10.5px !important;
+          padding: 6px 4px !important;
+        }
+
+        /* ══ ZONE SIGNATURE FINALE (réception) ══ */
+        .doc-final-sign {
+          margin-top: 5mm;
+          border: 2px solid #000;
           border-radius: 4px;
-          padding: 10px 12px;
-          min-height: 80px;
+          padding: 14px 18px;
+          page-break-inside: avoid;
+          background: #fafbfc;
         }
-        .doc-sign-title {
-          font-size: 11px;
+        .doc-final-sign-text {
+          font-size: 13px;
           font-weight: 700;
           color: ${BLACK};
+          letter-spacing: 0.03em;
           text-transform: uppercase;
-          letter-spacing: 0.04em;
-          margin-bottom: 8px;
-          border-bottom: 1px solid #ccc;
-          padding-bottom: 4px;
-        }
-        .doc-sign-line {
-          height: 28px;
-          border-bottom: 1px solid #999;
-          margin-top: 18px;
-        }
-        .doc-sign-sub {
-          font-size: 9px;
-          color: #777;
-          margin-top: 3px;
+          margin-bottom: 14px;
           text-align: center;
         }
+        .doc-final-sign-row {
+          display: flex;
+          gap: 30px;
+          align-items: flex-end;
+        }
+        .doc-final-sign-field {
+          flex: 0 0 30%;
+        }
+        .doc-final-sign-field-large {
+          flex: 1;
+        }
+        .doc-final-sign-line {
+          height: 28px;
+          border-bottom: 1.5px solid #555;
+        }
+        .doc-final-sign-label {
+          font-size: 10px;
+          color: #555;
+          margin-top: 3px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          text-align: left;
+        }
 
-        /* ══ FOOTER MINIMAL ══ */
+        /* ══ FOOTER ══ */
         .doc-footer-mini {
-          margin-top: 5mm;
+          margin-top: 4mm;
           padding-top: 5px;
           border-top: 1px solid #d1d5db;
           text-align: center;
@@ -501,13 +618,13 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
       <div className="doc-wrap">
 
-        {/* ══ BANDEAU FICHE DE TRAVAIL ══ */}
+        {/* BANDEAU */}
         <div className="doc-banner">
           <span>📋 FICHE DE TRAVAIL — USAGE INTERNE</span>
           <span className="doc-banner-printed">Imprimée le {printedAt}</span>
         </div>
 
-        {/* ══ HEADER ══ */}
+        {/* HEADER 3 colonnes : logo+meta · QR · adresse livraison */}
         <div className="doc-header">
           <div className="doc-header-left">
             <img className="doc-logo"
@@ -529,19 +646,20 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                   <tr><td className="doc-meta-label">Délai de livraison</td><td>{data.leadTime}</td></tr>
                 )}
                 {data.deliveryMode && (
-                  <tr><td className="doc-meta-label">Mode de livraison</td><td><strong>{data.deliveryMode}</strong></td></tr>
+                  <tr><td className="doc-meta-label">Mode livraison</td><td><strong>{data.deliveryMode}</strong></td></tr>
                 )}
                 <tr><td className="doc-meta-label">Total articles</td><td><strong>{totalQty} pce{totalQty > 1 ? "s" : ""}</strong></td></tr>
               </tbody>
             </table>
-
-            {/* QR code commande */}
-            <div className="qr-wrap">
-              <div id="qr-commande"></div>
-              <div className="qr-label">Scan = N° commande</div>
-            </div>
           </div>
 
+          {/* QR Code colonne dédiée à côté du logo */}
+          <div className="doc-header-qr">
+            <div id="qr-commande"></div>
+            <div className="qr-label">Scan = N° cmd</div>
+          </div>
+
+          {/* Adresse livraison */}
           <div className="doc-header-right">
             <div className="doc-addr-window">
               <span className="doc-addr-window-title">📦 Adresse de livraison</span>
@@ -555,12 +673,13 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               <div className="doc-addr-name">{livrNom} {livrPrenom}</div>
               {livrRue && <div className="doc-addr-line">{livrRue} {livrNumero}</div>}
               {livrNpa && <div className="doc-addr-line">{livrNpa} {livrVille}</div>}
-              {livrTel && <div className="doc-addr-tel">📞 {livrTel}</div>}
+              {livrTelEffectif && <div className="doc-addr-tel">📞 {livrTelEffectif}</div>}
+              {clientEmail && <div className="doc-addr-email">✉ {clientEmail}</div>}
             </div>
           </div>
         </div>
 
-        {/* ══ Adresse facturation (info secondaire) ══ */}
+        {/* Adresse facturation si différente */}
         {data.livrDiff && (
           <div className="doc-billing-info">
             <span className="doc-billing-info-label">Facturation :</span>
@@ -572,31 +691,33 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           </div>
         )}
 
-        {/* ══ TABLEAU ARTICLES ══ */}
+        {/* TABLEAU ARTICLES — avec colonnes Prix et Total */}
         <table className="doc-table">
           <thead>
             <tr>
               <th style={{width:56}}></th>
-              <th className="th-center" style={{width:60}}>Cmd / Rés</th>
-              <th className="th-center" style={{width:80}}>Qté</th>
+              <th className="th-center" style={{width:54}}>Cmd / Rés</th>
+              <th className="th-center" style={{width:60}}>Qté</th>
               <th className="th-left">Description / SKU / Code-barres</th>
-              <th className="th-center" style={{width:80}}>Stock</th>
+              <th className="th-right" style={{width:70}}>Prix/pce</th>
+              <th className="th-right" style={{width:78}}>Total</th>
+              <th className="th-center" style={{width:78}}>Stock</th>
             </tr>
           </thead>
           <tbody>
             {data.lines.length === 0 && (
-              <tr><td colSpan={5} style={{textAlign:"center", padding:"20px", color:"#aaa", fontStyle:"italic"}}>Aucun article</td></tr>
+              <tr><td colSpan={7} style={{textAlign:"center", padding:"20px", color:"#aaa", fontStyle:"italic"}}>Aucun article</td></tr>
             )}
             {data.lines.map((line) => {
               if (line.type === "comment") {
                 return (
                   <tr key={line.id} className="tr-comment">
-                    <td colSpan={5}>💬 {line.title}</td>
+                    <td colSpan={7}>💬 {line.title}</td>
                   </tr>
                 );
               }
 
-              // Affichage stock
+              // Stock
               let stockDisplay: React.ReactNode;
               if (line.stock === undefined || line.stock === null) {
                 stockDisplay = <span className="stock-na">—</span>;
@@ -610,13 +731,15 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                 }
               }
 
+              const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
+              const isMultiQty = line.qty > 1;
+
               return (
                 <tr key={line.id} className="row-product">
                   <td className="td-img">
                     {line.image && <img src={line.image} alt="" />}
                   </td>
 
-                  {/* Cercles ®© commandé / réservé */}
                   <td className="td-circles">
                     <div>
                       <span className="check-circle"></span>
@@ -625,13 +748,11 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                     <span className="check-circles-labels">cmd · rés</span>
                   </td>
 
-                  {/* Big qty */}
                   <td className="td-qty">
-                    <span className="big-qty">{line.qty}</span>
-                    <span className="big-qty-x">×</span>
+                    <span className={`qty-num${isMultiQty ? " qty-num-multi" : ""}`}>{line.qty}</span>
+                    <span className="qty-x">×</span>
                   </td>
 
-                  {/* Description + SKU + Code-barres */}
                   <td className="td-desc">
                     <div className="item-title">{line.title}</div>
                     {line.sku && (
@@ -641,6 +762,17 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                           <svg className="barcode-sku" data-sku={line.sku}></svg>
                         </div>
                       </>
+                    )}
+                  </td>
+
+                  <td className="td-price">
+                    <span className="price-val">{formatMoney(line.unitPrice)}</span>
+                  </td>
+
+                  <td className="td-total">
+                    {formatMoney(lineTotal)}
+                    {(line.lineDiscount || 0) > 0 && (
+                      <div className="line-discount">− {formatMoney(line.lineDiscount || 0)}</div>
                     )}
                   </td>
 
@@ -654,7 +786,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           </tbody>
         </table>
 
-        {/* ══ NOTES + RÉCAP ══ */}
+        {/* NOTES + TOTAUX COMPLETS */}
         <div className="doc-bottom-wrap">
           <div className="doc-notes-col">
             {data.remarks && (
@@ -666,54 +798,107 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           </div>
 
           <div className="doc-totals-col">
-            <table className="doc-recap">
+            <table className="doc-pricing">
               <tbody>
-                <tr className="recap-total">
-                  <td className="recap-label">TOTAL TTC</td>
-                  <td className="recap-value">
-                    <span style={{fontSize: 11, color: "#888", fontWeight: 400, marginRight: 4}}>(voir commande)</span>
-                  </td>
+                <tr>
+                  <td className="pt-label">Sous-total articles</td>
+                  <td className="pt-value">{formatMoney(totals.subTotal)}</td>
                 </tr>
-                <tr className="recap-fillable">
-                  <td className="recap-label">Acompte versé</td>
-                  <td className="recap-value">CHF&nbsp;_____________</td>
+                {totals.discountValue > 0 && (
+                  <tr>
+                    <td className="pt-label">Remise</td>
+                    <td className="pt-value" style={{color:"#2a8a2a"}}>− {formatMoney(totals.discountValue)}</td>
+                  </tr>
+                )}
+                {totals.discountValue > 0 && (
+                  <tr>
+                    <td className="pt-label">Après remise</td>
+                    <td className="pt-value">{formatMoney(totals.totalAfterDiscount)}</td>
+                  </tr>
+                )}
+                {activeServices.length > 0 && (
+                  <>
+                    <tr>
+                      <td className="pt-label">Services</td>
+                      <td className="pt-value">{formatMoney(totals.serviceTotal)}</td>
+                    </tr>
+                    {activeServices.map((srv, i) => (
+                      <tr key={i}>
+                        <td className="pt-sub">↳ {srv.label}</td>
+                        <td className="pt-value" style={{fontSize:10.5}}>
+                          {srv.amount === 0 ? "Offert" : formatMoney(srv.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </>
+                )}
+                {totals.roundingValue !== 0 && (
+                  <tr>
+                    <td className="pt-label">Arrondi</td>
+                    <td className="pt-value">{formatMoney(totals.roundingValue)}</td>
+                  </tr>
+                )}
+                {totals.isPrivateTTC ? (
+                  <tr className="pt-tva">
+                    <td className="pt-label">TVA 8.1% incluse</td>
+                    <td className="pt-value">{formatMoney(totals.tvaAmount)}</td>
+                  </tr>
+                ) : (
+                  <>
+                    <tr>
+                      <td className="pt-label">Total HT</td>
+                      <td className="pt-value">{formatMoney(totals.totalAfterRounding)}</td>
+                    </tr>
+                    <tr className="pt-tva">
+                      <td className="pt-label">+ TVA 8.1%</td>
+                      <td className="pt-value">{formatMoney(totals.tvaAmount)}</td>
+                    </tr>
+                  </>
+                )}
+                <tr className="pt-total">
+                  <td className="pt-total-label">TOTAL {totals.isPrivateTTC ? "TTC" : "HT + TVA"}</td>
+                  <td className="pt-total-value">{formatMoney(totals.finalTotal)}</td>
                 </tr>
-                <tr className="recap-fillable">
-                  <td className="recap-label">Solde à percevoir</td>
-                  <td className="recap-value">CHF&nbsp;_____________</td>
+
+                {/* Acompte / Solde à remplir à la main */}
+                <tr className="pt-fillable">
+                  <td className="pt-label">Acompte versé</td>
+                  <td className="pt-value">_____________</td>
                 </tr>
-                <tr className="recap-final">
-                  <td className="recap-label">Mode de paiement</td>
-                  <td className="recap-value" style={{fontSize:11}}>{data.paymentMode}</td>
+                <tr className="pt-fillable">
+                  <td className="pt-label">Solde à percevoir</td>
+                  <td className="pt-value">_____________</td>
                 </tr>
+
+                {data.paymentMode && (
+                  <tr className="pt-paymentmode">
+                    <td className="pt-label">Mode paiement</td>
+                    <td className="pt-value" style={{fontSize:10.5}}>{data.paymentMode}</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* ══ ZONE SIGNATURES ══ */}
-        <div className="doc-sign-row">
-          <div className="doc-sign-box">
-            <div className="doc-sign-title">Préparé par</div>
-            <div style={{fontSize:10, color:"#777"}}>Nom · Date · Heure</div>
-            <div className="doc-sign-line"></div>
-            <div className="doc-sign-sub">Signature préparateur</div>
+        {/* ZONE SIGNATURE CLIENT FINALE */}
+        <div className="doc-final-sign">
+          <div className="doc-final-sign-text">
+            ✓ Marchandise contrôlée et reçue en parfait état
           </div>
-          <div className="doc-sign-box">
-            <div className="doc-sign-title">Contrôlé par</div>
-            <div style={{fontSize:10, color:"#777"}}>Nom · Date · Heure</div>
-            <div className="doc-sign-line"></div>
-            <div className="doc-sign-sub">Signature contrôle</div>
-          </div>
-          <div className="doc-sign-box">
-            <div className="doc-sign-title">Livré / Remis</div>
-            <div style={{fontSize:10, color:"#777"}}>Nom · Date · Heure</div>
-            <div className="doc-sign-line"></div>
-            <div className="doc-sign-sub">Signature livreur / client</div>
+          <div className="doc-final-sign-row">
+            <div className="doc-final-sign-field">
+              <div className="doc-final-sign-line"></div>
+              <div className="doc-final-sign-label">Date</div>
+            </div>
+            <div className="doc-final-sign-field-large">
+              <div className="doc-final-sign-line"></div>
+              <div className="doc-final-sign-label">Signature client</div>
+            </div>
           </div>
         </div>
 
-        {/* ══ FOOTER MINIMAL ══ */}
+        {/* FOOTER */}
         <div className="doc-footer-mini">
           Jardin-Confort SA · Route de Lavaux 425 · 1095 Lutry · +41 21 791 36 71 · Document interne — ne pas remettre au client
         </div>
