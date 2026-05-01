@@ -223,9 +223,22 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           qrEl.innerHTML = qr.createImgTag(3, 0);
         }
       }
+
+      // 2e QR : "NomClient Mag" (utilisé pour identifier le client en magasin)
+      if (qrcode && data.nom) {
+        const qrClientEl = document.getElementById("qr-client");
+        if (qrClientEl) {
+          const refValue = `${data.nom} Mag`;
+          const qr2 = qrcode(0, "M");
+          qr2.addData(refValue);
+          qr2.make();
+          qrClientEl.innerHTML = qr2.createImgTag(3, 0);
+        }
+      }
+
       barcodesRendered.current = true;
     }).catch((err) => console.error("Erreur chargement librairies barcode:", err));
-  }, [ready, data.lines, numeroAffiche]);
+  }, [ready, data.lines, data.nom, numeroAffiche]);
 
   if (!ready) return <div style={{padding:40, textAlign:"center", color:GREY}}>Chargement…</div>;
 
@@ -331,6 +344,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           padding-top: 2px;
         }
         .doc-header-qr img { display: block; }
+        .doc-header-qr .qr-second { margin-top: 6px; }
         .doc-header-qr .qr-label {
           font-size: 8px;
           color: #666;
@@ -774,6 +788,10 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           <div className="doc-header-qr">
             <div id="qr-commande"></div>
             <div className="qr-label">Scan = N° {typeDocument === "Offre" ? "offre" : "cmd"}</div>
+
+            {/* 2e QR code : "Ref: NomClient Mag" (équivalent du QR Shopify) */}
+            <div id="qr-client" className="qr-second"></div>
+            <div className="qr-label">Ref client</div>
           </div>
 
           <div className="doc-header-right">
