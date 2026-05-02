@@ -27,6 +27,15 @@ const serviceLabels: Record<string, string> = {
   reprise:       "Reprise et recyclage des anciens meubles",
 };
 
+// ─── Étapes affichées dans l'overlay de chargement (changent toutes les ~4s) ───
+const VALIDATION_STEPS = [
+  { icon: "✍️",  label: "Validation de votre signature…" },
+  { icon: "📋",  label: "Création de votre commande…" },
+  { icon: "📄",  label: "Génération de votre confirmation…" },
+  { icon: "🧾",  label: "Préparation de votre QR de paiement…" },
+  { icon: "✨",  label: "Finalisation, presque prêt…" },
+];
+
 type QuoteLine = {
   id: string;
   type: "product" | "custom" | "comment";
@@ -107,6 +116,109 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 13, fontWeight: 700, color: C.blue, marginBottom: 12 }}>{children}</div>;
 }
 
+// ─── Overlay de chargement rassurant (affiché pendant la validation) ───
+function ValidationOverlay({ step }: { step: number }) {
+  const current = VALIDATION_STEPS[Math.min(step, VALIDATION_STEPS.length - 1)];
+  // Progression visuelle : 5% au démarrage, +18% par étape, max 95% (la barre ne se remplit jamais à 100%
+  // tant qu'on n'a pas la response — pour ne pas mentir au client)
+  const progress = Math.min(5 + step * 18, 95);
+
+  return (
+    <div
+      role="dialog"
+      aria-live="polite"
+      aria-label="Validation en cours"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        background: "rgba(15, 23, 42, 0.55)",
+        backdropFilter: "blur(4px)",
+        WebkitBackdropFilter: "blur(4px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        animation: "fadeIn 0.25s ease-out",
+      }}
+    >
+      <div
+        style={{
+          background: "white",
+          borderRadius: 24,
+          maxWidth: 420,
+          width: "100%",
+          padding: "36px 32px",
+          textAlign: "center",
+          boxShadow: "0 25px 50px -12px rgba(0,0,0,0.4)",
+          animation: "slideUp 0.35s ease-out",
+        }}
+      >
+        {/* Spinner principal */}
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            margin: "0 auto 20px",
+            border: `4px solid ${C.bg}`,
+            borderTopColor: C.blueBtn,
+            borderRadius: "50%",
+            animation: "spin 0.9s linear infinite",
+          }}
+        />
+
+        {/* Titre */}
+        <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>
+          Validation de votre offre
+        </div>
+
+        {/* Étape actuelle */}
+        <div
+          key={step}
+          style={{
+            fontSize: 14,
+            color: C.grey,
+            marginBottom: 24,
+            minHeight: 22,
+            animation: "fadeIn 0.4s ease-out",
+          }}
+        >
+          <span style={{ marginRight: 6 }}>{current.icon}</span>
+          {current.label}
+        </div>
+
+        {/* Barre de progression */}
+        <div
+          style={{
+            width: "100%",
+            height: 6,
+            background: C.bg,
+            borderRadius: 999,
+            overflow: "hidden",
+            marginBottom: 16,
+          }}
+        >
+          <div
+            style={{
+              width: `${progress}%`,
+              height: "100%",
+              background: `linear-gradient(90deg, ${C.blueBtn}, ${C.blue})`,
+              borderRadius: 999,
+              transition: "width 0.6s ease-out",
+            }}
+          />
+        </div>
+
+        {/* Message rassurant */}
+        <div style={{ fontSize: 12, color: C.grey, lineHeight: 1.6 }}>
+          Cela peut prendre quelques secondes,<br />
+          merci de ne pas fermer cette page.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OffrePage({ params }: { params: Promise<{ slug: string }> }) {
   const [offre, setOffre] = useState<OffreRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -125,6 +237,7 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
   const [submitError, setSubmitError] = useState("");
   const [success, setSuccess] = useState(false);
   const [signatureVisible, setSignatureVisible] = useState(false);
+  const [validationStep, setValidationStep] = useState(0);  // ← progression overlay
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const hasSignature = useRef(false);
@@ -195,6 +308,19 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
     }, 5000);
     return () => clearInterval(interval);
   }, [offre, pdfUrl, slug]);
+
+  // ─── Animation des étapes pendant la validation (toutes les 4s) ───
+  useEffect(() => {
+    if (!submitting) {
+      setValidationStep(0);
+      return;
+    }
+    // Avance d'une étape toutes les 4 secondes, mais reste sur la dernière étape
+    const interval = setInterval(() => {
+      setValidationStep(prev => Math.min(prev + 1, VALIDATION_STEPS.length - 1));
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [submitting]);
 
   // ─── Téléchargement QR à la demande (génère si pas encore créé) ───
   async function handleQrDownload() {
@@ -289,36 +415,43 @@ useEffect(() => {
   }
 
   async function handleSubmit() {
-    setSubmitError("");
-    if (!accepted) { setSubmitError("Veuillez cocher la case d'acceptation."); return; }
-    if (!signataire.trim()) { setSubmitError("Veuillez indiquer le nom du signataire."); return; }
-    if (!hasSignature.current) { setSubmitError("Veuillez signer dans la zone prévue."); return; }
-    const signatureBase64 = canvasRef.current?.toDataURL("image/png") || "";
-    setSubmitting(true);
-    try {
-      const res = await fetch(`/api/offres/${slug}/valider`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signataire: signataire.trim(), signature_base64: signatureBase64, date_signature: todayStr() }),
-      });
-      const json = await res.json();
+  setSubmitError("");
+  if (!accepted) { setSubmitError("Veuillez cocher la case d'acceptation."); return; }
+  if (!signataire.trim()) { setSubmitError("Veuillez indiquer le nom du signataire."); return; }
+  if (!hasSignature.current) { setSubmitError("Veuillez signer dans la zone prévue."); return; }
+  
+  // ─── Afficher l'overlay IMMÉDIATEMENT, avant tout traitement bloquant ───
+  setSubmitting(true);
+  setValidationStep(0);
+  
+  // Attendre 1 tick que React render l'overlay avant de faire le toDataURL
+  // (qui peut être lent sur une signature complexe)
+  await new Promise(r => setTimeout(r, 50));
+  
+  const signatureBase64 = canvasRef.current?.toDataURL("image/png") || "";
+  
+  try {
+    const res = await fetch(`/api/offres/${slug}/valider`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ signataire: signataire.trim(), signature_base64: signatureBase64, date_signature: todayStr() }),
+    });
+    const json = await res.json();
 
-      // Cas doublon : offre déjà validée → rediriger vers confirmation existante
-      if (res.status === 409 && json.cmdSlug) {
-        setSuccess(true);
-        setTimeout(() => { window.location.href = `/offre/${json.cmdSlug}/confirmation`; }, 800);
-        return;
-      }
-
-      if (!res.ok) throw new Error(json.error || "Erreur serveur");
+    if (res.status === 409 && json.cmdSlug) {
       setSuccess(true);
-      setTimeout(() => { window.location.href = `/offre/${json.cmdSlug}/confirmation`; }, 1400);
-    } catch (err) {
-      setSubmitError((err as Error).message);
-      setSubmitting(false);
+      setTimeout(() => { window.location.href = `/offre/${json.cmdSlug}/confirmation`; }, 800);
+      return;
     }
-  }
 
+    if (!res.ok) throw new Error(json.error || "Erreur serveur");
+    setSuccess(true);
+    setTimeout(() => { window.location.href = `/offre/${json.cmdSlug}/confirmation`; }, 1400);
+  } catch (err) {
+    setSubmitError((err as Error).message);
+    setSubmitting(false);
+  }
+}
   // ── Loading / Error states ──
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: FONT, color: C.grey }}>
@@ -399,6 +532,8 @@ useEffect(() => {
         .nav-lnk { transition: box-shadow 0.1s; }
         .nav-lnk:hover { box-shadow: inset 0 -2px 0 0 #3E4D56; }
         @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
         .spinner{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle}
         @media (max-width: 900px) {
           .two-col { grid-template-columns: 1fr !important; }
@@ -406,6 +541,9 @@ useEffect(() => {
           .hide-mobile { display: none !important; }
         }
       `}</style>
+
+      {/* ─── OVERLAY DE CHARGEMENT (pendant validation OU redirection) ─── */}
+      {(submitting || success) && <ValidationOverlay step={validationStep} />}
 
       {/* ── TOP BAR ── */}
       <div style={{ background: C.blueBtn, padding: "6px 0" }}>
@@ -898,12 +1036,6 @@ useEffect(() => {
                 {submitError && (
                   <div style={{ background: "#FEF2F2", color: "#991B1B", border: "1px solid #FECACA", borderRadius: 16, padding: "12px 16px", marginBottom: 16, fontSize: 14 }}>
                     {submitError}
-                  </div>
-                )}
-                {/* Succès */}
-                {success && (
-                  <div style={{ background: "#EEF7FF", color: C.blue, border: "1px solid #B7D8F0", borderRadius: 16, padding: 16, marginBottom: 16, fontSize: 14, lineHeight: 1.6 }}>
-                    ✅ Merci ! Votre offre a été validée. Redirection en cours…
                   </div>
                 )}
 
