@@ -60,6 +60,8 @@ type OffreRow = {
   payment_mode: string | null;
   stockRefreshedAt?: string;
   validite_duree: string | null;
+  pdf_url?: string | null;
+  qr_url?: string | null;
   data: {
     lines?: QuoteLine[];
     clientType?: string;
@@ -111,6 +113,11 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
   const [slug, setSlug] = useState("");
   const [pageError, setPageError] = useState("");
 
+  // URLs PDF/QR (pour offre déjà acceptée)
+  const [pdfUrl, setPdfUrl] = useState("");
+  const [qrUrl, setQrUrl] = useState("");
+  const [qrDownloading, setQrDownloading] = useState(false);
+
   // Validation state
   const [accepted, setAccepted] = useState(false);
   const [signataire, setSignataire] = useState("");
@@ -134,11 +141,93 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
         const o = json.offre as OffreRow;
         setOffre(o);
         setSignataire(`${o.client_prenom || ""} ${o.client_nom || ""}`.trim());
+        // Récupérer URLs PDF + QR si déjà disponibles
+        setPdfUrl(o.pdf_url || "");
+        setQrUrl(o.qr_url || "");
       } catch { setPageError("error"); }
       finally { setLoading(false); }
     }
     load();
   }, [params]);
+
+  // ─── Auto-poll pour récupérer URL QR si pas encore prêt (offre acceptée) ───
+  useEffect(() => {
+    if (!offre || offre.statut !== "Acceptée" || qrUrl || !slug) return;
+    let attempts = 0;
+    const maxAttempts = 12; // 12 × 5s = 60s max
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await fetch(`/api/offres/${slug}/qr`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.qr_url) {
+            setQrUrl(json.qr_url);
+            clearInterval(interval);
+            return;
+          }
+        }
+      } catch { /* ignore */ }
+      if (attempts >= maxAttempts) clearInterval(interval);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [offre, qrUrl, slug]);
+
+  // ─── Auto-poll pour récupérer PDF commande si pas encore prêt ───
+  useEffect(() => {
+    if (!offre || offre.statut !== "Acceptée" || pdfUrl || !slug) return;
+    let attempts = 0;
+    const maxAttempts = 12;
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await fetch(`/api/offres/${slug}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.offre?.pdf_url) {
+            setPdfUrl(json.offre.pdf_url);
+            clearInterval(interval);
+            return;
+          }
+        }
+      } catch { /* ignore */ }
+      if (attempts >= maxAttempts) clearInterval(interval);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [offre, pdfUrl, slug]);
+
+  // ─── Téléchargement QR à la demande (génère si pas encore créé) ───
+  async function handleQrDownload() {
+    if (qrDownloading) return;
+    if (qrUrl) { window.open(qrUrl, "_blank"); return; }
+    setQrDownloading(true);
+    try {
+      // Lance la génération
+      fetch(`/api/offres/${slug}/qr`, { method: "POST" }).catch(() => {});
+      // Poll toutes les 5s, max 90s
+      let elapsed = 0;
+      while (elapsed < 90) {
+        await new Promise(r => setTimeout(r, 5000));
+        elapsed += 5;
+        try {
+          const res = await fetch(`/api/offres/${slug}/qr`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json.qr_url) {
+              setQrUrl(json.qr_url);
+              window.open(json.qr_url, "_blank");
+              setQrDownloading(false);
+              return;
+            }
+          }
+        } catch { /* ignore */ }
+      }
+      setQrDownloading(false);
+      alert("Le QR paiement prend plus de temps que prévu. Veuillez réessayer dans quelques instants.");
+    } catch {
+      setQrDownloading(false);
+    }
+  }
 
   // Init canvas after offre loaded
   useEffect(() => {
@@ -270,6 +359,8 @@ useEffect(() => {
   const totalAfterAll = subTotal - discountValue + serviceTotal + roundingValue;
   const tvaAmount = isPrivateTTC ? totalAfterAll - totalAfterAll / (1 + TVA_RATE) : totalAfterAll * TVA_RATE;
   const finalTotal = isPrivateTTC ? totalAfterAll : totalAfterAll + tvaAmount;
+  const isAcompte = payMode.includes("50%");
+  const montantAPayer = isAcompte ? Math.round(finalTotal * 0.5 * 100) / 100 : finalTotal;
 
   // Adresses
   const addrFact = [
@@ -307,6 +398,8 @@ useEffect(() => {
         .nav-sujet:hover .nav-dropdown { display: block !important; }
         .nav-lnk { transition: box-shadow 0.1s; }
         .nav-lnk:hover { box-shadow: inset 0 -2px 0 0 #3E4D56; }
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .spinner{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle}
         @media (max-width: 900px) {
           .two-col { grid-template-columns: 1fr !important; }
           .side-sticky { position: static !important; }
@@ -443,18 +536,67 @@ useEffect(() => {
               </Card>
             )}
 
-            {/* Statut acceptée — offre déjà validée */}
+            {/* ─── Statut Acceptée — 2 boutons directs (PDF commande + QR paiement) ─── */}
             {isAcceptee && (
               <Card style={{ padding: 24, background: "#E8F5E9", border: `1px solid ${C.green}` }}>
                 <div style={{ fontWeight: 700, color: C.green, fontSize: 18, marginBottom: 8 }}>✅ Offre déjà validée</div>
-                <div style={{ fontSize: 14, color: "#2e7d32", lineHeight: 1.8, marginBottom: 16 }}>
-                  Cette offre a déjà été acceptée et confirmée. Merci pour votre confiance !<br/>
-                  Votre commande est en cours de traitement par notre équipe.
+                <div style={{ fontSize: 14, color: "#2e7d32", lineHeight: 1.7, marginBottom: 16 }}>
+                  Cette offre a été acceptée et confirmée. Merci pour votre confiance !
+                  {isAcompte
+                    ? <> Veuillez procéder au paiement de l&apos;acompte de <strong>{fmt(montantAPayer)}</strong>.</>
+                    : <> Veuillez procéder au paiement du montant de <strong>{fmt(montantAPayer)}</strong>.</>}
                 </div>
-                <a href={`/offre/${slug}/confirmation`}
-                  style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.green, color:"white", padding:"10px 20px", borderRadius:20, fontSize:14, fontWeight:600, textDecoration:"none" }}>
-                  📋 Voir ma confirmation de commande →
-                </a>
+
+                {/* Bouton 1 : Télécharger PDF de la commande */}
+                {pdfUrl ? (
+                  <a href={pdfUrl} target="_blank" rel="noopener noreferrer"
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                      background: C.green, color: "white",
+                      padding: "12px 20px", borderRadius: 24, fontSize: 14, fontWeight: 600,
+                      textDecoration: "none", marginBottom: 10, width: "100%",
+                    }}>
+                    📄 Télécharger la confirmation PDF
+                  </a>
+                ) : (
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    background: "#fff8e1", color: "#92400e",
+                    padding: "12px 20px", borderRadius: 24, fontSize: 13, fontWeight: 600,
+                    border: "1px solid #fbbf24", marginBottom: 10, width: "100%",
+                  }}>
+                    <span className="spinner"/>
+                    PDF en cours de génération…
+                  </div>
+                )}
+
+                {/* Bouton 2 : Télécharger QR paiement */}
+                <button onClick={handleQrDownload} disabled={qrDownloading}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    background: qrDownloading ? "#94A3B8" : "white",
+                    color: qrDownloading ? "white" : C.green,
+                    border: `1px solid ${C.green}`,
+                    padding: "12px 20px", borderRadius: 24, fontSize: 14, fontWeight: 600,
+                    cursor: qrDownloading ? "wait" : "pointer", width: "100%",
+                    fontFamily: FONT, transition: "all 0.2s",
+                  }}>
+                  {qrDownloading ? (
+                    <><span className="spinner"/> Génération du QR…</>
+                  ) : qrUrl ? (
+                    <>📥 Télécharger le QR paiement</>
+                  ) : (
+                    <>📥 Télécharger le QR paiement</>
+                  )}
+                </button>
+
+                {/* Lien discret vers la page complète */}
+                <div style={{ marginTop: 12, textAlign: "center", fontSize: 12, color: "#2e7d32" }}>
+                  <a href={`/offre/${slug}/confirmation`}
+                    style={{ color: "#2e7d32", textDecoration: "underline" }}>
+                    Voir tous les détails et coordonnées bancaires →
+                  </a>
+                </div>
               </Card>
             )}
           </div>
