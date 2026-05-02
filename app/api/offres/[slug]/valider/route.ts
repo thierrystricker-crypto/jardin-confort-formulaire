@@ -211,7 +211,9 @@ export async function POST(
       url_pdf_commande: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/commandes/${cmdSlug}.pdf`,
       url_qr_paiement: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/qr/${cmdSlug}_qr.pdf`,
       url_fiche_travail_initiale: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/fiches-travail/${cmdSlug}_initial.pdf`,
-      url_fiche_travail: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/fiches-travail/${cmdSlug}.pdf`,
+      // ⚠️ url_fiche_travail pointe sur la fiche INITIALE (la seule auto-générée).
+      // La "courante" (sans suffixe) est créée à la demande par l'équipe via le dashboard.
+      url_fiche_travail: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/fiches-travail/${cmdSlug}_initial.pdf`,
 
       iban: "CH72 0076 7000 K033 3796 5",
       banque: "BCV – Banque Cantonale Vaudoise",
