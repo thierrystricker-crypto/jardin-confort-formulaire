@@ -74,14 +74,14 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "ids ou all=true requis" }, { status: 400 });
     }
 
-    const { error, count } = await query.select("id", { count: "exact" });
+    const { data, error } = await query.select("id");
 
     if (error) {
       console.error("Notifications PATCH error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, updated: count || 0 });
+    return NextResponse.json({ success: true, updated: data?.length || 0 });
 
   } catch (err) {
     console.error("Notifications PATCH error:", err);
