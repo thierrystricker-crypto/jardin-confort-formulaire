@@ -4,7 +4,7 @@
 // + Auto-génère le PDF commande, le QR paiement
 // + Auto-génère la fiche de travail INITIALE (figée, stock du moment) + COURANTE
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
 
@@ -237,34 +237,45 @@ export async function POST(
       console.error("Webhook error:", webhookErr);
     }
 
-    // ─── Génération PDFs en arrière-plan ───
-    // ⚠️ Sur Vercel, le pattern (async () => { sleep ... })() ne fonctionne PAS
-    // de manière fiable car le serverless container peut être tué avant la fin
-    // des sleeps. Solution : on lance les fetchs en parallèle SANS attendre,
-    // et chaque endpoint cible se débrouille avec pdf.co.
+    // ─── Génération PDFs ───
+    // Stratégie : on ATTEND la génération du PDF de confirmation de commande
+    // (le client le voit immédiatement sur la page /confirmation).
+    // Pour les autres PDFs (QR, fiches de travail), on utilise after() de
+    // Next.js 16 qui GARANTIT l'exécution même après le return de la response.
     //
-    // Pour éviter la saturation de pdf.co (3-5 jobs en parallèle = OK), on
-    // n'a pas besoin de sleeps : pdf.co gère sa propre file d'attente côté serveur.
-    fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" })
-      .catch(err => console.error("PDF offre err:", err))
+    // Sans after(), sur Vercel serverless, les fetch fire-and-forget peuvent être
+    // tués dès que la response part. C'est exactement ce que after() résout.
 
-    fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST" })
-      .catch(err => console.error("PDF commande err:", err))
+    // Tâches en arrière-plan (garanties par Next.js after())
+    after(async () => {
+      // PDF offre (mise à jour de l'offre originale avec signature)
+      await fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" })
+        .catch(err => console.error("[after] PDF offre err:", err))
 
-    fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST" })
-      .catch(err => console.error("QR paiement err:", err))
+      // QR paiement
+      await fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST" })
+        .catch(err => console.error("[after] QR paiement err:", err))
 
-    fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: "initial" }),
-    }).catch(err => console.error("Fiche initiale err:", err))
+      // Fiche de travail INITIALE (figée à l'instant T = stock vu par le client)
+      // ⚠️ On NE génère PAS la fiche "courante" automatiquement : elle doit être
+      // créée à la demande par l'équipe pour avoir le stock du moment de la prépa.
+      await fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "initial" }),
+      }).catch(err => console.error("[after] Fiche initiale err:", err))
+    })
 
-    fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: "current" }),
-    }).catch(err => console.error("Fiche courante err:", err))
+    // ATTENDRE la génération du PDF commande (c'est celui que le client va voir
+    // immédiatement sur la page de confirmation). Timeout 25s par sécurité.
+    try {
+      await Promise.race([
+        fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST" }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000)),
+      ])
+    } catch (err) {
+      console.error("PDF commande err (non bloquant):", err)
+    }
 
     return NextResponse.json({
       success: true,

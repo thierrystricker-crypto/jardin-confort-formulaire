@@ -3,7 +3,7 @@
 // + Génère le PDF en arrière-plan
 // + Si commande (directe ou édition) : génère AUSSI la fiche de travail initiale + courante
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { computeTotals } from "@/lib/jc-print-types";
 import { createNotification } from "@/lib/notifications";
@@ -146,29 +146,43 @@ export async function POST(request: NextRequest) {
 
     // ─── Génération PDFs en arrière-plan ───
     // ─── Génération PDFs en arrière-plan ───
-    // ⚠️ Sur Vercel, le pattern (async () => { sleep ... })() ne fonctionne PAS
-    // de manière fiable car le serverless container peut être tué avant la fin
-    // des sleeps. Solution : fire-and-forget direct, pdf.co gère sa file d'attente.
+    // ⚠️ Sur Vercel, les fetch fire-and-forget peuvent être tués dès que la
+    // response part. On utilise after() qui GARANTIT l'exécution post-response.
 
-    // 1. PDF du document principal (offre ou commande)
-    fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    }).catch(err => console.error("PDF generation error:", err))
+    // PDF principal : on l'attend pour les commandes (pour la page confirmation
+    // qui affiche le PDF), sinon fire-and-forget pour les offres.
+    if (isCommande) {
+      // Pour une commande directe : attendre le PDF principal
+      try {
+        await Promise.race([
+          fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000)),
+        ])
+      } catch (err) {
+        console.error("PDF commande err (non bloquant):", err)
+      }
+    } else {
+      // Pour une offre : juste fire-and-forget
+      fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }).catch(err => console.error("PDF offre err:", err))
+    }
 
-    // 2. Si c'est une commande nouvellement créée → fiches de travail (initiale + courante)
+    // Si commande nouvellement créée → fiche INITIALE garantie via after()
+    // ⚠️ On NE génère PAS la fiche "courante" automatiquement : elle doit être
+    // créée à la demande par l'équipe pour avoir le stock du moment de la prépa.
     if (isCommande && isNewDocument) {
-      fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "initial" }),
-      }).catch(err => console.error("Fiche travail initiale error:", err))
-
-      fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "current" }),
-      }).catch(err => console.error("Fiche travail courante error:", err))
+      after(async () => {
+        await fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "initial" }),
+        }).catch(err => console.error("[after] Fiche travail initiale error:", err))
+      })
     }
 
     return NextResponse.json({
