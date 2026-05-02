@@ -119,9 +119,9 @@ export async function GET() {
         alert: true,
         last_ping_at: lastPingDate?.toISOString() || null,
         last_validation_at: lastCommandeDate.toISOString(),
-        last_validation_numero: lastCommande.numero_affiche,
+        last_validation_numero: lastCommande?.numero_affiche || null,
         gap_minutes: gap,
-        message: `Make n'a pas ping depuis la commande ${lastCommande.numero_affiche} (il y a ${gap} min)`,
+        message: `Make n'a pas ping depuis la commande ${lastCommande?.numero_affiche || "(inconnu)"} (il y a ${gap} min)`,
       });
     }
 
@@ -134,9 +134,9 @@ export async function GET() {
       alert: false,
       last_ping_at: lastPingDate.toISOString(),
       last_validation_at: lastCommandeDate.toISOString(),
-      last_validation_numero: lastCommande.numero_affiche,
+      last_validation_numero: lastCommande?.numero_affiche || null,
       gap_minutes: pingGapMinutes,
-      message: `Make a traité ${lastCommande.numero_affiche} en ${pingGapMinutes} min`,
+      message: `Make a traité ${lastCommande?.numero_affiche || "la commande"} en ${pingGapMinutes} min`,
     });
 
   } catch (err) {
