@@ -244,40 +244,56 @@ export async function POST(
     // (le client le voit immédiatement sur la page /confirmation).
     // Pour les autres PDFs (QR, fiches de travail), on utilise after() de
     // Next.js 16 qui GARANTIT l'exécution même après le return de la response.
+
+    // ⚠️ ORDRE CRITIQUE : Tous les PDFs qui pourraient lire le stock DOIVENT être
+    // générés AVANT la décrémentation Shopify. Sinon ils afficheraient un stock
+    // déjà décrémenté au lieu du stock du moment de la commande.
     //
-    // Sans after(), sur Vercel serverless, les fetch fire-and-forget peuvent être
-    // tués dès que la response part. C'est exactement ce que after() résout.
+    // Ordre d'exécution :
+    //   1. PDF offre originale (mise à jour avec signature) — pas de stock
+    //   2. QR paiement — pas de stock
+    //   3. Fiche de travail INITIALE — STOCK figé du moment ⚠️
+    //   4. (PDF commande/confirmation est await-é ci-dessous, AVANT after())
+    //   5. SEULEMENT MAINTENANT : décrémentation Shopify
 
-    // Tâches en arrière-plan (garanties par Next.js after())
     after(async () => {
-      // PDF offre (mise à jour de l'offre originale avec signature)
-      await fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" })
-        .catch(err => console.error("[after] PDF offre err:", err))
+      // ─── ÉTAPE 1 : PDFs sans dépendance stock (en parallèle) ───
+      await Promise.allSettled([
+        fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" })
+          .catch(err => console.error("[after] PDF offre err:", err)),
+        fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST" })
+          .catch(err => console.error("[after] QR paiement err:", err)),
+      ])
 
-      // QR paiement
-      await fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST" })
-        .catch(err => console.error("[after] QR paiement err:", err))
+      // ─── ÉTAPE 2 : Fiche de travail INITIALE (lit le stock T+0) ───
+      // ⚠️ DOIT finir AVANT la décrémentation Shopify
+      try {
+        await fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "initial" }),
+        })
+      } catch (err) {
+        console.error("[after] Fiche initiale err:", err)
+      }
 
-      // Fiche de travail INITIALE (figée à l'instant T = stock vu par le client)
-      // ⚠️ On NE génère PAS la fiche "courante" automatiquement : elle doit être
-      // créée à la demande par l'équipe pour avoir le stock du moment de la prépa.
-      await fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "initial" }),
-      }).catch(err => console.error("[after] Fiche initiale err:", err))
-
-      // ─── Sortie de stock Shopify ───
-      // Décrémente le stock Shopify pour chaque article SKU de la commande
-      await fetch(`${BASE_URL}/api/stock-movements/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offre_slug: cmdSlug, reason: "commande_validee" }),
-      }).catch(err => console.error("[after] Stock movements err:", err))
+      // ─── ÉTAPE 3 : Décrémentation Shopify (modifie le stock) ───
+      // Seulement APRÈS que tous les PDFs sont figés
+      try {
+        await fetch(`${BASE_URL}/api/stock-movements/process`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ offre_slug: cmdSlug, reason: "commande_validee" }),
+        })
+      } catch (err) {
+        console.error("[after] Stock movements err:", err)
+      }
     })
 
-    // ATTENDRE la génération du PDF commande (c'est celui que le client va voir
-    // immédiatement sur la page de confirmation). Timeout 25s par sécurité.
+    // ⚠️ PDF COMMANDE : généré AVANT que after() lance la décrémentation Shopify
+    // car la response part juste après ce await, et after() ne démarre qu'ensuite.
+    // Donc le PDF commande lit aussi le stock T+0 → cohérent avec la fiche initiale.
+    // Timeout 25s par sécurité.
     try {
       await Promise.race([
         fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST" }),

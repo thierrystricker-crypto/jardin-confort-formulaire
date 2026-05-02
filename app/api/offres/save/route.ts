@@ -145,14 +145,22 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://jardin-confort-formulaire.vercel.app";
 
     // ─── Génération PDFs en arrière-plan ───
-    // ─── Génération PDFs en arrière-plan ───
     // ⚠️ Sur Vercel, les fetch fire-and-forget peuvent être tués dès que la
     // response part. On utilise after() qui GARANTIT l'exécution post-response.
+    //
+    // ⚠️ ORDRE CRITIQUE pour les commandes : tous les PDFs qui pourraient lire
+    // le stock DOIVENT être générés AVANT la décrémentation Shopify.
+    // Sinon ils afficheraient un stock déjà décrémenté.
+    //
+    // Pour une OFFRE (DEV) : pas de décrémentation, juste fire-and-forget du PDF.
+    // Pour une COMMANDE :
+    //   1. PDF commande (await — pour la page confirmation)
+    //   2. Fiche de travail INITIALE (lit le stock T+0)
+    //   3. SEULEMENT MAINTENANT : décrémentation Shopify
 
-    // PDF principal : on l'attend pour les commandes (pour la page confirmation
-    // qui affiche le PDF), sinon fire-and-forget pour les offres.
     if (isCommande) {
-      // Pour une commande directe : attendre le PDF principal
+      // Pour une commande directe : attendre le PDF principal AVANT que after() lance la séquence
+      // (le PDF commande pourrait afficher du stock plus tard — autant le générer avant la décrémentation)
       try {
         await Promise.race([
           fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
@@ -164,33 +172,41 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         console.error("PDF commande err (non bloquant):", err)
       }
+
+      // Si commande nouvellement créée → fiche INITIALE + décrémentation Shopify dans l'ordre
+      if (isNewDocument) {
+        after(async () => {
+          // ─── ÉTAPE 1 : Fiche de travail INITIALE (lit le stock T+0) ───
+          // ⚠️ DOIT finir AVANT la décrémentation Shopify
+          try {
+            await fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mode: "initial" }),
+            })
+          } catch (err) {
+            console.error("[after] Fiche travail initiale error:", err)
+          }
+
+          // ─── ÉTAPE 2 : Décrémentation Shopify (modifie le stock) ───
+          // Seulement APRÈS que tous les PDFs sont figés
+          try {
+            await fetch(`${baseUrl}/api/stock-movements/process`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ offre_slug: slug, reason: "commande_directe" }),
+            })
+          } catch (err) {
+            console.error("[after] Stock movements err:", err)
+          }
+        })
+      }
     } else {
-      // Pour une offre : juste fire-and-forget
+      // Pour une offre : juste fire-and-forget du PDF, pas de stock à gérer
       fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       }).catch(err => console.error("PDF offre err:", err))
-    }
-
-    // Si commande nouvellement créée → fiche INITIALE garantie via after()
-    // ⚠️ On NE génère PAS la fiche "courante" automatiquement : elle doit être
-    // créée à la demande par l'équipe pour avoir le stock du moment de la prépa.
-    if (isCommande && isNewDocument) {
-      after(async () => {
-        await fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "initial" }),
-        }).catch(err => console.error("[after] Fiche travail initiale error:", err))
-
-        // ─── Sortie de stock Shopify ───
-        // Décrémente le stock Shopify pour chaque article SKU de la commande
-        await fetch(`${baseUrl}/api/stock-movements/process`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ offre_slug: slug, reason: "commande_directe" }),
-        }).catch(err => console.error("[after] Stock movements err:", err))
-      })
     }
 
     return NextResponse.json({
