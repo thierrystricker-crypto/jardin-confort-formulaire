@@ -182,6 +182,14 @@ export async function POST(request: NextRequest) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mode: "initial" }),
         }).catch(err => console.error("[after] Fiche travail initiale error:", err))
+
+        // ─── Sortie de stock Shopify ───
+        // Décrémente le stock Shopify pour chaque article SKU de la commande
+        await fetch(`${baseUrl}/api/stock-movements/process`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ offre_slug: slug, reason: "commande_directe" }),
+        }).catch(err => console.error("[after] Stock movements err:", err))
       })
     }
 

@@ -266,6 +266,14 @@ export async function POST(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "initial" }),
       }).catch(err => console.error("[after] Fiche initiale err:", err))
+
+      // ─── Sortie de stock Shopify ───
+      // Décrémente le stock Shopify pour chaque article SKU de la commande
+      await fetch(`${BASE_URL}/api/stock-movements/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offre_slug: cmdSlug, reason: "commande_validee" }),
+      }).catch(err => console.error("[after] Stock movements err:", err))
     })
 
     // ATTENDRE la génération du PDF commande (c'est celui que le client va voir

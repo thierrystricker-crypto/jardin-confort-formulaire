@@ -3,6 +3,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import StockMovementsBlock from "@/components/StockMovementsBlock";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -76,7 +77,6 @@ function FicheTravailPreview({
   currentUrl: string | null
   initialAt: string | null
 }) {
-  // Par défaut on affiche l'initiale (figée) car c'est la référence officielle
   const defaultMode: "initial" | "current" =
     initialUrl ? "initial" : "current"
   const [mode, setMode] = React.useState<"initial" | "current">(defaultMode)
@@ -91,7 +91,6 @@ function FicheTravailPreview({
           <span className="text-xs font-normal text-amber-300/70 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-0.5">Interne</span>
         </h2>
         <div className="flex items-center gap-2">
-          {/* Toggle initiale / actuelle */}
           <div className="inline-flex rounded-xl border border-white/10 bg-[#34383d] p-1 text-xs">
             <button
               onClick={() => setMode("initial")}
@@ -161,12 +160,10 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [pdfGenerating,setPdfGenerating]=useState(false)
   const [qrUrl,setQrUrl]=useState<string|null>(null)
   const [qrGenerating,setQrGenerating]=useState(false)
-  // ─── NOUVEAU : state pour la fiche de travail ───
   const [ficheTravailUrl, setFicheTravailUrl] = useState<string|null>(null)
   const [ficheTravailGenerating, setFicheTravailGenerating] = useState(false)
   const [ficheTravailInitialUrl, setFicheTravailInitialUrl] = useState<string|null>(null)
   const [ficheTravailInitialAt, setFicheTravailInitialAt] = useState<string|null>(null)
-  // ────────────────────────────────────────────────
   const [relancing,setRelancing]=useState(false)
   const [relanceStatus,setRelanceStatus]=useState("")
   const [emailCopied,setEmailCopied]=useState(false)
@@ -213,7 +210,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         if ((o as unknown as Record<string,unknown>).qr_url) {
           setQrUrl((o as unknown as Record<string,unknown>).qr_url as string)
         }
-        // ─── NOUVEAU : charger les URL fiche travail (initiale + courante) ───
         if ((o as unknown as Record<string,unknown>).fiche_travail_pdf_url) {
           setFicheTravailUrl((o as unknown as Record<string,unknown>).fiche_travail_pdf_url as string)
         }
@@ -223,11 +219,9 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         if ((o as unknown as Record<string,unknown>).fiche_travail_initial_at) {
           setFicheTravailInitialAt((o as unknown as Record<string,unknown>).fiche_travail_initial_at as string)
         }
-        // ──────────────────────────────────────────────────────────────────────────────────
         if ((o as unknown as Record<string,unknown>).probabilite) {
           setProbabilite((o as unknown as Record<string,unknown>).probabilite as string)
         }
-        // ─── Si commande issue d'une offre, récupérer le slug de l'offre via l'API dashboard ───
         if (o.offre_origine && o.type_document === "Commande") {
           try {
             const oRes = await fetch(`/api/dashboard/offres?q=${encodeURIComponent(o.offre_origine)}&limit=1`)
@@ -240,7 +234,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             }
           } catch { /* ignore */ }
         }
-        // ──────────────────────────────────────────────────────────────────────────────────────
         if (o.client_email || o.client_tel1) {
           try {
             const q = o.client_email || o.client_tel1 || ""
@@ -285,9 +278,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     finally { setQrGenerating(false) }
   }
 
-  // ─── NOUVEAU : fonction de génération de la fiche de travail ───
-  // mode "current" → regénère avec stock à jour (écrase la version courante)
-  // mode "initial" → fige la version initiale (ne se regénère normalement qu'une fois)
   async function generateFicheTravail(mode: "initial" | "current" = "current", force = false) {
     if(!slug) return
     setFicheTravailGenerating(true)
@@ -318,7 +308,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
       setFicheTravailGenerating(false)
     }
   }
-  // ────────────────────────────────────────────────────────────────
 
   async function saveProbabilite(val: string) {
     setProbSaving(true)
@@ -533,7 +522,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const urlPrint=`${APP_URL}/print/offre/${offre.slug}`
   const isAbandonne=offre.statut==="Abandonnée"
   const isOffre=offre.type_document==="Offre"&&!["Convertie","Acceptée"].includes(offre.statut)
-  // ─── NOUVEAU : afficher le bouton fiche de travail uniquement pour les commandes ───
   const isCommande = offre.type_document === "Commande" || ["Acceptée", "Convertie"].includes(offre.statut)
 
   return (
@@ -592,8 +580,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             )}
 
             {/* ─── Boutons Fiche de travail (commandes uniquement) ─── */}
-            {/* Bouton 1 : fiche INITIALE (figée à la commande, stock vu par le client) */}
-            {/* Bouton 2 : fiche ACTUELLE (regénérée avec stock du moment) */}
             {isCommande && (
               <>
                 {ficheTravailInitialUrl ? (
@@ -626,9 +612,16 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                         : "🔄 Générer fiche stock actuel"}
                   </span>
                 </button>
+
+                {/* ─── NOUVEAU : Bouton vers la vue globale Mouvements de stock ─── */}
+                <Link href="/dashboard/stock-movements"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b]"
+                  title="Voir tous les mouvements de stock Shopify">
+                  📦 Stock Shopify
+                </Link>
+                {/* ──────────────────────────────────────────────────────────────── */}
               </>
             )}
-            {/* ───────────────────────────────────────────────────────────────── */}
           </div>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex items-start gap-4">
@@ -658,7 +651,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   {days!==null&&(
                     <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getDaysBadgeColor(days)}`}>{days} jour{days>1?"s":""} ouvert</span>
                   )}
-                  {/* Badge probabilité dans le header */}
                   {probabilite!=="neutre"&&(
                     <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${probabilite==="forte"?"bg-emerald-500/15 text-emerald-300":probabilite==="moyenne"?"bg-amber-500/15 text-amber-300":"bg-rose-500/15 text-rose-300"}`}>
                       {probabilite==="forte"?"🟢 Forte":probabilite==="moyenne"?"🟡 Moyenne":"🔴 Faible"}
@@ -744,6 +736,11 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                 </div>
               </section>
             </div>
+
+            {/* ─── NOUVEAU : Bloc Mouvements de stock (commandes uniquement) ─── */}
+            {/* Affiche les sorties Shopify automatiques pour cette commande */}
+            {isCommande && <StockMovementsBlock slug={slug} />}
+            {/* ────────────────────────────────────────────────────────────────── */}
 
             {/* PROBABILITÉ DE CLOSING */}
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
@@ -906,7 +903,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             )}
 
             {/* ─── Aperçu Fiche de travail (commandes uniquement) ─── */}
-            {/* Affiche la fiche INITIALE par défaut, sinon la courante */}
             {isCommande && (ficheTravailInitialUrl || ficheTravailUrl) && (
               <FicheTravailPreview
                 initialUrl={ficheTravailInitialUrl}
@@ -914,7 +910,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                 initialAt={ficheTravailInitialAt}
               />
             )}
-            {/* ──────────────────────────────────────────────────── */}
 
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
               <div className="mb-4 flex items-center justify-between">
