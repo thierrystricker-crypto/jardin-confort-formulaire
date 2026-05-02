@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { createNotification } from "@/lib/notifications";
 
 const MAKE_WEBHOOK = process.env.MAKE_WEBHOOK_VALIDATION_URL ||
   "https://hook.eu1.make.com/tqqhnrzkcwfhybguktd75drtmqv9ah49";
@@ -150,6 +151,22 @@ export async function POST(
       console.error("Insert CMD error:", insertError);
       return NextResponse.json({ error: "Erreur création commande: " + insertError.message }, { status: 500 });
     }
+
+    // ─── Créer une notification interne (Couche 1) ───
+    // Non bloquant — si erreur, le flow continue
+    await createNotification({
+      type: "commande_validee",
+      offre_slug: cmdSlug,
+      numero_affiche: numeroCommande,
+      type_document: "Commande",
+      client_nom: offre.client_nom,
+      client_prenom: offre.client_prenom,
+      client_societe: offre.client_societe,
+      commercial: offre.commercial,
+      total_ttc: offre.total_ttc,
+      payment_mode: offre.payment_mode,
+      titre: `🎉 Commande ${numeroCommande} validée online`,
+    });
 
     // 5. Webhook Make
     const offreData = offre.data as Record<string, unknown>

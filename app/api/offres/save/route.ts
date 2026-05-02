@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { computeTotals } from "@/lib/jc-print-types";
+import { createNotification } from "@/lib/notifications";
 
 function makeSlug(numero: string, withToken = false): string {
   const base = numero.toLowerCase()
@@ -123,6 +124,24 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error("Supabase error:", error);
       return NextResponse.json({ error: "Erreur base de données : " + error.message }, { status: 500 });
+    }
+
+    // ─── Créer une notification si nouvelle commande directe ───
+    // (Pas de notif pour les offres ni pour les éditions)
+    if (isCommande && isNewDocument) {
+      await createNotification({
+        type: "commande_directe",
+        offre_slug: slug,
+        numero_affiche: numeroAffiche,
+        type_document: "Commande",
+        client_nom: data.nom || null,
+        client_prenom: data.prenom || null,
+        client_societe: data.societe || null,
+        commercial: data.commercial || null,
+        total_ttc: row.total_ttc,
+        payment_mode: data.paymentMode || null,
+        titre: `📋 Nouvelle commande directe ${numeroAffiche}`,
+      });
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://jardin-confort-formulaire.vercel.app";
