@@ -111,44 +111,6 @@ function ProgressBar({ progress }: { progress: number }) {
   );
 }
 
-// ── Poller QR ──
-function QrPoller({ slug, onReady }: { slug: string; onReady: (url: string) => void }) {
-  const [attempts, setAttempts] = useState(0);
-  const maxAttempts = 12;
-  useEffect(() => {
-    if (!slug || attempts >= maxAttempts) return;
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/offres/${slug}/qr`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json.qr_url) { onReady(json.qr_url); return; }
-        }
-      } catch { /* ignore */ }
-      setAttempts(a => a + 1);
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [slug, attempts, onReady]);
-  const progress = Math.min(95, (attempts / maxAttempts) * 100);
-  return (
-    <div style={{ padding: "32px 20px", textAlign: "center" }}>
-      <div style={{ fontSize: 28, marginBottom: 12 }}>⏳</div>
-      <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 6 }}>Génération du QR paiement en cours…</div>
-      <div style={{ fontSize: 13, color: C.grey, marginBottom: 20 }}>Cela peut prendre jusqu&apos;à 60 secondes. Cette page se met à jour automatiquement.</div>
-      <div style={{ maxWidth: 360, margin: "0 auto" }}>
-        <ProgressBar progress={progress} />
-        <div style={{ fontSize: 12, color: C.grey, marginTop: 8 }}>Étape {attempts + 1} / {maxAttempts}</div>
-      </div>
-      <div style={{ marginTop: 20, fontSize: 13, color: C.grey }}>
-        En attendant, vous pouvez utiliser le{" "}
-        <a href={QR_SECOURS} target="_blank" rel="noopener noreferrer" style={{ color: C.blueBtn, fontWeight: 600, textDecoration: "underline" }}>
-          bulletin de paiement de secours ↗
-        </a>
-      </div>
-    </div>
-  );
-}
-
 export default function ConfirmationPage({ params }: { params: Promise<{ slug: string }> }) {
   const [cmd, setCmd] = useState<CmdData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -156,10 +118,16 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
   const [pdfUrl, setPdfUrl] = useState("");
   const [qrUrl, setQrUrl] = useState("");
   const [dateValidation, setDateValidation] = useState("");
+
+  // États pour PDF confirmation (poller)
+  const [pdfChecking, setPdfChecking] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState(0);
+
+  // États pour QR paiement (poller au clic sur télécharger)
   const [qrDownloading, setQrDownloading] = useState(false);
   const [qrProgress, setQrProgress] = useState(0);
-  const [qrLoadError, setQrLoadError] = useState(false);
 
+  // ── Chargement initial ──
   useEffect(() => {
     async function load() {
       const { slug: s } = await params;
@@ -180,6 +148,44 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
     load();
   }, [params]);
 
+  // ── Auto-poll du PDF de confirmation s'il n'est pas encore prêt ──
+  // Le PDF peut mettre 10-20s à se générer après la validation
+  useEffect(() => {
+    if (!slug || pdfUrl || !cmd) return;
+    setPdfChecking(true);
+    let attempts = 0;
+    const maxAttempts = 18; // 18 × 5s = 90s max
+
+    const intervalRef = { current: 0 as unknown as ReturnType<typeof setInterval> };
+
+    intervalRef.current = setInterval(async () => {
+      attempts++;
+      setPdfProgress(Math.min(95, (attempts / maxAttempts) * 100));
+
+      try {
+        const res = await fetch(`/api/offres/${slug}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.offre?.pdf_url) {
+            setPdfUrl(json.offre.pdf_url);
+            setPdfProgress(100);
+            setPdfChecking(false);
+            clearInterval(intervalRef.current);
+            return;
+          }
+        }
+      } catch { /* ignore */ }
+
+      if (attempts >= maxAttempts) {
+        setPdfChecking(false);
+        clearInterval(intervalRef.current);
+      }
+    }, 5000);
+
+    return () => clearInterval(intervalRef.current);
+  }, [slug, pdfUrl, cmd]);
+
+  // ── Téléchargement QR (génère à la demande si pas encore prêt) ──
   const handleQrDownload = useCallback(async () => {
     if (qrDownloading) return;
     if (qrUrl) { window.open(qrUrl, "_blank"); return; }
@@ -223,7 +229,7 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
   return (
     <>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
-      <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${FONT};background:#F3F5F6;color:${C.text};font-size:15px}a{color:${C.text};text-decoration:none}`}</style>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${FONT};background:#F3F5F6;color:${C.text};font-size:15px}a{color:${C.text};text-decoration:none}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}@keyframes spin{to{transform:rotate(360deg)}}.spinner{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle}`}</style>
 
       {/* Header */}
       <div style={{ background: "#2B8AD1", padding: "6px 0" }}>
@@ -282,14 +288,28 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* ── Bouton PDF confirmation avec gestion attente intelligente ── */}
             {pdfUrl ? (
               <a href={pdfUrl} target="_blank" rel="noopener noreferrer"
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 52, padding: "0 20px", borderRadius: 26, background: C.blueBtn, color: "white", fontWeight: 600, fontSize: 15 }}>
                 📄 Télécharger la confirmation PDF
               </a>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 52, padding: "0 20px", borderRadius: 26, background: C.bg, color: C.grey, fontWeight: 600, fontSize: 14, border: `1px solid ${C.border}` }}>
-                ⏳ Confirmation PDF en préparation…
+              <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+                minHeight: 52, padding: "10px 20px", borderRadius: 26,
+                background: "#fff8e1", color: "#92400e", fontWeight: 600, fontSize: 14,
+                border: `1px solid #fbbf24`, animation: "pulse 2s infinite",
+              }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="spinner"/>
+                  Génération du PDF en cours…
+                </span>
+                {pdfChecking && (
+                  <div style={{ width: "100%" }}>
+                    <ProgressBar progress={pdfProgress}/>
+                  </div>
+                )}
               </div>
             )}
 
@@ -319,7 +339,7 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
         </div>
 
 
-{/* Message */}
+        {/* Message */}
         <div style={{ background: "#EEF7FF", border: "1px solid #B7D8F0", borderRadius: 22, padding: "22px 24px", marginBottom: 24, color: C.blue, lineHeight: 1.75, fontSize: 16 }}>
           <p style={{ marginBottom: 14 }}>Merci beaucoup <strong>{nomComplet}</strong> pour la validation de votre commande.</p>
           <p style={{ marginBottom: 14 }}>Notre équipe a été avertie de votre confirmation et va prendre contact avec vous au plus vite.</p>
@@ -376,58 +396,73 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
 
         
 
-        {/* ── QR Paiement ── */}
+        {/* ── Section Paiement (sans viewer PDF) ── */}
         <div style={{ background: "white", border: `1px solid ${C.border}`, borderRadius: 26, padding: 28, marginBottom: 24, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: C.blue, marginBottom: 8 }}>QR Paiement</h2>
-          <p style={{ fontSize: 14, color: C.grey, marginBottom: 20, lineHeight: 1.6 }}>
-            Veuillez scanner le QR code ci-dessous ou utiliser les coordonnées bancaires indiquées.
-            Le montant à inscrire est : <strong>{fmt(montantAPayer)}</strong>
+          <h2 style={{ fontSize: 24, fontWeight: 600, color: C.blue, marginBottom: 8 }}>Paiement par QR-facture</h2>
+          <p style={{ fontSize: 14, color: C.grey, marginBottom: 24, lineHeight: 1.6 }}>
+            Utilisez le QR code personnalisé ou les coordonnées bancaires ci-dessous pour effectuer votre paiement.
+            Le montant à payer est : <strong style={{ color: C.text }}>{fmt(montantAPayer)}</strong>
           </p>
 
-          {/* ── Viewer PDF — hauteur 820px pour que le QR en bas soit visible ── */}
-          <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 20, overflow: "hidden", marginBottom: 16 }}>
-            {qrUrl && !qrLoadError ? (
-              <object
-                data={`${qrUrl}#view=FitH`}
-                type="application/pdf"
-                style={{ width: "100%", height: 820, border: "none", display: "block" }}
-                onError={() => setQrLoadError(true)}
-              >
-                <div style={{ padding: 32, textAlign: "center" }}>
-                  <p style={{ marginBottom: 16, color: C.grey, fontSize: 14 }}>Votre navigateur ne peut pas afficher le PDF directement.</p>
-                  <a href={qrUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 24px", borderRadius: 20, background: C.blueBtn, color: "white", fontWeight: 600, fontSize: 14 }}>
-                    📥 Ouvrir le QR paiement
-                  </a>
-                </div>
-              </object>
-            ) : qrLoadError ? (
-              <div style={{ padding: 32, textAlign: "center" }}>
-                <div style={{ fontSize: 22, marginBottom: 12 }}>⚠️</div>
-                <p style={{ marginBottom: 16, color: C.grey, fontSize: 14 }}>Le QR paiement personnalisé n&apos;a pas pu être affiché.</p>
-                <a href={QR_SECOURS} target="_blank" rel="noopener noreferrer"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 24px", borderRadius: 20, background: C.blueBtn, color: "white", fontWeight: 600, fontSize: 14 }}>
-                  📄 Utiliser le bulletin de paiement de secours
-                </a>
+          {/* ── Bouton principal de téléchargement QR ── */}
+          <div style={{
+            background: "linear-gradient(135deg, #EEF7FF 0%, #DCEEFB 100%)",
+            border: `1px solid #B7D8F0`,
+            borderRadius: 20,
+            padding: "24px 28px",
+            marginBottom: 20,
+            display: "flex",
+            alignItems: "center",
+            gap: 24,
+            flexWrap: "wrap",
+          }}>
+            <div style={{ fontSize: 56, lineHeight: 1 }}>📱</div>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ fontSize: 17, fontWeight: 600, color: C.blue, marginBottom: 4 }}>QR-facture personnalisée</div>
+              <div style={{ fontSize: 13, color: C.grey, lineHeight: 1.5 }}>
+                Le QR contient votre référence et le montant exact. Scannez-le avec votre application de banque mobile pour payer en quelques secondes.
               </div>
-            ) : (
-              <QrPoller slug={slug} onReady={setQrUrl} />
-            )}
+            </div>
+            <button onClick={handleQrDownload} disabled={qrDownloading}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
+                minHeight: 56, padding: "12px 28px", borderRadius: 26,
+                background: qrDownloading ? "#94A3B8" : C.blueBtn, color: "white", fontWeight: 700, fontSize: 15,
+                border: "none",
+                cursor: qrDownloading ? "wait" : "pointer", transition: "all 0.2s",
+                whiteSpace: "nowrap",
+              }}>
+              {qrDownloading ? (
+                <>
+                  <span style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span className="spinner"/> Génération…
+                  </span>
+                  <div style={{ width: 160 }}>
+                    <ProgressBar progress={qrProgress}/>
+                  </div>
+                </>
+              ) : qrUrl ? (
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>📥 Ouvrir le QR-facture</span>
+              ) : (
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>📥 Télécharger le QR-facture</span>
+              )}
+            </button>
           </div>
 
-          {/* Liens de secours */}
-          <div style={{ marginBottom: 20, fontSize: 13, color: C.grey, textAlign: "center" }}>
-            Problème d&apos;affichage ?{" "}
-            <a href={qrUrl || QR_SECOURS} target="_blank" rel="noopener noreferrer" style={{ color: C.blueBtn, fontWeight: 600, textDecoration: "underline" }}>
-              Ouvrir dans un nouvel onglet ↗
+          {/* Lien de secours */}
+          <div style={{ marginBottom: 24, fontSize: 13, color: C.grey, textAlign: "center" }}>
+            En cas de problème, vous pouvez utiliser le{" "}
+            <a href={QR_SECOURS} target="_blank" rel="noopener noreferrer" style={{ color: C.blueBtn, fontWeight: 600, textDecoration: "underline" }}>
+              bulletin de paiement de secours ↗
             </a>
-            {" · "}
-            <a href={QR_SECOURS} target="_blank" rel="noopener noreferrer" style={{ color: C.grey, textDecoration: "underline" }}>
-              Bulletin de secours ↗
-            </a>
+            {" "}(QR vierge, à compléter à la main).
           </div>
 
-          {/* ── Cards cliquables pour copier ── */}
+          {/* ── Coordonnées bancaires ── */}
+          <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 700, color: C.blue, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Ou paiement manuel par virement
+          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <CopyCard label="IBAN" value="CH72 0076 7000 K033 3796 5" />
             <CopyCard label="Référence" value={cmd.numero_commande} />
