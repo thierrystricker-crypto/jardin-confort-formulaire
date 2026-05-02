@@ -1,7 +1,7 @@
 "use client";
 // app/dashboard/page.tsx
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 
 type OffreStatut = "En cours"|"Envoyée"|"Convertie"|"Acceptée"|"Abandonnée"|"Refusée"
@@ -107,6 +107,72 @@ function SortTh({label,k,cur,dir,onSort}:{label:string;k:SortKey;cur:SortKey;dir
   )
 }
 
+// ─── Bouton Notifications avec badge live (compteur des non-lues) ───
+// Auto-refresh toutes les 30s. S'anime si nouvelles notifs détectées.
+function NotificationsButton() {
+  const [unreadCount, setUnreadCount] = useState<number|null>(null)
+  const [makeAlert, setMakeAlert] = useState(false)
+  const [pulse, setPulse] = useState(false)
+  const [previousCount, setPreviousCount] = useState<number|null>(null)
+
+  const loadCount = useCallback(async () => {
+    try {
+      const [notifsRes, healthRes] = await Promise.all([
+        fetch("/api/notifications?status=unread&limit=1"),
+        fetch("/api/make-health"),
+      ])
+      if (notifsRes.ok) {
+        const json = await notifsRes.json()
+        const newCount = json.unread_count || 0
+        // Animation pulse si nouvelle notif arrivée
+        if (previousCount !== null && newCount > previousCount) {
+          setPulse(true)
+          setTimeout(() => setPulse(false), 3000)
+        }
+        setPreviousCount(newCount)
+        setUnreadCount(newCount)
+      }
+      if (healthRes.ok) {
+        const json = await healthRes.json()
+        setMakeAlert(json.alert === true)
+      }
+    } catch (e) {
+      console.error("Notifications count error:", e)
+    }
+  }, [previousCount])
+
+  useEffect(() => {
+    loadCount()
+    const interval = setInterval(loadCount, 30000)
+    return () => clearInterval(interval)
+  }, [loadCount])
+
+  const hasUnread = unreadCount !== null && unreadCount > 0
+
+  return (
+    <Link href="/dashboard/notifications"
+      className={`relative inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm transition ${
+        hasUnread
+          ? "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+          : "border-white/10 bg-[#2a2d31] text-zinc-300 hover:bg-[#34383d]"
+      } ${pulse ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-[#1f2125]" : ""}`}>
+      <span className={pulse ? "animate-bounce" : ""}>🔔</span>
+      <span>Notifications</span>
+      {hasUnread && (
+        <span className="inline-flex items-center justify-center rounded-full bg-rose-500 px-2 py-0.5 text-xs font-bold text-white min-w-[1.5rem]">
+          {unreadCount}
+        </span>
+      )}
+      {makeAlert && (
+        <span className="ml-1 inline-flex items-center text-rose-400" title="Le flow Make semble en panne — vérifier dans le centre de notifications">
+          ⚠
+        </span>
+      )}
+    </Link>
+  )
+}
+// ──────────────────────────────────────────────────────────────────
+
 const PROB_ORDER: Record<string,number> = { forte:0, moyenne:1, neutre:2, faible:3 }
 
 export default function DashboardPage() {
@@ -197,6 +263,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex gap-3 flex-wrap">
               <Link href="/offres/nouveau" target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-2xl bg-[#2B8AD1] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#2478b8]">+ Nouvelle offre</Link>
+              <NotificationsButton/>
               <Link href="/dashboard/clients" className="inline-flex items-center rounded-2xl border border-white/10 bg-[#2a2d31] px-4 py-3 text-sm text-zinc-300 transition hover:bg-[#34383d]">👥 Clients</Link>
               <button onClick={loadOffres} className="inline-flex items-center rounded-2xl border border-white/10 bg-[#2a2d31] px-4 py-3 text-sm text-zinc-300 transition hover:bg-[#34383d]">🔄 Actualiser</button>
             </div>
