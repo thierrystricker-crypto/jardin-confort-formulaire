@@ -3,6 +3,8 @@
 // Utilise OAuth Client Credentials Flow (comme l'app jotform-iframe-test qui marche déjà).
 // Pas besoin de token statique : on génère un token à la demande via CLIENT_ID/SECRET.
 
+import { createHash, randomUUID } from "crypto"
+
 const SHOP = process.env.SHOPIFY_STORE_DOMAIN || ""
 const ADMIN_CLIENT_ID = process.env.SHOPIFY_ADMIN_CLIENT_ID || ""
 const ADMIN_CLIENT_SECRET = process.env.SHOPIFY_ADMIN_CLIENT_SECRET || ""
@@ -170,24 +172,43 @@ export async function findVariantBySKU(sku: string): Promise<ShopifyVariantLooku
   }
 }
 
+// ─── Génère un idempotencyKey UUID-v4-like depuis une string stable ───
+// Permet d'avoir le même key pour la même opération (CMD-XXX + SKU + reason)
+// → si retry → Shopify ne fera PAS l'opération deux fois
+function generateIdempotencyKey(seed: string): string {
+  const hash = createHash("sha256").update(seed).digest("hex")
+  // Format UUID v4 attendu par Shopify : 8-4-4-4-12
+  return [
+    hash.substring(0, 8),
+    hash.substring(8, 12),
+    "4" + hash.substring(13, 16),                            // version 4
+    ((parseInt(hash.substring(16, 17), 16) & 0x3) | 0x8).toString(16) + hash.substring(17, 20),  // variant
+    hash.substring(20, 32),
+  ].join("-")
+}
+
 // ─── Ajustement d'inventaire (delta négatif = sortie, positif = entrée) ───
 //
-// IMPORTANT : changeFromQuantity = null
-// On désactive le compare-and-swap (CAS) car notre dashboard n'est pas la source
-// unique de vérité du stock. Plusieurs canaux peuvent modifier le stock en
-// parallèle (Shopify POS, ventes online, autres apps...). On se contente
-// d'appliquer le delta — Shopify reste la source de vérité.
+// changeFromQuantity = null
+//   → désactive le compare-and-swap (CAS) car le dashboard n'est pas la source
+//     unique de vérité (Shopify POS, ventes online, etc. peuvent modifier en parallèle)
 //
-// ledgerDocumentUri = identifie clairement la source dans Shopify Admin
-// Format recommandé : gid://[app-name]/[type]/[id]
+// @idempotent(key: $idempotencyKey)
+//   → exigé par l'API 2026-04
+//   → garantit qu'un même mouvement ne peut être appliqué qu'une seule fois
+//   → key dérivé du ledgerUri pour avoir une clé stable et reproductible
+//
+// ledgerDocumentUri / referenceDocumentUri
+//   → identifie clairement la source dans Shopify Admin
+//   → format : gid://offres-jardin-confort/StockMovement/CMD-XXXXX
 export async function adjustInventory(
   inventoryItemId: string,
   delta: number,
-  ledgerUri?: string,                     // ex: "gid://offres-jardin-confort/StockMovement/CMD-80526"
+  ledgerUri?: string,
 ): Promise<{ success: boolean; newQuantity?: number; raw?: unknown; error?: string }> {
   const mutation = `
-    mutation adjustInventory($input: InventoryAdjustQuantitiesInput!) {
-      inventoryAdjustQuantities(input: $input) {
+    mutation adjustInventory($input: InventoryAdjustQuantitiesInput!, $idempotencyKey: String!) {
+      inventoryAdjustQuantities(input: $input) @idempotent(key: $idempotencyKey) {
         inventoryAdjustmentGroup {
           createdAt
           reason
@@ -207,14 +228,24 @@ export async function adjustInventory(
     }
   `
 
+  // ─── Génération de l'idempotencyKey ───
+  // Si on a un ledgerUri stable (gid://offres-jardin-confort/StockMovement/CMD-XXX),
+  // on dérive le key de [ledgerUri + inventoryItemId + delta] pour être stable et reproductible.
+  // Sinon on utilise un randomUUID (cas manuel).
+  const idempotencyKey = ledgerUri
+    ? generateIdempotencyKey(`${ledgerUri}|${inventoryItemId}|${delta}`)
+    : randomUUID()
+
+  const referenceUri = ledgerUri || `gid://offres-jardin-confort/StockMovement/manual-${Date.now()}`
+
   const input = {
     reason: "correction",
     name: "available",
-    referenceDocumentUri: ledgerUri || `gid://offres-jardin-confort/StockMovement/manual-${Date.now()}`,
+    referenceDocumentUri: referenceUri,
     changes: [
       {
         delta,
-        changeFromQuantity: null,     // ← CAS désactivé — pas de bloc en cas de race condition
+        changeFromQuantity: null,     // CAS désactivé (pas de blocage en cas de race condition)
         inventoryItemId,
         locationId: SHOPIFY_LOCATION_ID,
       },
@@ -231,7 +262,7 @@ export async function adjustInventory(
   }
 
   try {
-    const data = await shopifyAdminGraphQL<Resp>(mutation, { input })
+    const data = await shopifyAdminGraphQL<Resp>(mutation, { input, idempotencyKey })
     const result = data.inventoryAdjustQuantities
 
     if (result.userErrors && result.userErrors.length > 0) {
@@ -242,7 +273,9 @@ export async function adjustInventory(
       }
     }
 
-    if (!result.inventoryAdjustmentGroup) {
+    // Si pas d'inventoryAdjustmentGroup pour delta != 0 → erreur silencieuse
+    // Pour delta=0 c'est normal (pas d'ajustement effectué)
+    if (!result.inventoryAdjustmentGroup && delta !== 0) {
       return {
         success: false,
         error: "Aucun ajustement effectué (réponse vide)",
@@ -250,7 +283,7 @@ export async function adjustInventory(
       }
     }
 
-    const change = result.inventoryAdjustmentGroup.changes.find(c => c.name === "available")
+    const change = result.inventoryAdjustmentGroup?.changes.find(c => c.name === "available")
     const newQty = (typeof change?.quantityAfterChange === "number")
       ? change.quantityAfterChange
       : undefined
