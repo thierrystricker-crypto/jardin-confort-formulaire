@@ -71,7 +71,8 @@ export async function POST(request: NextRequest) {
     }> = []
 
     let firstErrorMsg: string | null = null
-    const referenceUri = `logistics://jardin-confort/${offre_slug}`
+    const ledgerUri = (numeroAffiche: string | null) =>
+      `gid://offres-jardin-confort/StockMovement/${numeroAffiche || offre_slug}`
 
     for (const line of eligibleLines) {
       const sku = line.sku!.trim()
@@ -133,7 +134,12 @@ export async function POST(request: NextRequest) {
         const before = variant.available
 
         // ─── Ajustement de l'inventaire ───
-        const adj = await adjustInventory(variant.inventoryItemId, -qty, referenceUri)
+        // changeFromQuantity=null en interne → pas de blocage en cas de race condition
+        const adj = await adjustInventory(
+          variant.inventoryItemId,
+          -qty,
+          ledgerUri(offre.numero_affiche),
+        )
 
         if (!adj.success) {
           await supabaseAdmin.from("stock_movements").update({

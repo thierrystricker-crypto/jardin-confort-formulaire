@@ -171,10 +171,19 @@ export async function findVariantBySKU(sku: string): Promise<ShopifyVariantLooku
 }
 
 // ─── Ajustement d'inventaire (delta négatif = sortie, positif = entrée) ───
+//
+// IMPORTANT : changeFromQuantity = null
+// On désactive le compare-and-swap (CAS) car notre dashboard n'est pas la source
+// unique de vérité du stock. Plusieurs canaux peuvent modifier le stock en
+// parallèle (Shopify POS, ventes online, autres apps...). On se contente
+// d'appliquer le delta — Shopify reste la source de vérité.
+//
+// ledgerDocumentUri = identifie clairement la source dans Shopify Admin
+// Format recommandé : gid://[app-name]/[type]/[id]
 export async function adjustInventory(
   inventoryItemId: string,
   delta: number,
-  referenceUri?: string,
+  ledgerUri?: string,                     // ex: "gid://offres-jardin-confort/StockMovement/CMD-80526"
 ): Promise<{ success: boolean; newQuantity?: number; raw?: unknown; error?: string }> {
   const mutation = `
     mutation adjustInventory($input: InventoryAdjustQuantitiesInput!) {
@@ -187,6 +196,7 @@ export async function adjustInventory(
             name
             delta
             quantityAfterChange
+            ledgerDocumentUri
           }
         }
         userErrors {
@@ -200,10 +210,11 @@ export async function adjustInventory(
   const input = {
     reason: "correction",
     name: "available",
-    referenceDocumentUri: referenceUri || `logistics://jardin-confort/manual-${Date.now()}`,
+    referenceDocumentUri: ledgerUri || `gid://offres-jardin-confort/StockMovement/manual-${Date.now()}`,
     changes: [
       {
         delta,
+        changeFromQuantity: null,     // ← CAS désactivé — pas de bloc en cas de race condition
         inventoryItemId,
         locationId: SHOPIFY_LOCATION_ID,
       },
@@ -213,7 +224,7 @@ export async function adjustInventory(
   type Resp = {
     inventoryAdjustQuantities: {
       inventoryAdjustmentGroup: {
-        changes: { name: string; delta: number; quantityAfterChange: number }[]
+        changes: { name: string; delta: number; quantityAfterChange: number | null }[]
       } | null
       userErrors: { field: string[]; message: string }[]
     }
@@ -231,10 +242,22 @@ export async function adjustInventory(
       }
     }
 
-    const newQty = result.inventoryAdjustmentGroup?.changes?.[0]?.quantityAfterChange
+    if (!result.inventoryAdjustmentGroup) {
+      return {
+        success: false,
+        error: "Aucun ajustement effectué (réponse vide)",
+        raw: result,
+      }
+    }
+
+    const change = result.inventoryAdjustmentGroup.changes.find(c => c.name === "available")
+    const newQty = (typeof change?.quantityAfterChange === "number")
+      ? change.quantityAfterChange
+      : undefined
+
     return {
       success: true,
-      newQuantity: typeof newQty === "number" ? newQty : undefined,
+      newQuantity: newQty,
       raw: result,
     }
   } catch (err) {
