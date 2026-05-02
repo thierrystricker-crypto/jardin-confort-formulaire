@@ -19,8 +19,6 @@ function makeSlug(numero: string, withToken = false): string {
   return `${base}-${token}`;
 }
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -147,41 +145,31 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://jardin-confort-formulaire.vercel.app";
 
     // ─── Génération PDFs en arrière-plan ───
-    // Toujours : PDF du document
-    // Si commande nouvellement créée : + fiche de travail initiale + courante
-    ;(async () => {
-      try {
-        // 1. PDF du document principal (offre ou commande)
-        await fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        }).catch(err => console.error("PDF generation error:", err))
+    // ─── Génération PDFs en arrière-plan ───
+    // ⚠️ Sur Vercel, le pattern (async () => { sleep ... })() ne fonctionne PAS
+    // de manière fiable car le serverless container peut être tué avant la fin
+    // des sleeps. Solution : fire-and-forget direct, pdf.co gère sa file d'attente.
 
-        // 2. Si c'est une commande nouvellement créée → fiches de travail
-        if (isCommande && isNewDocument) {
-          // Délai pour ne pas saturer pdf.co
-          await sleep(6000)
+    // 1. PDF du document principal (offre ou commande)
+    fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }).catch(err => console.error("PDF generation error:", err))
 
-          // Fiche INITIALE (figée à l'état actuel = stock du moment)
-          await fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "initial" }),
-          }).catch(err => console.error("Fiche travail initiale error:", err))
+    // 2. Si c'est une commande nouvellement créée → fiches de travail (initiale + courante)
+    if (isCommande && isNewDocument) {
+      fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "initial" }),
+      }).catch(err => console.error("Fiche travail initiale error:", err))
 
-          await sleep(5000)
-
-          // Fiche COURANTE (identique au début mais dans le slot regenérable)
-          await fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "current" }),
-          }).catch(err => console.error("Fiche travail courante error:", err))
-        }
-      } catch (err) {
-        console.error("Background generation error:", err)
-      }
-    })()
+      fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "current" }),
+      }).catch(err => console.error("Fiche travail courante error:", err))
+    }
 
     return NextResponse.json({
       success: true,

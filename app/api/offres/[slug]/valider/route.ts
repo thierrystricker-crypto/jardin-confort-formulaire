@@ -14,9 +14,6 @@ const MAKE_WEBHOOK = process.env.MAKE_WEBHOOK_VALIDATION_URL ||
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ||
   "https://offres.jardin-confort.ch";
 
-// Petit helper pour temporiser entre les appels pdf.co (évite la saturation)
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -240,43 +237,34 @@ export async function POST(
       console.error("Webhook error:", webhookErr);
     }
 
-    // ─── Génération PDFs en arrière-plan, séquentielle pour ne pas saturer pdf.co ───
-    // 1) PDF offre + PDF commande en // (urgent pour le client)
-    // 2) Puis QR paiement
-    // 3) Puis fiche de travail INITIALE (figée à l'instant T = stock vu par le client)
-    // 4) Puis fiche de travail COURANTE (identique au début, mais dans le slot regenérable)
-    ;(async () => {
-      try {
-        // Étape 1 : PDFs commande + offre en parallèle
-        await Promise.allSettled([
-          fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" }),
-          fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST" }),
-        ])
+    // ─── Génération PDFs en arrière-plan ───
+    // ⚠️ Sur Vercel, le pattern (async () => { sleep ... })() ne fonctionne PAS
+    // de manière fiable car le serverless container peut être tué avant la fin
+    // des sleeps. Solution : on lance les fetchs en parallèle SANS attendre,
+    // et chaque endpoint cible se débrouille avec pdf.co.
+    //
+    // Pour éviter la saturation de pdf.co (3-5 jobs en parallèle = OK), on
+    // n'a pas besoin de sleeps : pdf.co gère sa propre file d'attente côté serveur.
+    fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" })
+      .catch(err => console.error("PDF offre err:", err))
 
-        // Étape 2 : QR paiement (5s plus tard pour ne pas saturer pdf.co)
-        await sleep(5000)
-        await fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST" }).catch(() => {})
+    fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST" })
+      .catch(err => console.error("PDF commande err:", err))
 
-        // Étape 3 : Fiche de travail INITIALE (figée)
-        await sleep(5000)
-        await fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "initial" }),
-        }).catch(() => {})
+    fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST" })
+      .catch(err => console.error("QR paiement err:", err))
 
-        // Étape 4 : Fiche de travail COURANTE (idem au début, mais re-génerable)
-        await sleep(5000)
-        await fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "current" }),
-        }).catch(() => {})
+    fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "initial" }),
+    }).catch(err => console.error("Fiche initiale err:", err))
 
-      } catch (err) {
-        console.error("Background PDF generation error:", err)
-      }
-    })()
+    fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "current" }),
+    }).catch(err => console.error("Fiche courante err:", err))
 
     return NextResponse.json({
       success: true,
