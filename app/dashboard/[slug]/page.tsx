@@ -417,6 +417,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
           signataire: offre.commercial || "Conversion manuelle",
           signature_base64: "",
           date_signature: new Date().toLocaleDateString("fr-CH"),
+          internal: true,  // ← conversion manuelle depuis le dashboard : pas d'email au client + notif différenciée
         }),
       })
       const json = await res.json()

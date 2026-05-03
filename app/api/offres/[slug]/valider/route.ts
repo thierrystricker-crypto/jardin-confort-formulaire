@@ -21,7 +21,7 @@ export async function POST(
   try {
     const { slug } = await params;
     const body = await request.json();
-    const { signataire, signature_base64, date_signature } = body;
+    const { signataire, signature_base64, date_signature, internal } = body;
 
     if (!signataire) {
       return NextResponse.json({ error: "Signataire requis" }, { status: 400 });
@@ -151,8 +151,9 @@ export async function POST(
 
     // ─── Créer une notification interne (Couche 1) ───
     // Non bloquant — si erreur, le flow continue
+    // On différencie : conversion manuelle (depuis dashboard) vs validation client en ligne
     await createNotification({
-      type: "commande_validee",
+      type: internal ? "commande_convertie_manuelle" : "commande_validee",
       offre_slug: cmdSlug,
       numero_affiche: numeroCommande,
       type_document: "Commande",
@@ -162,7 +163,9 @@ export async function POST(
       commercial: offre.commercial,
       total_ttc: offre.total_ttc,
       payment_mode: offre.payment_mode,
-      titre: `🎉 Commande ${numeroCommande} validée online`,
+      titre: internal
+        ? `🔄 Commande ${numeroCommande} créée (conversion manuelle)`
+        : `🎉 Commande ${numeroCommande} validée online`,
     });
 
     // 5. Webhook Make
@@ -226,17 +229,24 @@ export async function POST(
       total_ttc: offre.total_ttc,
     };
 
-    try {
-      await fetch(MAKE_WEBHOOK, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-make-apikey": "jc_validation_2026_K9mP4xT7qL2vN8aR5wF1",
-        },
-        body: JSON.stringify(webhookPayload),
-      });
-    } catch (webhookErr) {
-      console.error("Webhook error:", webhookErr);
+    // Webhook Make : SKIP si conversion interne (depuis le dashboard)
+    // Pour ne pas envoyer un email automatique au client lors d'une conversion manuelle.
+    // Le client peut toujours recevoir un mail manuel via le brouillon dans le dashboard.
+    if (!internal) {
+      try {
+        await fetch(MAKE_WEBHOOK, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-make-apikey": "jc_validation_2026_K9mP4xT7qL2vN8aR5wF1",
+          },
+          body: JSON.stringify(webhookPayload),
+        });
+      } catch (webhookErr) {
+        console.error("Webhook error:", webhookErr);
+      }
+    } else {
+      console.log("[valider] Conversion manuelle — webhook Make skippé");
     }
 
     // ─── Génération PDFs ───
