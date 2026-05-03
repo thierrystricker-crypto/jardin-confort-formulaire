@@ -164,7 +164,7 @@ function CommandesShopifyBlock({ commandes }: { commandes: CommandeShopify[] }) 
 
   function shopifyAdminUrl(order: CommandeShopify) {
     if (!order.shopify_order_legacy_id) return null
-    return `https://admin.shopify.com/store/jardinconfort/orders/${order.shopify_order_legacy_id}`
+    return `https://admin.shopify.com/store/le-meuble/orders/${order.shopify_order_legacy_id}`
   }
 
   // Stats globales
