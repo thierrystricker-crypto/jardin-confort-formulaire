@@ -99,7 +99,7 @@ function ShopifySyncButton({ onDone }: { onDone: () => void }) {
       // Boucle : on relance le sync chunk par chunk jusqu'à ce que hasMore=false
       while (true) {
         totalChunks++
-        const res = await fetch("/api/shopify/sync-orders", {
+        const res: Response = await fetch("/api/shopify/sync-orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -108,7 +108,18 @@ function ShopifySyncButton({ onDone }: { onDone: () => void }) {
             maxOrders: 200,
           })
         })
-        const json = await res.json()
+        const json: {
+          success: boolean
+          error?: string
+          ordersFetched: number
+          ordersInserted: number
+          ordersUpdated: number
+          clientsMatched: number
+          clientsCreated: number
+          errors: Array<{ shopifyId: string; message: string }>
+          hasMore: boolean
+          nextCursor: string | null
+        } = await res.json()
         if (!res.ok || !json.success) {
           throw new Error(json.error || `Erreur HTTP ${res.status}`)
         }
