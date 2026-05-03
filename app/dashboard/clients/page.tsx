@@ -58,38 +58,85 @@ function sourceLabel(s: string | null) {
 // ─── Badges compacts pour les documents liés à un client ───
 // Affiche uniquement les badges avec au moins 1 document.
 // Tiret — si aucun document.
-// ─── Bouton synchronisation Shopify ───────────────────
+// ─── Bouton synchronisation Shopify (chunked pour Vercel Hobby) ────
 function ShopifySyncButton({ onDone }: { onDone: () => void }) {
   const [syncing, setSyncing] = useState(false)
-  const [result, setResult] = useState<{
-    ordersFetched: number
-    ordersInserted: number
-    ordersUpdated: number
-    clientsMatched: number
-    clientsCreated: number
-    errors: Array<{ shopifyId: string; message: string }>
-    durationMs: number
-  } | null>(null)
+  const [progress, setProgress] = useState({
+    chunks: 0,
+    ordersFetched: 0,
+    ordersInserted: 0,
+    ordersUpdated: 0,
+    clientsMatched: 0,
+    clientsCreated: 0,
+    errors: [] as Array<{ shopifyId: string; message: string }>,
+    durationMs: 0,
+  })
+  const [done, setDone] = useState(false)
   const [error, setError] = useState("")
 
   async function handleSync() {
-    if (!confirm("⚠️ Synchroniser TOUTES les commandes Shopify ? Cette opération peut prendre plusieurs minutes pour le premier lancement.")) return
+    if (!confirm("⚠️ Synchroniser TOUTES les commandes Shopify ?\n\nVu le volume (potentiellement 10 000+ commandes), le sync se fera en plusieurs étapes automatiques. Ne ferme pas l'onglet pendant l'opération (peut prendre 15-25 min).")) return
 
     setSyncing(true)
+    setDone(false)
     setError("")
-    setResult(null)
+    setProgress({
+      chunks: 0,
+      ordersFetched: 0,
+      ordersInserted: 0,
+      ordersUpdated: 0,
+      clientsMatched: 0,
+      clientsCreated: 0,
+      errors: [],
+      durationMs: 0,
+    })
+
+    let cursor: string | null = null
+    let totalChunks = 0
+    const startedAt = Date.now()
 
     try {
-      const res = await fetch("/api/shopify/sync-orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ syncType: "manual" })
-      })
-      const json = await res.json()
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || "Erreur de synchronisation")
+      // Boucle : on relance le sync chunk par chunk jusqu'à ce que hasMore=false
+      while (true) {
+        totalChunks++
+        const res = await fetch("/api/shopify/sync-orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            syncType: "manual",
+            startCursor: cursor,
+            maxOrders: 200,
+          })
+        })
+        const json = await res.json()
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || `Erreur HTTP ${res.status}`)
+        }
+
+        // Mettre à jour la progression cumulée
+        setProgress(p => ({
+          chunks: totalChunks,
+          ordersFetched: p.ordersFetched + json.ordersFetched,
+          ordersInserted: p.ordersInserted + json.ordersInserted,
+          ordersUpdated: p.ordersUpdated + json.ordersUpdated,
+          clientsMatched: p.clientsMatched + json.clientsMatched,
+          clientsCreated: p.clientsCreated + json.clientsCreated,
+          errors: [...p.errors, ...json.errors],
+          durationMs: Date.now() - startedAt,
+        }))
+
+        if (!json.hasMore) {
+          // Sync terminé
+          break
+        }
+
+        cursor = json.nextCursor
+
+        // Petit délai entre chunks pour laisser respirer
+        await new Promise(r => setTimeout(r, 1000))
       }
-      setResult(json)
+
+      setDone(true)
       onDone()
     } catch (e) {
       setError((e as Error).message)
@@ -106,74 +153,91 @@ function ShopifySyncButton({ onDone }: { onDone: () => void }) {
         className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
         title="Importer les commandes Shopify dans la base"
       >
-        {syncing ? "⏳ Synchro en cours…" : "🛍️ Sync Shopify"}
+        {syncing
+          ? `⏳ Sync en cours… ${progress.ordersFetched} commandes`
+          : "🛍️ Sync Shopify"}
       </button>
 
-      {/* Modal résultat */}
-      {(result || error) && (
+      {/* Modal pendant et après sync */}
+      {(syncing || done || error) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => { setResult(null); setError("") }}>
+          onClick={() => { if (!syncing) { setDone(false); setError("") } }}>
           <div className="max-w-md w-full rounded-2xl border border-white/10 bg-[#2a2d31] p-6"
             onClick={e => e.stopPropagation()}>
             {error ? (
               <>
                 <h3 className="text-lg font-semibold text-rose-300 mb-3">❌ Erreur de synchronisation</h3>
                 <p className="text-sm text-zinc-300 mb-4">{error}</p>
+                <p className="text-xs text-zinc-500 mb-4">⚠️ {progress.ordersInserted + progress.ordersUpdated} commandes ont déjà été synchronisées avant l&apos;erreur. Tu peux relancer pour reprendre.</p>
               </>
-            ) : result && (
+            ) : (
               <>
-                <h3 className="text-lg font-semibold text-emerald-300 mb-3">✅ Synchronisation Shopify terminée</h3>
+                <h3 className="text-lg font-semibold mb-3">
+                  {syncing
+                    ? <span className="text-sky-300">⏳ Synchronisation Shopify en cours…</span>
+                    : <span className="text-emerald-300">✅ Synchronisation terminée</span>}
+                </h3>
+                {syncing && (
+                  <p className="text-xs text-amber-300 mb-3">⚠️ Ne ferme pas l&apos;onglet ! Le sync va continuer automatiquement…</p>
+                )}
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
+                    <span className="text-zinc-400">Lots traités</span>
+                    <span className="font-mono text-zinc-100">{progress.chunks}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-zinc-400">Commandes récupérées</span>
-                    <span className="font-mono text-zinc-100">{result.ordersFetched}</span>
+                    <span className="font-mono text-zinc-100">{progress.ordersFetched}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-400">→ Nouvelles</span>
-                    <span className="font-mono text-emerald-300">+{result.ordersInserted}</span>
+                    <span className="font-mono text-emerald-300">+{progress.ordersInserted}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-400">→ Mises à jour</span>
-                    <span className="font-mono text-sky-300">↻{result.ordersUpdated}</span>
+                    <span className="font-mono text-sky-300">↻{progress.ordersUpdated}</span>
                   </div>
                   <hr className="border-white/10 my-2" />
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Clients existants matchés</span>
-                    <span className="font-mono text-zinc-100">{result.clientsMatched}</span>
+                    <span className="font-mono text-zinc-100">{progress.clientsMatched}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Nouveaux clients créés</span>
-                    <span className="font-mono text-amber-300">+{result.clientsCreated}</span>
+                    <span className="font-mono text-amber-300">+{progress.clientsCreated}</span>
                   </div>
-                  {result.errors.length > 0 && (
+                  {progress.errors.length > 0 && (
                     <>
                       <hr className="border-white/10 my-2" />
                       <div className="flex justify-between text-rose-300">
                         <span>Erreurs</span>
-                        <span className="font-mono">{result.errors.length}</span>
+                        <span className="font-mono">{progress.errors.length}</span>
                       </div>
                       <details className="mt-2">
                         <summary className="cursor-pointer text-xs text-zinc-500">Voir détails</summary>
                         <div className="mt-2 max-h-40 overflow-y-auto rounded-lg bg-black/30 p-2 text-xs font-mono text-rose-300/80">
-                          {result.errors.map((e, i) => (
-                            <div key={i} className="mb-1">{e.shopifyId} : {e.message}</div>
+                          {progress.errors.slice(0, 20).map((e, i) => (
+                            <div key={i} className="mb-1">{e.shopifyId}: {e.message}</div>
                           ))}
+                          {progress.errors.length > 20 && <div className="text-zinc-500">…et {progress.errors.length - 20} autres</div>}
                         </div>
                       </details>
                     </>
                   )}
                   <hr className="border-white/10 my-2" />
                   <div className="flex justify-between text-xs text-zinc-500">
-                    <span>Durée</span>
-                    <span className="font-mono">{(result.durationMs / 1000).toFixed(1)}s</span>
+                    <span>Durée totale</span>
+                    <span className="font-mono">{(progress.durationMs / 1000).toFixed(1)}s</span>
                   </div>
                 </div>
               </>
             )}
-            <button onClick={() => { setResult(null); setError("") }}
-              className="mt-4 w-full rounded-xl bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">
-              Fermer
-            </button>
+            {!syncing && (
+              <button onClick={() => { setDone(false); setError("") }}
+                className="mt-4 w-full rounded-xl bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">
+                Fermer
+              </button>
+            )}
           </div>
         </div>
       )}
