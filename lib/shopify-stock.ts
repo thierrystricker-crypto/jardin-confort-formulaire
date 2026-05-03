@@ -1,508 +1,302 @@
-// lib/shopify-orders.ts
-// Helpers pour synchroniser les commandes Shopify dans Supabase
+// lib/shopify-stock.ts
+// Helpers pour gérer les sorties de stock Shopify Admin GraphQL.
+// Utilise OAuth Client Credentials Flow (comme l'app jotform-iframe-test qui marche déjà).
+// Pas besoin de token statique : on génère un token à la demande via CLIENT_ID/SECRET.
 
-import { supabaseAdmin } from "@/lib/supabase"
+import { createHash, randomUUID } from "crypto"
 
-const SHOPIFY_API_VERSION = "2026-04"
-const SHOPIFY_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN || "www.jardin-confort.ch"
-const SHOPIFY_CLIENT_ID = process.env.SHOPIFY_ADMIN_CLIENT_ID
-const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_ADMIN_CLIENT_SECRET
+const SHOP = process.env.SHOPIFY_STORE_DOMAIN || ""
+const ADMIN_CLIENT_ID = process.env.SHOPIFY_ADMIN_CLIENT_ID || ""
+const ADMIN_CLIENT_SECRET = process.env.SHOPIFY_ADMIN_CLIENT_SECRET || ""
 
-// ─── OAuth Client Credentials (auto-contenu) ─────────────
-// Cache du token en mémoire (validité ~1h selon Shopify)
-let cachedToken: { token: string; expiresAt: number } | null = null
+// Location unique de Jardin-Confort
+export const SHOPIFY_LOCATION_ID = "gid://shopify/Location/43228233863"
 
-async function getAccessToken(): Promise<string> {
-  // Si on a un token valide en cache (avec 5min de marge), on l'utilise
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 5 * 60 * 1000) {
-    return cachedToken.token
+// ─── Cache du token Admin (valide 24h, on le rafraîchit avec 5min de marge) ───
+let cachedAdminToken: string | null = null
+let cachedAdminTokenExpiresAt = 0
+
+async function getAdminAccessToken(): Promise<string> {
+  const now = Date.now()
+
+  if (cachedAdminToken && now < cachedAdminTokenExpiresAt) {
+    return cachedAdminToken
   }
 
-  if (!SHOPIFY_CLIENT_ID || !SHOPIFY_CLIENT_SECRET) {
+  if (!ADMIN_CLIENT_ID || !ADMIN_CLIENT_SECRET) {
     throw new Error("SHOPIFY_ADMIN_CLIENT_ID ou SHOPIFY_ADMIN_CLIENT_SECRET manquant")
   }
 
-  const res = await fetch(`https://${SHOPIFY_DOMAIN}/admin/oauth/access_token`, {
+  const body = new URLSearchParams()
+  body.set("grant_type", "client_credentials")
+  body.set("client_id", ADMIN_CLIENT_ID)
+  body.set("client_secret", ADMIN_CLIENT_SECRET)
+
+  const response = await fetch(`https://${SHOP}/admin/oauth/access_token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: SHOPIFY_CLIENT_ID,
-      client_secret: SHOPIFY_CLIENT_SECRET,
-      grant_type: "client_credentials",
-    }),
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Accept": "application/json",
+    },
+    body: body.toString(),
+    cache: "no-store",
+  })
+
+  type TokenResponse = {
+    access_token?: string
+    expires_in?: number
+    error?: string
+    error_description?: string
+  }
+
+  const json = await response.json() as TokenResponse
+
+  if (!response.ok || !json.access_token) {
+    throw new Error(
+      json.error_description || json.error || "Impossible d'obtenir le token Admin Shopify"
+    )
+  }
+
+  cachedAdminToken = json.access_token
+  const expiresInMs = (json.expires_in ?? 86400) * 1000
+  cachedAdminTokenExpiresAt = now + expiresInMs - 5 * 60 * 1000
+
+  return cachedAdminToken
+}
+
+// ─── Type retour : informations d'un variant Shopify trouvé par SKU ───
+export type ShopifyVariantLookup = {
+  variantId: string
+  inventoryItemId: string
+  productTitle: string
+  variantTitle: string | null
+  sku: string
+  available: number
+} | null
+
+// ─── Appel GraphQL Admin générique ───
+async function shopifyAdminGraphQL<T = unknown>(
+  query: string,
+  variables?: Record<string, unknown>
+): Promise<T> {
+  const token = await getAdminAccessToken()
+
+  const res = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": token,
+    },
+    body: JSON.stringify({ query, variables }),
+    cache: "no-store",
   })
 
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Shopify OAuth error ${res.status}: ${text}`)
+    throw new Error(`Shopify HTTP ${res.status}: ${await res.text()}`)
   }
 
-  const json = await res.json()
-  if (!json.access_token) {
-    throw new Error(`Shopify OAuth: pas d'access_token retourné: ${JSON.stringify(json)}`)
+  const json = await res.json() as { data?: T; errors?: unknown[] }
+
+  if (json.errors && json.errors.length > 0) {
+    throw new Error(`Shopify GraphQL errors: ${JSON.stringify(json.errors)}`)
   }
 
-  // expires_in en secondes (généralement 3600s = 1h)
-  const expiresIn = json.expires_in || 3600
-  cachedToken = {
-    token: json.access_token,
-    expiresAt: Date.now() + expiresIn * 1000,
+  if (!json.data) {
+    throw new Error("Shopify GraphQL: pas de data dans la réponse")
   }
-  return json.access_token
+
+  return json.data
 }
 
-// ─── Types ───────────────────────────────────────────────
-
-type ShopifyOrder = {
-  id: string                           // gid://shopify/Order/123
-  legacyResourceId: string             // 123 (UnsignedInt64 → string)
-  name: string                         // JAR-11244
-  number: number                       // 11244
-  createdAt: string                    // ISO
-  updatedAt: string
-  cancelledAt: string | null
-  cancelReason: string | null
-  test: boolean
-  email: string | null
-  phone: string | null
-  note: string | null
-  tags: string[]
-  sourceName: string | null
-  statusPageUrl: string
-  displayFinancialStatus: string | null
-  displayFulfillmentStatus: string
-  currencyCode: string
-  totalPriceSet: { shopMoney: { amount: string; currencyCode: string } }
-  subtotalPriceSet?: { shopMoney: { amount: string; currencyCode: string } }
-  totalTaxSet?: { shopMoney: { amount: string; currencyCode: string } }
-  totalShippingPriceSet?: { shopMoney: { amount: string; currencyCode: string } }
-  totalDiscountsSet?: { shopMoney: { amount: string; currencyCode: string } }
-  customer: {
-    id: string
-    email: string | null
-    phone: string | null
-    firstName: string | null
-    lastName: string | null
-  } | null
-  shippingAddress: ShopifyAddress | null
-  billingAddress: ShopifyAddress | null
-  lineItems: {
-    edges: Array<{
-      node: {
-        id: string
-        title: string
-        name: string
-        sku: string | null
-        quantity: number
-        currentQuantity: number
-        originalUnitPriceSet: { shopMoney: { amount: string; currencyCode: string } }
-      }
-    }>
-  }
-}
-
-type ShopifyAddress = {
-  address1: string | null
-  address2: string | null
-  city: string | null
-  zip: string | null
-  province: string | null
-  country: string | null
-  countryCodeV2: string | null
-  phone: string | null
-  firstName: string | null
-  lastName: string | null
-  company: string | null
-}
-
-export type SyncResult = {
-  ordersFetched: number
-  ordersInserted: number
-  ordersUpdated: number
-  clientsMatched: number
-  clientsCreated: number
-  errors: Array<{ shopifyId: string; message: string }>
-  durationMs: number
-}
-
-// ─── GraphQL Query ───────────────────────────────────────
-
-const ORDERS_QUERY = `
-  query SyncOrders($first: Int!, $after: String) {
-    orders(first: $first, after: $after, sortKey: CREATED_AT, reverse: false) {
-      edges {
-        node {
-          id
-          legacyResourceId
-          name
-          number
-          createdAt
-          updatedAt
-          cancelledAt
-          cancelReason
-          test
-          email
-          phone
-          note
-          tags
-          sourceName
-          statusPageUrl
-          displayFinancialStatus
-          displayFulfillmentStatus
-          currencyCode
-          totalPriceSet { shopMoney { amount currencyCode } }
-          subtotalPriceSet { shopMoney { amount currencyCode } }
-          totalTaxSet { shopMoney { amount currencyCode } }
-          totalShippingPriceSet { shopMoney { amount currencyCode } }
-          totalDiscountsSet { shopMoney { amount currencyCode } }
-          customer {
+// ─── Recherche d'un variant + inventory_item depuis un SKU ───
+export async function findVariantBySKU(sku: string): Promise<ShopifyVariantLookup> {
+  const query = `
+    query findVariantBySKU($q: String!) {
+      productVariants(first: 5, query: $q) {
+        edges {
+          node {
             id
-            email
-            phone
-            firstName
-            lastName
-          }
-          shippingAddress {
-            address1 address2 city zip province country countryCodeV2 phone firstName lastName company
-          }
-          billingAddress {
-            address1 address2 city zip province country countryCodeV2 phone firstName lastName company
-          }
-          lineItems(first: 50) {
-            edges {
-              node {
-                id
-                title
-                name
-                sku
-                quantity
-                currentQuantity
-                originalUnitPriceSet { shopMoney { amount currencyCode } }
+            sku
+            title
+            product { title }
+            inventoryItem {
+              id
+              inventoryLevel(locationId: "${SHOPIFY_LOCATION_ID}") {
+                quantities(names: ["available"]) {
+                  name
+                  quantity
+                }
               }
             }
           }
         }
-        cursor
       }
-      pageInfo { hasNextPage endCursor }
+    }
+  `
+
+  type RawVariant = {
+    id: string
+    sku: string | null
+    title: string | null
+    product: { title: string }
+    inventoryItem: {
+      id: string
+      inventoryLevel: { quantities: { name: string; quantity: number }[] } | null
+    } | null
+  }
+
+  type Resp = {
+    productVariants: {
+      edges: { node: RawVariant }[]
     }
   }
-`
 
-// ─── Fetch Shopify ───────────────────────────────────────
+  const data = await shopifyAdminGraphQL<Resp>(query, { q: `sku:${sku}` })
 
-async function fetchShopifyOrdersPage(
-  cursor: string | null,
-  pageSize: number = 50
-): Promise<{ orders: ShopifyOrder[]; hasNextPage: boolean; endCursor: string | null }> {
-  const token = await getAccessToken()
-  const res = await fetch(
-    `https://${SHOPIFY_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": token,
-      },
-      body: JSON.stringify({
-        query: ORDERS_QUERY,
-        variables: { first: pageSize, after: cursor },
-      }),
-    }
-  )
+  // Match exact (Shopify peut renvoyer des matchs partiels)
+  const variants = data.productVariants.edges.map(e => e.node)
+  const exact = variants.find(v => v.sku === sku)
+  if (!exact) return null
+  if (!exact.inventoryItem) return null
 
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Shopify API error ${res.status}: ${text}`)
-  }
+  const availableQty = exact.inventoryItem.inventoryLevel?.quantities
+    .find(q => q.name === "available")?.quantity ?? 0
 
-  const json = await res.json()
-  if (json.errors) {
-    throw new Error(`Shopify GraphQL error: ${JSON.stringify(json.errors)}`)
-  }
-
-  const edges = json.data?.orders?.edges || []
   return {
-    orders: edges.map((e: { node: ShopifyOrder }) => e.node),
-    hasNextPage: json.data?.orders?.pageInfo?.hasNextPage || false,
-    endCursor: json.data?.orders?.pageInfo?.endCursor || null,
+    variantId: exact.id,
+    inventoryItemId: exact.inventoryItem.id,
+    productTitle: exact.product.title,
+    variantTitle: exact.title,
+    sku: exact.sku || sku,
+    available: availableQty,
   }
 }
 
-// ─── Normalisation ───────────────────────────────────────
-
-function normalizePhone(raw: string | null | undefined): string {
-  if (!raw) return ""
-  return raw.replace(/[^\d]/g, "")
+// ─── Génère un idempotencyKey UUID-v4-like depuis une string stable ───
+// Permet d'avoir le même key pour la même opération (CMD-XXX + SKU + reason)
+// → si retry → Shopify ne fera PAS l'opération deux fois
+function generateIdempotencyKey(seed: string): string {
+  const hash = createHash("sha256").update(seed).digest("hex")
+  // Format UUID v4 attendu par Shopify : 8-4-4-4-12
+  return [
+    hash.substring(0, 8),
+    hash.substring(8, 12),
+    "4" + hash.substring(13, 16),                            // version 4
+    ((parseInt(hash.substring(16, 17), 16) & 0x3) | 0x8).toString(16) + hash.substring(17, 20),  // variant
+    hash.substring(20, 32),
+  ].join("-")
 }
 
-function normalizeEmail(raw: string | null | undefined): string {
-  if (!raw) return ""
-  return raw.toLowerCase().trim()
-}
-
-// ─── Matching client (strict) ────────────────────────────
-// Priorité 1 : email exact (insensible casse)
-// Priorité 2 : téléphone exact (chiffres normalisés)
-// Priorité 3 : nom + NPA exact
-
-async function findMatchingClient(order: ShopifyOrder): Promise<number | null> {
-  const email = normalizeEmail(order.customer?.email || order.email)
-  const phone = normalizePhone(
-    order.customer?.phone || order.phone || order.shippingAddress?.phone || order.billingAddress?.phone
-  )
-
-  // 1. Email exact
-  if (email) {
-    const { data } = await supabaseAdmin
-      .from("clients")
-      .select("id")
-      .ilike("email", email)
-      .limit(1)
-      .maybeSingle()
-    if (data?.id) return data.id
-  }
-
-  // 2. Téléphone exact (chiffres seulement)
-  // On compare les derniers 9 chiffres (numéro local sans code pays)
-  if (phone && phone.length >= 9) {
-    const lastNine = phone.slice(-9)
-    const { data: clients } = await supabaseAdmin
-      .from("clients")
-      .select("id, tel1, tel2")
-
-    for (const c of clients || []) {
-      const t1 = normalizePhone(c.tel1)
-      const t2 = normalizePhone(c.tel2)
-      if (t1.endsWith(lastNine) || t2.endsWith(lastNine)) {
-        return c.id
+// ─── Ajustement d'inventaire (delta négatif = sortie, positif = entrée) ───
+//
+// changeFromQuantity = null
+//   → désactive le compare-and-swap (CAS) car le dashboard n'est pas la source
+//     unique de vérité (Shopify POS, ventes online, etc. peuvent modifier en parallèle)
+//
+// @idempotent(key: $idempotencyKey)
+//   → exigé par l'API 2026-04
+//   → garantit qu'un même mouvement ne peut être appliqué qu'une seule fois
+//   → key dérivé du ledgerUri pour avoir une clé stable et reproductible
+//
+// ledgerDocumentUri / referenceDocumentUri
+//   → identifie clairement la source dans Shopify Admin
+//   → format : gid://offres-jardin-confort/StockMovement/CMD-XXXXX
+export async function adjustInventory(
+  inventoryItemId: string,
+  delta: number,
+  ledgerUri?: string,
+): Promise<{ success: boolean; newQuantity?: number; raw?: unknown; error?: string }> {
+  const mutation = `
+    mutation adjustInventory($input: InventoryAdjustQuantitiesInput!, $idempotencyKey: String!) {
+      inventoryAdjustQuantities(input: $input) @idempotent(key: $idempotencyKey) {
+        inventoryAdjustmentGroup {
+          createdAt
+          reason
+          referenceDocumentUri
+          changes {
+            name
+            delta
+            quantityAfterChange
+            ledgerDocumentUri
+          }
+        }
+        userErrors {
+          field
+          message
+        }
       }
     }
+  `
+
+  // ─── Génération de l'idempotencyKey ───
+  // Si on a un ledgerUri stable (gid://offres-jardin-confort/StockMovement/CMD-XXX),
+  // on dérive le key de [ledgerUri + inventoryItemId + delta] pour être stable et reproductible.
+  // Sinon on utilise un randomUUID (cas manuel).
+  const idempotencyKey = ledgerUri
+    ? generateIdempotencyKey(`${ledgerUri}|${inventoryItemId}|${delta}`)
+    : randomUUID()
+
+  const referenceUri = ledgerUri || `gid://offres-jardin-confort/StockMovement/manual-${Date.now()}`
+
+  const input = {
+    reason: "correction",
+    name: "available",
+    referenceDocumentUri: referenceUri,
+    changes: [
+      {
+        delta,
+        changeFromQuantity: null,     // CAS désactivé (pas de blocage en cas de race condition)
+        inventoryItemId,
+        locationId: SHOPIFY_LOCATION_ID,
+      },
+    ],
   }
 
-  // 3. Nom + NPA exact (nom = lastName + NPA = shippingAddress.zip ou billingAddress.zip)
-  const lastName = order.customer?.lastName || order.shippingAddress?.lastName || order.billingAddress?.lastName
-  const npa = order.shippingAddress?.zip || order.billingAddress?.zip
-  if (lastName && npa) {
-    const { data } = await supabaseAdmin
-      .from("clients")
-      .select("id")
-      .ilike("nom", lastName.trim())
-      .eq("npa", npa.trim())
-      .limit(1)
-      .maybeSingle()
-    if (data?.id) return data.id
-  }
-
-  return null
-}
-
-// ─── Création de client ──────────────────────────────────
-
-async function createClientFromOrder(order: ShopifyOrder): Promise<number | null> {
-  const email = order.customer?.email || order.email
-  const phone = order.customer?.phone || order.phone || order.shippingAddress?.phone || null
-  const firstName = order.customer?.firstName || order.shippingAddress?.firstName || null
-  const lastName = order.customer?.lastName || order.shippingAddress?.lastName || null
-  const company = order.shippingAddress?.company || order.billingAddress?.company || null
-
-  // Si on n'a même pas de nom, on ne peut pas créer de client
-  if (!lastName && !company) return null
-
-  const addr = order.shippingAddress || order.billingAddress
-
-  const { data, error } = await supabaseAdmin
-    .from("clients")
-    .insert({
-      nom: lastName?.trim() || company?.trim() || "—",
-      prenom: firstName?.trim() || null,
-      societe: company?.trim() || null,
-      email: email?.trim() || null,
-      tel1: phone?.trim() || null,
-      rue: addr?.address1?.trim() || null,
-      rue2: addr?.address2?.trim() || null,
-      npa: addr?.zip?.trim() || null,
-      ville: addr?.city?.trim() || null,
-      pays: addr?.countryCodeV2 || "CH",
-      source: "shopify",
-    })
-    .select("id")
-    .single()
-
-  if (error || !data) {
-    console.error("Erreur création client depuis commande Shopify", error)
-    return null
-  }
-  return data.id
-}
-
-// ─── Upsert d'une commande ───────────────────────────────
-
-async function upsertOrder(
-  order: ShopifyOrder,
-  clientId: number | null
-): Promise<"inserted" | "updated"> {
-  const lineItems = order.lineItems.edges.map(e => ({
-    id: e.node.id,
-    title: e.node.title,
-    name: e.node.name,
-    sku: e.node.sku,
-    quantity: e.node.quantity,
-    currentQuantity: e.node.currentQuantity,
-    price: e.node.originalUnitPriceSet?.shopMoney?.amount || null,
-  }))
-
-  // Vérifier si la commande existe déjà
-  const { data: existing } = await supabaseAdmin
-    .from("commandes_shopify")
-    .select("id")
-    .eq("shopify_order_id", order.id)
-    .maybeSingle()
-
-  const payload = {
-    shopify_order_id: order.id,
-    shopify_order_legacy_id: order.legacyResourceId ? Number(order.legacyResourceId) : null,
-    shopify_order_name: order.name,
-    shopify_order_number: order.number,
-    client_id: clientId,
-    customer_shopify_id: order.customer?.id || null,
-    customer_email: order.customer?.email || order.email || null,
-    customer_phone: order.customer?.phone || order.phone || null,
-    customer_first_name: order.customer?.firstName || null,
-    customer_last_name: order.customer?.lastName || null,
-    total_price: parseFloat(order.totalPriceSet?.shopMoney?.amount || "0"),
-    subtotal_price: parseFloat(order.subtotalPriceSet?.shopMoney?.amount || "0"),
-    total_tax: parseFloat(order.totalTaxSet?.shopMoney?.amount || "0"),
-    total_shipping: parseFloat(order.totalShippingPriceSet?.shopMoney?.amount || "0"),
-    total_discounts: parseFloat(order.totalDiscountsSet?.shopMoney?.amount || "0"),
-    currency: order.currencyCode,
-    financial_status: order.displayFinancialStatus,
-    fulfillment_status: order.displayFulfillmentStatus,
-    cancelled_at: order.cancelledAt,
-    cancel_reason: order.cancelReason,
-    source_name: order.sourceName,
-    test: order.test,
-    tags: order.tags,
-    note: order.note,
-    status_page_url: order.statusPageUrl,
-    shipping_address: order.shippingAddress,
-    billing_address: order.billingAddress,
-    line_items: lineItems,
-    raw_data: order,
-    created_at_shopify: order.createdAt,
-    updated_at_shopify: order.updatedAt,
-  }
-
-  if (existing) {
-    await supabaseAdmin
-      .from("commandes_shopify")
-      .update(payload)
-      .eq("id", existing.id)
-    return "updated"
-  } else {
-    await supabaseAdmin
-      .from("commandes_shopify")
-      .insert(payload)
-    return "inserted"
-  }
-}
-
-// ─── Sync principal ──────────────────────────────────────
-
-export async function syncShopifyOrders(options: {
-  syncType: "initial" | "manual" | "cron"
-  maxPages?: number               // Limite de sécurité (par défaut illimité)
-  pageSize?: number
-}): Promise<SyncResult> {
-  const startTime = Date.now()
-  const { syncType, maxPages = 1000, pageSize = 50 } = options
-
-  // Log start
-  const { data: logRow } = await supabaseAdmin
-    .from("shopify_sync_log")
-    .insert({ sync_type: syncType, status: "running" })
-    .select("id")
-    .single()
-  const logId = logRow?.id
-
-  const result: SyncResult = {
-    ordersFetched: 0,
-    ordersInserted: 0,
-    ordersUpdated: 0,
-    clientsMatched: 0,
-    clientsCreated: 0,
-    errors: [],
-    durationMs: 0,
+  type Resp = {
+    inventoryAdjustQuantities: {
+      inventoryAdjustmentGroup: {
+        changes: { name: string; delta: number; quantityAfterChange: number | null }[]
+      } | null
+      userErrors: { field: string[]; message: string }[]
+    }
   }
 
   try {
-    let cursor: string | null = null
-    let pageCount = 0
+    const data = await shopifyAdminGraphQL<Resp>(mutation, { input, idempotencyKey })
+    const result = data.inventoryAdjustQuantities
 
-    do {
-      const { orders, hasNextPage, endCursor } = await fetchShopifyOrdersPage(cursor, pageSize)
-      result.ordersFetched += orders.length
-
-      for (const order of orders) {
-        try {
-          // 1. Trouver ou créer le client
-          let clientId = await findMatchingClient(order)
-          if (clientId) {
-            result.clientsMatched++
-          } else {
-            clientId = await createClientFromOrder(order)
-            if (clientId) result.clientsCreated++
-          }
-
-          // 2. Upsert de la commande
-          const action = await upsertOrder(order, clientId)
-          if (action === "inserted") result.ordersInserted++
-          else result.ordersUpdated++
-        } catch (err) {
-          result.errors.push({
-            shopifyId: order.id,
-            message: (err as Error).message,
-          })
-          console.error(`Erreur traitement commande ${order.name}:`, err)
-        }
+    if (result.userErrors && result.userErrors.length > 0) {
+      return {
+        success: false,
+        error: result.userErrors.map(e => `${e.field?.join(".")}: ${e.message}`).join("; "),
+        raw: result,
       }
-
-      cursor = hasNextPage ? endCursor : null
-      pageCount++
-
-      if (pageCount >= maxPages) {
-        console.warn(`Sync arrêté à ${maxPages} pages (limite de sécurité)`)
-        break
-      }
-
-      // Petit délai entre pages pour être gentil avec l'API Shopify (rate limit ~2 req/s)
-      await new Promise(r => setTimeout(r, 200))
-    } while (cursor)
-
-    result.durationMs = Date.now() - startTime
-
-    // Log success
-    if (logId) {
-      await supabaseAdmin
-        .from("shopify_sync_log")
-        .update({
-          finished_at: new Date().toISOString(),
-          status: "success",
-          orders_fetched: result.ordersFetched,
-          orders_inserted: result.ordersInserted,
-          orders_updated: result.ordersUpdated,
-          clients_matched: result.clientsMatched,
-          clients_created: result.clientsCreated,
-          errors: result.errors.length > 0 ? result.errors : null,
-          details: { duration_ms: result.durationMs, page_count: pageCount },
-        })
-        .eq("id", logId)
     }
 
-    return result
+    // Si pas d'inventoryAdjustmentGroup pour delta != 0 → erreur silencieuse
+    // Pour delta=0 c'est normal (pas d'ajustement effectué)
+    if (!result.inventoryAdjustmentGroup && delta !== 0) {
+      return {
+        success: false,
+        error: "Aucun ajustement effectué (réponse vide)",
+        raw: result,
+      }
+    }
+
+    const change = result.inventoryAdjustmentGroup?.changes.find(c => c.name === "available")
+    const newQty = (typeof change?.quantityAfterChange === "number")
+      ? change.quantityAfterChange
+      : undefined
+
+    return {
+      success: true,
+      newQuantity: newQty,
+      raw: result,
+    }
   } catch (err) {
-    result.durationMs = Date.now() - startTime
-    if (logId) {
-      await supabaseAdmin
-        .from("shopify_sync_log")
-        .update({
+    return {
+      success: false,
+      error: (err as Error).message,
+    }
+  }
+}
