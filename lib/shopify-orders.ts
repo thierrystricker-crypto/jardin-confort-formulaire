@@ -1,6 +1,6 @@
 // lib/shopify-orders.ts
 // Helpers pour synchroniser les commandes Shopify dans Supabase
-// Version chunked compatible Vercel Hobby (60s timeout)
+// Version chunked + cache clients pour Vercel Hobby (60s)
 
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -9,7 +9,7 @@ const SHOPIFY_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN || "www.jardin-confort.c
 const SHOPIFY_CLIENT_ID = process.env.SHOPIFY_ADMIN_CLIENT_ID
 const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_ADMIN_CLIENT_SECRET
 
-// ─── OAuth Client Credentials (auto-contenu) ─────────────
+// ─── OAuth Client Credentials ────────────────────────────
 let cachedToken: { token: string; expiresAt: number } | null = null
 
 async function getAccessToken(): Promise<string> {
@@ -121,9 +121,79 @@ export type SyncResult = {
   clientsCreated: number
   errors: Array<{ shopifyId: string; message: string }>
   durationMs: number
-  hasMore: boolean              // true si y'a encore des commandes à fetcher
-  nextCursor: string | null     // À passer au prochain appel pour continuer
-  totalProcessed: number        // Cumul du nombre de commandes déjà traitées
+  hasMore: boolean
+  nextCursor: string | null
+  totalProcessed: number
+}
+
+// ─── Cache clients (in-memory, hot) ──────────────────────
+// Évite de requêter Supabase pour chaque commande Shopify
+
+type ClientRow = {
+  id: number
+  email: string | null
+  tel1: string | null
+  tel2: string | null
+  nom: string | null
+  npa: string | null
+}
+
+type ClientsCache = {
+  byEmail: Map<string, number>          // email lowercased → id
+  byPhoneLastNine: Map<string, number>  // 9 derniers chiffres → id
+  byNomNpa: Map<string, number>         // "nom_lowercased|npa" → id
+}
+
+async function buildClientsCache(): Promise<ClientsCache> {
+  const cache: ClientsCache = {
+    byEmail: new Map(),
+    byPhoneLastNine: new Map(),
+    byNomNpa: new Map(),
+  }
+
+  // Fetch en pagination par lots de 1000 (limite Supabase par défaut)
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("clients")
+      .select("id, email, tel1, tel2, nom, npa")
+      .range(from, from + pageSize - 1)
+
+    if (error) {
+      console.error("Erreur build cache clients :", error)
+      break
+    }
+    if (!data || data.length === 0) break
+
+    for (const c of data as ClientRow[]) {
+      // Index par email
+      const em = (c.email || "").toLowerCase().trim()
+      if (em) cache.byEmail.set(em, c.id)
+
+      // Index par téléphone (9 derniers chiffres = numéro local)
+      for (const tel of [c.tel1, c.tel2]) {
+        if (!tel) continue
+        const digits = tel.replace(/[^\d]/g, "")
+        if (digits.length >= 9) {
+          cache.byPhoneLastNine.set(digits.slice(-9), c.id)
+        }
+      }
+
+      // Index par nom+NPA
+      const nom = (c.nom || "").toLowerCase().trim()
+      const npa = (c.npa || "").trim()
+      if (nom && npa) {
+        cache.byNomNpa.set(`${nom}|${npa}`, c.id)
+      }
+    }
+
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+
+  console.log(`[shopify-sync] Cache clients construit : ${cache.byEmail.size} emails, ${cache.byPhoneLastNine.size} tels, ${cache.byNomNpa.size} nom+NPA`)
+  return cache
 }
 
 // ─── GraphQL Query ───────────────────────────────────────
@@ -242,58 +312,40 @@ function normalizeEmail(raw: string | null | undefined): string {
   return raw.toLowerCase().trim()
 }
 
-// ─── Matching client ─────────────────────────────────────
+// ─── Matching client (utilise le cache, INSTANTANÉ) ──────
 
-async function findMatchingClient(order: ShopifyOrder): Promise<number | null> {
+function findMatchingClientInCache(order: ShopifyOrder, cache: ClientsCache): number | null {
+  // 1. Email exact
   const email = normalizeEmail(order.customer?.email || order.email)
+  if (email) {
+    const id = cache.byEmail.get(email)
+    if (id) return id
+  }
+
+  // 2. Téléphone exact (9 derniers chiffres)
   const phone = normalizePhone(
     order.customer?.phone || order.phone || order.shippingAddress?.phone || order.billingAddress?.phone
   )
-
-  if (email) {
-    const { data } = await supabaseAdmin
-      .from("clients")
-      .select("id")
-      .ilike("email", email)
-      .limit(1)
-      .maybeSingle()
-    if (data?.id) return data.id
-  }
-
   if (phone && phone.length >= 9) {
-    const lastNine = phone.slice(-9)
-    const { data: clients } = await supabaseAdmin
-      .from("clients")
-      .select("id, tel1, tel2")
-
-    for (const c of clients || []) {
-      const t1 = normalizePhone(c.tel1)
-      const t2 = normalizePhone(c.tel2)
-      if (t1.endsWith(lastNine) || t2.endsWith(lastNine)) {
-        return c.id
-      }
-    }
+    const id = cache.byPhoneLastNine.get(phone.slice(-9))
+    if (id) return id
   }
 
+  // 3. Nom + NPA exact
   const lastName = order.customer?.lastName || order.shippingAddress?.lastName || order.billingAddress?.lastName
   const npa = order.shippingAddress?.zip || order.billingAddress?.zip
   if (lastName && npa) {
-    const { data } = await supabaseAdmin
-      .from("clients")
-      .select("id")
-      .ilike("nom", lastName.trim())
-      .eq("npa", npa.trim())
-      .limit(1)
-      .maybeSingle()
-    if (data?.id) return data.id
+    const key = `${lastName.toLowerCase().trim()}|${npa.trim()}`
+    const id = cache.byNomNpa.get(key)
+    if (id) return id
   }
 
   return null
 }
 
-// ─── Création de client ──────────────────────────────────
+// ─── Création de client + ajout au cache ─────────────────
 
-async function createClientFromOrder(order: ShopifyOrder): Promise<number | null> {
+async function createClientFromOrder(order: ShopifyOrder, cache: ClientsCache): Promise<number | null> {
   const email = order.customer?.email || order.email
   const phone = order.customer?.phone || order.phone || order.shippingAddress?.phone || null
   const firstName = order.customer?.firstName || order.shippingAddress?.firstName || null
@@ -326,7 +378,19 @@ async function createClientFromOrder(order: ShopifyOrder): Promise<number | null
     console.error("Erreur création client depuis commande Shopify", error)
     return null
   }
-  return data.id
+
+  // Ajouter le nouveau client au cache pour les commandes suivantes
+  const newId = data.id
+  if (email) cache.byEmail.set(email.toLowerCase().trim(), newId)
+  if (phone) {
+    const digits = phone.replace(/[^\d]/g, "")
+    if (digits.length >= 9) cache.byPhoneLastNine.set(digits.slice(-9), newId)
+  }
+  if (lastName && addr?.zip) {
+    cache.byNomNpa.set(`${lastName.toLowerCase().trim()}|${addr.zip.trim()}`, newId)
+  }
+
+  return newId
 }
 
 // ─── Upsert d'une commande ───────────────────────────────
@@ -399,22 +463,22 @@ async function upsertOrder(
   }
 }
 
-// ─── Sync principal (CHUNKED pour Vercel Hobby 60s) ─────
+// ─── Sync principal (CHUNKED + CACHED) ───────────────────
 
 export async function syncShopifyOrders(options: {
   syncType: "initial" | "manual" | "cron"
-  startCursor?: string | null      // Cursor pour reprendre où on s'est arrêté
-  maxOrders?: number               // Nombre max de commandes à traiter dans cet appel
+  startCursor?: string | null
+  maxOrders?: number
   pageSize?: number
-  timeoutMs?: number               // Stop si on approche du timeout
+  timeoutMs?: number
 }): Promise<SyncResult> {
   const startTime = Date.now()
   const {
     syncType,
     startCursor = null,
-    maxOrders = 500,                // Par défaut 500 commandes par appel
+    maxOrders = 200,
     pageSize = 50,
-    timeoutMs = 50000,              // Stop à 50s pour laisser de la marge avant le 60s Vercel
+    timeoutMs = 50000,
   } = options
 
   // Log start (uniquement si premier appel)
@@ -442,11 +506,15 @@ export async function syncShopifyOrders(options: {
   }
 
   try {
+    // 1. Construire le cache clients UNE FOIS au début
+    const cacheStart = Date.now()
+    const clientsCache = await buildClientsCache()
+    console.log(`[shopify-sync] Cache construit en ${Date.now() - cacheStart}ms`)
+
     let cursor: string | null = startCursor
     let processedInThisCall = 0
 
     while (processedInThisCall < maxOrders) {
-      // Vérifier si on approche du timeout
       const elapsed = Date.now() - startTime
       if (elapsed > timeoutMs) {
         console.warn(`[shopify-sync] Stop avant timeout (${elapsed}ms écoulés). Cursor: ${cursor}`)
@@ -460,11 +528,13 @@ export async function syncShopifyOrders(options: {
 
       for (const order of orders) {
         try {
-          let clientId = await findMatchingClient(order)
+          // Lookup INSTANTANÉ dans le cache (pas de requête Supabase)
+          let clientId = findMatchingClientInCache(order, clientsCache)
           if (clientId) {
             result.clientsMatched++
           } else {
-            clientId = await createClientFromOrder(order)
+            // Pas trouvé → créer (et ajouter au cache)
+            clientId = await createClientFromOrder(order, clientsCache)
             if (clientId) result.clientsCreated++
           }
 
@@ -484,27 +554,24 @@ export async function syncShopifyOrders(options: {
       cursor = hasNextPage ? endCursor : null
 
       if (!cursor) {
-        // Plus de pages = sync complet
         result.hasMore = false
         result.nextCursor = null
         break
       }
 
       if (processedInThisCall >= maxOrders) {
-        // On a atteint la limite de cet appel — il y aura un appel suivant
         result.hasMore = true
         result.nextCursor = cursor
         break
       }
 
-      // Petit délai entre pages (rate limit Shopify ~2 req/s)
+      // Petit délai entre pages Shopify (rate limit ~2 req/s)
       await new Promise(r => setTimeout(r, 200))
     }
 
     result.durationMs = Date.now() - startTime
     result.totalProcessed = processedInThisCall
 
-    // Log : success seulement si terminé, sinon "running" pour reprendre
     if (logId) {
       await supabaseAdmin
         .from("shopify_sync_log")
