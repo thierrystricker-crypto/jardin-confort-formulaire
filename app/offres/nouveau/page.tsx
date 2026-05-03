@@ -132,6 +132,14 @@ function normalizeSwissPhone(raw: string) {
   return ["+" + t.slice(0, 2), t.slice(2, 4), t.slice(4, 7), t.slice(7, 9), t.slice(9, 11)].filter(Boolean).join(" ");
 }
 
+
+// Téléphone international flexible (pour téléphone 2 et téléphone livraison) :
+// garde uniquement les caractères valides d'un numéro international.
+// Pas de reformatage automatique → l'utilisateur reste libre du format.
+function sanitizePhoneInternational(raw: string) {
+  return raw.replace(/[^\d\s+()\-./]/g, "").slice(0, 25);
+}
+
 function sanitizeNpa(v: string) { return v.replace(/[^\d]/g, "").slice(0, 4); }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -1005,8 +1013,8 @@ const [savedSlug, setSavedSlug]           = useState("");
               )}
             </div>
             <div className="jc-field">
-              <label>Téléphone 2</label>
-              <input autoComplete="new-password" placeholder="+41 79 000 00 00" value={telephone2} onChange={(e) => setTelephone2(normalizeSwissPhone(e.target.value))} />
+              <label>Téléphone 2 <span className="jc-label-hint">(international accepté)</span></label>
+              <input autoComplete="new-password" placeholder="+33 6 12 34 56 78, +49 30 12345…" value={telephone2} onChange={(e) => setTelephone2(sanitizePhoneInternational(e.target.value))} />
             </div>
             <div className="jc-field" style={{position:"relative"}}>
               <label>Email *</label>
@@ -1153,8 +1161,8 @@ const [savedSlug, setSavedSlug]           = useState("");
               </div>
               <div className="jc-grid jc-g2 mt12">
                 <div className="jc-field">
-                  <label>Téléphone livraison</label>
-                  <input autoComplete="new-password" placeholder="+41 79 000 00 00" value={livrTel} onChange={(e) => setLivrTel(normalizeSwissPhone(e.target.value))} />
+                  <label>Téléphone livraison <span className="jc-label-hint">(international accepté)</span></label>
+                  <input autoComplete="new-password" placeholder="+33 6 12 34 56 78…" value={livrTel} onChange={(e) => setLivrTel(sanitizePhoneInternational(e.target.value))} />
                 </div>
               </div>
             </div>
