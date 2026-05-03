@@ -64,11 +64,15 @@ export async function GET() {
       .limit(1)
       .single();
 
-    // 2. Dernière commande validée (= moment où Make aurait dû ping)
+    // 2. Dernière commande qui DEVAIT déclencher Make
+    // ⚠️ On filtre uniquement par type "commande_validee" (validation client en ligne).
+    // Les conversions manuelles (commande_convertie_manuelle) et commandes directes
+    // (commande_directe) ne déclenchent PAS Make donc ne doivent PAS être prises
+    // en compte par le healthcheck.
     const { data: lastCommande } = await supabaseAdmin
-      .from("offres")
-      .select("created_at, numero_affiche, slug")
-      .eq("type_document", "Commande")
+      .from("notifications")
+      .select("created_at, numero_affiche, offre_slug")
+      .eq("type", "commande_validee")
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
