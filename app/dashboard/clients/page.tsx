@@ -105,7 +105,7 @@ function ShopifySyncButton({ onDone }: { onDone: () => void }) {
           body: JSON.stringify({
             syncType: "manual",
             startCursor: cursor,
-            maxOrders: 200,
+            maxOrders: 500,
           })
         })
         const json: {

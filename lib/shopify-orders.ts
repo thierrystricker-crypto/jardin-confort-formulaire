@@ -1,6 +1,6 @@
 // lib/shopify-orders.ts
 // Helpers pour synchroniser les commandes Shopify dans Supabase
-// Version chunked + cache clients pour Vercel Hobby (60s)
+// Version BULK UPSERT + cache clients pour Vercel Hobby (60s)
 
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -126,8 +126,7 @@ export type SyncResult = {
   totalProcessed: number
 }
 
-// ─── Cache clients (in-memory, hot) ──────────────────────
-// Évite de requêter Supabase pour chaque commande Shopify
+// ─── Cache clients (in-memory) ───────────────────────────
 
 type ClientRow = {
   id: number
@@ -139,9 +138,9 @@ type ClientRow = {
 }
 
 type ClientsCache = {
-  byEmail: Map<string, number>          // email lowercased → id
-  byPhoneLastNine: Map<string, number>  // 9 derniers chiffres → id
-  byNomNpa: Map<string, number>         // "nom_lowercased|npa" → id
+  byEmail: Map<string, number>
+  byPhoneLastNine: Map<string, number>
+  byNomNpa: Map<string, number>
 }
 
 async function buildClientsCache(): Promise<ClientsCache> {
@@ -151,7 +150,6 @@ async function buildClientsCache(): Promise<ClientsCache> {
     byNomNpa: new Map(),
   }
 
-  // Fetch en pagination par lots de 1000 (limite Supabase par défaut)
   let from = 0
   const pageSize = 1000
   while (true) {
@@ -167,11 +165,9 @@ async function buildClientsCache(): Promise<ClientsCache> {
     if (!data || data.length === 0) break
 
     for (const c of data as ClientRow[]) {
-      // Index par email
       const em = (c.email || "").toLowerCase().trim()
       if (em) cache.byEmail.set(em, c.id)
 
-      // Index par téléphone (9 derniers chiffres = numéro local)
       for (const tel of [c.tel1, c.tel2]) {
         if (!tel) continue
         const digits = tel.replace(/[^\d]/g, "")
@@ -180,7 +176,6 @@ async function buildClientsCache(): Promise<ClientsCache> {
         }
       }
 
-      // Index par nom+NPA
       const nom = (c.nom || "").toLowerCase().trim()
       const npa = (c.npa || "").trim()
       if (nom && npa) {
@@ -192,7 +187,7 @@ async function buildClientsCache(): Promise<ClientsCache> {
     from += pageSize
   }
 
-  console.log(`[shopify-sync] Cache clients construit : ${cache.byEmail.size} emails, ${cache.byPhoneLastNine.size} tels, ${cache.byNomNpa.size} nom+NPA`)
+  console.log(`[shopify-sync] Cache clients : ${cache.byEmail.size} emails, ${cache.byPhoneLastNine.size} tels, ${cache.byNomNpa.size} nom+NPA`)
   return cache
 }
 
@@ -260,8 +255,6 @@ const ORDERS_QUERY = `
   }
 `
 
-// ─── Fetch Shopify ───────────────────────────────────────
-
 async function fetchShopifyOrdersPage(
   cursor: string | null,
   pageSize: number = 50
@@ -312,17 +305,15 @@ function normalizeEmail(raw: string | null | undefined): string {
   return raw.toLowerCase().trim()
 }
 
-// ─── Matching client (utilise le cache, INSTANTANÉ) ──────
+// ─── Matching client (cache, instantané) ─────────────────
 
 function findMatchingClientInCache(order: ShopifyOrder, cache: ClientsCache): number | null {
-  // 1. Email exact
   const email = normalizeEmail(order.customer?.email || order.email)
   if (email) {
     const id = cache.byEmail.get(email)
     if (id) return id
   }
 
-  // 2. Téléphone exact (9 derniers chiffres)
   const phone = normalizePhone(
     order.customer?.phone || order.phone || order.shippingAddress?.phone || order.billingAddress?.phone
   )
@@ -331,7 +322,6 @@ function findMatchingClientInCache(order: ShopifyOrder, cache: ClientsCache): nu
     if (id) return id
   }
 
-  // 3. Nom + NPA exact
   const lastName = order.customer?.lastName || order.shippingAddress?.lastName || order.billingAddress?.lastName
   const npa = order.shippingAddress?.zip || order.billingAddress?.zip
   if (lastName && npa) {
@@ -343,9 +333,23 @@ function findMatchingClientInCache(order: ShopifyOrder, cache: ClientsCache): nu
   return null
 }
 
-// ─── Création de client + ajout au cache ─────────────────
+// ─── Bulk : créer les clients manquants en une seule requête ───
 
-async function createClientFromOrder(order: ShopifyOrder, cache: ClientsCache): Promise<number | null> {
+type PendingClient = {
+  shopifyOrderId: string  // pour retrouver à quelle commande il appartient
+  nom: string
+  prenom: string | null
+  societe: string | null
+  email: string | null
+  tel1: string | null
+  rue: string | null
+  rue2: string | null
+  npa: string | null
+  ville: string | null
+  pays: string
+}
+
+function buildPendingClient(order: ShopifyOrder): PendingClient | null {
   const email = order.customer?.email || order.email
   const phone = order.customer?.phone || order.phone || order.shippingAddress?.phone || null
   const firstName = order.customer?.firstName || order.shippingAddress?.firstName || null
@@ -356,49 +360,24 @@ async function createClientFromOrder(order: ShopifyOrder, cache: ClientsCache): 
 
   const addr = order.shippingAddress || order.billingAddress
 
-  const { data, error } = await supabaseAdmin
-    .from("clients")
-    .insert({
-      nom: lastName?.trim() || company?.trim() || "—",
-      prenom: firstName?.trim() || null,
-      societe: company?.trim() || null,
-      email: email?.trim() || null,
-      tel1: phone?.trim() || null,
-      rue: addr?.address1?.trim() || null,
-      rue2: addr?.address2?.trim() || null,
-      npa: addr?.zip?.trim() || null,
-      ville: addr?.city?.trim() || null,
-      pays: addr?.countryCodeV2 || "CH",
-      source: "shopify",
-    })
-    .select("id")
-    .single()
-
-  if (error || !data) {
-    console.error("Erreur création client depuis commande Shopify", error)
-    return null
+  return {
+    shopifyOrderId: order.id,
+    nom: lastName?.trim() || company?.trim() || "—",
+    prenom: firstName?.trim() || null,
+    societe: company?.trim() || null,
+    email: email?.trim() || null,
+    tel1: phone?.trim() || null,
+    rue: addr?.address1?.trim() || null,
+    rue2: addr?.address2?.trim() || null,
+    npa: addr?.zip?.trim() || null,
+    ville: addr?.city?.trim() || null,
+    pays: addr?.countryCodeV2 || "CH",
   }
-
-  // Ajouter le nouveau client au cache pour les commandes suivantes
-  const newId = data.id
-  if (email) cache.byEmail.set(email.toLowerCase().trim(), newId)
-  if (phone) {
-    const digits = phone.replace(/[^\d]/g, "")
-    if (digits.length >= 9) cache.byPhoneLastNine.set(digits.slice(-9), newId)
-  }
-  if (lastName && addr?.zip) {
-    cache.byNomNpa.set(`${lastName.toLowerCase().trim()}|${addr.zip.trim()}`, newId)
-  }
-
-  return newId
 }
 
-// ─── Upsert d'une commande ───────────────────────────────
+// ─── Construction du payload pour bulk upsert ────────────
 
-async function upsertOrder(
-  order: ShopifyOrder,
-  clientId: number | null
-): Promise<"inserted" | "updated"> {
+function buildOrderPayload(order: ShopifyOrder, clientId: number | null) {
   const lineItems = order.lineItems.edges.map(e => ({
     id: e.node.id,
     title: e.node.title,
@@ -409,13 +388,7 @@ async function upsertOrder(
     price: e.node.originalUnitPriceSet?.shopMoney?.amount || null,
   }))
 
-  const { data: existing } = await supabaseAdmin
-    .from("commandes_shopify")
-    .select("id")
-    .eq("shopify_order_id", order.id)
-    .maybeSingle()
-
-  const payload = {
+  return {
     shopify_order_id: order.id,
     shopify_order_legacy_id: order.legacyResourceId ? Number(order.legacyResourceId) : null,
     shopify_order_name: order.name,
@@ -448,22 +421,9 @@ async function upsertOrder(
     created_at_shopify: order.createdAt,
     updated_at_shopify: order.updatedAt,
   }
-
-  if (existing) {
-    await supabaseAdmin
-      .from("commandes_shopify")
-      .update(payload)
-      .eq("id", existing.id)
-    return "updated"
-  } else {
-    await supabaseAdmin
-      .from("commandes_shopify")
-      .insert(payload)
-    return "inserted"
-  }
 }
 
-// ─── Sync principal (CHUNKED + CACHED) ───────────────────
+// ─── Sync principal (BULK UPSERT + CACHE) ────────────────
 
 export async function syncShopifyOrders(options: {
   syncType: "initial" | "manual" | "cron"
@@ -476,7 +436,7 @@ export async function syncShopifyOrders(options: {
   const {
     syncType,
     startCursor = null,
-    maxOrders = 200,
+    maxOrders = 500,           // On peut maintenant traiter 500 par chunk grâce au bulk
     pageSize = 50,
     timeoutMs = 50000,
   } = options
@@ -514,40 +474,139 @@ export async function syncShopifyOrders(options: {
     let cursor: string | null = startCursor
     let processedInThisCall = 0
 
+    // 2. Pour chaque page Shopify de 50 commandes
     while (processedInThisCall < maxOrders) {
       const elapsed = Date.now() - startTime
       if (elapsed > timeoutMs) {
-        console.warn(`[shopify-sync] Stop avant timeout (${elapsed}ms écoulés). Cursor: ${cursor}`)
+        console.warn(`[shopify-sync] Stop avant timeout (${elapsed}ms écoulés)`)
         result.hasMore = true
         result.nextCursor = cursor
         break
       }
 
+      const fetchStart = Date.now()
       const { orders, hasNextPage, endCursor } = await fetchShopifyOrdersPage(cursor, pageSize)
+      console.log(`[shopify-sync] Page Shopify (${orders.length} commandes) fetched en ${Date.now() - fetchStart}ms`)
       result.ordersFetched += orders.length
 
+      if (orders.length === 0) {
+        result.hasMore = false
+        result.nextCursor = null
+        break
+      }
+
+      // 3. Phase 1 : Matching client en mémoire (instantané)
+      const ordersWithClient: Array<{ order: ShopifyOrder; clientId: number | null }> = []
+      const pendingClients: PendingClient[] = []
+
       for (const order of orders) {
-        try {
-          // Lookup INSTANTANÉ dans le cache (pas de requête Supabase)
-          let clientId = findMatchingClientInCache(order, clientsCache)
-          if (clientId) {
-            result.clientsMatched++
-          } else {
-            // Pas trouvé → créer (et ajouter au cache)
-            clientId = await createClientFromOrder(order, clientsCache)
-            if (clientId) result.clientsCreated++
+        const matchedId = findMatchingClientInCache(order, clientsCache)
+        if (matchedId) {
+          result.clientsMatched++
+          ordersWithClient.push({ order, clientId: matchedId })
+        } else {
+          // À créer en bulk plus tard
+          const pending = buildPendingClient(order)
+          if (pending) {
+            pendingClients.push(pending)
+          }
+          ordersWithClient.push({ order, clientId: null }) // sera mis à jour après création
+        }
+      }
+
+      // 4. Phase 2 : BULK INSERT des nouveaux clients (1 seule requête)
+      if (pendingClients.length > 0) {
+        const insertStart = Date.now()
+        const { data: createdClients, error: createErr } = await supabaseAdmin
+          .from("clients")
+          .insert(pendingClients.map(p => ({
+            nom: p.nom,
+            prenom: p.prenom,
+            societe: p.societe,
+            email: p.email,
+            tel1: p.tel1,
+            rue: p.rue,
+            rue2: p.rue2,
+            npa: p.npa,
+            ville: p.ville,
+            pays: p.pays,
+            source: "shopify",
+          })))
+          .select("id, email, tel1, nom, npa")
+
+        console.log(`[shopify-sync] Bulk insert ${pendingClients.length} clients en ${Date.now() - insertStart}ms`)
+
+        if (createErr) {
+          console.error("Erreur bulk insert clients:", createErr)
+          result.errors.push({ shopifyId: "bulk-clients", message: createErr.message })
+        } else if (createdClients) {
+          // Map shopify_order_id → new client_id (par ordre d'insertion)
+          const orderIdToNewClientId = new Map<string, number>()
+          for (let i = 0; i < pendingClients.length && i < createdClients.length; i++) {
+            const newClient = createdClients[i]
+            orderIdToNewClientId.set(pendingClients[i].shopifyOrderId, newClient.id)
+
+            // Mettre à jour le cache pour les commandes suivantes
+            const em = (newClient.email || "").toLowerCase().trim()
+            if (em) clientsCache.byEmail.set(em, newClient.id)
+            if (newClient.tel1) {
+              const digits = newClient.tel1.replace(/[^\d]/g, "")
+              if (digits.length >= 9) clientsCache.byPhoneLastNine.set(digits.slice(-9), newClient.id)
+            }
+            const nom = (newClient.nom || "").toLowerCase().trim()
+            const npa = (newClient.npa || "").trim()
+            if (nom && npa) clientsCache.byNomNpa.set(`${nom}|${npa}`, newClient.id)
           }
 
-          const action = await upsertOrder(order, clientId)
-          if (action === "inserted") result.ordersInserted++
-          else result.ordersUpdated++
+          // Mettre à jour ordersWithClient avec les nouveaux IDs
+          for (const item of ordersWithClient) {
+            if (item.clientId === null) {
+              const newId = orderIdToNewClientId.get(item.order.id)
+              if (newId) {
+                item.clientId = newId
+                result.clientsCreated++
+              }
+            }
+          }
+        }
+      }
+
+      // 5. Phase 3 : Vérifier quelles commandes existent déjà (1 seule requête)
+      const checkStart = Date.now()
+      const orderIds = orders.map(o => o.id)
+      const { data: existingOrders } = await supabaseAdmin
+        .from("commandes_shopify")
+        .select("shopify_order_id")
+        .in("shopify_order_id", orderIds)
+
+      const existingIds = new Set((existingOrders || []).map(e => e.shopify_order_id))
+      console.log(`[shopify-sync] Check existing en ${Date.now() - checkStart}ms (${existingIds.size}/${orderIds.length} déjà en base)`)
+
+      // 6. Phase 4 : BULK UPSERT (1 seule requête pour insert + update)
+      const upsertStart = Date.now()
+      const payloads = ordersWithClient.map(({ order, clientId }) => buildOrderPayload(order, clientId))
+
+      const { error: upsertErr } = await supabaseAdmin
+        .from("commandes_shopify")
+        .upsert(payloads, {
+          onConflict: "shopify_order_id",
+          ignoreDuplicates: false,  // false = update si conflit
+        })
+
+      console.log(`[shopify-sync] Bulk upsert ${payloads.length} commandes en ${Date.now() - upsertStart}ms`)
+
+      if (upsertErr) {
+        console.error("Erreur bulk upsert commandes:", upsertErr)
+        result.errors.push({ shopifyId: "bulk-orders", message: upsertErr.message })
+      } else {
+        // Compter inserted vs updated
+        for (const order of orders) {
+          if (existingIds.has(order.id)) {
+            result.ordersUpdated++
+          } else {
+            result.ordersInserted++
+          }
           processedInThisCall++
-        } catch (err) {
-          result.errors.push({
-            shopifyId: order.id,
-            message: (err as Error).message,
-          })
-          console.error(`Erreur traitement commande ${order.name}:`, err)
         }
       }
 
