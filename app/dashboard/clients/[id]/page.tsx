@@ -57,6 +57,46 @@ type Facture = {
   created_at: string
 }
 
+type CommandeShopify = {
+  id: number
+  shopify_order_id: string
+  shopify_order_legacy_id: number | null
+  shopify_order_name: string
+  shopify_order_number: number
+  total_price: number
+  subtotal_price: number
+  total_tax: number
+  total_shipping: number
+  currency: string
+  financial_status: string | null
+  fulfillment_status: string
+  cancelled_at: string | null
+  cancel_reason: string | null
+  source_name: string | null
+  test: boolean
+  tags: string[]
+  note: string | null
+  status_page_url: string | null
+  shipping_address: {
+    address1: string | null
+    address2: string | null
+    city: string | null
+    zip: string | null
+    country: string | null
+  } | null
+  billing_address: unknown
+  line_items: Array<{
+    id: string
+    title: string
+    name: string
+    sku: string | null
+    quantity: number
+    currentQuantity: number
+    price: string | null
+  }>
+  created_at_shopify: string
+}
+
 function fmtDate(iso: string | null) {
   if (!iso) return "—"
   return new Date(iso).toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" })
@@ -72,9 +112,248 @@ function getStatusColor(statut: string, type: string) {
   return "bg-amber-500/15 text-amber-300"
 }
 
+// ─── Bloc commandes Shopify ──────────────────────────────
+function CommandesShopifyBlock({ commandes }: { commandes: CommandeShopify[] }) {
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
+
+  if (commandes.length === 0) return null
+
+  function toggleExpand(id: number) {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function fmtMoney(amount: number, currency: string) {
+    return new Intl.NumberFormat("fr-CH", {
+      style: "currency",
+      currency: currency || "CHF",
+      minimumFractionDigits: 2,
+    }).format(amount)
+  }
+
+  function fmtDateTime(iso: string) {
+    return new Date(iso).toLocaleDateString("fr-CH", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    })
+  }
+
+  function financialBadge(status: string | null) {
+    const s = (status || "").toUpperCase()
+    if (s === "PAID") return { label: "✅ Payé", cls: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" }
+    if (s === "PENDING") return { label: "⏳ En attente", cls: "bg-amber-500/15 text-amber-300 border-amber-500/30" }
+    if (s === "REFUNDED") return { label: "↩️ Remboursé", cls: "bg-rose-500/15 text-rose-300 border-rose-500/30" }
+    if (s === "PARTIALLY_REFUNDED") return { label: "↩️ Partiellement remboursé", cls: "bg-rose-500/15 text-rose-300 border-rose-500/30" }
+    if (s === "VOIDED") return { label: "❌ Annulé (paiement)", cls: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30" }
+    if (s === "AUTHORIZED") return { label: "🔒 Autorisé", cls: "bg-sky-500/15 text-sky-300 border-sky-500/30" }
+    return { label: status || "—", cls: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30" }
+  }
+
+  function fulfillmentBadge(status: string) {
+    const s = status.toUpperCase()
+    if (s === "FULFILLED") return { label: "📦 Expédié", cls: "bg-emerald-500/15 text-emerald-300" }
+    if (s === "PARTIALLY_FULFILLED") return { label: "📦 Partiellement expédié", cls: "bg-amber-500/15 text-amber-300" }
+    if (s === "UNFULFILLED") return { label: "📋 Non expédié", cls: "bg-zinc-500/15 text-zinc-400" }
+    if (s === "RESTOCKED") return { label: "🔁 Restocké", cls: "bg-violet-500/15 text-violet-300" }
+    return { label: status, cls: "bg-zinc-500/15 text-zinc-400" }
+  }
+
+  function shopifyAdminUrl(order: CommandeShopify) {
+    if (!order.shopify_order_legacy_id) return null
+    return `https://admin.shopify.com/store/jardinconfort/orders/${order.shopify_order_legacy_id}`
+  }
+
+  // Stats globales
+  const totalCA = commandes
+    .filter(c => !c.cancelled_at && c.financial_status === "PAID")
+    .reduce((sum, c) => sum + (c.total_price || 0), 0)
+  const nbActives = commandes.filter(c => !c.cancelled_at).length
+  const nbAnnulees = commandes.filter(c => c.cancelled_at).length
+
+  return (
+    <div className="rounded-2xl border border-orange-500/20 bg-[#2a2d31] p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          🛍️ <span>Commandes Shopify</span>
+          <span className="ml-2 text-sm font-normal text-zinc-400">({commandes.length})</span>
+        </h2>
+        <div className="flex items-center gap-4 text-xs text-zinc-400">
+          <span>{nbActives} active{nbActives > 1 ? "s" : ""}</span>
+          {nbAnnulees > 0 && <span className="text-rose-300/70">{nbAnnulees} annulée{nbAnnulees > 1 ? "s" : ""}</span>}
+          <span className="font-mono text-emerald-300">{fmtMoney(totalCA, "CHF")} CA payé</span>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {commandes.map(cmd => {
+          const isExpanded = expandedIds.has(cmd.id)
+          const finBadge = financialBadge(cmd.financial_status)
+          const fulBadge = fulfillmentBadge(cmd.fulfillment_status)
+          const adminUrl = shopifyAdminUrl(cmd)
+          const isCancelled = !!cmd.cancelled_at
+
+          return (
+            <div key={cmd.id}
+              className={`rounded-xl border ${isCancelled ? "border-rose-500/20 bg-rose-500/5 opacity-70" : "border-white/10 bg-[#1f2125]"} overflow-hidden`}>
+
+              {/* Ligne compacte (cliquable) */}
+              <button onClick={() => toggleExpand(cmd.id)}
+                className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/5 transition text-left">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="text-xs">{isExpanded ? "▼" : "▶"}</span>
+                  <span className={`font-mono font-semibold text-sm ${isCancelled ? "line-through text-zinc-500" : "text-orange-300"}`}>
+                    {cmd.shopify_order_name}
+                  </span>
+                  <span className="text-xs text-zinc-500">
+                    {fmtDateTime(cmd.created_at_shopify)}
+                  </span>
+                  {cmd.test && (
+                    <span className="rounded-full bg-purple-500/15 px-2 py-0.5 text-xs text-purple-300">TEST</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${finBadge.cls}`}>
+                    {finBadge.label}
+                  </span>
+                  {!isCancelled && (
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${fulBadge.cls}`}>
+                      {fulBadge.label}
+                    </span>
+                  )}
+                  {isCancelled && (
+                    <span className="rounded-full border border-rose-500/30 bg-rose-500/15 px-2 py-0.5 text-xs text-rose-300">
+                      ❌ Annulée
+                    </span>
+                  )}
+                  <span className="font-mono text-sm font-semibold text-zinc-100 min-w-[100px] text-right">
+                    {fmtMoney(cmd.total_price, cmd.currency)}
+                  </span>
+                </div>
+              </button>
+
+              {/* Détail (expandable) */}
+              {isExpanded && (
+                <div className="border-t border-white/5 bg-black/20 px-4 py-3 space-y-3 text-sm">
+
+                  {/* Liens Shopify */}
+                  <div className="flex flex-wrap gap-2">
+                    {adminUrl && (
+                      <a href={adminUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/20">
+                        🛍️ Voir sur Shopify Admin
+                      </a>
+                    )}
+                    {cmd.status_page_url && (
+                      <a href={cmd.status_page_url} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/20">
+                        🧾 Reçu client (page de suivi)
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Annulation */}
+                  {isCancelled && (
+                    <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-2 text-xs text-rose-300">
+                      ❌ Commande annulée le {fmtDateTime(cmd.cancelled_at!)}
+                      {cmd.cancel_reason && <span> · Raison : {cmd.cancel_reason}</span>}
+                    </div>
+                  )}
+
+                  {/* Articles */}
+                  {cmd.line_items && cmd.line_items.length > 0 && (
+                    <div>
+                      <div className="text-xs font-semibold uppercase text-zinc-500 mb-1.5">Articles ({cmd.line_items.length})</div>
+                      <div className="space-y-1">
+                        {cmd.line_items.map((item, i) => (
+                          <div key={i} className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.02] px-3 py-1.5">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-zinc-200 text-sm">{item.title || item.name}</div>
+                              {item.sku && <div className="text-xs text-zinc-500 font-mono">{item.sku}</div>}
+                            </div>
+                            <div className="text-zinc-400 text-xs">×{item.quantity}</div>
+                            {item.price && (
+                              <div className="font-mono text-xs text-zinc-300 min-w-[80px] text-right">
+                                {fmtMoney(parseFloat(item.price) * item.quantity, cmd.currency)}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Adresse de livraison */}
+                  {cmd.shipping_address && (
+                    <div>
+                      <div className="text-xs font-semibold uppercase text-zinc-500 mb-1">Livraison</div>
+                      <div className="text-xs text-zinc-300 leading-relaxed">
+                        {cmd.shipping_address.address1}
+                        {cmd.shipping_address.address2 && <><br/>{cmd.shipping_address.address2}</>}
+                        <br/>
+                        {cmd.shipping_address.zip} {cmd.shipping_address.city}
+                        {cmd.shipping_address.country && <>, {cmd.shipping_address.country}</>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Détail montants */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Sous-total</span>
+                      <span className="font-mono text-zinc-300">{fmtMoney(cmd.subtotal_price, cmd.currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">TVA</span>
+                      <span className="font-mono text-zinc-300">{fmtMoney(cmd.total_tax, cmd.currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Livraison</span>
+                      <span className="font-mono text-zinc-300">{fmtMoney(cmd.total_shipping, cmd.currency)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold">
+                      <span className="text-zinc-300">TOTAL</span>
+                      <span className="font-mono text-zinc-100">{fmtMoney(cmd.total_price, cmd.currency)}</span>
+                    </div>
+                  </div>
+
+                  {/* Tags & note */}
+                  {(cmd.tags?.length > 0 || cmd.note) && (
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {cmd.tags?.length > 0 && cmd.tags.map((tag, i) => (
+                        <span key={i} className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-zinc-400">
+                          {tag}
+                        </span>
+                      ))}
+                      {cmd.note && (
+                        <div className="text-xs italic text-amber-300/80">
+                          📝 {cmd.note}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Source */}
+                  <div className="text-xs text-zinc-500">
+                    Source : {cmd.source_name || "web"}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [client, setClient] = useState<Client | null>(null)
   const [offres, setOffres] = useState<Offre[]>([])
+  const [commandesShopify, setCommandesShopify] = useState<CommandeShopify[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -100,6 +379,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         setClient(json.client)
         setForm(json.client)
         setOffres(json.offres || [])
+        setCommandesShopify(json.commandesShopify || [])
         try {
           const fRes = await fetch(`/api/clients/${id}/factures`)
           if (fRes.ok) {
@@ -235,6 +515,17 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   <div className="mt-1 text-2xl font-bold text-sky-300">{fmtMoney(caWinbiz)}</div>
                 </div>
               )}
+              {commandesShopify.length > 0 && (() => {
+                const caShopify = commandesShopify
+                  .filter(c => !c.cancelled_at && c.financial_status === "PAID")
+                  .reduce((s, c) => s + (c.total_price || 0), 0)
+                return (
+                  <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 px-6 py-3">
+                    <div className="text-xs text-zinc-400">CA Shopify</div>
+                    <div className="mt-1 text-2xl font-bold text-orange-300">{fmtMoney(caShopify)}</div>
+                  </div>
+                )
+              })()}
             </div>
           </div>
         </div>
@@ -469,6 +760,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             )}
           </section>
         </div>
+{/* COMMANDES SHOPIFY */}
+        <CommandesShopifyBlock commandes={commandesShopify} />
 
         {/* FACTURES WINBIZ */}
         <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">

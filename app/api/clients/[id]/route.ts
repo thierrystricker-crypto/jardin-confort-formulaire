@@ -1,5 +1,5 @@
 // app/api/clients/[id]/route.ts
-// GET  — détail client + historique offres
+// GET  — détail client + historique offres + commandes Shopify
 // PATCH — modifier client
 
 import { NextRequest, NextResponse } from "next/server"
@@ -40,7 +40,42 @@ export async function GET(
       offres = data || []
     }
 
-    return NextResponse.json({ client, offres })
+    // Chercher les commandes Shopify liées via client_id
+    const { data: commandesShopify } = await supabaseAdmin
+      .from("commandes_shopify")
+      .select(`
+        id,
+        shopify_order_id,
+        shopify_order_legacy_id,
+        shopify_order_name,
+        shopify_order_number,
+        total_price,
+        subtotal_price,
+        total_tax,
+        total_shipping,
+        currency,
+        financial_status,
+        fulfillment_status,
+        cancelled_at,
+        cancel_reason,
+        source_name,
+        test,
+        tags,
+        note,
+        status_page_url,
+        shipping_address,
+        billing_address,
+        line_items,
+        created_at_shopify
+      `)
+      .eq("client_id", id)
+      .order("created_at_shopify", { ascending: false })
+
+    return NextResponse.json({
+      client,
+      offres,
+      commandesShopify: commandesShopify || []
+    })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
