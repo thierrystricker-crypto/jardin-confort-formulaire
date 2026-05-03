@@ -1,5 +1,6 @@
 // lib/shopify-orders.ts
 // Helpers pour synchroniser les commandes Shopify dans Supabase
+// Version chunked compatible Vercel Hobby (60s timeout)
 
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -120,6 +121,9 @@ export type SyncResult = {
   clientsCreated: number
   errors: Array<{ shopifyId: string; message: string }>
   durationMs: number
+  hasMore: boolean              // true si y'a encore des commandes à fetcher
+  nextCursor: string | null     // À passer au prochain appel pour continuer
+  totalProcessed: number        // Cumul du nombre de commandes déjà traitées
 }
 
 // ─── GraphQL Query ───────────────────────────────────────
@@ -395,22 +399,34 @@ async function upsertOrder(
   }
 }
 
-// ─── Sync principal ──────────────────────────────────────
+// ─── Sync principal (CHUNKED pour Vercel Hobby 60s) ─────
 
 export async function syncShopifyOrders(options: {
   syncType: "initial" | "manual" | "cron"
-  maxPages?: number
+  startCursor?: string | null      // Cursor pour reprendre où on s'est arrêté
+  maxOrders?: number               // Nombre max de commandes à traiter dans cet appel
   pageSize?: number
+  timeoutMs?: number               // Stop si on approche du timeout
 }): Promise<SyncResult> {
   const startTime = Date.now()
-  const { syncType, maxPages = 1000, pageSize = 50 } = options
+  const {
+    syncType,
+    startCursor = null,
+    maxOrders = 500,                // Par défaut 500 commandes par appel
+    pageSize = 50,
+    timeoutMs = 50000,              // Stop à 50s pour laisser de la marge avant le 60s Vercel
+  } = options
 
-  const { data: logRow } = await supabaseAdmin
-    .from("shopify_sync_log")
-    .insert({ sync_type: syncType, status: "running" })
-    .select("id")
-    .single()
-  const logId = logRow?.id
+  // Log start (uniquement si premier appel)
+  let logId: number | undefined
+  if (!startCursor) {
+    const { data: logRow } = await supabaseAdmin
+      .from("shopify_sync_log")
+      .insert({ sync_type: syncType, status: "running" })
+      .select("id")
+      .single()
+    logId = logRow?.id
+  }
 
   const result: SyncResult = {
     ordersFetched: 0,
@@ -420,13 +436,25 @@ export async function syncShopifyOrders(options: {
     clientsCreated: 0,
     errors: [],
     durationMs: 0,
+    hasMore: false,
+    nextCursor: null,
+    totalProcessed: 0,
   }
 
   try {
-    let cursor: string | null = null
-    let pageCount = 0
+    let cursor: string | null = startCursor
+    let processedInThisCall = 0
 
-    do {
+    while (processedInThisCall < maxOrders) {
+      // Vérifier si on approche du timeout
+      const elapsed = Date.now() - startTime
+      if (elapsed > timeoutMs) {
+        console.warn(`[shopify-sync] Stop avant timeout (${elapsed}ms écoulés). Cursor: ${cursor}`)
+        result.hasMore = true
+        result.nextCursor = cursor
+        break
+      }
+
       const { orders, hasNextPage, endCursor } = await fetchShopifyOrdersPage(cursor, pageSize)
       result.ordersFetched += orders.length
 
@@ -443,6 +471,7 @@ export async function syncShopifyOrders(options: {
           const action = await upsertOrder(order, clientId)
           if (action === "inserted") result.ordersInserted++
           else result.ordersUpdated++
+          processedInThisCall++
         } catch (err) {
           result.errors.push({
             shopifyId: order.id,
@@ -453,31 +482,42 @@ export async function syncShopifyOrders(options: {
       }
 
       cursor = hasNextPage ? endCursor : null
-      pageCount++
 
-      if (pageCount >= maxPages) {
-        console.warn(`Sync arrêté à ${maxPages} pages (limite de sécurité)`)
+      if (!cursor) {
+        // Plus de pages = sync complet
+        result.hasMore = false
+        result.nextCursor = null
         break
       }
 
+      if (processedInThisCall >= maxOrders) {
+        // On a atteint la limite de cet appel — il y aura un appel suivant
+        result.hasMore = true
+        result.nextCursor = cursor
+        break
+      }
+
+      // Petit délai entre pages (rate limit Shopify ~2 req/s)
       await new Promise(r => setTimeout(r, 200))
-    } while (cursor)
+    }
 
     result.durationMs = Date.now() - startTime
+    result.totalProcessed = processedInThisCall
 
+    // Log : success seulement si terminé, sinon "running" pour reprendre
     if (logId) {
       await supabaseAdmin
         .from("shopify_sync_log")
         .update({
-          finished_at: new Date().toISOString(),
-          status: "success",
+          finished_at: result.hasMore ? null : new Date().toISOString(),
+          status: result.hasMore ? "running" : "success",
           orders_fetched: result.ordersFetched,
           orders_inserted: result.ordersInserted,
           orders_updated: result.ordersUpdated,
           clients_matched: result.clientsMatched,
           clients_created: result.clientsCreated,
           errors: result.errors.length > 0 ? result.errors : null,
-          details: { duration_ms: result.durationMs, page_count: pageCount },
+          details: { duration_ms: result.durationMs, has_more: result.hasMore, next_cursor: result.nextCursor },
         })
         .eq("id", logId)
     }
