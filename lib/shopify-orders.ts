@@ -2,19 +2,60 @@
 // Helpers pour synchroniser les commandes Shopify dans Supabase
 
 import { supabaseAdmin } from "@/lib/supabase"
-import { getShopifyAccessToken } from "@/lib/shopify-stock"
 
 const SHOPIFY_API_VERSION = "2026-04"
 const SHOPIFY_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN || "www.jardin-confort.ch"
+const SHOPIFY_CLIENT_ID = process.env.SHOPIFY_ADMIN_CLIENT_ID
+const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_ADMIN_CLIENT_SECRET
+
+// ─── OAuth Client Credentials (auto-contenu) ─────────────
+let cachedToken: { token: string; expiresAt: number } | null = null
+
+async function getAccessToken(): Promise<string> {
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 5 * 60 * 1000) {
+    return cachedToken.token
+  }
+
+  if (!SHOPIFY_CLIENT_ID || !SHOPIFY_CLIENT_SECRET) {
+    throw new Error("SHOPIFY_ADMIN_CLIENT_ID ou SHOPIFY_ADMIN_CLIENT_SECRET manquant")
+  }
+
+  const res = await fetch(`https://${SHOPIFY_DOMAIN}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: SHOPIFY_CLIENT_ID,
+      client_secret: SHOPIFY_CLIENT_SECRET,
+      grant_type: "client_credentials",
+    }),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Shopify OAuth error ${res.status}: ${text}`)
+  }
+
+  const json = await res.json()
+  if (!json.access_token) {
+    throw new Error(`Shopify OAuth: pas d'access_token retourné: ${JSON.stringify(json)}`)
+  }
+
+  const expiresIn = json.expires_in || 3600
+  cachedToken = {
+    token: json.access_token,
+    expiresAt: Date.now() + expiresIn * 1000,
+  }
+  return json.access_token
+}
 
 // ─── Types ───────────────────────────────────────────────
 
 type ShopifyOrder = {
-  id: string                           // gid://shopify/Order/123
-  legacyResourceId: string             // 123 (UnsignedInt64 → string)
-  name: string                         // JAR-11244
-  number: number                       // 11244
-  createdAt: string                    // ISO
+  id: string
+  legacyResourceId: string
+  name: string
+  number: number
+  createdAt: string
   updatedAt: string
   cancelledAt: string | null
   cancelReason: string | null
@@ -151,7 +192,7 @@ async function fetchShopifyOrdersPage(
   cursor: string | null,
   pageSize: number = 50
 ): Promise<{ orders: ShopifyOrder[]; hasNextPage: boolean; endCursor: string | null }> {
-  const token = await getShopifyAccessToken()
+  const token = await getAccessToken()
   const res = await fetch(
     `https://${SHOPIFY_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
     {
@@ -197,10 +238,7 @@ function normalizeEmail(raw: string | null | undefined): string {
   return raw.toLowerCase().trim()
 }
 
-// ─── Matching client (strict) ────────────────────────────
-// Priorité 1 : email exact (insensible casse)
-// Priorité 2 : téléphone exact (chiffres normalisés)
-// Priorité 3 : nom + NPA exact
+// ─── Matching client ─────────────────────────────────────
 
 async function findMatchingClient(order: ShopifyOrder): Promise<number | null> {
   const email = normalizeEmail(order.customer?.email || order.email)
@@ -208,7 +246,6 @@ async function findMatchingClient(order: ShopifyOrder): Promise<number | null> {
     order.customer?.phone || order.phone || order.shippingAddress?.phone || order.billingAddress?.phone
   )
 
-  // 1. Email exact
   if (email) {
     const { data } = await supabaseAdmin
       .from("clients")
@@ -219,8 +256,6 @@ async function findMatchingClient(order: ShopifyOrder): Promise<number | null> {
     if (data?.id) return data.id
   }
 
-  // 2. Téléphone exact (chiffres seulement)
-  // On compare les derniers 9 chiffres (numéro local sans code pays)
   if (phone && phone.length >= 9) {
     const lastNine = phone.slice(-9)
     const { data: clients } = await supabaseAdmin
@@ -236,7 +271,6 @@ async function findMatchingClient(order: ShopifyOrder): Promise<number | null> {
     }
   }
 
-  // 3. Nom + NPA exact (nom = lastName + NPA = shippingAddress.zip ou billingAddress.zip)
   const lastName = order.customer?.lastName || order.shippingAddress?.lastName || order.billingAddress?.lastName
   const npa = order.shippingAddress?.zip || order.billingAddress?.zip
   if (lastName && npa) {
@@ -262,7 +296,6 @@ async function createClientFromOrder(order: ShopifyOrder): Promise<number | null
   const lastName = order.customer?.lastName || order.shippingAddress?.lastName || null
   const company = order.shippingAddress?.company || order.billingAddress?.company || null
 
-  // Si on n'a même pas de nom, on ne peut pas créer de client
   if (!lastName && !company) return null
 
   const addr = order.shippingAddress || order.billingAddress
@@ -308,7 +341,6 @@ async function upsertOrder(
     price: e.node.originalUnitPriceSet?.shopMoney?.amount || null,
   }))
 
-  // Vérifier si la commande existe déjà
   const { data: existing } = await supabaseAdmin
     .from("commandes_shopify")
     .select("id")
@@ -367,13 +399,12 @@ async function upsertOrder(
 
 export async function syncShopifyOrders(options: {
   syncType: "initial" | "manual" | "cron"
-  maxPages?: number               // Limite de sécurité (par défaut illimité)
+  maxPages?: number
   pageSize?: number
 }): Promise<SyncResult> {
   const startTime = Date.now()
   const { syncType, maxPages = 1000, pageSize = 50 } = options
 
-  // Log start
   const { data: logRow } = await supabaseAdmin
     .from("shopify_sync_log")
     .insert({ sync_type: syncType, status: "running" })
@@ -401,7 +432,6 @@ export async function syncShopifyOrders(options: {
 
       for (const order of orders) {
         try {
-          // 1. Trouver ou créer le client
           let clientId = await findMatchingClient(order)
           if (clientId) {
             result.clientsMatched++
@@ -410,7 +440,6 @@ export async function syncShopifyOrders(options: {
             if (clientId) result.clientsCreated++
           }
 
-          // 2. Upsert de la commande
           const action = await upsertOrder(order, clientId)
           if (action === "inserted") result.ordersInserted++
           else result.ordersUpdated++
@@ -431,13 +460,11 @@ export async function syncShopifyOrders(options: {
         break
       }
 
-      // Petit délai entre pages pour être gentil avec l'API Shopify (rate limit ~2 req/s)
       await new Promise(r => setTimeout(r, 200))
     } while (cursor)
 
     result.durationMs = Date.now() - startTime
 
-    // Log success
     if (logId) {
       await supabaseAdmin
         .from("shopify_sync_log")

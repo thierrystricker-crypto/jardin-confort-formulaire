@@ -1,0 +1,4 @@
+[33m8cdcd5a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix(shopify): rendre lib/shopify-orders.ts autonome (OAuth interne)
+[33m25c218b[m fix(stock): ajout directive @idempotent obligatoire avec key stable
+[33me46bb35[m fix(stock): changeFromQuantity=null pour eviter les blocages en cas de race condition
+[33mb56d778[m feat(stock): mouvements de stock Shopify automatiques avec OAuth Client Credentials
