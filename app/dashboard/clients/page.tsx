@@ -58,6 +58,128 @@ function sourceLabel(s: string | null) {
 // ─── Badges compacts pour les documents liés à un client ───
 // Affiche uniquement les badges avec au moins 1 document.
 // Tiret — si aucun document.
+// ─── Bouton synchronisation Shopify ───────────────────
+function ShopifySyncButton({ onDone }: { onDone: () => void }) {
+  const [syncing, setSyncing] = useState(false)
+  const [result, setResult] = useState<{
+    ordersFetched: number
+    ordersInserted: number
+    ordersUpdated: number
+    clientsMatched: number
+    clientsCreated: number
+    errors: Array<{ shopifyId: string; message: string }>
+    durationMs: number
+  } | null>(null)
+  const [error, setError] = useState("")
+
+  async function handleSync() {
+    if (!confirm("⚠️ Synchroniser TOUTES les commandes Shopify ? Cette opération peut prendre plusieurs minutes pour le premier lancement.")) return
+
+    setSyncing(true)
+    setError("")
+    setResult(null)
+
+    try {
+      const res = await fetch("/api/shopify/sync-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ syncType: "manual" })
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Erreur de synchronisation")
+      }
+      setResult(json)
+      onDone()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  return (
+    <>
+      <button
+        onClick={handleSync}
+        disabled={syncing}
+        className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+        title="Importer les commandes Shopify dans la base"
+      >
+        {syncing ? "⏳ Synchro en cours…" : "🛍️ Sync Shopify"}
+      </button>
+
+      {/* Modal résultat */}
+      {(result || error) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => { setResult(null); setError("") }}>
+          <div className="max-w-md w-full rounded-2xl border border-white/10 bg-[#2a2d31] p-6"
+            onClick={e => e.stopPropagation()}>
+            {error ? (
+              <>
+                <h3 className="text-lg font-semibold text-rose-300 mb-3">❌ Erreur de synchronisation</h3>
+                <p className="text-sm text-zinc-300 mb-4">{error}</p>
+              </>
+            ) : result && (
+              <>
+                <h3 className="text-lg font-semibold text-emerald-300 mb-3">✅ Synchronisation Shopify terminée</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Commandes récupérées</span>
+                    <span className="font-mono text-zinc-100">{result.ordersFetched}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">→ Nouvelles</span>
+                    <span className="font-mono text-emerald-300">+{result.ordersInserted}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">→ Mises à jour</span>
+                    <span className="font-mono text-sky-300">↻{result.ordersUpdated}</span>
+                  </div>
+                  <hr className="border-white/10 my-2" />
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Clients existants matchés</span>
+                    <span className="font-mono text-zinc-100">{result.clientsMatched}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Nouveaux clients créés</span>
+                    <span className="font-mono text-amber-300">+{result.clientsCreated}</span>
+                  </div>
+                  {result.errors.length > 0 && (
+                    <>
+                      <hr className="border-white/10 my-2" />
+                      <div className="flex justify-between text-rose-300">
+                        <span>Erreurs</span>
+                        <span className="font-mono">{result.errors.length}</span>
+                      </div>
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-zinc-500">Voir détails</summary>
+                        <div className="mt-2 max-h-40 overflow-y-auto rounded-lg bg-black/30 p-2 text-xs font-mono text-rose-300/80">
+                          {result.errors.map((e, i) => (
+                            <div key={i} className="mb-1">{e.shopifyId} : {e.message}</div>
+                          ))}
+                        </div>
+                      </details>
+                    </>
+                  )}
+                  <hr className="border-white/10 my-2" />
+                  <div className="flex justify-between text-xs text-zinc-500">
+                    <span>Durée</span>
+                    <span className="font-mono">{(result.durationMs / 1000).toFixed(1)}s</span>
+                  </div>
+                </div>
+              </>
+            )}
+            <button onClick={() => { setResult(null); setError("") }}
+              className="mt-4 w-full rounded-xl bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
 function DocBadges({ client }: { client: Client }) {
   const offres = client.nb_offres || 0
   const commandes = client.nb_commandes_internes || 0
@@ -263,6 +385,7 @@ export default function ClientsPage() {
               className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/15 px-4 py-2 text-sm text-sky-300 hover:bg-sky-500/20">
               📥 Importer CSV
             </button>
+            <ShopifySyncButton onDone={() => fetchClients(search)} />
             <button onClick={() => setShowNew(v => !v)}
               className="inline-flex items-center rounded-xl bg-[#2B8AD1] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2478b8]">
               + Nouveau client

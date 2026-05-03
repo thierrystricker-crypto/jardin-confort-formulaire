@@ -110,6 +110,18 @@ async function enrichWithCounts(clients: Client[]): Promise<ClientWithCounts[]> 
     facturesMap.set(f.client_id, (facturesMap.get(f.client_id) || 0) + 1)
   }
 
+  // 2bis. Récupérer toutes les commandes Shopify (matching par client_id direct, figé au sync)
+  const shopifyMap = new Map<number, number>()
+  const { data: shopifyData } = await supabaseAdmin
+    .from("commandes_shopify")
+    .select("client_id")
+    .in("client_id", clientIds)
+
+  for (const s of shopifyData || []) {
+    if (s.client_id == null) continue
+    shopifyMap.set(s.client_id, (shopifyMap.get(s.client_id) || 0) + 1)
+  }
+
   // 3. Assembler les compteurs sur chaque client
   return clients.map(c => {
     const offresCounts = offresMap.get(c.id) || { offres: 0, commandes: 0 }
@@ -117,7 +129,7 @@ async function enrichWithCounts(clients: Client[]): Promise<ClientWithCounts[]> 
       ...c,
       nb_offres: offresCounts.offres,
       nb_commandes_internes: offresCounts.commandes,
-      nb_commandes_shopify: 0, // À implémenter plus tard
+      nb_commandes_shopify: shopifyMap.get(c.id) || 0,
       nb_factures_winbiz: facturesMap.get(c.id) || 0,
     }
   })
