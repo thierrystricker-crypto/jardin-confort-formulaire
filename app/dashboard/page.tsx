@@ -71,7 +71,7 @@ const COMMERCIAUX = ["Brice Chappé","Alejandro Gallegos","Fabian Coquoz","Miche
 
 type SortKey = "date"|"client"|"montant"|"statut"|"commercial"|"jours"|"numero"|"probabilite"
 type SortDir = "asc"|"desc"
-type QuickFilter = "all"|"offres"|"commandes"|"abandonnes"|"relance"
+type QuickFilter = "all"|"offres"|"commandes"|"abandonnes"|"relance"|"prob_forte"|"prob_moyenne"|"prob_faible"|"prob_neutre"
 
 function isoWeek(d: Date) {
   const t = new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()))
@@ -203,6 +203,11 @@ export default function DashboardPage() {
     else if(quickFilter==="commandes") list=list.filter(o=>o.type_document==="Commande"||o.statut==="Acceptée")
     else if(quickFilter==="abandonnes") list=list.filter(o=>["Abandonnée","Refusée"].includes(o.statut))
     else if(quickFilter==="relance") list=list.filter(o=>{const d=getDaysOpen(o);return d!==null&&d>=7})
+    // ─── Filtres par probabilité (uniquement sur les offres en cours, pas les commandes) ───
+    else if(quickFilter==="prob_forte") list=list.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="forte")
+    else if(quickFilter==="prob_moyenne") list=list.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="moyenne")
+    else if(quickFilter==="prob_faible") list=list.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="faible")
+    else if(quickFilter==="prob_neutre") list=list.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&(!o.probabilite||o.probabilite==="neutre"))
     if(commercial!=="all") list=list.filter(o=>o.commercial===commercial)
     if(search.trim()){
       const q=search.toLowerCase()
@@ -282,11 +287,30 @@ export default function DashboardPage() {
             <button onClick={()=>{setSearch("");setQuickFilter("all");setCommercial("all")}} className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2.5 text-sm text-zinc-100 transition hover:bg-[#40454b]">Reset</button>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+         <div className="flex flex-wrap gap-2">
             {quickFilters.map(f=>(
               <button key={f.value} type="button" onClick={()=>setQuickFilter(f.value)}
                 className={`rounded-full px-4 py-2 text-sm transition ${quickFilter===f.value?"bg-zinc-100 text-zinc-900":"border border-white/10 bg-[#34383d] text-zinc-200 hover:bg-[#40454b]"}`}>
                 {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ─── Filtres rapides par probabilité de closing ─── */}
+          {/* Affichés uniquement pour les offres en cours (pas les commandes) */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Probabilité :</span>
+            {[
+              {value:"prob_forte" as QuickFilter, icon:"🟢", label:"Forte", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="forte").length},
+              {value:"prob_moyenne" as QuickFilter, icon:"🟡", label:"Moyenne", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="moyenne").length},
+              {value:"prob_faible" as QuickFilter, icon:"🔴", label:"Faible", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="faible").length},
+              {value:"prob_neutre" as QuickFilter, icon:"⚪", label:"Non définie", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&(!o.probabilite||o.probabilite==="neutre")).length},
+            ].map(f=>(
+              <button key={f.value} type="button" onClick={()=>setQuickFilter(quickFilter===f.value?"all":f.value)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition ${quickFilter===f.value?"bg-zinc-100 text-zinc-900":"border border-white/10 bg-[#34383d] text-zinc-200 hover:bg-[#40454b]"}`}>
+                <span>{f.icon}</span>
+                <span>{f.label}</span>
+                <span className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-xs font-semibold ${quickFilter===f.value?"bg-zinc-300 text-zinc-700":"bg-white/10 text-zinc-400"}`}>{f.count}</span>
               </button>
             ))}
           </div>
@@ -353,10 +377,15 @@ export default function DashboardPage() {
                           <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(o.statut,o.type_document)}`}>{o.statut}</span>
                         </td>
                         <td className="px-4 py-4 text-center text-lg">
-                          {o.probabilite==="forte"  ? <span title="Forte">🟢</span>
-                          :o.probabilite==="moyenne" ? <span title="Moyenne">🟡</span>
-                          :o.probabilite==="faible"  ? <span title="Faible">🔴</span>
-                          :<span title="Neutre" className="text-zinc-600">⚪</span>}
+                          {/* Le feu de probabilité ne s'affiche QUE pour les offres en cours.
+                              Les commandes (CMD-XXXXX) ou offres acceptées/converties/abandonnées
+                              n'ont plus besoin de feu : le statut suffit. */}
+                          {(o.type_document==="Commande"||["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)) ? (
+                            <span className="text-zinc-700">—</span>
+                          ) : o.probabilite==="forte"  ? <span title="Forte">🟢</span>
+                          : o.probabilite==="moyenne" ? <span title="Moyenne">🟡</span>
+                          : o.probabilite==="faible"  ? <span title="Faible">🔴</span>
+                          : <span title="Non définie" className="text-zinc-600">⚪</span>}
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex flex-col gap-1">
