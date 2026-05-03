@@ -310,6 +310,35 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                     {(line.lineDiscount || 0) > 0 && (
                       <div className="item-discount">Remise : − {formatMoney(line.lineDiscount || 0)}</div>
                     )}
+                    {/* ─── Badge stock + délai (commandes uniquement) ─── */}
+                    {/* Stock affiché UNIQUEMENT pour les CMD : pour les offres (DEV)
+                        on n'affiche pas le stock car ça figerait une info volatile dans
+                        un PDF qui peut être consulté plus tard. Pour les commandes, le
+                        stock vient de ?snapshot=false (live Shopify) ET le PDF est
+                        généré AVANT la décrémentation grâce à la séquence d'after(). */}
+                    {data.formType === "Commande" && (() => {
+                      const sn = typeof line.stock === "number" ? line.stock : null;
+                      const isSC = line.stock === "sur_commande" || (sn !== null && sn < 1);
+                      const isOk = sn !== null && sn > 2;
+                      const isLow = sn !== null && sn > 0 && sn <= 2;
+                      const baseStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, marginTop: 4 };
+                      if (isSC) return (
+                        <div style={{ ...baseStyle, color: "#E67E22" }}>
+                          📦 {(line as any).delaiLivraison || "Sur commande"}
+                        </div>
+                      );
+                      if (isOk) return (
+                        <div style={{ ...baseStyle, color: "#2C7E3F" }}>
+                          ✓ En stock ({sn} pce{sn! > 1 ? "s" : ""})
+                        </div>
+                      );
+                      if (isLow) return (
+                        <div style={{ ...baseStyle, color: "#E67E22" }}>
+                          ⚠ Stock limité ({sn} pce{sn! > 1 ? "s" : ""})
+                        </div>
+                      );
+                      return null;
+                    })()}
                   </td>
                   <td className="td-center">× {line.qty}</td>
                   <td className="td-right">{formatMoney(line.unitPrice)}</td>
