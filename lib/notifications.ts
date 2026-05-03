@@ -3,7 +3,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase";
 
-type NotificationType = "commande_validee" | "commande_directe" | "offre_abandonnee";
+type NotificationType = "commande_validee" | "commande_convertie_manuelle" | "commande_directe" | "offre_abandonnee";
 
 type CreateNotificationInput = {
   type: NotificationType;
@@ -22,6 +22,7 @@ type CreateNotificationInput = {
 
 const DEFAULT_TITRES: Record<NotificationType, string> = {
   commande_validee: "🎉 Nouvelle commande validée online",
+  commande_convertie_manuelle: "🔄 Commande créée par conversion manuelle",
   commande_directe: "📋 Nouvelle commande créée directement",
   offre_abandonnee: "❌ Offre marquée comme abandonnée",
 };
