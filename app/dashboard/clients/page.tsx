@@ -23,6 +23,11 @@ type Client = {
   source: string | null
   created_at: string
   updated_at: string
+  // Compteurs documents (enrichis par /api/clients GET)
+  nb_offres?: number
+  nb_commandes_internes?: number
+  nb_commandes_shopify?: number
+  nb_factures_winbiz?: number
 }
 
 function normalizeSwissPhone(raw: string) {
@@ -48,6 +53,48 @@ function sourceLabel(s: string | null) {
   if (s === "winbiz")  return { label: "WinBiz",  cls: "bg-sky-500/15 text-sky-300" }
   if (s === "offre")   return { label: "Offre",   cls: "bg-amber-500/15 text-amber-300" }
   return { label: "Manuel", cls: "bg-white/5 text-zinc-400" }
+}
+
+// ─── Badges compacts pour les documents liés à un client ───
+// Affiche uniquement les badges avec au moins 1 document.
+// Tiret — si aucun document.
+function DocBadges({ client }: { client: Client }) {
+  const offres = client.nb_offres || 0
+  const commandes = client.nb_commandes_internes || 0
+  const shopify = client.nb_commandes_shopify || 0
+  const factures = client.nb_factures_winbiz || 0
+  const hasAny = offres + commandes + shopify + factures > 0
+
+  if (!hasAny) return <span className="text-zinc-600">—</span>
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {offres > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-300"
+          title={`${offres} offre${offres > 1 ? "s" : ""} active${offres > 1 ? "s" : ""}`}>
+          📄 {offres}
+        </span>
+      )}
+      {commandes > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-300"
+          title={`${commandes} commande${commandes > 1 ? "s" : ""} interne${commandes > 1 ? "s" : ""} (CMD)`}>
+          🛒 {commandes}
+        </span>
+      )}
+      {shopify > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-xs font-semibold text-orange-300"
+          title={`${shopify} commande${shopify > 1 ? "s" : ""} Shopify`}>
+          🛍️ {shopify}
+        </span>
+      )}
+      {factures > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-xs font-semibold text-violet-300"
+          title={`${factures} facture${factures > 1 ? "s" : ""} WinBiz`}>
+          📊 {factures}
+        </span>
+      )}
+    </div>
+  )
 }
 
 export default function ClientsPage() {
@@ -533,6 +580,7 @@ export default function ClientsPage() {
                     <th className="px-4 py-3 font-medium">Téléphone</th>
                     <th className="px-4 py-3 font-medium">Ville</th>
                     <th className="px-4 py-3 font-medium">Source</th>
+                    <th className="px-4 py-3 font-medium">Documents</th>
                     <th className="px-4 py-3 font-medium">Créé le</th>
                     <th className="px-4 py-3 text-right font-medium">Actions</th>
                   </tr>
@@ -559,6 +607,9 @@ export default function ClientsPage() {
                         <td className="px-4 py-3 text-zinc-400">{[c.npa, c.ville].filter(Boolean).join(" ") || "—"}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${src.cls}`}>{src.label}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <DocBadges client={c} />
                         </td>
                         <td className="px-4 py-3 text-zinc-500 text-xs">{fmtDate(c.created_at)}</td>
                         <td className="px-4 py-3">
