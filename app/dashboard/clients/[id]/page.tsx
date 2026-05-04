@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { getShopifyPdfUrls } from "@/lib/shopify-pdf-urls";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -232,6 +233,23 @@ function CommandesShopifyBlock({ commandes }: { commandes: CommandeShopify[] }) 
                   <span className="font-mono text-sm font-semibold text-zinc-100 min-w-[100px] text-right">
                     {fmtMoney(cmd.total_price, cmd.currency)}
                   </span>
+                  {/* Icône facture rapide en vue compacte */}
+                  {(() => {
+                    const pdfs = getShopifyPdfUrls(cmd.shopify_order_legacy_id, cmd.shopify_order_name)
+                    if (!pdfs.facture) return null
+                    return (
+                      
+                        href={pdfs.facture}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Télécharger la facture PDF"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition flex-shrink-0"
+                      >
+                        💰
+                      </a>
+                    )
+                  })()}
                 </div>
               </button>
 
@@ -254,6 +272,34 @@ function CommandesShopifyBlock({ commandes }: { commandes: CommandeShopify[] }) 
                       </a>
                     )}
                   </div>
+
+                  {/* Documents PDF Order Printer Pro */}
+                  {(() => {
+                    const pdfs = getShopifyPdfUrls(cmd.shopify_order_legacy_id, cmd.shopify_order_name)
+                    if (!pdfs.ficheTravail) return null
+                    return (
+                      <div>
+                        <div className="text-xs font-semibold uppercase text-zinc-500 mb-1.5">📄 Documents PDF</div>
+                        <div className="flex flex-wrap gap-2">
+                          <a href={pdfs.ficheTravail} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/20">
+                            📋 Fiche de travail
+                          </a>
+                          <a href={pdfs.bulletinLivraison!} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-300 hover:bg-violet-500/20">
+                            📦 Bulletin de livraison
+                          </a>
+                          <a href={pdfs.facture!} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/20">
+                            💰 Facture
+                          </a>
+                        </div>
+                        <div className="text-[10px] text-zinc-600 mt-1 italic">
+                          Documents générés par Order Printer Pro · Si erreur 404, le PDF n&apos;est pas disponible pour cette commande
+                        </div>
+                      </div>
+                    )
+                  })()}
 
                   {/* Annulation */}
                   {isCancelled && (
