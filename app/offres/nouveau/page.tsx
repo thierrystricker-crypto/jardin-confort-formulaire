@@ -1066,6 +1066,7 @@ const [savedSlug, setSavedSlug]           = useState("");
                     <input
                       type="number" min="1" max="365"
                       value={validiteDuree.replace(/[^\d]/g, "")}
+                      onFocus={(e) => e.currentTarget.select()}
                       onChange={(e) => {
                         const n = parseInt(e.target.value)
                         if (!isNaN(n) && n > 0) setValiditeDuree(`${n} jours`)
@@ -1462,7 +1463,7 @@ const [savedSlug, setSavedSlug]           = useState("");
                             </div>
                           </td>
                           <td style={{ paddingRight: 16 }}>
-                            <input className="jc-qty-input no-spin" type="number" min="1" value={line.qty} onChange={(e) => updateLine(line.id, { qty: Math.max(1, parseInt(e.target.value || "1", 10)) })} />
+                            <input className="jc-qty-input no-spin" type="number" min="1" value={line.qty} onChange={(e) => updateLine(line.id, { qty: Math.max(1, parseInt(e.target.value || "1", 10)) })} onFocus={(e) => e.currentTarget.select()} />
                           </td>
                           <td style={{ paddingLeft: 12 }}>
                             <input className="jc-cell-input jc-sku-input" value={line.sku} onChange={(e) => updateLine(line.id, { sku: e.target.value })} />
@@ -1491,7 +1492,7 @@ const [savedSlug, setSavedSlug]           = useState("");
                                   type="number" step="0.01"
                                   placeholder="0"
                                   value={line.unitPrice === 0 ? "" : line.unitPrice}
-                                  onFocus={(e) => { if (line.unitPrice === 0) updateLine(line.id, { unitPrice: 0 }); }}
+                                  onFocus={(e) => { if (line.unitPrice === 0) updateLine(line.id, { unitPrice: 0 }); e.currentTarget.select(); }}
                                   onBlur={(e) => { if (e.target.value === "") updateLine(line.id, { unitPrice: 0 }); }}
                                   onChange={(e) => updateLine(line.id, { unitPrice: e.target.value === "" ? 0 : Number(e.target.value) })}
                                 />
@@ -1621,6 +1622,7 @@ const [savedSlug, setSavedSlug]           = useState("");
                       value={servicePrices[srv.code]}
                       disabled={!enabledServices[srv.code]}
                       onChange={(e) => setServicePrices((c) => ({ ...c, [srv.code]: e.target.value }))}
+                      onFocus={(e) => e.currentTarget.select()}
                     />
                   </div>
                 </div>
@@ -1649,6 +1651,7 @@ const [savedSlug, setSavedSlug]           = useState("");
                     value={servicePrices["custom"] || ""}
                     disabled={!enabledServices["custom"]}
                     onChange={(e) => setServicePrices((c) => ({ ...c, custom: e.target.value }))}
+                    onFocus={(e) => e.currentTarget.select()}
                   />
                 </div>
               </div>
