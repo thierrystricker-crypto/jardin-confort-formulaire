@@ -238,7 +238,7 @@ function CommandesShopifyBlock({ commandes }: { commandes: CommandeShopify[] }) 
                     const pdfs = getShopifyPdfUrls(cmd.shopify_order_legacy_id, cmd.shopify_order_name)
                     if (!pdfs.facture) return null
                     return (
-                      
+                      <a
                         href={pdfs.facture}
                         target="_blank"
                         rel="noopener noreferrer"
