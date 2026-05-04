@@ -85,10 +85,10 @@ type DraftSnapshot = {
 // ── Services selon le document Jardin-Confort ──
 const serviceOptions = [
   { code: "montage",       label: "Frais de montage",                                    defaultPrice: "" as unknown as number  },
-  { code: "poste",         label: "Livraison des colis par La Poste",                    defaultPrice: "" as unknown as number  },
-  { code: "trottoir",      label: "Livraison colis franco trottoir par transporteur",    defaultPrice: 60  },
-  { code: "etage",         label: "Livraison « à l'étage » et déballage des articles",  defaultPrice: 80  },
-  { code: "etage_montage", label: "Livraison « à l'étage », déballage et montage",      defaultPrice: 120 },
+  { code: "poste",         label: "Livraison des colis par La Poste",                    defaultPrice: 9  },
+  { code: "trottoir",      label: "Livraison colis franco trottoir par transporteur",    defaultPrice: 59  },
+  { code: "etage",         label: "Livraison « à l'étage » et déballage des articles",  defaultPrice: 79  },
+  { code: "etage_montage", label: "Livraison « à l'étage », déballage et montage",      defaultPrice: 119 },
   { code: "reprise",       label: "Reprise et recyclage des anciens meubles",            defaultPrice: 60  },
 ];
 
