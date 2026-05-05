@@ -181,6 +181,7 @@ export default function DashboardPage() {
   const [search,setSearch]=useState("")
   const [quickFilter,setQuickFilter]=useState<QuickFilter>("all")
   const [commercial,setCommercial]=useState("all")
+  const [hideAbandoned,setHideAbandoned]=useState(true)  // masqué par défaut
   const [sortKey,setSortKey]=useState<SortKey>("date")
   const [sortDir,setSortDir]=useState<SortDir>("desc")
 
@@ -192,6 +193,17 @@ export default function DashboardPage() {
   }
   useEffect(()=>{loadOffres()},[])
 
+  // Charger la préférence "masquer abandonnées" depuis localStorage
+  useEffect(()=>{
+    const saved = localStorage.getItem("dashboard-hide-abandoned")
+    if (saved !== null) setHideAbandoned(saved === "true")
+  },[])
+
+  // Sauvegarder la préférence à chaque changement
+  useEffect(()=>{
+    localStorage.setItem("dashboard-hide-abandoned", String(hideAbandoned))
+  },[hideAbandoned])
+
   function handleSort(k:SortKey) {
     if(k===sortKey){setSortDir(d=>d==="asc"?"desc":"asc");return}
     setSortKey(k);setSortDir("desc")
@@ -199,6 +211,10 @@ export default function DashboardPage() {
 
   const filtered=useMemo(()=>{
     let list=offres
+    // Masquer les abandonnées/refusées par défaut (sauf si on est explicitement sur le filtre "abandonnés")
+    if(hideAbandoned && quickFilter !== "abandonnes") {
+      list=list.filter(o=>!["Abandonnée","Refusée"].includes(o.statut))
+    }
     if(quickFilter==="offres") list=list.filter(o=>o.type_document==="Offre"&&!["Abandonnée","Convertie","Refusée"].includes(o.statut))
     else if(quickFilter==="commandes") list=list.filter(o=>o.type_document==="Commande"||o.statut==="Acceptée")
     else if(quickFilter==="abandonnes") list=list.filter(o=>["Abandonnée","Refusée"].includes(o.statut))
@@ -233,7 +249,7 @@ export default function DashboardPage() {
       if(av>bv) return sortDir==="asc"?1:-1
       return 0
     })
-  },[offres,quickFilter,commercial,search,sortKey,sortDir])
+  },[offres,quickFilter,commercial,search,sortKey,sortDir,hideAbandoned])
 
   const statsFiltered=useMemo(()=>computeStats(
     commercial==="all" ? offres : offres.filter(o=>o.commercial===commercial)
@@ -286,6 +302,24 @@ export default function DashboardPage() {
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Recherche : client, référence, email, ville…"
               className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"/>
             <button onClick={()=>{setSearch("");setQuickFilter("all");setCommercial("all")}} className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2.5 text-sm text-zinc-100 transition hover:bg-[#40454b]">Reset</button>
+          </div>
+
+          {/* Toggle masquer abandonnées */}
+          <div className="flex items-center gap-3">
+            <label className="inline-flex items-center gap-2 cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">
+              <input
+                type="checkbox"
+                checked={hideAbandoned}
+                onChange={e=>setHideAbandoned(e.target.checked)}
+                className="rounded border-white/20"
+              />
+              <span>Masquer les abandonnées et refusées</span>
+              {hideAbandoned && (
+                <span className="text-xs text-zinc-500">
+                  ({offres.filter(o=>["Abandonnée","Refusée"].includes(o.statut)).length} masquées)
+                </span>
+              )}
+            </label>
           </div>
 
          <div className="flex flex-wrap gap-2">
