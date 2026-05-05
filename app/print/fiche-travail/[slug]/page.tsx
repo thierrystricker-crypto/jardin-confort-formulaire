@@ -799,16 +799,36 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               <span className="doc-addr-window-title">📦 Adresse de livraison</span>
               <div className="doc-addr-ref">Réf : {numeroAffiche}</div>
 
-              {isPickup && (
-                <div className="doc-pickup-badge">⚠ À L'EMPORTER</div>
+              {isPickup ? (
+                <>
+                  <div className="doc-pickup-badge">⚠ À L'EMPORTER</div>
+                  <div style={{
+                    fontSize: 12,
+                    color: "#666",
+                    fontStyle: "italic",
+                    lineHeight: 1.5,
+                    marginTop: 4,
+                  }}>
+                    Le client viendra retirer la marchandise<br/>
+                    <strong style={{color:"#000", fontStyle:"normal"}}>Jardin-Confort SA</strong><br/>
+                    Route de Lavaux 425 · 1095 Lutry
+                  </div>
+                  <div className="doc-addr-name" style={{marginTop: 8, fontSize: 13}}>
+                    Client : {data.nom} {data.prenom}
+                  </div>
+                  {livrTelEffectif && <div className="doc-addr-tel">📞 {livrTelEffectif}</div>}
+                  {clientEmail && <div className="doc-addr-email">✉ {clientEmail}</div>}
+                </>
+              ) : (
+                <>
+                  {livrSociete && <div className="doc-addr-line">{livrSociete}</div>}
+                  <div className="doc-addr-name">{livrNom} {livrPrenom}</div>
+                  {livrRue && <div className="doc-addr-line">{livrRue} {livrNumero}</div>}
+                  {livrNpa && <div className="doc-addr-line">{livrNpa} {livrVille}</div>}
+                  {livrTelEffectif && <div className="doc-addr-tel">📞 {livrTelEffectif}</div>}
+                  {clientEmail && <div className="doc-addr-email">✉ {clientEmail}</div>}
+                </>
               )}
-
-              {livrSociete && <div className="doc-addr-line">{livrSociete}</div>}
-              <div className="doc-addr-name">{livrNom} {livrPrenom}</div>
-              {livrRue && <div className="doc-addr-line">{livrRue} {livrNumero}</div>}
-              {livrNpa && <div className="doc-addr-line">{livrNpa} {livrVille}</div>}
-              {livrTelEffectif && <div className="doc-addr-tel">📞 {livrTelEffectif}</div>}
-              {clientEmail && <div className="doc-addr-email">✉ {clientEmail}</div>}
             </div>
           </div>
         </div>

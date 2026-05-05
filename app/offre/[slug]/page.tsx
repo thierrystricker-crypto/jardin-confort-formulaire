@@ -820,7 +820,23 @@ useEffect(() => {
                 ))}
               </Card>
               <Card style={{ padding: "20px 24px" }}>
-                <SectionTitle>Adresse de livraison</SectionTitle>
+                <SectionTitle>{d.deliveryMode === "À l'emporter" ? "Retrait en magasin" : "Adresse de livraison"}</SectionTitle>
+                {d.deliveryMode === "À l'emporter" && (
+                  <div style={{
+                    display: "inline-block",
+                    background: "#FFF8E1",
+                    color: "#7B5E00",
+                    border: "1.5px solid #f59e0b",
+                    borderRadius: 6,
+                    padding: "4px 10px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    marginBottom: 10,
+                    letterSpacing: "0.05em",
+                  }}>
+                    📦 À L&apos;EMPORTER
+                  </div>
+                )}
                 {addrLivr.map((line, i) => (
                   <div key={i} style={{ fontSize: 15, fontWeight: i === 1 ? 600 : 400, color: i === 1 ? C.text : C.grey, lineHeight: 1.8 }}>{line}</div>
                 ))}

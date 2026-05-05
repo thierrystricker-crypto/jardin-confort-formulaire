@@ -182,7 +182,7 @@ export default function JardinConfortV7() {
   const [formType, setFormType]       = useState<FormType>("Offre");
   const [clientType, setClientType]   = useState<ClientType>("Privé (prix TTC)");
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("Paiement d'avance à la commande");
-  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("Livraison à domicile");
+ const [deliveryMode, setDeliveryMode] = useState<DeliveryMode | "">("");
   const [offerStatus, setOfferStatus] = useState<OfferStatus>("En cours");
   const [date, setDate]               = useState(todayForInput());
   const [commercial, setCommercial]   = useState("");
@@ -480,8 +480,8 @@ const [savedSlug, setSavedSlug]           = useState("");
     ? totalAfterRounding               // TTC déjà inclus
     : totalAfterRounding + tvaAmount;  // HT + TVA
 
-  const missingRequired = { nom: !nom.trim(), ville: !ville.trim(), email: !email.trim(), commercial: !commercial.trim() };
-  const isFormValid = !missingRequired.nom && !missingRequired.ville && !missingRequired.email && !missingRequired.commercial;
+  const missingRequired = { nom: !nom.trim(), ville: !ville.trim(), email: !email.trim(), commercial: !commercial.trim(), deliveryMode: !deliveryMode };
+  const isFormValid = !missingRequired.nom && !missingRequired.ville && !missingRequired.email && !missingRequired.commercial && !missingRequired.deliveryMode;
 
   // ── helpers ──
   function captureUndo() { setUndoSnapshot(cloneLines(lines)); }
@@ -916,8 +916,13 @@ const [savedSlug, setSavedSlug]           = useState("");
               </select>
             </div>
             <div className="jc-field">
-              <label>Mode de livraison</label>
-              <select value={deliveryMode} onChange={(e) => setDeliveryMode(e.target.value as DeliveryMode)}>
+              <label>Mode de livraison *</label>
+              <select 
+                className={missingRequired.deliveryMode ? "jc-error" : ""}
+                value={deliveryMode} 
+                onChange={(e) => setDeliveryMode(e.target.value as DeliveryMode | "")}
+              >
+                <option value="">— Choisir un mode de livraison —</option>
                 <option>Livraison à domicile</option>
                 <option>À l'emporter</option>
               </select>
@@ -1085,7 +1090,35 @@ const [savedSlug, setSavedSlug]           = useState("");
             </div>
           </div>
 
-          {/* Adresse de livraison */}
+
+{/* Bandeau À l'emporter */}
+          {deliveryMode === "À l'emporter" && (
+            <div style={{
+              marginTop: 20,
+              padding: "14px 18px",
+              borderRadius: 12,
+              background: "rgba(245, 158, 11, 0.1)",
+              border: "1.5px solid rgba(245, 158, 11, 0.4)",
+              color: "#f59e0b",
+              fontSize: 14,
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}>
+              <span style={{fontSize: 20}}>📦</span>
+              <div>
+                <div>Retrait en magasin — À l&apos;emporter</div>
+                <div style={{fontSize: 11, fontWeight: 400, opacity: 0.8, marginTop: 2}}>
+                  Le client viendra retirer la marchandise à Jardin-Confort SA · Route de Lavaux 425 · 1095 Lutry
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Adresse de livraison — visible UNIQUEMENT si livraison à domicile */}
+          {deliveryMode === "Livraison à domicile" && (
+          <>
           <div className="jc-section-title smallTop screenOnly" style={{marginTop:20}}>Adresse de livraison</div>
           <div className="jc-livr-toggle screenOnly">
             <label className="jc-check-label">
@@ -1168,10 +1201,12 @@ const [savedSlug, setSavedSlug]           = useState("");
               </div>
             </div>
           )}
+          </>
+          )}
 
           <div className="jc-validation-row">
             <span className={isFormValid ? "jc-ok" : "jc-warn"}>
-              {isFormValid ? "✓ Champs obligatoires remplis" : `⚠ Manquants : ${[missingRequired.commercial && "Commercial", missingRequired.nom && "Nom", missingRequired.ville && "Ville", missingRequired.email && "Email"].filter(Boolean).join(", ")}`}
+              {isFormValid ? "✓ Champs obligatoires remplis" : `⚠ Manquants : ${[missingRequired.commercial && "Commercial", missingRequired.nom && "Nom", missingRequired.ville && "Ville", missingRequired.email && "Email", missingRequired.deliveryMode && "Mode de livraison"].filter(Boolean).join(", ")}`}
             </span>
             {draftSavedAt && <span className="jc-muted-sm">💾 {draftSavedAt}</span>}
           </div>

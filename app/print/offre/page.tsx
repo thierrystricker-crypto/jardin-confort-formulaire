@@ -370,10 +370,19 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
                 <span className="doc-addr-title">Adresse de livraison</span>
                 <div className="doc-addr-content">
                   {(data as any).deliveryMode === "À l'emporter" ? (
-                    <div style={{fontStyle:"italic"}}>
-                      À l'emporter<br/>
-                      Jardin-Confort SA<br/>
-                      Route de Lavaux 425 · 1095 Lutry
+                    <div style={{
+                      background: "#FFF8E1",
+                      border: "1.5px solid #f59e0b",
+                      borderRadius: 6,
+                      padding: "8px 12px",
+                      fontWeight: 700,
+                      color: "#7B5E00",
+                    }}>
+                      📦 RETRAIT EN MAGASIN — À l&apos;emporter
+                      <div style={{fontWeight: 400, fontSize: 11, marginTop: 4, color: "#666"}}>
+                        Jardin-Confort SA<br/>
+                        Route de Lavaux 425 · 1095 Lutry
+                      </div>
                     </div>
                   ) : data.livrDiff ? (
                     <>
