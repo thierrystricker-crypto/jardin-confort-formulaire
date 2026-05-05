@@ -525,6 +525,63 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
           </div>
         </div>
 
+        {/* LIEN VALIDATION EN LIGNE — placeholder en mode preview, offres uniquement */}
+        {data.formType === "Offre" && (
+        <div style={{
+          margin: "0 0 6mm 0",
+          background: "linear-gradient(135deg, #f5f5f5 0%, #ececec 100%)",
+          border: "1.5px dashed #999",
+          borderRadius: 12,
+          padding: "14px 20px",
+          display: "flex",
+          alignItems: "center",
+          gap: 20,
+          opacity: 0.75,
+        }}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13, fontWeight:700, color:"#666", marginBottom:4}}>
+              ✍️ Signature électronique disponible <span style={{
+                fontSize: 10,
+                background: "#dc2626",
+                color: "white",
+                padding: "2px 8px",
+                borderRadius: 4,
+                marginLeft: 6,
+                fontWeight: 700,
+                letterSpacing: "0.05em",
+              }}>APERÇU</span>
+            </div>
+            <div style={{fontSize:11, color:"#888", lineHeight:1.6, marginBottom:10}}>
+              Vous pouvez valider et signer cette offre directement en ligne depuis votre smartphone ou ordinateur, sans impression nécessaire.
+            </div>
+            <div style={{
+              display: "inline-block",
+              background: "#bbb",
+              color: "white",
+              borderRadius: 20,
+              padding: "8px 18px",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: "0.02em",
+              cursor: "not-allowed",
+            }}>
+              ✅ Valider mon offre en ligne →
+            </div>
+            <div style={{marginTop:6, fontSize:10, color:"#999", fontStyle:"italic"}}>
+              ⚠ Le lien sera généré après l&apos;enregistrement (bouton « ☁ Enregistrer & URL »)
+            </div>
+          </div>
+          <div style={{flexShrink:0, textAlign:"center"}}>
+            <div style={{
+              width:110, height:110, borderRadius:8, border:"1px dashed #999",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              background:"#fafafa", color:"#999", fontSize:32,
+            }}>📱</div>
+            <div style={{fontSize:9, color:"#999", marginTop:4, fontStyle:"italic"}}>QR Code à venir</div>
+          </div>
+        </div>
+        )}
+
         {/* REMERCIEMENTS */}
         <p className="doc-thanks">
           Nous nous réjouissons de pouvoir traiter votre commande. Merci d'avance pour votre confiance !
