@@ -951,7 +951,7 @@ useEffect(() => {
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 24px", fontSize: 13, color: C.grey, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
                     <span>TVA 8.1% {isPrivateTTC ? "(incluse)" : ""}</span><span>{fmt(tvaAmount)}</span>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", background: C.blueBtn, borderRadius: "0 0 25px 25px", marginTop: 4 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", background: C.blueBtn, borderRadius: "0 0 26px 26px" }}>
                     <span style={{ fontWeight: 700, fontSize: 15, color: "white" }}>TOTAL {isPrivateTTC ? "TTC" : "HT+TVA"}</span>
                     <span style={{ fontWeight: 700, fontSize: 20, color: "white", whiteSpace: "nowrap" }}>{fmt(finalTotal)}</span>
                   </div>
