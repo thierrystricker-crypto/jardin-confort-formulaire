@@ -472,6 +472,7 @@ useEffect(() => {
   const payMode = d.paymentMode || offre.payment_mode || "Paiement d'avance à la commande";
   const isEnCours = ["En cours", "Envoyée"].includes(offre.statut);
   const isAcceptee = offre.statut === "Acceptée";
+  const isCommande = offre.type_document === "Commande";
 
   // Calcul expiration
   const validiteDuree = offre.validite_duree || d.validiteDuree || "30 jours"
@@ -622,8 +623,12 @@ useEffect(() => {
 
         {/* Titre */}
         <h1 style={{ fontSize: 36, fontWeight: 500, color: C.text, letterSpacing: "-0.02em", marginBottom: 28 }}>
-          Confirmez ici votre offre en 1 clic !
-        </h1>
+            {isCommande
+              ? `Votre commande ${offre.numero_affiche}`
+              : isAcceptee
+                ? "Votre offre validée"
+                : "Confirmez ici votre offre en 1 clic !"}
+          </h1>
 
         {/* ── LAYOUT 2 COLONNES ── */}
         <div className="two-col" style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 24, alignItems: "start" }}>
@@ -749,12 +754,23 @@ useEffect(() => {
                 <span style={{ fontSize: 28, flexShrink: 0 }}>🌿</span>
                 <div>
                   <div style={{ fontWeight: 700, color: C.blue, fontSize: 16, marginBottom: 6 }}>
-                    Offre personnalisée en attente de votre validation
-                  </div>
-                  <div style={{ fontSize: 15, color: C.text, lineHeight: 1.8 }}>
-                    Bonjour <strong>{nomClient}</strong>, veuillez trouver votre offre selon notre aimable entretien.
-                    Si tout est en ordre, vous pouvez volontiers valider celle-ci en signant ci-dessous.
-                    Vous recevrez ensuite une confirmation de commande avec les modalités de paiement convenues.
+                      {isCommande
+                        ? "Confirmation de votre commande"
+                        : "Offre personnalisée en attente de votre validation"}
+                    </div>
+                    <div style={{ fontSize: 15, color: C.text, lineHeight: 1.8 }}>
+                      {isCommande ? (
+                        <>
+                          Bonjour <strong>{nomClient}</strong>, veuillez trouver les détails de votre commande
+                          créée par notre équipe. Pour toute question, contactez-nous au +41 21 791 36 71.
+                        </>
+                      ) : (
+                        <>
+                          Bonjour <strong>{nomClient}</strong>, veuillez trouver votre offre selon notre aimable entretien.
+                          Si tout est en ordre, vous pouvez volontiers valider celle-ci en signant ci-dessous.
+                          Vous recevrez ensuite une confirmation de commande avec les modalités de paiement convenues.
+                        </>
+                      )}
                   </div>
                   <div style={{ fontSize: 13, color: C.grey, marginTop: 8 }}>
                     Je reste à votre disposition pour toute information supplémentaire.{" "}
@@ -1004,7 +1020,33 @@ useEffect(() => {
                 </div>
               </Card>
             )}
-            {isEnCours && !isExpire && !isAcceptee && (
+            {/* Bloc Commande directe — pas de validation à faire */}
+            {isCommande && (
+              <Card style={{ padding: 28, background: "#E8F5E9", border: `1px solid ${C.green}` }}>
+                <div style={{ fontWeight: 700, color: C.green, fontSize: 20, marginBottom: 12 }}>
+                  ✅ Cette commande est confirmée
+                </div>
+                <div style={{ fontSize: 15, color: "#2e7d32", lineHeight: 1.7, marginBottom: 16 }}>
+                  Cette commande a été créée par notre équipe et n&apos;a pas besoin de signature de votre part.
+                  <br/>Le numéro de commande est <strong>{offre.numero_affiche}</strong>.
+                </div>
+                <div style={{ background: "white", border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 20px", fontSize: 14, color: C.text, lineHeight: 1.8 }}>
+                  Pour toute question, contactez Jardin-Confort :
+                  <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 12 }}>
+                    <a href="tel:+41217913671"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 8, background: C.blueBtn, color: "white", padding: "10px 20px", borderRadius: 20, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+                      📞 +41 21 791 36 71
+                    </a>
+                    <a href={`mailto:info@jardin-confort.ch?subject=Commande ${offre.numero_affiche}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "white", color: C.blueBtn, border: `1px solid ${C.blueBtn}`, padding: "10px 20px", borderRadius: 20, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+                      ✉️ Envoyer un email
+                    </a>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {isEnCours && !isExpire && !isAcceptee && !isCommande && (
               <Card id="bloc-signature" style={{ padding: 28 }}>
                 <div style={{ fontSize: 20, fontWeight: 600, color: C.blue, marginBottom: 20 }}>
                   Valider et signer votre offre
