@@ -57,6 +57,7 @@ type PrintData = {
   lines: QuoteLine[];
   remarks: string;
   leadTime: string;
+  accesLivraison?: string;
   deliveryMode?: string;
   discount?: string;
   discountPercent?: string;
@@ -453,6 +454,35 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           font-weight: 500;
         }
 
+        /* ══ ACCÈS LIVRAISON (violet, pour distinguer des remarques générales) ══ */
+        .doc-acces-livraison {
+          margin-bottom: 4mm;
+          background: linear-gradient(90deg, #f3e8ff 0%, #ede9fe 100%);
+          border: 2px solid #8b5cf6;
+          border-radius: 6px;
+          padding: 10px 14px;
+          page-break-inside: avoid;
+        }
+        .doc-acces-livraison-title {
+          display: inline-block;
+          background: #8b5cf6;
+          color: white;
+          padding: 3px 10px;
+          border-radius: 3px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          margin-bottom: 6px;
+        }
+        .doc-acces-livraison-text {
+          font-size: 12px;
+          color: #1f2937;
+          line-height: 1.55;
+          white-space: pre-wrap;
+          font-weight: 500;
+        }
+
         /* ══ TABLEAU ══ */
         .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 3mm; }
         .doc-table thead th {
@@ -840,6 +870,14 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           <div className="doc-remarks-top">
             <div className="doc-remarks-top-title">⚠ Notes / Instructions importantes</div>
             <div className="doc-remarks-top-text">{data.remarks}</div>
+          </div>
+        )}
+
+        {/* ══ ACCÈS LIVRAISON — caché si "À l'emporter" ══ */}
+        {data.accesLivraison && data.accesLivraison.trim() && !isPickup && (
+          <div className="doc-acces-livraison">
+            <div className="doc-acces-livraison-title">🏢 Accès livraison / étage</div>
+            <div className="doc-acces-livraison-text">{data.accesLivraison}</div>
           </div>
         )}
 

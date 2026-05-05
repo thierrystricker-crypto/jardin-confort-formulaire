@@ -77,6 +77,7 @@ type DraftSnapshot = {
   notesInternes: string;
   leadTime: string;
   validiteDuree: string;
+  accesLivraison: string;
   manualRounding: string; // stocké pour compatibilité
   enabledServices: Record<string, boolean>;
   servicePrices: Record<string, string>;
@@ -236,6 +237,7 @@ export default function JardinConfortV7() {
   const [ambianceImages, setAmbianceImages] = useState<{id: string; dataUrl: string; legende: string}[]>([]);
   const [leadTime, setLeadTime]         = useState("25-30 jours");
   const [validiteDuree, setValiditeDuree] = useState("30 jours");
+  const [accesLivraison, setAccesLivraison] = useState("");
   // arrondi : toujours stocké comme string, toujours <= 0
   const [roundingStr, setRoundingStr]   = useState("");
   // Autocomplétion adresse — Google Places
@@ -545,7 +547,7 @@ const [savedSlug, setSavedSlug]           = useState("");
   }
 
   function makeSnapshot(): DraftSnapshot {
-    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, validiteDuree, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
+    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, validiteDuree, accesLivraison, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
   // ── Sauvegarder dans Supabase + générer numéro + URL publique ──
@@ -656,7 +658,7 @@ const [savedSlug, setSavedSlug]           = useState("");
     setLivrNumero(s.livrNumero || ""); setLivrNpa(s.livrNpa || ""); setLivrVille(s.livrVille || "");
     setLines(cloneLines(s.lines)); setDiscount(s.discount); setDiscountPercent(s.discountPercent || "0");
     setRemarks(s.remarks); setNotesInternes(s.notesInternes || "");
-    setLeadTime(s.leadTime); setValiditeDuree((s as any).validiteDuree || "30 jours"); setRoundingStr(s.manualRounding || "");
+    setLeadTime(s.leadTime); setValiditeDuree((s as any).validiteDuree || "30 jours"); setAccesLivraison((s as any).accesLivraison || ""); setRoundingStr(s.manualRounding || "");
     setEnabledServices({ ...initialEnabledServices, ...s.enabledServices });
     setServicePrices({ ...initialServicePrices, ...s.servicePrices });
     setDraftSavedAt(new Date().toLocaleString("fr-CH"));
@@ -671,7 +673,7 @@ const [savedSlug, setSavedSlug]           = useState("");
     setLivrTel(""); setLivrRue(""); setLivrRue2(""); setLivrNumero(""); setLivrNpa(""); setLivrVille("");
     setLines([]); setDiscount("0");
     setDiscountPercent("0"); setRemarks(""); setNotesInternes(""); setAmbianceImages([]);
-    setLeadTime("25-30 jours"); setValiditeDuree("30 jours"); setRoundingStr("");
+    setLeadTime("25-30 jours"); setValiditeDuree("30 jours"); setAccesLivraison(""); setRoundingStr("");
     setEnabledServices({ ...initialEnabledServices }); setServicePrices({ ...initialServicePrices });
     setUndoSnapshot(null); setShowResetConfirm(false);
   }
@@ -716,6 +718,7 @@ const [savedSlug, setSavedSlug]           = useState("");
           if (p.paymentMode) setPaymentMode(p.paymentMode)
           if (p.deliveryMode) setDeliveryMode(p.deliveryMode as DeliveryMode)
           if (p.remarks) setRemarks(p.remarks)
+          if (p.accesLivraison) setAccesLivraison(p.accesLivraison)
         } catch { /* ignore */ }
       }
       return
@@ -1201,6 +1204,22 @@ const [savedSlug, setSavedSlug]           = useState("");
               </div>
             </div>
           )}
+
+          {/* Champ Accès livraison — uniquement si livraison à domicile */}
+          <div className="jc-grid jc-g1 mt12">
+            <div className="jc-field">
+              <label>
+                🏢 Accès livraison / étage
+                <span className="jc-label-hint">(visible sur la fiche de travail)</span>
+              </label>
+              <textarea
+                rows={2}
+                value={accesLivraison}
+                onChange={(e) => setAccesLivraison(e.target.value)}
+                placeholder="Ex: 3ème étage avec ascenseur · Code immeuble 1234 · Sonner Famille Dupont · Téléphoner avant livraison · Pas de parking, prévoir diable…"
+              />
+            </div>
+          </div>
           </>
           )}
 

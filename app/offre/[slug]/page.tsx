@@ -78,6 +78,7 @@ type OffreRow = {
     deliveryMode?: string;
     leadTime?: string;
     remarks?: string;
+    accesLivraison?: string;
     reference?: string;
     societe?: string; nom?: string; prenom?: string;
     rue?: string; numero?: string; npa?: string; ville?: string;
@@ -918,6 +919,7 @@ useEffect(() => {
                   ["Paiement", payMode],
                   ["Livraison", d.deliveryMode || "Livraison à domicile"],
                   d.leadTime ? ["Délai estimé", d.leadTime] : null,
+                  (d.accesLivraison && d.deliveryMode !== "À l'emporter") ? ["Accès livraison", d.accesLivraison] : null,
                 ].filter((x): x is string[] => x !== null).map(([k, v], i) => (
                   <div key={i} style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 15 }}>
                     <span style={{ color: C.grey, minWidth: 110 }}>{k}</span>

@@ -78,6 +78,8 @@ export type PrintData = {
   remarks: string;
   leadTime: string;
 
+  // Accès livraison / étage (notes pour l'équipe livraison)
+  accesLivraison?: string;
   // Images d'ambiance (page 2)
   ambianceImages: AmbianceImage[];
 };
@@ -85,10 +87,10 @@ export type PrintData = {
 // ── Services fixes ──
 export const serviceOptions = [
   { code: "montage",       label: "Frais de montage",                                    defaultPrice: 0   },
-  { code: "poste",         label: "Livraison des colis par La Poste",                    defaultPrice: 0   },
-  { code: "trottoir",      label: "Livraison colis franco trottoir par transporteur",    defaultPrice: 60  },
-  { code: "etage",         label: "Livraison « à l'étage » et déballage des articles",  defaultPrice: 80  },
-  { code: "etage_montage", label: "Livraison « à l'étage », déballage et montage",      defaultPrice: 120 },
+  { code: "poste",         label: "Livraison des colis par La Poste",                    defaultPrice: 9   },
+  { code: "trottoir",      label: "Livraison colis franco trottoir par transporteur",    defaultPrice: 59  },
+  { code: "etage",         label: "Livraison « à l'étage » et déballage des articles",  defaultPrice: 79  },
+  { code: "etage_montage", label: "Livraison « à l'étage », déballage et montage",      defaultPrice: 119 },
   { code: "reprise",       label: "Reprise et recyclage des anciens meubles",            defaultPrice: 60  },
 ];
 

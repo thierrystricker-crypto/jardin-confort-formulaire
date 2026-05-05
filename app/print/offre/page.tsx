@@ -326,6 +326,9 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
                 {data.customerNumber && (
                   <tr><td className="doc-meta-label">N° client</td><td>{data.customerNumber}</td></tr>
                 )}
+                {(data as any).accesLivraison && (data as any).deliveryMode !== "À l'emporter" && (
+                  <tr><td className="doc-meta-label">Accès livraison</td><td style={{fontStyle:"italic"}}>{(data as any).accesLivraison}</td></tr>
+                )}
               </tbody>
             </table>
           </div>
