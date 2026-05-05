@@ -831,7 +831,7 @@ useEffect(() => {
             {offre.stockRefreshedAt && (
               <div style={{ background: "#FFF8E1", border: "1px solid #FFE082", borderRadius: 16, padding: "10px 16px", fontSize: 13, color: "#7B5E00", lineHeight: 1.6 }}>
                 ℹ️ <strong>Info stock non contractuelle.</strong>{" "}
-                Disponibilités vérifiées le {new Date(offre.stockRefreshedAt).toLocaleString("fr-CH")} sous toutes réserves d&apos;erreurs et de disponibilité.
+                Disponibilités vérifiées le {new Date(offre.stockRefreshedAt).toLocaleString("fr-CH")}. Sous toutes réserves d&apos;erreurs et de disponibilité.
               </div>
             )}
 
@@ -936,9 +936,9 @@ useEffect(() => {
                     <>
                       <div style={{ padding: "8px 24px 2px", fontSize: 12, fontWeight: 700, color: C.grey, textTransform: "uppercase", letterSpacing: "0.05em" }}>Services inclus</div>
                       {activeServices.map(srv => (
-                        <div key={srv.code} style={{ display: "flex", justifyContent: "space-between", padding: "5px 24px 5px 36px", fontSize: 14 }}>
-                          <span style={{ color: C.grey }}>↳ {srv.label}</span>
-                          <span>{srv.amount === 0 ? "Offert" : fmt(srv.amount)}</span>
+                        <div key={srv.code} style={{ display: "flex", justifyContent: "space-between", padding: "5px 24px 5px 36px", fontSize: 14, gap: 16, alignItems: "flex-start" }}>
+                          <span style={{ color: C.grey, flex: 1, minWidth: 0 }}>↳ {srv.label}</span>
+                          <span style={{ flexShrink: 0, whiteSpace: "nowrap" }}>{srv.amount === 0 ? "Offert" : fmt(srv.amount)}</span>
                         </div>
                       ))}
                     </>
@@ -951,7 +951,7 @@ useEffect(() => {
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 24px", fontSize: 13, color: C.grey, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
                     <span>TVA 8.1% {isPrivateTTC ? "(incluse)" : ""}</span><span>{fmt(tvaAmount)}</span>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", background: C.blueBtn, borderRadius: "0 0 24px 24px", marginTop: 4 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", background: C.blueBtn, borderRadius: "0 0 25px 25px", marginTop: 4 }}>
                     <span style={{ fontWeight: 700, fontSize: 15, color: "white" }}>TOTAL {isPrivateTTC ? "TTC" : "HT+TVA"}</span>
                     <span style={{ fontWeight: 700, fontSize: 20, color: "white", whiteSpace: "nowrap" }}>{fmt(finalTotal)}</span>
                   </div>
