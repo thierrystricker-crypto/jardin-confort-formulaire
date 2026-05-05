@@ -43,7 +43,7 @@ type DraftSnapshot = {
   formType: FormType;
   clientType: ClientType;
   paymentMode: PaymentMode;
-  deliveryMode: DeliveryMode;
+  deliveryMode: DeliveryMode | "";
   offerStatus: OfferStatus;
   date: string;
   commercial: string;
