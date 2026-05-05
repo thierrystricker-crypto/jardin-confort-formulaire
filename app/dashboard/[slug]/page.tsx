@@ -520,10 +520,11 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const days=getDaysOpen(offre)
   const d=offre.data as Record<string,unknown>
   const urlPublique=`${APP_URL}/offre/${offre.slug}`
-  const urlPrint=`${APP_URL}/print/offre/${offre.slug}`
-  const isAbandonne=offre.statut==="Abandonnée"
-  const isOffre=offre.type_document==="Offre"&&!["Convertie","Acceptée"].includes(offre.statut)
-  const isCommande = offre.type_document === "Commande" || ["Acceptée", "Convertie"].includes(offre.statut)
+    const urlPrint=`${APP_URL}/print/offre/${offre.slug}`
+    const isAbandonne=offre.statut==="Abandonnée"
+    const isOffre=offre.type_document==="Offre"&&!["Convertie","Acceptée"].includes(offre.statut)
+    const isCommande = offre.type_document === "Commande" || ["Acceptée", "Convertie"].includes(offre.statut)
+    const isCommandeDirecte = offre.type_document === "Commande" && !offre.offre_origine
 
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
@@ -543,8 +544,10 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                 ✉ Email relance
               </button>
             )}
-            <a href={urlPublique} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">👁 Page client</a>
+            {!isCommandeDirecte && (
+              <a href={urlPublique} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">👁 Page client</a>
+            )}
             <a href={urlPrint} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">🖨 Imprimer</a>
             {pdfUrl ? (
@@ -912,16 +915,18 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               />
             )}
 
-            <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold">Aperçu page client</h2>
-                <a href={urlPublique} target="_blank" rel="noopener noreferrer"
-                  className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">Ouvrir ↗</a>
-              </div>
-              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                <iframe src={urlPublique} title="Aperçu" className="h-[900px] w-full border-0"/>
-              </div>
-            </section>
+            {!isCommandeDirecte && (
+              <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Aperçu page client</h2>
+                  <a href={urlPublique} target="_blank" rel="noopener noreferrer"
+                    className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">Ouvrir ↗</a>
+                </div>
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                  <iframe src={urlPublique} title="Aperçu" className="h-[900px] w-full border-0"/>
+                </div>
+              </section>
+            )}
           </div>
         </div>
 
