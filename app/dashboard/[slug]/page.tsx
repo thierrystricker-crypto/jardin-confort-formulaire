@@ -530,6 +530,9 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       <div className="mx-auto max-w-[1800px] space-y-6">
 
+        
+        {/* TOP */}
+        <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
         {/* ─── BARRE DE BOUTONS RÉORGANISÉE EN 4 GROUPES ─── */}
           <div className="mb-5 space-y-3">
 
