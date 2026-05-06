@@ -720,6 +720,27 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                         title="Génère une nouvelle fiche avec le stock actuel — pour la préparation/livraison">
                         {ficheTravailGenerating && (
                           <span className="absolute inset-0 overflow-hidden rounded-xl">
+                            <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
+                          </span>
+                        )}
+                        <span className="relative">
+                          {ficheTravailGenerating
+                            ? "🔄 Génération…"
+                            : ficheTravailUrl
+                              ? "🔄 Fiche stock actuel"
+                              : "🔄 Générer fiche stock actuel"}
+                        </span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+            </div>
+            {/* ═══ FIN COLONNE DROITE ═══ */}
+
+          </div>
+        </div>
 
         {/* GRILLE */}
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_660px]">
