@@ -3,11 +3,17 @@
 // POST — créer un nouveau client
 //
 // Recherche étendue :
-//   - DEV-XXXXX / DEVXXXXX  → cherche dans offres.numero_offre
-//   - CMD-XXXXX / CMDXXXXX  → cherche dans offres.numero_commande / numero_affiche
-//   - n° de facture WinBiz  → cherche dans factures_winbiz.numero_facture
-//   - n° de commande Shopify (#65351, JAR12345, 152034, etc.) → cherche dans commandes_shopify.shopify_order_name
+//   - DEV-XXXXX  → cherche dans offres.numero_offre
+//   - CMD-XXXXX  → cherche dans offres.numero_commande / numero_affiche
+//   - n° facture WinBiz  → cherche dans factures_winbiz.numero_facture
+//   - n° commande Shopify (#65351, JAR12345, 152034) → commandes_shopify.shopify_order_name
 //   - sinon → recherche classique nom/email/tel/société/etc.
+//
+// Compteurs documents :
+//   - Logique alignée sur /api/clients/[id] (la fiche) pour cohérence visuelle
+//   - Match offres : par email (ilike, case-insensitive) OU numero_client OU nom+npa fallback
+//   - Match factures/shopify : par client_id direct (figé à l'import/sync)
+//   - Toutes les offres comptent (peu importe le statut) — si la fiche l'affiche, la liste le compte
 
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
@@ -16,6 +22,8 @@ type Client = {
   id: number
   numero_client: string | null
   email: string | null
+  nom?: string | null
+  npa?: string | null
   [key: string]: unknown
 }
 
@@ -27,94 +35,194 @@ type ClientWithCounts = Client & {
 }
 
 /**
+ * Découpe un tableau en chunks de taille `size` pour éviter les limites
+ * silencieuses de Supabase/PostgREST sur les `.in(...)` à gros volume.
+ */
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+type OffreRow = {
+  client_numero_client: string | null
+  client_email: string | null
+  client_nom?: string | null
+  client_npa?: string | null
+  type_document: string | null
+  statut: string | null
+}
+
+/**
+ * Incrémente les compteurs offres/commandes pour un client donné.
+ * Une offre = type_document="Offre" (toutes statuts confondus, pour cohérence avec la fiche).
+ * Une commande interne = type_document="Commande" OU statut "Acceptée"/"Convertie".
+ */
+function tallyOffre(map: Map<number, { offres: number; commandes: number }>, clientId: number, o: OffreRow) {
+  const counts = map.get(clientId) || { offres: 0, commandes: 0 }
+  if (o.type_document === "Commande" || o.statut === "Acceptée" || o.statut === "Convertie") {
+    counts.commandes++
+  } else {
+    counts.offres++
+  }
+  map.set(clientId, counts)
+}
+
+/**
  * Enrichit une liste de clients avec les compteurs de documents liés.
+ *
+ * Stratégie offres : on récupère TOUTES les offres potentiellement liées
+ * via 3 voies (numero_client, email ilike, nom+npa fallback) en évitant
+ * les doublons grâce à un Set de clés synthétiques.
  */
 async function enrichWithCounts(clients: Client[]): Promise<ClientWithCounts[]> {
   if (clients.length === 0) return []
 
   const clientIds = clients.map(c => c.id)
 
-  const numerosClient = Array.from(new Set(
-    clients
-      .map(c => (c.numero_client || "").trim())
-      .filter(n => n.length > 0)
-  ))
-  const emails = Array.from(new Set(
-    clients
-      .map(c => (c.email || "").toLowerCase().trim())
-      .filter(e => e.length > 0)
-  ))
+  // Index pour reverse-lookup
+  const emailToIds = new Map<string, number[]>()
+  const numClientToIds = new Map<string, number[]>()
+  const nomNpaToIds = new Map<string, number[]>()
 
+  for (const c of clients) {
+    const em = (c.email || "").toLowerCase().trim()
+    const num = (c.numero_client || "").trim()
+    const nom = (c.nom || "").toLowerCase().trim()
+    const npa = (c.npa || "").trim()
+
+    if (em) {
+      const arr = emailToIds.get(em) || []
+      arr.push(c.id); emailToIds.set(em, arr)
+    }
+    if (num) {
+      const arr = numClientToIds.get(num) || []
+      arr.push(c.id); numClientToIds.set(num, arr)
+    }
+    if (nom && npa) {
+      const arr = nomNpaToIds.get(`${nom}||${npa}`) || []
+      arr.push(c.id); nomNpaToIds.set(`${nom}||${npa}`, arr)
+    }
+  }
+
+  // ─── 1) Offres ─────────────────────────────────────────────────
   const offresMap = new Map<number, { offres: number; commandes: number }>()
+  // Set de dédup : empêche de compter 2× la même offre quand elle matche par 2 voies
+  const seenOffreKeys = new Set<string>()
 
-  if (numerosClient.length > 0 || emails.length > 0) {
-    const filters: string[] = []
-    if (numerosClient.length > 0) {
-      filters.push(`client_numero_client.in.(${numerosClient.map(n => `"${n}"`).join(",")})`)
-    }
-    if (emails.length > 0) {
-      filters.push(`client_email.in.(${emails.map(e => `"${e}"`).join(",")})`)
-    }
+  function offreKey(o: OffreRow, clientId: number): string {
+    return `${clientId}::${o.client_numero_client || ""}::${(o.client_email || "").toLowerCase()}::${o.type_document}::${o.statut}`
+  }
 
-    const { data: offresData } = await supabaseAdmin
+  // 1a — Match par numero_client (exact, fast path le plus fiable)
+  const numerosClient = Array.from(numClientToIds.keys())
+  for (const batch of chunk(numerosClient, 500)) {
+    if (batch.length === 0) continue
+    const { data } = await supabaseAdmin
       .from("offres")
-      .select("client_numero_client, client_email, type_document, statut")
-      .or(filters.join(","))
+      .select("client_numero_client, client_email, client_nom, client_npa, type_document, statut")
+      .in("client_numero_client", batch)
 
-    const numClientToId = new Map<string, number>()
-    const emailToId = new Map<string, number>()
-    for (const c of clients) {
-      const num = (c.numero_client || "").trim()
-      const em = (c.email || "").toLowerCase().trim()
-      if (num) numClientToId.set(num, c.id)
-      if (em) emailToId.set(em, c.id)
-    }
-
-    for (const o of offresData || []) {
-      let clientId: number | undefined
+    for (const o of data || []) {
       const num = (o.client_numero_client || "").trim()
-      if (num) clientId = numClientToId.get(num)
-      if (!clientId) {
-        const em = (o.client_email || "").toLowerCase().trim()
-        if (em) clientId = emailToId.get(em)
+      const ids = numClientToIds.get(num)
+      if (!ids) continue
+      for (const cid of ids) {
+        const key = offreKey(o, cid)
+        if (seenOffreKeys.has(key)) continue
+        seenOffreKeys.add(key)
+        tallyOffre(offresMap, cid, o)
       }
-      if (!clientId) continue
-
-      const counts = offresMap.get(clientId) || { offres: 0, commandes: 0 }
-      if (o.type_document === "Commande" || o.statut === "Acceptée" || o.statut === "Convertie") {
-        counts.commandes++
-      } else if (
-        o.type_document === "Offre" &&
-        !["Abandonnée", "Refusée"].includes(o.statut || "")
-      ) {
-        counts.offres++
-      }
-      offresMap.set(clientId, counts)
     }
   }
 
+  // 1b — Match par email (ilike → case-insensitive)
+  // On batche les emails par paquets de 50 dans un OR de ilike
+  const emails = Array.from(emailToIds.keys())
+  for (const batch of chunk(emails, 50)) {
+    if (batch.length === 0) continue
+    const orFilters = batch
+      .map(e => `client_email.ilike.${escapeOrValue(e)}`)
+      .join(",")
+
+    const { data } = await supabaseAdmin
+      .from("offres")
+      .select("client_numero_client, client_email, client_nom, client_npa, type_document, statut")
+      .or(orFilters)
+
+    for (const o of data || []) {
+      const em = (o.client_email || "").toLowerCase().trim()
+      const ids = emailToIds.get(em)
+      if (!ids) continue
+      for (const cid of ids) {
+        const key = offreKey(o, cid)
+        if (seenOffreKeys.has(key)) continue
+        seenOffreKeys.add(key)
+        tallyOffre(offresMap, cid, o)
+      }
+    }
+  }
+
+  // 1c — Fallback nom+npa pour clients sans email ni numero_client
+  // (ou qui n'ont matché aucune offre par les 2 voies précédentes)
+  const clientsSansMatch = clients.filter(c =>
+    !offresMap.has(c.id) && (c.nom || "").trim() && (c.npa || "").trim()
+  )
+  if (clientsSansMatch.length > 0) {
+    for (const batch of chunk(clientsSansMatch, 30)) {
+      const orFilters = batch.map(c => {
+        const nom = (c.nom as string).replace(/[(),"']/g, " ").trim()
+        const npa = (c.npa as string).replace(/[(),"']/g, "").trim()
+        return `and(client_nom.ilike.*${nom}*,client_npa.eq.${npa})`
+      }).join(",")
+
+      const { data } = await supabaseAdmin
+        .from("offres")
+        .select("client_numero_client, client_email, client_nom, client_npa, type_document, statut")
+        .or(orFilters)
+
+      for (const o of data || []) {
+        const nom = (o.client_nom || "").toLowerCase().trim()
+        const npa = (o.client_npa || "").trim()
+        const ids = nomNpaToIds.get(`${nom}||${npa}`)
+        if (!ids) continue
+        for (const cid of ids) {
+          const key = offreKey(o, cid)
+          if (seenOffreKeys.has(key)) continue
+          seenOffreKeys.add(key)
+          tallyOffre(offresMap, cid, o)
+        }
+      }
+    }
+  }
+
+  // ─── 2) Factures WinBiz : par client_id direct ─────────────────
   const facturesMap = new Map<number, number>()
-  const { data: facturesData } = await supabaseAdmin
-    .from("factures_winbiz")
-    .select("client_id")
-    .in("client_id", clientIds)
-
-  for (const f of facturesData || []) {
-    if (f.client_id == null) continue
-    facturesMap.set(f.client_id, (facturesMap.get(f.client_id) || 0) + 1)
+  for (const batch of chunk(clientIds, 500)) {
+    const { data } = await supabaseAdmin
+      .from("factures_winbiz")
+      .select("client_id")
+      .in("client_id", batch)
+    for (const f of data || []) {
+      if (f.client_id == null) continue
+      facturesMap.set(f.client_id, (facturesMap.get(f.client_id) || 0) + 1)
+    }
   }
 
+  // ─── 3) Commandes Shopify : par client_id direct ───────────────
   const shopifyMap = new Map<number, number>()
-  const { data: shopifyData } = await supabaseAdmin
-    .from("commandes_shopify")
-    .select("client_id")
-    .in("client_id", clientIds)
-
-  for (const s of shopifyData || []) {
-    if (s.client_id == null) continue
-    shopifyMap.set(s.client_id, (shopifyMap.get(s.client_id) || 0) + 1)
+  for (const batch of chunk(clientIds, 500)) {
+    const { data } = await supabaseAdmin
+      .from("commandes_shopify")
+      .select("client_id")
+      .in("client_id", batch)
+    for (const s of data || []) {
+      if (s.client_id == null) continue
+      shopifyMap.set(s.client_id, (shopifyMap.get(s.client_id) || 0) + 1)
+    }
   }
 
+  // ─── 4) Assemblage final ───────────────────────────────────────
   return clients.map(c => {
     const offresCounts = offresMap.get(c.id) || { offres: 0, commandes: 0 }
     return {
@@ -128,7 +236,16 @@ async function enrichWithCounts(clients: Client[]): Promise<ClientWithCounts[]> 
 }
 
 /**
- * Charge des clients par leurs IDs (sans dépendre de l'ordre).
+ * Échappe une valeur pour l'utiliser dans un filtre `.or()` PostgREST.
+ * Les caractères , ( ) " ' cassent les expressions OR — on les remplace par espace.
+ */
+function escapeOrValue(v: string): string {
+  const safe = v.replace(/[(),"']/g, " ").trim()
+  return `*${safe}*`
+}
+
+/**
+ * Charge des clients par leurs IDs.
  */
 async function loadClientsByIds(ids: number[], limit: number): Promise<Client[]> {
   if (ids.length === 0) return []
@@ -143,82 +260,64 @@ async function loadClientsByIds(ids: number[], limit: number): Promise<Client[]>
 }
 
 /**
- * Recherche un client à partir d'un numéro de document (offre, commande,
- * facture WinBiz, ou commande Shopify). Retourne la liste des clients matchés.
- *
- * Détection :
- *   - DEV-?\d+        → offres.numero_offre
- *   - CMD-?\d+        → offres.numero_commande OR offres.numero_affiche
- *   - chiffres ≥4 OU contient "JAR" + chiffres → factures_winbiz.numero_facture + commandes_shopify.shopify_order_name
+ * Recherche un client à partir d'un numéro de document.
  */
 async function searchByDocumentNumber(q: string, limit: number): Promise<Client[] | null> {
   const trimmed = q.trim()
   const upper = trimmed.toUpperCase()
 
-  // ─── Cas 1 : DEV-XXXXX (numéro d'offre) ────────────────────────
+  // Cas 1 : DEV-XXXXX
   if (/^DEV[-\s]?\d+/i.test(trimmed)) {
-    // Reconstruit le numéro normalisé (DEV-12345)
     const digits = trimmed.replace(/\D/g, "")
     if (!digits) return null
-
     const { data: offres } = await supabaseAdmin
       .from("offres")
       .select("client_numero_client, client_email")
       .or(`numero_offre.ilike.%${digits}%,numero_affiche.ilike.%DEV%${digits}%`)
       .limit(50)
-
     if (!offres || offres.length === 0) return []
     return await resolveClientsFromOffres(offres, limit)
   }
 
-  // ─── Cas 2 : CMD-XXXXX (numéro de commande interne) ────────────
+  // Cas 2 : CMD-XXXXX
   if (/^CMD[-\s]?\d+/i.test(trimmed)) {
     const digits = trimmed.replace(/\D/g, "")
     if (!digits) return null
-
     const { data: offres } = await supabaseAdmin
       .from("offres")
       .select("client_numero_client, client_email")
       .or(`numero_commande.ilike.%${digits}%,numero_affiche.ilike.%CMD%${digits}%`)
       .limit(50)
-
     if (!offres || offres.length === 0) return []
     return await resolveClientsFromOffres(offres, limit)
   }
 
-  // ─── Cas 3 : numéro alphanumérique pouvant être Shopify ou WinBiz ──
-  // Détecte : "12345", "#65351", "JAR12345", "152034", "1-12345", etc.
-  // Critère : contient au moins 4 chiffres consécutifs ET aucun caractère alphabétique sauf JAR/# éventuel
+  // Cas 3 : numéro Shopify ou WinBiz
   const digitsOnly = trimmed.replace(/\D/g, "")
   const isLikelyDocNumber =
     digitsOnly.length >= 4 &&
-    (/^#?\d{4,}$/.test(trimmed) ||                  // 12345 ou #12345
-     /^JAR[-\s]?\d{4,}$/i.test(trimmed) ||          // JAR12345
-     /^\d{4,}$/.test(trimmed) ||                     // pur numérique
+    (/^#?\d{4,}$/.test(trimmed) ||
+     /^JAR[-\s]?\d{4,}$/i.test(trimmed) ||
+     /^\d{4,}$/.test(trimmed) ||
      (upper.includes("JAR") && digitsOnly.length >= 4))
 
   if (isLikelyDocNumber) {
     const matchedClientIds = new Set<number>()
 
-    // 3a — Factures WinBiz : numero_facture (string)
     const { data: factures } = await supabaseAdmin
       .from("factures_winbiz")
       .select("client_id, numero_facture")
       .ilike("numero_facture", `%${digitsOnly}%`)
       .limit(50)
-
     for (const f of factures || []) {
       if (f.client_id != null) matchedClientIds.add(f.client_id)
     }
 
-    // 3b — Commandes Shopify : on cherche dans shopify_order_name (qui contient
-    // le préfixe historique #, JAR, 6, 1, etc.) avec un ilike sur les chiffres.
     const { data: shopify } = await supabaseAdmin
       .from("commandes_shopify")
       .select("client_id, shopify_order_name")
       .ilike("shopify_order_name", `%${digitsOnly}%`)
       .limit(50)
-
     for (const s of shopify || []) {
       if (s.client_id != null) matchedClientIds.add(s.client_id)
     }
@@ -227,14 +326,9 @@ async function searchByDocumentNumber(q: string, limit: number): Promise<Client[
     return await loadClientsByIds(Array.from(matchedClientIds), limit)
   }
 
-  // Pas de pattern document détecté → laisse passer à la recherche classique
   return null
 }
 
-/**
- * Helper : transforme une liste d'offres (avec client_numero_client + client_email)
- * en liste de clients réels.
- */
 async function resolveClientsFromOffres(
   offres: Array<{ client_numero_client: string | null; client_email: string | null }>,
   limit: number
@@ -251,7 +345,8 @@ async function resolveClientsFromOffres(
     filters.push(`numero_client.in.(${numeros.map(n => `"${n}"`).join(",")})`)
   }
   if (emails.length > 0) {
-    filters.push(`email.in.(${emails.map(e => `"${e}"`).join(",")})`)
+    const emailFilters = emails.map(e => `email.ilike.${escapeOrValue(e)}`).join(",")
+    filters.push(emailFilters)
   }
   if (filters.length === 0) return []
 
@@ -277,13 +372,8 @@ export async function GET(request: NextRequest) {
       .limit(limit)
 
     if (q) {
-      // ═══════════════════════════════════════════════════════════════
-      // PRIORITÉ : recherche par numéro de document (DEV/CMD/Shopify/WinBiz)
-      // ═══════════════════════════════════════════════════════════════
       const docResults = await searchByDocumentNumber(q, limit)
       if (docResults !== null) {
-        // Si on a un match document (même 0 résultat), on retourne directement
-        // — sauf si 0 résultat ET q ressemble plus à un nom : on continue en classique
         if (docResults.length > 0) {
           const { count } = await supabaseAdmin
             .from("clients")
@@ -291,20 +381,14 @@ export async function GET(request: NextRequest) {
           const enriched = await enrichWithCounts(docResults)
           return NextResponse.json({ clients: enriched, total: count || 0 })
         }
-        // Si 0 résultat ET on est sûr que c'est un n° de doc (DEV/CMD/JAR/#),
-        // on retourne vide. Sinon on fallback en recherche classique.
         if (/^(DEV|CMD|JAR|#)/i.test(q.trim())) {
           const { count } = await supabaseAdmin
             .from("clients")
             .select("*", { count: "exact", head: true })
           return NextResponse.json({ clients: [], total: count || 0 })
         }
-        // Sinon (ex: "52201" qui n'a rien donné) → fallback classique en dessous
       }
 
-      // ═══════════════════════════════════════════════════════════════
-      // RECHERCHE CLASSIQUE (nom/email/tel/société/etc.)
-      // ═══════════════════════════════════════════════════════════════
       const qDigits = q.replace(/[^\d]/g, "")
 
       if (qDigits.length >= 3) {
