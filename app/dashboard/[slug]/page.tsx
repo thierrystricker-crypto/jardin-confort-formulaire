@@ -670,7 +670,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   {pdfUrl ? (
                     <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
                       className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
-                      📄 Télécharger PDF officiel
+                      📄 Commande version client PDF
                     </a>
                   ) : (
                     <button onClick={generatePdf} disabled={pdfGenerating}
@@ -680,7 +680,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                           <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
                         </span>
                       )}
-                      <span className="relative">{pdfGenerating ? "📄 Génération PDF…" : "📄 Générer PDF officiel"}</span>
+                      <span className="relative">{pdfGenerating ? "📄 Génération…" : "📄 Générer commande client PDF"}</span>
                     </button>
                   )}
                   {qrUrl ? (
@@ -705,13 +705,13 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                         <a href={ficheTravailInitialUrl} target="_blank" rel="noopener noreferrer" download
                           className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20"
                           title={ficheTravailInitialAt ? `Figée le ${new Date(ficheTravailInitialAt).toLocaleString("fr-CH")} — stock vu par le client à la commande` : "Stock figé à la commande"}>
-                          📋 Fiche initiale
+                          📋 Fiche de travail initiale PDF
                         </a>
                       ) : (
                         <button onClick={() => generateFicheTravail("initial")} disabled={ficheTravailGenerating}
                           className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/70 transition hover:bg-emerald-500/15 disabled:opacity-80"
                           title="Générer la fiche initiale avec le stock du jour de la commande">
-                          {ficheTravailGenerating ? "📋 Génération…" : "📋 Générer fiche initiale"}
+                          {ficheTravailGenerating ? "📋 Génération…" : "📋 Générer fiche de travail initiale PDF"}
                         </button>
                       )}
                       <button onClick={() => generateFicheTravail("current")} disabled={ficheTravailGenerating}
@@ -726,8 +726,8 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                           {ficheTravailGenerating
                             ? "🔄 Génération…"
                             : ficheTravailUrl
-                              ? "🔄 Fiche stock actuel"
-                              : "🔄 Générer fiche stock actuel"}
+                              ? "🔄 Régénérer fiche de travail avec stock actuel PDF"
+                              : "🔄 Générer fiche de travail avec stock actuel PDF"}
                         </span>
                       </button>
                     </>
