@@ -530,203 +530,196 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       <div className="mx-auto max-w-[1800px] space-y-6">
 
-        
+
         {/* TOP */}
         <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-        {/* ─── BARRE DE BOUTONS RÉORGANISÉE EN 4 GROUPES ─── */}
-          <div className="mb-5 space-y-3">
+          <div className="grid gap-6 lg:grid-cols-2">
 
-            {/* Groupe 1 — Navigation & contact */}
-            <div>
-              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Navigation & contact
+            {/* ═══ COLONNE GAUCHE : NAVIGATION + OUTILS + DOSSIER ═══ */}
+            <div className="space-y-4">
+
+              {/* Groupe 1 — Navigation & contact */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  Navigation & contact
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link href="/dashboard"
+                    className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">
+                    ← Retour au dashboard
+                  </Link>
+                  {offre.client_email && (
+                    <button type="button" disabled={relancing}
+                      onClick={async () => {
+                        await enregistrerRelance()
+                        window.location.href = `mailto:${offre.client_email}?subject=${encodeURIComponent(`Suivi offre ${offre.numero_affiche}`)}&body=${encodeURIComponent(mailBody)}`
+                      }}
+                      className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b] disabled:opacity-50">
+                      ✉ Email relance
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link href="/dashboard"
-                  className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">
-                  ← Retour au dashboard
-                </Link>
-                {offre.client_email && (
-                  <button type="button" disabled={relancing}
-                    onClick={async () => {
-                      await enregistrerRelance()
-                      window.location.href = `mailto:${offre.client_email}?subject=${encodeURIComponent(`Suivi offre ${offre.numero_affiche}`)}&body=${encodeURIComponent(mailBody)}`
-                    }}
-                    className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b] disabled:opacity-50">
-                    ✉ Email relance
-                  </button>
-                )}
+
+              {/* Groupe 4 — Outils internes */}
+              {isCommande && (
+                <div>
+                  <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Outils internes
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link href="/dashboard/stock-movements"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b]"
+                      title="Voir tous les mouvements de stock Shopify">
+                      📦 Stock Shopify
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* Bloc dossier (logo + numéro + statut + badges + montant) */}
+              <div className="pt-2 flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <img src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/picto_jardin_confort_apple_low.png?v=1775944940" alt="" className="h-16 w-16 rounded-xl object-contain"/>
+                  <div>
+                    <div className="text-sm text-zinc-400">Dossier</div>
+                    <h1 className="mt-1 text-3xl font-semibold">{offre.numero_affiche}</h1>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(offre.statut,offre.type_document)}`}>{offre.statut}</span>
+                      <span className="text-sm text-zinc-400">{offre.type_document}</span>
+                      {days!==null&&(
+                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getDaysBadgeColor(days)}`}>{days} jour{days>1?"s":""} ouvert</span>
+                      )}
+                      {probabilite!=="neutre"&&(
+                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${probabilite==="forte"?"bg-emerald-500/15 text-emerald-300":probabilite==="moyenne"?"bg-amber-500/15 text-amber-300":"bg-rose-500/15 text-rose-300"}`}>
+                          {probabilite==="forte"?"🟢 Forte":probabilite==="moyenne"?"🟡 Moyenne":"🔴 Faible"}
+                        </span>
+                      )}
+                    </div>
+                    {offre.offre_origine && (
+                      <div className="mt-2">
+                        {offreOrigineSlug ? (
+                          <a href={`/dashboard/${offreOrigineSlug}`}
+                            title={`Voir l'offre d'origine ${offre.offre_origine}`}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/15 px-3 py-1 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/25 hover:border-violet-400/60">
+                            <span>📄 Issu de l&apos;offre</span>
+                            <span className="font-bold">{offre.offre_origine}</span>
+                            <span className="text-violet-400/70">→</span>
+                          </a>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-300/80">
+                            <span>📄 Issu de l&apos;offre</span>
+                            <span className="font-bold">{offre.offre_origine}</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-zinc-100">{fmtMoney(offre.total_ttc)}</div>
+                  <div className="mt-1 text-sm text-zinc-400">{offre.payment_mode||"—"}</div>
+                  <div className="mt-1 text-sm text-zinc-500">{offre.nb_articles} article{offre.nb_articles!==1?"s":""}</div>
+                </div>
               </div>
+
             </div>
+            {/* ═══ FIN COLONNE GAUCHE ═══ */}
 
-            {/* Groupe 2 — Pages web (bleu) */}
-            <div>
-              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-sky-400/70">
-                Pages web <span className="ml-1 text-[10px] font-normal normal-case text-zinc-500">à consulter / partager</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {!isCommandeDirecte && (
-                  <a href={urlPublique} target="_blank" rel="noopener noreferrer"
+            {/* ═══ COLONNE DROITE : PAGES WEB + DOCUMENTS PDF ═══ */}
+            <div className="space-y-4">
+
+              {/* Groupe 2 — Pages web (bleu) */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-sky-400/70">
+                  Pages web <span className="ml-1 text-[10px] font-normal normal-case text-zinc-500">à consulter / partager</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {!isCommandeDirecte && (
+                    <a href={urlPublique} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
+                      👁 Page client
+                    </a>
+                  )}
+                  <a href={urlPrint} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
-                    👁 Page client
+                    🖨 Aperçu impression
                   </a>
-                )}
-                <a href={urlPrint} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
-                  🖨 Aperçu impression
-                </a>
-                {isCommande && (
-                  <>
-                    <a href={`${APP_URL}/print/bulletin-livraison/${offre.slug}`} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20"
-                      title="Bulletin de livraison sans prix (à joindre au colis)">
-                      🚚 Bulletin livraison
-                    </a>
-                    <a href={`${APP_URL}/print/page-garde-colis/${offre.slug}`} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20"
-                      title="Page de garde A4 pour envoi de colis">
-                      📦 Page de garde colis
-                    </a>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Groupe 3 — Documents PDF (vert) */}
-            <div>
-              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-400/70">
-                Documents PDF <span className="ml-1 text-[10px] font-normal normal-case text-zinc-500">à télécharger / archiver</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {pdfUrl ? (
-                  <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
-                    className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
-                    📄 Télécharger PDF officiel
-                  </a>
-                ) : (
-                  <button onClick={generatePdf} disabled={pdfGenerating}
-                    className="relative inline-flex items-center overflow-hidden rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/70 transition hover:bg-emerald-500/15 disabled:opacity-80">
-                    {pdfGenerating && (
-                      <span className="absolute inset-0 overflow-hidden rounded-xl">
-                        <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
-                      </span>
-                    )}
-                    <span className="relative">{pdfGenerating ? "📄 Génération PDF…" : "📄 Générer PDF officiel"}</span>
-                  </button>
-                )}
-                {qrUrl ? (
-                  <a href={qrUrl} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
-                    🧾 QR paiement
-                  </a>
-                ) : (
-                  <button onClick={generateQr} disabled={qrGenerating}
-                    className="relative inline-flex items-center overflow-hidden rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/70 transition hover:bg-emerald-500/15 disabled:opacity-80">
-                    {qrGenerating && (
-                      <span className="absolute inset-0 overflow-hidden rounded-xl">
-                        <span className="absolute inset-y-0 left-0 animate-[progress_12s_ease-in-out_forwards] bg-emerald-500/30" />
-                      </span>
-                    )}
-                    <span className="relative">{qrGenerating ? "⏳ Génération QR…" : "🧾 Générer QR paiement"}</span>
-                  </button>
-                )}
-                {isCommande && (
-                  <>
-                    {ficheTravailInitialUrl ? (
-                      <a href={ficheTravailInitialUrl} target="_blank" rel="noopener noreferrer" download
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20"
-                        title={ficheTravailInitialAt ? `Figée le ${new Date(ficheTravailInitialAt).toLocaleString("fr-CH")} — stock vu par le client à la commande` : "Stock figé à la commande"}>
-                        📋 Fiche initiale
+                  {isCommande && (
+                    <>
+                      <a href={`${APP_URL}/print/bulletin-livraison/${offre.slug}`} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20"
+                        title="Bulletin de livraison sans prix (à joindre au colis)">
+                        🚚 Bulletin livraison
                       </a>
-                    ) : (
-                      <button onClick={() => generateFicheTravail("initial")} disabled={ficheTravailGenerating}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/70 transition hover:bg-emerald-500/15 disabled:opacity-80"
-                        title="Générer la fiche initiale avec le stock du jour de la commande">
-                        {ficheTravailGenerating ? "📋 Génération…" : "📋 Générer fiche initiale"}
-                      </button>
-                    )}
-                    <button onClick={() => generateFicheTravail("current")} disabled={ficheTravailGenerating}
-                      className="relative inline-flex items-center gap-1.5 overflow-hidden rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-80"
-                      title="Génère une nouvelle fiche avec le stock actuel — pour la préparation/livraison">
-                      {ficheTravailGenerating && (
+                      <a href={`${APP_URL}/print/page-garde-colis/${offre.slug}`} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20"
+                        title="Page de garde A4 pour envoi de colis">
+                        📦 Page de garde colis
+                      </a>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Groupe 3 — Documents PDF (vert) */}
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-400/70">
+                  Documents PDF <span className="ml-1 text-[10px] font-normal normal-case text-zinc-500">à télécharger / archiver</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {pdfUrl ? (
+                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
+                      className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
+                      📄 Télécharger PDF officiel
+                    </a>
+                  ) : (
+                    <button onClick={generatePdf} disabled={pdfGenerating}
+                      className="relative inline-flex items-center overflow-hidden rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/70 transition hover:bg-emerald-500/15 disabled:opacity-80">
+                      {pdfGenerating && (
                         <span className="absolute inset-0 overflow-hidden rounded-xl">
                           <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
                         </span>
                       )}
-                      <span className="relative">
-                        {ficheTravailGenerating
-                          ? "🔄 Génération…"
-                          : ficheTravailUrl
-                            ? "🔄 Fiche stock actuel"
-                            : "🔄 Générer fiche stock actuel"}
-                      </span>
+                      <span className="relative">{pdfGenerating ? "📄 Génération PDF…" : "📄 Générer PDF officiel"}</span>
                     </button>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Groupe 4 — Outils internes (commandes uniquement) */}
-            {isCommande && (
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  Outils internes
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link href="/dashboard/stock-movements"
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 transition hover:bg-[#40454b]"
-                    title="Voir tous les mouvements de stock Shopify">
-                    📦 Stock Shopify
-                  </Link>
-                </div>
-              </div>
-            )}
-
-          </div>
-          {/* ─── FIN BARRE DE BOUTONS ─── */}
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-start gap-4">
-              <img src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/picto_jardin_confort_apple_low.png?v=1775944940" alt="" className="h-16 w-16 rounded-xl object-contain"/>
-              <div>
-                <div className="text-sm text-zinc-400">Dossier</div>
-                <h1 className="mt-2 text-3xl font-semibold">{offre.numero_affiche}</h1>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(offre.statut,offre.type_document)}`}>{offre.statut}</span>
-                  <span className="text-sm text-zinc-400">{offre.type_document}</span>
-                  {offre.offre_origine && (
-                    offreOrigineSlug ? (
-                      <a href={`/dashboard/${offreOrigineSlug}`}
-                        title={`Voir l'offre d'origine ${offre.offre_origine}`}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/15 px-3 py-1 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/25 hover:border-violet-400/60">
-                        <span>📄 Issu de l&apos;offre</span>
-                        <span className="font-bold">{offre.offre_origine}</span>
-                        <span className="text-violet-400/70">→</span>
-                      </a>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-300/80">
-                        <span>📄 Issu de l&apos;offre</span>
-                        <span className="font-bold">{offre.offre_origine}</span>
-                      </span>
-                    )
                   )}
-                  {days!==null&&(
-                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getDaysBadgeColor(days)}`}>{days} jour{days>1?"s":""} ouvert</span>
+                  {qrUrl ? (
+                    <a href={qrUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
+                      🧾 QR paiement
+                    </a>
+                  ) : (
+                    <button onClick={generateQr} disabled={qrGenerating}
+                      className="relative inline-flex items-center overflow-hidden rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/70 transition hover:bg-emerald-500/15 disabled:opacity-80">
+                      {qrGenerating && (
+                        <span className="absolute inset-0 overflow-hidden rounded-xl">
+                          <span className="absolute inset-y-0 left-0 animate-[progress_12s_ease-in-out_forwards] bg-emerald-500/30" />
+                        </span>
+                      )}
+                      <span className="relative">{qrGenerating ? "⏳ Génération QR…" : "🧾 Générer QR paiement"}</span>
+                    </button>
                   )}
-                  {probabilite!=="neutre"&&(
-                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${probabilite==="forte"?"bg-emerald-500/15 text-emerald-300":probabilite==="moyenne"?"bg-amber-500/15 text-amber-300":"bg-rose-500/15 text-rose-300"}`}>
-                      {probabilite==="forte"?"🟢 Forte":probabilite==="moyenne"?"🟡 Moyenne":"🔴 Faible"}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-zinc-100">{fmtMoney(offre.total_ttc)}</div>
-              <div className="mt-1 text-sm text-zinc-400">{offre.payment_mode||"—"}</div>
-              <div className="mt-1 text-sm text-zinc-500">{offre.nb_articles} article{offre.nb_articles!==1?"s":""}</div>
-            </div>
-          </div>
-        </div>
+                  {isCommande && (
+                    <>
+                      {ficheTravailInitialUrl ? (
+                        <a href={ficheTravailInitialUrl} target="_blank" rel="noopener noreferrer" download
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20"
+                          title={ficheTravailInitialAt ? `Figée le ${new Date(ficheTravailInitialAt).toLocaleString("fr-CH")} — stock vu par le client à la commande` : "Stock figé à la commande"}>
+                          📋 Fiche initiale
+                        </a>
+                      ) : (
+                        <button onClick={() => generateFicheTravail("initial")} disabled={ficheTravailGenerating}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/70 transition hover:bg-emerald-500/15 disabled:opacity-80"
+                          title="Générer la fiche initiale avec le stock du jour de la commande">
+                          {ficheTravailGenerating ? "📋 Génération…" : "📋 Générer fiche initiale"}
+                        </button>
+                      )}
+                      <button onClick={() => generateFicheTravail("current")} disabled={ficheTravailGenerating}
+                        className="relative inline-flex items-center gap-1.5 overflow-hidden rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-80"
+                        title="Génère une nouvelle fiche avec le stock actuel — pour la préparation/livraison">
+                        {ficheTravailGenerating && (
+                          <span className="absolute inset-0 overflow-hidden rounded-xl">
 
         {/* GRILLE */}
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_660px]">
