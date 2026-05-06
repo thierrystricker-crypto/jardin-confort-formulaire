@@ -387,7 +387,7 @@ export default function ClientsPage() {
   const fetchClients = useCallback(async (q: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/clients?q=${encodeURIComponent(q)}&limit=2000`)
+      const res = await fetch(`/api/clients?q=${encodeURIComponent(q)}&limit=100`)
       const json = await res.json()
       setClients(json.clients || [])
       if (json.total !== undefined) setTotalClients(json.total)
@@ -450,9 +450,19 @@ export default function ClientsPage() {
             <div>
               <h1 className="text-2xl font-semibold">Fichier clients</h1>
               <p className="text-sm text-zinc-400">
-                {clients.length} client{clients.length !== 1 ? "s" : ""}
-                {totalClients !== null && totalClients > clients.length && ` / ${totalClients.toLocaleString("fr-CH")}`}
-              </p>
+  {search.trim() ? (
+    <>
+      {clients.length} résultat{clients.length !== 1 ? "s" : ""}
+      {totalClients !== null && ` (sur ${totalClients.toLocaleString("fr-CH")} clients)`}
+    </>
+  ) : (
+    <>
+      {clients.length} clients récents
+      {totalClients !== null && ` · ${totalClients.toLocaleString("fr-CH")} au total`}
+      <span className="ml-2 text-xs text-zinc-500">(utilise la recherche pour trouver un client précis)</span>
+    </>
+  )}
+</p>
             </div>
           </div>
           <div className="flex gap-3">

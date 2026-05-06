@@ -1,19 +1,6 @@
 // app/api/clients/route.ts
 // GET  — liste clients avec recherche + compteurs documents (offres / commandes / factures)
 // POST — créer un nouveau client
-//
-// Recherche étendue :
-//   - DEV-XXXXX  → cherche dans offres.numero_offre
-//   - CMD-XXXXX  → cherche dans offres.numero_commande / numero_affiche
-//   - n° facture WinBiz  → cherche dans factures_winbiz.numero_facture
-//   - n° commande Shopify (#65351, JAR12345, 152034) → commandes_shopify.shopify_order_name
-//   - sinon → recherche classique nom/email/tel/société/etc.
-//
-// Compteurs documents :
-//   - Logique alignée sur /api/clients/[id] (la fiche) pour cohérence visuelle
-//   - Match offres : par email (ilike, case-insensitive) OU numero_client OU nom+npa fallback
-//   - Match factures/shopify : par client_id direct (figé à l'import/sync)
-//   - Toutes les offres comptent (peu importe le statut) — si la fiche l'affiche, la liste le compte
 
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
@@ -35,8 +22,9 @@ type ClientWithCounts = Client & {
 }
 
 /**
- * Découpe un tableau en chunks de taille `size` pour éviter les limites
- * silencieuses de Supabase/PostgREST sur les `.in(...)` à gros volume.
+ * Découpe un tableau en chunks. Taille 200 pour rester sous les limites
+ * URL/PostgREST sur les `.in(...)` à gros volume (au-delà, des batches
+ * peuvent silencieusement échouer ou être tronqués).
  */
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = []
@@ -53,11 +41,6 @@ type OffreRow = {
   statut: string | null
 }
 
-/**
- * Incrémente les compteurs offres/commandes pour un client donné.
- * Une offre = type_document="Offre" (toutes statuts confondus, pour cohérence avec la fiche).
- * Une commande interne = type_document="Commande" OU statut "Acceptée"/"Convertie".
- */
 function tallyOffre(map: Map<number, { offres: number; commandes: number }>, clientId: number, o: OffreRow) {
   const counts = map.get(clientId) || { offres: 0, commandes: 0 }
   if (o.type_document === "Commande" || o.statut === "Acceptée" || o.statut === "Convertie") {
@@ -69,18 +52,59 @@ function tallyOffre(map: Map<number, { offres: number; commandes: number }>, cli
 }
 
 /**
+ * Récupère tous les `client_id` matchés par une requête simple sur une table
+ * en chunkant la liste d'IDs (200 max par batch) et en parallélisant les appels.
+ * Les erreurs sont loggées mais ne bloquent pas — on retourne les données
+ * partielles qu'on a pu récupérer (mieux que de tout perdre).
+ */
+async function fetchClientIdCountsByIn(
+  table: "factures_winbiz" | "commandes_shopify",
+  clientIds: number[]
+): Promise<Map<number, number>> {
+  const result = new Map<number, number>()
+  const batches = chunk(clientIds, 200)
+
+  // Lance toutes les requêtes en parallèle
+  const responses = await Promise.all(
+    batches.map(async (batch, idx) => {
+      const { data, error } = await supabaseAdmin
+        .from(table)
+        .select("client_id")
+        .in("client_id", batch)
+
+      if (error) {
+        // Log silencieux côté Vercel — visible dans les logs
+        console.error(`[enrichWithCounts] Batch ${idx + 1}/${batches.length} on ${table} FAILED:`, error.message)
+        return { data: null, batchSize: batch.length }
+      }
+      return { data, batchSize: batch.length }
+    })
+  )
+
+  for (const { data } of responses) {
+    if (!data) continue
+    for (const row of data) {
+      const cid = (row as { client_id: number | null }).client_id
+      if (cid == null) continue
+      result.set(cid, (result.get(cid) || 0) + 1)
+    }
+  }
+
+  return result
+}
+
+/**
  * Enrichit une liste de clients avec les compteurs de documents liés.
  *
- * Stratégie offres : on récupère TOUTES les offres potentiellement liées
- * via 3 voies (numero_client, email ilike, nom+npa fallback) en évitant
- * les doublons grâce à un Set de clés synthétiques.
+ * Stratégie offres : 3 voies de match (numero_client + email ilike + nom+npa).
+ * Stratégie factures/shopify : par client_id direct, batches parallèles de 200.
  */
 async function enrichWithCounts(clients: Client[]): Promise<ClientWithCounts[]> {
   if (clients.length === 0) return []
 
   const clientIds = clients.map(c => c.id)
 
-  // Index pour reverse-lookup
+  // ─── Index pour reverse-lookup ──────────────────────────────
   const emailToIds = new Map<string, number[]>()
   const numClientToIds = new Map<string, number[]>()
   const nomNpaToIds = new Map<string, number[]>()
@@ -107,84 +131,29 @@ async function enrichWithCounts(clients: Client[]): Promise<ClientWithCounts[]> 
 
   // ─── 1) Offres ─────────────────────────────────────────────────
   const offresMap = new Map<number, { offres: number; commandes: number }>()
-  // Set de dédup : empêche de compter 2× la même offre quand elle matche par 2 voies
   const seenOffreKeys = new Set<string>()
 
   function offreKey(o: OffreRow, clientId: number): string {
     return `${clientId}::${o.client_numero_client || ""}::${(o.client_email || "").toLowerCase()}::${o.type_document}::${o.statut}`
   }
 
-  // 1a — Match par numero_client (exact, fast path le plus fiable)
+  // 1a — Match par numero_client (chunks de 200, parallèle)
   const numerosClient = Array.from(numClientToIds.keys())
-  for (const batch of chunk(numerosClient, 500)) {
-    if (batch.length === 0) continue
-    const { data } = await supabaseAdmin
-      .from("offres")
-      .select("client_numero_client, client_email, client_nom, client_npa, type_document, statut")
-      .in("client_numero_client", batch)
-
-    for (const o of data || []) {
-      const num = (o.client_numero_client || "").trim()
-      const ids = numClientToIds.get(num)
-      if (!ids) continue
-      for (const cid of ids) {
-        const key = offreKey(o, cid)
-        if (seenOffreKeys.has(key)) continue
-        seenOffreKeys.add(key)
-        tallyOffre(offresMap, cid, o)
-      }
-    }
-  }
-
-  // 1b — Match par email (ilike → case-insensitive)
-  // On batche les emails par paquets de 50 dans un OR de ilike
-  const emails = Array.from(emailToIds.keys())
-  for (const batch of chunk(emails, 50)) {
-    if (batch.length === 0) continue
-    const orFilters = batch
-      .map(e => `client_email.ilike.${escapeOrValue(e)}`)
-      .join(",")
-
-    const { data } = await supabaseAdmin
-      .from("offres")
-      .select("client_numero_client, client_email, client_nom, client_npa, type_document, statut")
-      .or(orFilters)
-
-    for (const o of data || []) {
-      const em = (o.client_email || "").toLowerCase().trim()
-      const ids = emailToIds.get(em)
-      if (!ids) continue
-      for (const cid of ids) {
-        const key = offreKey(o, cid)
-        if (seenOffreKeys.has(key)) continue
-        seenOffreKeys.add(key)
-        tallyOffre(offresMap, cid, o)
-      }
-    }
-  }
-
-  // 1c — Fallback nom+npa pour clients sans email ni numero_client
-  // (ou qui n'ont matché aucune offre par les 2 voies précédentes)
-  const clientsSansMatch = clients.filter(c =>
-    !offresMap.has(c.id) && (c.nom || "").trim() && (c.npa || "").trim()
-  )
-  if (clientsSansMatch.length > 0) {
-    for (const batch of chunk(clientsSansMatch, 30)) {
-      const orFilters = batch.map(c => {
-        const nom = (c.nom as string).replace(/[(),"']/g, " ").trim()
-        const npa = (c.npa as string).replace(/[(),"']/g, "").trim()
-        return `and(client_nom.ilike.*${nom}*,client_npa.eq.${npa})`
-      }).join(",")
-
-      const { data } = await supabaseAdmin
+  await Promise.all(
+    chunk(numerosClient, 200).map(async (batch, idx) => {
+      if (batch.length === 0) return
+      const { data, error } = await supabaseAdmin
         .from("offres")
         .select("client_numero_client, client_email, client_nom, client_npa, type_document, statut")
-        .or(orFilters)
+        .in("client_numero_client", batch)
 
+      if (error) {
+        console.error(`[enrichWithCounts] Batch numero_client ${idx} FAILED:`, error.message)
+        return
+      }
       for (const o of data || []) {
-        const nom = (o.client_nom || "").toLowerCase().trim()
-        const npa = (o.client_npa || "").trim()
-        const ids = nomNpaToIds.get(`${nom}||${npa}`)
+        const num = (o.client_numero_client || "").trim()
+        const ids = numClientToIds.get(num)
         if (!ids) continue
         for (const cid of ids) {
           const key = offreKey(o, cid)
@@ -193,34 +162,81 @@ async function enrichWithCounts(clients: Client[]): Promise<ClientWithCounts[]> 
           tallyOffre(offresMap, cid, o)
         }
       }
-    }
+    })
+  )
+
+  // 1b — Match par email (ilike, batches de 30, parallèle)
+  const emails = Array.from(emailToIds.keys())
+  await Promise.all(
+    chunk(emails, 30).map(async (batch, idx) => {
+      if (batch.length === 0) return
+      const orFilters = batch.map(e => `client_email.ilike.${escapeOrValue(e)}`).join(",")
+      const { data, error } = await supabaseAdmin
+        .from("offres")
+        .select("client_numero_client, client_email, client_nom, client_npa, type_document, statut")
+        .or(orFilters)
+
+      if (error) {
+        console.error(`[enrichWithCounts] Batch email ${idx} FAILED:`, error.message)
+        return
+      }
+      for (const o of data || []) {
+        const em = (o.client_email || "").toLowerCase().trim()
+        const ids = emailToIds.get(em)
+        if (!ids) continue
+        for (const cid of ids) {
+          const key = offreKey(o, cid)
+          if (seenOffreKeys.has(key)) continue
+          seenOffreKeys.add(key)
+          tallyOffre(offresMap, cid, o)
+        }
+      }
+    })
+  )
+
+  // 1c — Fallback nom+npa pour clients sans match
+  const clientsSansMatch = clients.filter(c =>
+    !offresMap.has(c.id) && (c.nom || "").trim() && (c.npa || "").trim()
+  )
+  if (clientsSansMatch.length > 0) {
+    await Promise.all(
+      chunk(clientsSansMatch, 20).map(async (batch, idx) => {
+        const orFilters = batch.map(c => {
+          const nom = (c.nom as string).replace(/[(),"']/g, " ").trim()
+          const npa = (c.npa as string).replace(/[(),"']/g, "").trim()
+          return `and(client_nom.ilike.*${nom}*,client_npa.eq.${npa})`
+        }).join(",")
+
+        const { data, error } = await supabaseAdmin
+          .from("offres")
+          .select("client_numero_client, client_email, client_nom, client_npa, type_document, statut")
+          .or(orFilters)
+
+        if (error) {
+          console.error(`[enrichWithCounts] Batch nom+npa ${idx} FAILED:`, error.message)
+          return
+        }
+        for (const o of data || []) {
+          const nom = (o.client_nom || "").toLowerCase().trim()
+          const npa = (o.client_npa || "").trim()
+          const ids = nomNpaToIds.get(`${nom}||${npa}`)
+          if (!ids) continue
+          for (const cid of ids) {
+            const key = offreKey(o, cid)
+            if (seenOffreKeys.has(key)) continue
+            seenOffreKeys.add(key)
+            tallyOffre(offresMap, cid, o)
+          }
+        }
+      })
+    )
   }
 
-  // ─── 2) Factures WinBiz : par client_id direct ─────────────────
-  const facturesMap = new Map<number, number>()
-  for (const batch of chunk(clientIds, 500)) {
-    const { data } = await supabaseAdmin
-      .from("factures_winbiz")
-      .select("client_id")
-      .in("client_id", batch)
-    for (const f of data || []) {
-      if (f.client_id == null) continue
-      facturesMap.set(f.client_id, (facturesMap.get(f.client_id) || 0) + 1)
-    }
-  }
-
-  // ─── 3) Commandes Shopify : par client_id direct ───────────────
-  const shopifyMap = new Map<number, number>()
-  for (const batch of chunk(clientIds, 500)) {
-    const { data } = await supabaseAdmin
-      .from("commandes_shopify")
-      .select("client_id")
-      .in("client_id", batch)
-    for (const s of data || []) {
-      if (s.client_id == null) continue
-      shopifyMap.set(s.client_id, (shopifyMap.get(s.client_id) || 0) + 1)
-    }
-  }
+  // ─── 2 + 3) Factures WinBiz et Commandes Shopify en parallèle ──
+  const [facturesMap, shopifyMap] = await Promise.all([
+    fetchClientIdCountsByIn("factures_winbiz", clientIds),
+    fetchClientIdCountsByIn("commandes_shopify", clientIds),
+  ])
 
   // ─── 4) Assemblage final ───────────────────────────────────────
   return clients.map(c => {
@@ -235,18 +251,11 @@ async function enrichWithCounts(clients: Client[]): Promise<ClientWithCounts[]> 
   })
 }
 
-/**
- * Échappe une valeur pour l'utiliser dans un filtre `.or()` PostgREST.
- * Les caractères , ( ) " ' cassent les expressions OR — on les remplace par espace.
- */
 function escapeOrValue(v: string): string {
   const safe = v.replace(/[(),"']/g, " ").trim()
   return `*${safe}*`
 }
 
-/**
- * Charge des clients par leurs IDs.
- */
 async function loadClientsByIds(ids: number[], limit: number): Promise<Client[]> {
   if (ids.length === 0) return []
   const uniqueIds = Array.from(new Set(ids)).slice(0, limit)
@@ -259,14 +268,10 @@ async function loadClientsByIds(ids: number[], limit: number): Promise<Client[]>
   return (data || []) as Client[]
 }
 
-/**
- * Recherche un client à partir d'un numéro de document.
- */
 async function searchByDocumentNumber(q: string, limit: number): Promise<Client[] | null> {
   const trimmed = q.trim()
   const upper = trimmed.toUpperCase()
 
-  // Cas 1 : DEV-XXXXX
   if (/^DEV[-\s]?\d+/i.test(trimmed)) {
     const digits = trimmed.replace(/\D/g, "")
     if (!digits) return null
@@ -279,7 +284,6 @@ async function searchByDocumentNumber(q: string, limit: number): Promise<Client[
     return await resolveClientsFromOffres(offres, limit)
   }
 
-  // Cas 2 : CMD-XXXXX
   if (/^CMD[-\s]?\d+/i.test(trimmed)) {
     const digits = trimmed.replace(/\D/g, "")
     if (!digits) return null
@@ -292,7 +296,6 @@ async function searchByDocumentNumber(q: string, limit: number): Promise<Client[
     return await resolveClientsFromOffres(offres, limit)
   }
 
-  // Cas 3 : numéro Shopify ou WinBiz
   const digitsOnly = trimmed.replace(/\D/g, "")
   const isLikelyDocNumber =
     digitsOnly.length >= 4 &&
