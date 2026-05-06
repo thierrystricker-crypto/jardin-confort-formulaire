@@ -417,7 +417,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
           signataire: offre.commercial || "Conversion manuelle",
           signature_base64: "",
           date_signature: new Date().toLocaleDateString("fr-CH"),
-          internal: true,  // ← conversion manuelle depuis le dashboard : pas d'email au client + notif différenciée
+          internal: true,
         }),
       })
       const json = await res.json()
@@ -520,16 +520,15 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const days=getDaysOpen(offre)
   const d=offre.data as Record<string,unknown>
   const urlPublique=`${APP_URL}/offre/${offre.slug}`
-    const urlPrint=`${APP_URL}/print/offre/${offre.slug}`
-    const isAbandonne=offre.statut==="Abandonnée"
-    const isOffre=offre.type_document==="Offre"&&!["Convertie","Acceptée"].includes(offre.statut)
-    const isCommande = offre.type_document === "Commande" || ["Acceptée", "Convertie"].includes(offre.statut)
-    const isCommandeDirecte = offre.type_document === "Commande" && !offre.offre_origine
+  const urlPrint=`${APP_URL}/print/offre/${offre.slug}`
+  const isAbandonne=offre.statut==="Abandonnée"
+  const isOffre=offre.type_document==="Offre"&&!["Convertie","Acceptée"].includes(offre.statut)
+  const isCommande = offre.type_document === "Commande" || ["Acceptée", "Convertie"].includes(offre.statut)
+  const isCommandeDirecte = offre.type_document === "Commande" && !offre.offre_origine
 
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       <div className="mx-auto max-w-[1800px] space-y-6">
-
 
         {/* TOP */}
         <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
@@ -812,10 +811,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </section>
             </div>
 
-            {/* ─── NOUVEAU : Bloc Mouvements de stock (commandes uniquement) ─── */}
-            {/* Affiche les sorties Shopify automatiques pour cette commande */}
             {isCommande && <StockMovementsBlock slug={slug} />}
-            {/* ────────────────────────────────────────────────────────────────── */}
 
             {/* PROBABILITÉ DE CLOSING */}
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
@@ -977,7 +973,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </section>
             )}
 
-            {/* ─── Aperçu Fiche de travail (commandes uniquement) ─── */}
             {isCommande && (ficheTravailInitialUrl || ficheTravailUrl) && (
               <FicheTravailPreview
                 initialUrl={ficheTravailInitialUrl}
