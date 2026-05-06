@@ -300,3 +300,22 @@ Quand tu démarres un nouveau chat Claude :
 ---
 
 *Dernière mise à jour : 6 mai 2026, 1h30 du matin (CET)* 🌙
+### Session du 6 mai 2026 (suite) — Recherche multi-source + Badges Documents fiables
+**Réalisations** :
+- ✅ Recherche dashboard clients étendue à : DEV-XXXXX, CMD-XXXXX, n° facture WinBiz, n° commande Shopify (#65351, JAR12345, 152034 — tolère tous les préfixes historiques #, JAR, 6, 1)
+- ✅ Détection automatique du type de query par regex en tête de `searchByDocumentNumber()`
+- ✅ Fallback intelligent vers recherche classique si pas de match document
+- ✅ Cohérence badges Documents avec fiche client : email matching en `ilike` (case-insensitive)
+- ✅ Triple voie de matching offres : numero_client + email + fallback nom+npa
+- ✅ Toutes les offres comptent dans les badges (statuts Refusée/Abandonnée inclus)
+- ✅ Batches `.in()` parallélisés (Promise.all) avec taille 200 max + error logging Vercel
+- ✅ Limite affichage liste : 100 résultats récents par défaut (vs 1000 avant) — cohérent avec 18 890 clients en base et croissant
+
+**Bug racine identifié** :
+- Les `.in()` Supabase de >500 IDs étaient silencieusement tronqués/échoués
+- Cause manifeste : limite URL/PostgREST sur les querystrings longs
+- Fix appliqué : chunks de 200 + parallélisation + `console.error` sur erreurs
+
+**Fichiers modifiés** :
+- `app/api/clients/route.ts` — recherche multi-source + `enrichWithCounts` robuste
+- `app/dashboard/clients/page.tsx` — limit 100 + texte du compteur clarifié

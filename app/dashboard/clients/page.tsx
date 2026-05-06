@@ -795,10 +795,18 @@ export default function ClientsPage() {
                 </thead>
                 <tbody>
                   {clients.map((c, idx) => {
-                    const src = sourceLabel(c.source)
-                    return (
-                      <tr key={c.id}
-                        className={`border-t border-white/5 text-zinc-200 transition hover:bg-white/5 ${idx % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.04]"}`}>
+  const src = sourceLabel(c.source)
+  return (
+    <tr key={c.id}
+      onClick={(e) => {
+  // Ctrl/Cmd+click ou clic milieu → nouvel onglet
+  if (e.ctrlKey || e.metaKey || e.button === 1) {
+    window.open(`/dashboard/clients/${c.id}`, "_blank")
+  } else {
+    window.location.href = `/dashboard/clients/${c.id}`
+  }
+}}
+      className={`border-t border-white/5 text-zinc-200 transition hover:bg-white/10 cursor-pointer ${idx % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.04]"}`}>
                         <td className="px-4 py-3">
                           <span className="font-mono text-xs font-semibold text-[#2B8AD1]">{c.numero_client}</span>
                         </td>
@@ -807,10 +815,10 @@ export default function ClientsPage() {
                         </td>
                         <td className="px-4 py-3 text-zinc-400">{c.societe || "—"}</td>
                         <td className="px-4 py-3">
-                          {c.email
-                            ? <a href={`mailto:${c.email}`} className="text-sky-400 hover:underline text-xs">{c.email}</a>
-                            : <span className="text-zinc-600">—</span>}
-                        </td>
+  {c.email
+    ? <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="text-sky-400 hover:underline text-xs">{c.email}</a>
+    : <span className="text-zinc-600">—</span>}
+</td>
                         <td className="px-4 py-3 text-zinc-400">{c.tel1 || "—"}</td>
                         <td className="px-4 py-3 text-zinc-400">{[c.npa, c.ville].filter(Boolean).join(" ") || "—"}</td>
                         <td className="px-4 py-3">
@@ -820,13 +828,10 @@ export default function ClientsPage() {
                           <DocBadges client={c} />
                         </td>
                         <td className="px-4 py-3 text-zinc-500 text-xs">{fmtDate(c.created_at)}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-2">
-                            <Link href={`/dashboard/clients/${c.id}`}
-                              className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">
-                              Voir
-                            </Link>
-                            <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+  <div className="flex justify-end gap-2">
+    
+    <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
                               nom: c.nom, prenom: c.prenom||"", societe: c.societe||"",
                               email: c.email||"", telephone1: c.tel1||"",
                               rue: c.rue||"", npa: c.npa||"", ville: c.ville||"",
