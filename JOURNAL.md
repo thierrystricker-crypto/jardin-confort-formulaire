@@ -319,3 +319,16 @@ Quand tu démarres un nouveau chat Claude :
 **Fichiers modifiés** :
 - `app/api/clients/route.ts` — recherche multi-source + `enrichWithCounts` robuste
 - `app/dashboard/clients/page.tsx` — limit 100 + texte du compteur clarifié
+
+
+### Session du 6 mai 2026 (suite) — Nouveaux templates print
+- ✅ Bulletin de livraison sans prix : `/print/bulletin-livraison/[slug]`
+  - Copie du template Commande sans prix/totaux/TVA/signature
+  - Services listés sans prix
+  - Bloc vert "Merci pour vos achats !" + message livraison partielle
+- ✅ Page de garde colis : `/print/page-garde-colis/[slug]`
+  - Logo Jardin-Confort vertical à gauche
+  - Adresse client en grand à droite (style enveloppe)
+  - Infos commande minimales (N°, date, expédition)
+  - Sans QR ni code-barres (différent du Order Printer Pro Shopify)
+- Uniquement pour les commandes internes CMD-XXXXX
