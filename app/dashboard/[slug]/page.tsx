@@ -550,6 +550,23 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             )}
             <a href={urlPrint} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">🖨 Imprimer</a>
+
+            {/* ─── Boutons templates print spécifiques aux commandes ─── */}
+            {isCommande && (
+              <>
+                <a href={`${APP_URL}/print/bulletin-livraison/${offre.slug}`} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center rounded-xl border border-violet-500/30 bg-violet-500/15 px-4 py-2 text-sm text-violet-300 transition hover:bg-violet-500/20"
+                  title="Bulletin de livraison sans prix (à joindre au colis)">
+                  🚚 Bulletin livraison
+                </a>
+                <a href={`${APP_URL}/print/page-garde-colis/${offre.slug}`} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center rounded-xl border border-orange-500/30 bg-orange-500/15 px-4 py-2 text-sm text-orange-300 transition hover:bg-orange-500/20"
+                  title="Page de garde A4 pour envoi de colis">
+                  📦 Page de garde colis
+                </a>
+              </>
+            )}
+
             {pdfUrl ? (
               <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
                 className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
