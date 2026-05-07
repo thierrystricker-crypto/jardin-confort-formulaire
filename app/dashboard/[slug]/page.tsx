@@ -651,11 +651,20 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                         title="Bulletin de livraison sans prix (à joindre au colis)">
                         🚚 Bulletin livraison
                       </a>
+                      <a href={`${APP_URL}/print/page-garde-colis/${offre.slug}`} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20"
+                        title="Page de garde A4 pour envoi de colis">
+                        📦 Page de garde colis
+                      </a>
                       <a href={`${APP_URL}/print/all/${offre.slug}`} target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center rounded-xl border-2 border-sky-500/60 bg-sky-500/20 px-4 py-2 text-sm font-bold text-sky-200 transition hover:bg-sky-500/30"
                         title="Imprime les 4 documents en un seul jeu : Fiche de travail → Commande → Page de garde → Bulletin">
                         🖨 Imprimer le jeu complet
                       </a>
+                    </>
+                  )}
+                </div>
+              </div>
 
               {/* Groupe 3 — Documents PDF (vert) */}
               <div>
