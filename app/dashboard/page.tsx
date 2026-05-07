@@ -183,6 +183,7 @@ export default function DashboardPage() {
   const [quickFilter,setQuickFilter]=useState<QuickFilter>("all")
   const [commercial,setCommercial]=useState("all")
   const [hideAbandoned,setHideAbandoned]=useState(true)  // masqué par défaut
+  const [hideConverted,setHideConverted]=useState(true)  // offres converties masquées par défaut
   const [sortKey,setSortKey]=useState<SortKey>("date")
   const [sortDir,setSortDir]=useState<SortDir>("desc")
 
@@ -194,16 +195,22 @@ export default function DashboardPage() {
   }
   useEffect(()=>{loadOffres()},[])
 
-  // Charger la préférence "masquer abandonnées" depuis localStorage
+  // Charger les préférences "masquer" depuis localStorage
   useEffect(()=>{
-    const saved = localStorage.getItem("dashboard-hide-abandoned")
-    if (saved !== null) setHideAbandoned(saved === "true")
+    const savedAb = localStorage.getItem("dashboard-hide-abandoned")
+    if (savedAb !== null) setHideAbandoned(savedAb === "true")
+    const savedConv = localStorage.getItem("dashboard-hide-converted")
+    if (savedConv !== null) setHideConverted(savedConv === "true")
   },[])
 
-  // Sauvegarder la préférence à chaque changement
+  // Sauvegarder les préférences à chaque changement
   useEffect(()=>{
     localStorage.setItem("dashboard-hide-abandoned", String(hideAbandoned))
   },[hideAbandoned])
+
+  useEffect(()=>{
+    localStorage.setItem("dashboard-hide-converted", String(hideConverted))
+  },[hideConverted])
 
   function handleSort(k:SortKey) {
     if(k===sortKey){setSortDir(d=>d==="asc"?"desc":"asc");return}
@@ -215,6 +222,10 @@ export default function DashboardPage() {
     // Masquer les abandonnées/refusées par défaut (sauf si on est explicitement sur le filtre "abandonnés")
     if(hideAbandoned && quickFilter !== "abandonnes") {
       list=list.filter(o=>!["Abandonnée","Refusée"].includes(o.statut))
+    }
+    // Masquer les offres converties (Acceptée + Convertie) - leurs commandes apparaissent juste à côté
+    if(hideConverted && quickFilter !== "commandes") {
+      list=list.filter(o=>!(o.type_document==="Offre"&&["Acceptée","Convertie"].includes(o.statut)))
     }
     if(quickFilter==="offres") list=list.filter(o=>o.type_document==="Offre"&&!["Abandonnée","Convertie","Refusée"].includes(o.statut))
     else if(quickFilter==="commandes") list=list.filter(o=>o.type_document==="Commande"||o.statut==="Acceptée")
@@ -251,7 +262,7 @@ export default function DashboardPage() {
       if(av>bv) return sortDir==="asc"?1:-1
       return 0
     })
-  },[offres,quickFilter,commercial,search,sortKey,sortDir,hideAbandoned])
+  },[offres,quickFilter,commercial,search,sortKey,sortDir,hideAbandoned,hideConverted])
 
   const statsFiltered=useMemo(()=>computeStats(
     commercial==="all" ? offres : offres.filter(o=>o.commercial===commercial)
@@ -306,8 +317,8 @@ export default function DashboardPage() {
             <button onClick={()=>{setSearch("");setQuickFilter("all");setCommercial("all")}} className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2.5 text-sm text-zinc-100 transition hover:bg-[#40454b]">Reset</button>
           </div>
 
-          {/* Toggle masquer abandonnées */}
-          <div className="flex items-center gap-3">
+          {/* Toggles masquer abandonnées + converties */}
+          <div className="flex items-center gap-6 flex-wrap">
             <label className="inline-flex items-center gap-2 cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">
               <input
                 type="checkbox"
@@ -319,6 +330,20 @@ export default function DashboardPage() {
               {hideAbandoned && (
                 <span className="text-xs text-zinc-500">
                   ({offres.filter(o=>["Abandonnée","Refusée"].includes(o.statut)).length} masquées)
+                </span>
+              )}
+            </label>
+            <label className="inline-flex items-center gap-2 cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">
+              <input
+                type="checkbox"
+                checked={hideConverted}
+                onChange={e=>setHideConverted(e.target.checked)}
+                className="rounded border-white/20"
+              />
+              <span>Masquer les offres converties</span>
+              {hideConverted && (
+                <span className="text-xs text-zinc-500">
+                  ({offres.filter(o=>o.type_document==="Offre"&&["Acceptée","Convertie"].includes(o.statut)).length} masquées)
                 </span>
               )}
             </label>
