@@ -442,7 +442,8 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         /* ═══ STYLES PAGE DE GARDE COLIS (page 3) — préfixe .pg- ═══════════ */
         /* ═══ Reproduit fidèlement app/print/page-garde-colis/[slug]/page.tsx ═ */
         /* ════════════════════════════════════════════════════════════════════ */
-        .pg-wrap { min-height: 1000px; position: relative; }
+        .pg-wrap { position: relative; }
+        @media screen { .pg-wrap { min-height: 1000px; } }
         .pg-top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 20mm; gap: 20px; }
         .pg-return-block { display: flex; gap: 18px; align-items: flex-start; flex: 0 0 auto; }
         .pg-return-logo { max-width: 130px; max-height: 80px; object-fit: contain; }
