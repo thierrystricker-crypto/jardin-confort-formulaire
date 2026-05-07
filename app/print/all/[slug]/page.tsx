@@ -9,86 +9,43 @@
 //    Page 3 — Page de garde colis (A4 logo + adresse)
 //    Page 4 — Bulletin de livraison (sans prix)
 //
+//  Ce fichier reproduit FIDÈLEMENT les 4 templates existants :
+//    - app/print/fiche-travail/[slug]/page.tsx       (préfixe .ft-)
+//    - app/print/offre/[slug]/page.tsx               (préfixe .cc-)
+//    - app/print/page-garde-colis/[slug]/page.tsx    (préfixe .pg-)
+//    - app/print/bulletin-livraison/[slug]/page.tsx  (préfixe .bl-)
+//
 //  Auto-print après 1500ms (laisse les images charger).
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState, useRef } from "react";
+import {
+  PrintData, QuoteLine, AmbianceImage,
+  serviceOptions, formatMoney, formatDate,
+  computeTotals,
+} from "@/lib/jc-print-types";
 
-const THEME = "#2b8ad1";
-const BLACK = "#000000";
-const GREY  = "#333333";
-const LIGHT = "#f9f9f9";
+const THEME  = "#2b8ad1";
+const BLACK  = "#000000";
+const GREY   = "#333333";
+const LIGHT  = "#f9f9f9";
 const ORANGE = "#e67e22";
 const QTY_HIGHLIGHT = "#dc2626";
 
-const TVA_RATE = 0.081;
-
-type ServiceItem = { code: string; label: string };
-const serviceOptions: ServiceItem[] = [
-  { code: "montage",       label: "Frais de montage" },
-  { code: "poste",         label: "Livraison des colis par La Poste" },
-  { code: "trottoir",      label: "Livraison colis franco trottoir" },
-  { code: "etage",         label: "Livraison à l'étage et déballage" },
-  { code: "etage_montage", label: "Livraison à l'étage, déballage et montage" },
-  { code: "reprise",       label: "Reprise et recyclage des anciens meubles" },
-];
-
-type QuoteLine = {
-  id: string;
-  type: "product" | "custom" | "comment";
-  image?: string;
-  sku: string;
-  title: string;
-  unitPrice: number;
-  qty: number;
-  stock?: number | null | "sur_commande";
-  lineDiscount?: number;
-};
-
-type PrintData = {
-  formType: string;
-  clientType: string;
-  paymentMode: string;
-  date: string;
-  commercial: string;
-  offerNumber: string;
-  reference: string;
-  societe: string; nom: string; prenom: string;
-  rue: string; numero: string; npa: string; ville: string;
-  telephone1: string; telephone2: string; email: string;
-  livrDiff: boolean;
-  livrSociete: string; livrNom: string; livrPrenom: string;
-  livrTel: string; livrRue: string; livrNumero: string; livrNpa: string; livrVille: string;
-  lines: QuoteLine[];
-  remarks: string;
-  leadTime: string;
-  accesLivraison?: string;
-  deliveryMode?: string;
-  discount?: string;
-  discountPercent?: string;
-  manualRounding?: string;
-  enabledServices?: Record<string, boolean>;
-  servicePrices?: Record<string, string>;
-  ambianceImages?: string[];
-};
-
 const EMPTY: PrintData = {
   formType: "Commande", clientType: "Privé (prix TTC)",
-  paymentMode: "", date: "", commercial: "", offerNumber: "", reference: "",
+  paymentMode: "Paiement d'avance à la commande", offerStatus: "En cours",
+  date: "", commercial: "", offerNumber: "", reference: "",
   societe: "", nom: "", prenom: "", rue: "", numero: "", npa: "", ville: "",
-  telephone1: "", telephone2: "", email: "",
+  telephone1: "", telephone2: "", email: "", customerNumber: "",
   livrDiff: false, livrSociete: "", livrNom: "", livrPrenom: "",
   livrTel: "", livrRue: "", livrNumero: "", livrNpa: "", livrVille: "",
-  lines: [], remarks: "", leadTime: "",
+  lines: [], discount: "0", discountPercent: "0", manualRounding: "",
+  enabledServices: {}, servicePrices: {}, remarks: "", leadTime: "",
+  ambianceImages: [],
   deliveryMode: "Livraison à domicile",
-  discount: "0", discountPercent: "0", manualRounding: "",
-  enabledServices: {}, servicePrices: {}, ambianceImages: [],
-};
-
-function formatDate(iso: string) {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any;
 
 function formatDateTime() {
   return new Date().toLocaleString("fr-CH", {
@@ -97,48 +54,11 @@ function formatDateTime() {
   });
 }
 
-function formatMoney(value: number) {
-  const formatted = new Intl.NumberFormat("de-CH", {
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
-  }).format(value);
-  return `CHF ${formatted}`;
-}
-
-function computeTotals(d: PrintData) {
-  const isPrivateTTC = d.clientType === "Privé (prix TTC)";
-  const subTotal = d.lines.reduce((s, l) => {
-    if (l.type === "comment") return s;
-    return s + (l.qty * l.unitPrice - (l.lineDiscount || 0));
-  }, 0);
-  const pct = Number(d.discountPercent || 0);
-  const discountValue = pct > 0 ? Math.round(subTotal * pct) / 100 : Number(d.discount || 0);
-  const enabled = d.enabledServices || {};
-  const prices = d.servicePrices || {};
-  const fixedServices = serviceOptions.reduce((s, srv) => {
-    if (!enabled[srv.code]) return s;
-    return s + Number(prices[srv.code] || 0);
-  }, 0);
-  const customService = enabled["custom"] ? Number(prices["custom"] || 0) : 0;
-  const serviceTotal = fixedServices + customService;
-  const totalAfterDiscount = subTotal - discountValue;
-  const totalPlusServices = totalAfterDiscount + serviceTotal;
-  const roundingValue = Math.min(0, Number(d.manualRounding) || 0);
-  const totalAfterRounding = totalPlusServices + roundingValue;
-  const tvaAmount = isPrivateTTC
-    ? totalAfterRounding - totalAfterRounding / (1 + TVA_RATE)
-    : totalAfterRounding * TVA_RATE;
-  const finalTotal = isPrivateTTC ? totalAfterRounding : totalAfterRounding + tvaAmount;
-  return {
-    isPrivateTTC, subTotal, discountValue, serviceTotal,
-    totalAfterDiscount, totalPlusServices, roundingValue,
-    totalAfterRounding, tvaAmount, finalTotal,
-  };
-}
-
 export default function PrintAllPage({ params }: { params: Promise<{ slug: string }> }) {
   const [data, setData] = useState<PrintData>(EMPTY);
   const [ready, setReady] = useState(false);
   const [numeroAffiche, setNumeroAffiche] = useState("");
+  const [offreSlug, setOffreSlug] = useState("");
   const [dateDocument, setDateDocument] = useState<string>("");
   const [typeDocument, setTypeDocument] = useState<string>("Commande");
   const [printedAt] = useState(formatDateTime());
@@ -156,9 +76,15 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           const offreData = json.offre?.data;
           if (offreData) {
             setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber || slug);
+            setOffreSlug(slug);
             setDateDocument(json.offre?.date_document || offreData.date || "");
             setTypeDocument(json.offre?.type_document || offreData.formType || "Commande");
-            setData({ ...EMPTY, ...offreData });
+            setData({
+              ...EMPTY,
+              ...offreData,
+              customerNumber: json.offre?.numero_client || "",
+              ambianceImages: offreData.ambianceImages || [],
+            });
           }
         }
       } catch (e) {
@@ -191,7 +117,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const JsBarcode = (window as any).JsBarcode;
       if (JsBarcode) {
-        document.querySelectorAll<HTMLElement>(".barcode-sku").forEach((el) => {
+        document.querySelectorAll<HTMLElement>(".barcode-sku-all").forEach((el) => {
           const sku = el.getAttribute("data-sku");
           if (!sku) return;
           try {
@@ -243,31 +169,56 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
     );
   }
 
-  // ─── Variables partagées ───
-  const livrSociete = data.livrDiff ? data.livrSociete : data.societe;
-  const livrNom     = data.livrDiff ? data.livrNom     : data.nom;
-  const livrPrenom  = data.livrDiff ? data.livrPrenom  : data.prenom;
-  const livrRue     = data.livrDiff ? data.livrRue     : data.rue;
-  const livrNumero  = data.livrDiff ? data.livrNumero  : data.numero;
-  const livrNpa     = data.livrDiff ? data.livrNpa     : data.npa;
-  const livrVille   = data.livrDiff ? data.livrVille   : data.ville;
-  const livrTelEffectif = (data.livrDiff && data.livrTel) ? data.livrTel : data.telephone1;
-  const clientEmail = data.email;
-  const isPickup = data.deliveryMode === "À l'emporter";
-  const totalQty = data.lines.reduce((s, l) => l.type === "comment" ? s : s + l.qty, 0);
   const totals = computeTotals(data);
+  const {
+    isPrivateTTC, subTotal, discountValue, serviceTotal,
+    roundingValue, tvaAmount, finalTotal,
+  } = totals;
 
   const activeServices = [
     ...serviceOptions
-      .filter((s) => data.enabledServices?.[s.code])
-      .map((s) => ({ label: s.label, amount: Number(data.servicePrices?.[s.code] || 0) })),
-    ...(data.enabledServices?.["custom"]
-      ? [{ label: data.servicePrices?.["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices?.["custom"] || 0) }]
+      .filter((s) => data.enabledServices[s.code])
+      .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code] || 0) })),
+    ...(data.enabledServices["custom"]
+      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices["custom"] || 0) }]
       : []),
   ];
 
+  const activeServicesNoPrice = [
+    ...serviceOptions
+      .filter((s) => data.enabledServices[s.code])
+      .map((s) => ({ label: s.label })),
+    ...(data.enabledServices["custom"]
+      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé" }]
+      : []),
+  ];
+
+  const validationUrl = `https://offres.jardin-confort.ch/offre/${offreSlug || numeroAffiche.toLowerCase().replace(/\s+/g, "-")}`;
+
+  // Variables fiche de travail
+  const livrSocieteFT = data.livrDiff ? data.livrSociete : data.societe;
+  const livrNomFT     = data.livrDiff ? data.livrNom     : data.nom;
+  const livrPrenomFT  = data.livrDiff ? data.livrPrenom  : data.prenom;
+  const livrRueFT     = data.livrDiff ? data.livrRue     : data.rue;
+  const livrNumeroFT  = data.livrDiff ? data.livrNumero  : data.numero;
+  const livrNpaFT     = data.livrDiff ? data.livrNpa     : data.npa;
+  const livrVilleFT   = data.livrDiff ? data.livrVille   : data.ville;
+  const livrTelFTeff = (data.livrDiff && data.livrTel) ? data.livrTel : data.telephone1;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isPickup = (data as any).deliveryMode === "À l'emporter";
+  const totalQty = data.lines.reduce((s, l) => l.type === "comment" ? s : s + l.qty, 0);
   const numeroLabel = typeDocument === "Offre" ? "N° d'offre" : "N° de commande";
   const dateLabel = typeDocument === "Offre" ? "Date offre" : "Date commande";
+
+  // Variables page de garde
+  const showLivrDiffPG = !isPickup && data.livrDiff;
+  const pgSociete = showLivrDiffPG ? data.livrSociete : data.societe;
+  const pgNom     = showLivrDiffPG ? data.livrNom     : data.nom;
+  const pgPrenom  = showLivrDiffPG ? data.livrPrenom  : data.prenom;
+  const pgRue     = showLivrDiffPG ? data.livrRue     : data.rue;
+  const pgNumero  = showLivrDiffPG ? data.livrNumero  : data.numero;
+  const pgNpa     = showLivrDiffPG ? data.livrNpa     : data.npa;
+  const pgVille   = showLivrDiffPG ? data.livrVille   : data.ville;
 
   return (
     <>
@@ -283,20 +234,15 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           print-color-adjust: exact;
           -webkit-print-color-adjust: exact;
         }
-        @page {
-          size: A4 portrait;
-          margin: 11mm 11mm 14mm 11mm;
-          @bottom-right {
-            content: "Page " counter(page) " / " counter(pages);
-            font-family: 'Raleway', Arial, sans-serif;
-            font-size: 9px;
-            color: #888;
-            padding-right: 2mm;
-          }
-        }
+        @page { size: A4 portrait; margin: 14mm 16mm 14mm 14mm; }
         @media screen {
-          .doc-wrap-all { max-width: 794px; margin: 0 auto; padding: 20px 28px; box-shadow: 0 0 20px rgba(0,0,0,0.08); background: white; }
-          .doc-wrap-all + .doc-wrap-all { margin-top: 30px; border-top: 4px dashed #ccc; padding-top: 40px; }
+          .doc-wrap-all {
+            max-width: 794px; margin: 0 auto; padding: 20px 28px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.08); background: white;
+          }
+          .doc-wrap-all + .doc-wrap-all {
+            margin-top: 30px; border-top: 4px dashed #ccc; padding-top: 40px;
+          }
           .print-btn-all {
             position: fixed; top: 16px; right: 16px; z-index: 100;
             background: ${THEME}; color: white; border: 0;
@@ -322,23 +268,17 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         }
         .page-break { page-break-before: always; }
 
-        /* ════════════════════════════════════════════════════════════ */
-        /* ═══ STYLES FICHE DE TRAVAIL (page 1) ════════════════════════ */
-        /* ════════════════════════════════════════════════════════════ */
-        .ft-banner {
-          background: ${THEME}; color: white;
-          padding: 5px 12px; margin-bottom: 3mm;
-          border-radius: 4px;
-          display: flex; justify-content: space-between; align-items: center;
-          font-size: 12px; font-weight: 700; letter-spacing: 0.05em;
-        }
+        /* ════════════════════════════════════════════════════════════════════ */
+        /* ═══ STYLES FICHE DE TRAVAIL (page 1) — préfixe .ft- ═══════════════ */
+        /* ════════════════════════════════════════════════════════════════════ */
+        .ft-banner { background: ${THEME}; color: white; padding: 5px 12px; margin-bottom: 3mm; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; }
         .ft-banner-printed { font-size: 10px; font-weight: 400; opacity: 0.9; }
         .ft-header { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 3mm; align-items: flex-start; }
         .ft-header-left { flex: 0 0 42%; }
         .ft-header-qr { flex: 0 0 80px; display: flex; flex-direction: column; align-items: center; padding-top: 2px; }
         .ft-header-qr img { display: block; }
-        .ft-header-qr .qr-second { margin-top: 6px; }
-        .ft-header-qr .qr-label { font-size: 8px; color: #666; margin-top: 2px; letter-spacing: 0.04em; text-transform: uppercase; text-align: center; }
+        .ft-header-qr .ft-qr-second { margin-top: 6px; }
+        .ft-qr-label { font-size: 8px; color: #666; margin-top: 2px; letter-spacing: 0.04em; text-transform: uppercase; text-align: center; }
         .ft-header-right { flex: 1; min-width: 0; }
         .ft-logo { max-width: 150px; max-height: 52px; object-fit: contain; display: block; margin-bottom: 4px; }
         .ft-type { font-size: 20px; font-weight: 900; color: ${THEME}; margin-bottom: 4px; line-height: 1.05; letter-spacing: 0.02em; text-transform: uppercase; }
@@ -361,11 +301,11 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .ft-acces-text { font-size: 12px; color: #1f2937; line-height: 1.55; white-space: pre-wrap; font-weight: 500; }
         .ft-table { width: 100%; border-collapse: collapse; margin-bottom: 3mm; }
         .ft-table thead th { padding: 6px 4px; border-top: 2px solid ${THEME}; border-bottom: 2px solid ${THEME}; font-weight: 700; font-size: 11px; color: ${BLACK}; text-transform: uppercase; letter-spacing: 0.04em; }
-        .ft-table thead th.th-left { text-align: left; }
-        .ft-table thead th.th-center { text-align: center; }
-        .ft-table thead th.th-right { text-align: right; }
+        .ft-table thead th.ft-th-left { text-align: left; }
+        .ft-table thead th.ft-th-center { text-align: center; }
+        .ft-table thead th.ft-th-right { text-align: right; }
         .ft-table tbody tr td { padding: 5px 4px; border-bottom: 1px solid #d1d5db; vertical-align: middle; font-size: 11.5px; }
-        .ft-table tbody tr.row-product:nth-child(even) td { background: ${LIGHT}; }
+        .ft-table tbody tr.ft-row-product:nth-child(even) td { background: ${LIGHT}; }
         .ft-td-img { width: 56px; vertical-align: middle; text-align: center; }
         .ft-td-img img { max-width: 50px; max-height: 50px; object-fit: contain; }
         .ft-td-img-placeholder { width: 50px; height: 50px; margin: 0 auto; border: 1px dashed #d1d5db; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #9ca3af; }
@@ -425,108 +365,148 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .ft-final-sign-line { height: 26px; border-bottom: 1.5px solid #555; }
         .ft-final-sign-label { font-size: 9.5px; color: #555; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; text-align: left; }
 
-        /* ════════════════════════════════════════════════════════════ */
-        /* ═══ STYLES COMMANDE CLIENT (page 2) ═════════════════════════ */
-        /* ════════════════════════════════════════════════════════════ */
-        .cc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6mm; padding-bottom: 4mm; border-bottom: 3px solid ${THEME}; }
-        .cc-header-left { flex: 1; }
-        .cc-logo { max-width: 180px; max-height: 60px; object-fit: contain; }
-        .cc-doc-type { font-size: 28px; font-weight: 900; color: ${THEME}; letter-spacing: 0.04em; text-transform: uppercase; margin-top: 5px; }
-        .cc-doc-num { font-size: 14px; color: #555; margin-top: 2px; font-weight: 600; }
-        .cc-header-right { text-align: right; font-size: 11px; color: #555; line-height: 1.5; padding-top: 4px; }
-        .cc-header-right strong { color: ${BLACK}; font-size: 12px; }
+        /* ════════════════════════════════════════════════════════════════════ */
+        /* ═══ STYLES COMMANDE CLIENT (page 2) — préfixe .cc- ═══════════════ */
+        /* ═══ Reproduit fidèlement app/print/offre/[slug]/page.tsx ═══════════ */
+        /* ════════════════════════════════════════════════════════════════════ */
+        .cc-header { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 6mm; width: 100%; }
+        .cc-header-left { flex: 0 0 46%; }
+        .cc-header-right { flex: 0 0 50%; }
+        .cc-logo { max-width: 175px; max-height: 65px; object-fit: contain; display: block; margin-bottom: 10px; }
+        .cc-type { font-size: 26px; font-weight: 400; color: ${THEME}; margin-bottom: 8px; line-height: 1.1; }
+        .cc-meta-table { border-collapse: collapse; width: 100%; }
+        .cc-meta-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 12px; line-height: 1.35; }
+        .cc-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 44%; }
+        .cc-addr-window { padding: 10px 14px 10px 20px; min-height: 58mm; background: white; }
+        .cc-addr-ref { font-size: 12px; color: #666; font-weight: 400; margin-bottom: 8px; }
+        .cc-addr-name { font-size: 19px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin-bottom: 4px; }
+        .cc-addr-line { font-size: 19px; color: ${BLACK}; line-height: 1.3; font-weight: 400; }
+        .cc-hr { border: 0; border-top: 2px solid ${THEME}; margin: 4mm 0; width: 100%; }
+        .cc-addresses { display: table; width: 100%; margin-bottom: 6mm; border-collapse: collapse; }
+        .cc-addr-row { display: table-row; }
+        .cc-addr-group { display: table-cell; width: 50%; vertical-align: top; padding-right: 10px; }
+        .cc-addr-inner { display: flex; gap: 0; }
+        .cc-addr-title { font-size: 12px; font-weight: 700; color: ${THEME}; white-space: nowrap; padding-right: 12px; padding-top: 1px; min-width: 110px; flex-shrink: 0; display: block; }
+        .cc-addr-content { font-size: 12px; line-height: 1.6; color: ${BLACK}; flex: 1; }
+        .cc-table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; }
+        .cc-table thead th { padding: 7px 4px; border-top: 2px solid ${THEME}; border-bottom: 2px solid ${THEME}; font-weight: 700; font-size: 12px; color: ${BLACK}; }
+        .cc-table thead th.cc-th-left { text-align: left; }
+        .cc-table thead th.cc-th-center { text-align: center; }
+        .cc-table thead th.cc-th-right { text-align: right; }
+        .cc-table tbody tr td { padding: 8px 4px; border-bottom: 1px solid #efefef; vertical-align: top; font-size: 12px; }
+        .cc-table tbody tr:nth-child(odd) td { background: ${LIGHT}; }
+        .cc-td-img { width: 56px; vertical-align: middle; text-align: center; }
+        .cc-td-img img { max-width: 52px; max-height: 52px; object-fit: contain; }
+        .cc-td-desc { padding-left: 8px !important; }
+        .cc-td-center { text-align: center; vertical-align: middle; white-space: nowrap; }
+        .cc-td-right { text-align: right; vertical-align: middle; white-space: nowrap; }
+        .cc-td-total { text-align: right; vertical-align: middle; white-space: nowrap; font-weight: 700; color: ${BLACK}; }
+        .cc-item-title { font-weight: 700; color: ${BLACK}; line-height: 1.35; }
+        .cc-item-sku { font-size: 11px; color: #777; margin-top: 2px; font-weight: 400; }
+        .cc-item-discount { font-size: 11px; color: #2a8a2a; margin-top: 3px; }
+        .cc-tr-comment td { background: #eef4fb !important; }
+        .cc-td-comment { padding: 6px 10px !important; font-style: italic; color: #445 !important; font-size: 12px; }
+        .cc-bottom-wrap { display: flex; gap: 20px; margin-bottom: 8mm; align-items: flex-end; }
+        .cc-notes-sign-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; }
+        .cc-totals-col { flex: 0 0 44%; }
+        .cc-notes-title { font-weight: 700; color: ${BLACK}; margin-bottom: 5px; font-size: 12px; }
+        .cc-notes-text { font-size: 12px; color: ${GREY}; line-height: 1.55; white-space: pre-wrap; margin-bottom: 12px; }
+        .cc-sign-block { margin-top: auto; background: #f0faf2; border: 1.5px solid #a7d9b0; border-radius: 10px; padding: 14px 18px 12px; }
+        .cc-sign-name { font-weight: 700; color: ${BLACK}; font-size: 12px; margin-bottom: 24px; }
+        .cc-sign-line { border-bottom: 1.5px solid #5a9e6a; margin-bottom: 5px; }
+        .cc-sign-sub { font-size: 10px; color: #5a9e6a; font-style: italic; }
+        .cc-pricing { width: 100%; border-collapse: collapse; }
+        .cc-pricing td { padding: 5px 4px; font-size: 12px; }
+        .cc-pricing tr:nth-child(even) td { background: ${LIGHT}; }
+        .cc-pt-label { font-weight: 600; color: ${BLACK}; }
+        .cc-pt-sub { font-size: 11px; padding-left: 14px !important; color: #555; }
+        .cc-pt-value { text-align: right; white-space: nowrap; color: ${BLACK}; }
+        .cc-pt-tva td { color: #666; font-size: 11px; }
+        .cc-pt-total td { border-top: 2px solid ${THEME} !important; border-bottom: 2px solid ${THEME} !important; padding: 8px 4px !important; }
+        .cc-pt-total-label { font-weight: 900 !important; font-size: 15px !important; color: ${BLACK} !important; }
+        .cc-pt-total-value { font-weight: 900 !important; font-size: 15px !important; color: ${BLACK} !important; text-align: right; white-space: nowrap; }
+        .cc-thanks { text-align: center; font-weight: 700; color: ${THEME}; margin: 6mm 0 3px; font-size: 13px; }
+        .cc-terms { text-align: center; font-size: 10px; color: #888; line-height: 1.5; margin-bottom: 6mm; }
+        .cc-terms a { color: ${THEME}; }
+        .cc-footer { border-top: 1px solid #ddd; padding-top: 6px; text-align: center; font-size: 11px; color: #666; line-height: 1.7; }
+        .cc-footer strong { color: ${BLACK}; }
+        .cc-footer-url { font-weight: 700; color: ${THEME}; }
+        .cc-footer-social { margin-top: 5px; text-align: center; display: block; width: 100%; }
+        .cc-footer-social img { width: 18px; height: 18px; margin: 0 4px; vertical-align: middle; display: inline-block; }
+        .cc-ambiance-grid { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8mm; }
+        .cc-ambiance-item { flex: 0 0 calc(50% - 7px); page-break-inside: avoid; break-inside: avoid; text-align: center; }
+        .cc-ambiance-item img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; }
+        .cc-ambiance-caption { font-size: 10px; color: #777; font-style: italic; margin-top: 5px; text-align: center; }
 
-        .cc-addresses { display: flex; gap: 18px; margin-bottom: 6mm; }
-        .cc-addr-block { flex: 1; padding: 10px 14px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }
-        .cc-addr-title { font-size: 10px; font-weight: 700; color: ${THEME}; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; }
-        .cc-addr-name { font-weight: 700; font-size: 13px; color: ${BLACK}; }
-        .cc-addr-line { font-size: 12px; color: #444; }
-        .cc-addr-contact { margin-top: 4px; font-size: 11px; color: #555; }
+        /* ════════════════════════════════════════════════════════════════════ */
+        /* ═══ STYLES PAGE DE GARDE COLIS (page 3) — préfixe .pg- ═══════════ */
+        /* ═══ Reproduit fidèlement app/print/page-garde-colis/[slug]/page.tsx ═ */
+        /* ════════════════════════════════════════════════════════════════════ */
+        .pg-wrap { min-height: 1000px; position: relative; }
+        .pg-top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 20mm; gap: 20px; }
+        .pg-return-block { display: flex; gap: 18px; align-items: flex-start; flex: 0 0 auto; }
+        .pg-return-logo { max-width: 130px; max-height: 80px; object-fit: contain; }
+        .pg-client-addr { flex: 0 0 auto; padding: 12px 24px; min-width: 90mm; margin-top: 10mm; }
+        .pg-client-addr-line { font-size: 22px; color: ${BLACK}; line-height: 1.35; font-weight: 400; }
+        .pg-client-addr-name { font-size: 24px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin-bottom: 2px; }
+        .pg-order-info { margin-top: 30mm; padding-left: 0; }
+        .pg-order-info-line { font-size: 14px; color: ${BLACK}; line-height: 1.7; }
+        .pg-order-info-line strong { font-weight: 700; }
+        .pg-accent-bar { width: 60mm; height: 3px; background: ${THEME}; margin-top: 6mm; }
 
-        .cc-meta-bar { display: flex; gap: 20px; padding: 8px 14px; background: rgba(43, 138, 209, 0.08); border-radius: 6px; margin-bottom: 5mm; font-size: 11.5px; flex-wrap: wrap; }
-        .cc-meta-item strong { color: ${BLACK}; }
-
-        .cc-table { width: 100%; border-collapse: collapse; margin-bottom: 4mm; }
-        .cc-table thead th { padding: 8px 6px; background: ${THEME}; color: white; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-        .cc-table thead th.th-left { text-align: left; }
-        .cc-table thead th.th-right { text-align: right; }
-        .cc-table thead th.th-center { text-align: center; }
-        .cc-table tbody tr td { padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11.5px; vertical-align: middle; }
-        .cc-table tbody tr:nth-child(even) td { background: ${LIGHT}; }
-        .cc-td-img { width: 60px; text-align: center; }
-        .cc-td-img img { max-width: 50px; max-height: 50px; object-fit: contain; }
-        .cc-td-qty { width: 55px; text-align: center; font-weight: 700; }
-        .cc-td-price { width: 80px; text-align: right; }
-        .cc-td-total { width: 90px; text-align: right; font-weight: 700; }
-        .cc-item-title { font-weight: 700; color: ${BLACK}; }
-        .cc-item-sku { font-size: 10px; color: #777; margin-top: 2px; }
-        .cc-comment-row td { background: #eef4fb !important; font-style: italic; color: #1e3a5f !important; font-weight: 600; border-left: 3px solid ${THEME} !important; }
-
-        .cc-totals-row { display: flex; gap: 14px; margin-bottom: 5mm; }
-        .cc-remarks-block { flex: 1; padding: 12px 14px; background: #fef3c7; border-left: 3px solid #f59e0b; border-radius: 4px; font-size: 11.5px; line-height: 1.55; white-space: pre-wrap; }
-        .cc-remarks-title { font-weight: 700; color: #92400e; margin-bottom: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-        .cc-totals-block { flex: 0 0 42%; }
-        .cc-totals-table { width: 100%; border-collapse: collapse; }
-        .cc-totals-table td { padding: 5px 8px; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
-        .cc-totals-table .cc-tot-label { color: ${BLACK}; }
-        .cc-totals-table .cc-tot-val { text-align: right; white-space: nowrap; color: ${BLACK}; }
-        .cc-totals-table .cc-grand td { border-top: 2px solid ${THEME}; border-bottom: 2px solid ${THEME}; padding: 9px 8px; background: rgba(43, 138, 209, 0.08); font-weight: 900; font-size: 15px; }
-
-        .cc-ambiance-section { margin-top: 8mm; page-break-inside: avoid; }
-        .cc-ambiance-title { font-size: 13px; font-weight: 700; color: ${THEME}; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4mm; padding-bottom: 3px; border-bottom: 2px solid ${THEME}; }
-        .cc-ambiance-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
-        .cc-ambiance-grid img { width: 100%; height: auto; max-height: 180px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; }
-
-        /* ════════════════════════════════════════════════════════════ */
-        /* ═══ STYLES PAGE DE GARDE COLIS (page 3) ═════════════════════ */
-        /* ════════════════════════════════════════════════════════════ */
-        .pg-wrap { display: flex; flex-direction: row; gap: 16mm; min-height: 250mm; padding-top: 12mm; }
-        .pg-left { flex: 0 0 35%; display: flex; flex-direction: column; align-items: center; padding-top: 30mm; }
-        .pg-logo { max-width: 100%; max-height: 200px; object-fit: contain; }
-        .pg-company { font-size: 22px; font-weight: 900; color: ${THEME}; margin-top: 12mm; text-align: center; letter-spacing: 0.05em; line-height: 1.2; }
-        .pg-company-addr { font-size: 12px; color: #555; margin-top: 6mm; text-align: center; line-height: 1.6; }
-        .pg-right { flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding-top: 20mm; }
-        .pg-destinataire-label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4mm; font-weight: 700; }
-        .pg-name { font-size: 32px; font-weight: 900; color: ${BLACK}; line-height: 1.2; margin-bottom: 4mm; }
-        .pg-address { font-size: 22px; color: ${BLACK}; line-height: 1.5; font-weight: 500; }
-        .pg-bottom-info { margin-top: auto; padding-top: 10mm; border-top: 2px solid #e5e7eb; font-size: 12px; color: #555; line-height: 1.7; }
-        .pg-bottom-info strong { color: ${BLACK}; font-weight: 700; }
-
-        /* ════════════════════════════════════════════════════════════ */
-        /* ═══ STYLES BULLETIN DE LIVRAISON (page 4) ═══════════════════ */
-        /* ════════════════════════════════════════════════════════════ */
-        .bl-banner { background: #10b981; color: white; padding: 5px 12px; margin-bottom: 4mm; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; }
-        .bl-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5mm; padding-bottom: 4mm; border-bottom: 3px solid #10b981; }
-        .bl-header-left { flex: 1; }
-        .bl-doc-type { font-size: 24px; font-weight: 900; color: #10b981; letter-spacing: 0.04em; text-transform: uppercase; margin-top: 5px; }
-        .bl-doc-num { font-size: 13px; color: #555; margin-top: 2px; font-weight: 600; }
-        .bl-header-right { text-align: right; font-size: 11px; color: #555; line-height: 1.5; }
-        .bl-addresses { display: flex; gap: 18px; margin-bottom: 5mm; }
-        .bl-addr-block { flex: 1; padding: 10px 14px; background: #f0fdf4; border: 2px solid #10b981; border-radius: 6px; }
-        .bl-addr-title { font-size: 10px; font-weight: 700; color: #059669; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
-        .bl-addr-name { font-weight: 700; font-size: 14px; color: ${BLACK}; }
-        .bl-addr-line { font-size: 12px; color: #333; }
-        .bl-table { width: 100%; border-collapse: collapse; margin-bottom: 5mm; }
-        .bl-table thead th { padding: 8px 6px; background: #10b981; color: white; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-        .bl-table thead th.th-left { text-align: left; }
-        .bl-table thead th.th-center { text-align: center; }
-        .bl-table tbody tr td { padding: 8px 6px; border-bottom: 1px solid #d1fae5; font-size: 12px; vertical-align: middle; }
-        .bl-table tbody tr:nth-child(even) td { background: #f0fdf4; }
-        .bl-td-img { width: 60px; text-align: center; }
-        .bl-td-img img { max-width: 50px; max-height: 50px; object-fit: contain; }
-        .bl-td-qty { width: 70px; text-align: center; font-size: 18px; font-weight: 900; color: ${BLACK}; }
-        .bl-item-title { font-weight: 700; color: ${BLACK}; font-size: 13px; }
-        .bl-item-sku { font-size: 10px; color: #777; margin-top: 2px; }
-        .bl-services { margin-bottom: 5mm; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; }
-        .bl-services-title { font-size: 11px; font-weight: 700; color: #059669; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
-        .bl-services-list { font-size: 12px; color: ${BLACK}; line-height: 1.7; }
-        .bl-thanks { margin-top: 8mm; padding: 14px 18px; background: linear-gradient(90deg, #d1fae5 0%, #a7f3d0 100%); border-radius: 8px; text-align: center; }
-        .bl-thanks-title { font-size: 16px; font-weight: 900; color: #059669; margin-bottom: 4px; }
-        .bl-thanks-text { font-size: 11.5px; color: #064e3b; line-height: 1.5; }
-        .bl-partial-notice { margin-top: 4mm; padding: 8px 12px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; font-size: 11px; color: #92400e; line-height: 1.5; }
+        /* ════════════════════════════════════════════════════════════════════ */
+        /* ═══ STYLES BULLETIN DE LIVRAISON (page 4) — préfixe .bl- ═══════ */
+        /* ═══ Reproduit fidèlement app/print/bulletin-livraison/[slug]/page.tsx*/
+        /* ════════════════════════════════════════════════════════════════════ */
+        .bl-header { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 6mm; width: 100%; }
+        .bl-header-left { flex: 0 0 46%; }
+        .bl-header-right { flex: 0 0 50%; }
+        .bl-logo { max-width: 175px; max-height: 65px; object-fit: contain; display: block; margin-bottom: 10px; }
+        .bl-type { font-size: 26px; font-weight: 400; color: ${THEME}; margin-bottom: 8px; line-height: 1.1; }
+        .bl-meta-table { border-collapse: collapse; width: 100%; }
+        .bl-meta-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 12px; line-height: 1.35; }
+        .bl-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 44%; }
+        .bl-addr-window { padding: 10px 14px 10px 20px; min-height: 58mm; background: white; }
+        .bl-addr-ref { font-size: 12px; color: #666; font-weight: 400; margin-bottom: 8px; }
+        .bl-addr-name { font-size: 19px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin-bottom: 4px; }
+        .bl-addr-line { font-size: 19px; color: ${BLACK}; line-height: 1.3; font-weight: 400; }
+        .bl-hr { border: 0; border-top: 2px solid ${THEME}; margin: 4mm 0; width: 100%; }
+        .bl-addresses { display: table; width: 100%; margin-bottom: 6mm; border-collapse: collapse; }
+        .bl-addr-row { display: table-row; }
+        .bl-addr-group { display: table-cell; width: 50%; vertical-align: top; padding-right: 10px; }
+        .bl-addr-inner { display: flex; gap: 0; }
+        .bl-addr-title { font-size: 12px; font-weight: 700; color: ${THEME}; white-space: nowrap; padding-right: 12px; padding-top: 1px; min-width: 110px; flex-shrink: 0; display: block; }
+        .bl-addr-content { font-size: 12px; line-height: 1.6; color: ${BLACK}; flex: 1; }
+        .bl-table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; }
+        .bl-table thead th { padding: 7px 4px; border-top: 2px solid ${THEME}; border-bottom: 2px solid ${THEME}; font-weight: 700; font-size: 12px; color: ${BLACK}; }
+        .bl-table thead th.bl-th-left { text-align: left; }
+        .bl-table thead th.bl-th-center { text-align: center; }
+        .bl-table tbody tr td { padding: 8px 4px; border-bottom: 1px solid #efefef; vertical-align: top; font-size: 12px; }
+        .bl-table tbody tr:nth-child(odd) td { background: ${LIGHT}; }
+        .bl-td-img { width: 56px; vertical-align: middle; text-align: center; }
+        .bl-td-img img { max-width: 52px; max-height: 52px; object-fit: contain; }
+        .bl-td-desc { padding-left: 8px !important; }
+        .bl-td-center { text-align: center; vertical-align: middle; white-space: nowrap; font-weight: 700; color: ${BLACK}; font-size: 14px; }
+        .bl-item-title { font-weight: 700; color: ${BLACK}; line-height: 1.35; }
+        .bl-item-sku { font-size: 11px; color: #777; margin-top: 2px; font-weight: 400; }
+        .bl-tr-comment td { background: #eef4fb !important; }
+        .bl-td-comment { padding: 6px 10px !important; font-style: italic; color: #445 !important; font-size: 12px; }
+        .bl-services-box { margin-bottom: 6mm; padding: 12px 16px; background: #f0f7ff; border-left: 3px solid ${THEME}; border-radius: 4px; }
+        .bl-services-title { font-size: 12px; font-weight: 700; color: ${BLACK}; margin-bottom: 6px; }
+        .bl-services-list { font-size: 12px; color: ${GREY}; line-height: 1.7; }
+        .bl-notes-block { margin-bottom: 6mm; }
+        .bl-notes-title { font-weight: 700; color: ${BLACK}; margin-bottom: 5px; font-size: 12px; }
+        .bl-notes-text { font-size: 12px; color: ${GREY}; line-height: 1.55; white-space: pre-wrap; }
+        .bl-thanks-block { text-align: center; margin: 8mm 0 4mm; padding: 14px 20px; background: #f0faf2; border: 1px solid #a7d9b0; border-radius: 8px; }
+        .bl-thanks-title { font-size: 14px; font-weight: 700; color: ${THEME}; margin-bottom: 6px; }
+        .bl-thanks-text { font-size: 11px; color: ${GREY}; line-height: 1.6; }
+        .bl-footer { border-top: 1px solid #ddd; padding-top: 6px; text-align: center; font-size: 11px; color: #666; line-height: 1.7; margin-top: 6mm; }
+        .bl-footer strong { color: ${BLACK}; }
+        .bl-footer-url { font-weight: 700; color: ${THEME}; }
+        .bl-footer-social { margin-top: 5px; text-align: center; display: block; width: 100%; }
+        .bl-footer-social img { width: 18px; height: 18px; margin: 0 4px; vertical-align: middle; display: inline-block; }
       `}</style>
 
-      {/* INFO + BOUTON IMPRIMER */}
       <div className="printall-info">
         🖨 Jeu complet — {numeroAffiche} · 4 pages
       </div>
@@ -534,9 +514,9 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         🖨 Imprimer
       </button>
 
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* ═══════════ PAGE 1 — FICHE DE TRAVAIL ════════════════════════ */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* ═══════════════ PAGE 1 — FICHE DE TRAVAIL ════════════════════════ */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
       <div className="doc-wrap-all">
         <div className="ft-banner">
           <span>📋 FICHE DE TRAVAIL — USAGE INTERNE</span>
@@ -556,7 +536,8 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 <tr><td className="ft-meta-label">{dateLabel}</td><td>{formatDate(dateDocument)}</td></tr>
                 <tr><td className="ft-meta-label">Commercial</td><td>{data.commercial}</td></tr>
                 {data.leadTime && <tr><td className="ft-meta-label">Délai de livraison</td><td>{data.leadTime}</td></tr>}
-                {data.deliveryMode && <tr><td className="ft-meta-label">Mode livraison</td><td><strong>{data.deliveryMode}</strong></td></tr>}
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {(data as any).deliveryMode && <tr><td className="ft-meta-label">Mode livraison</td><td><strong>{(data as any).deliveryMode}</strong></td></tr>}
                 <tr><td className="ft-meta-label">Total articles</td><td><strong>{totalQty} pce{totalQty > 1 ? "s" : ""}</strong></td></tr>
               </tbody>
             </table>
@@ -564,9 +545,9 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
 
           <div className="ft-header-qr">
             <div id="qr-commande-all"></div>
-            <div className="qr-label">Scan = N° {typeDocument === "Offre" ? "offre" : "cmd"}</div>
-            <div id="qr-client-all" className="qr-second"></div>
-            <div className="qr-label">Ref client</div>
+            <div className="ft-qr-label">Scan = N° {typeDocument === "Offre" ? "offre" : "cmd"}</div>
+            <div id="qr-client-all" className="ft-qr-second"></div>
+            <div className="ft-qr-label">Ref client</div>
           </div>
 
           <div className="ft-header-right">
@@ -582,17 +563,17 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     Route de Lavaux 425 · 1095 Lutry
                   </div>
                   <div className="ft-addr-name" style={{marginTop: 8, fontSize: 13}}>Client : {data.nom} {data.prenom}</div>
-                  {livrTelEffectif && <div className="ft-addr-tel">📞 {livrTelEffectif}</div>}
-                  {clientEmail && <div className="ft-addr-email">✉ {clientEmail}</div>}
+                  {livrTelFTeff && <div className="ft-addr-tel">📞 {livrTelFTeff}</div>}
+                  {data.email && <div className="ft-addr-email">✉ {data.email}</div>}
                 </>
               ) : (
                 <>
-                  {livrSociete && <div className="ft-addr-line">{livrSociete}</div>}
-                  <div className="ft-addr-name">{livrNom} {livrPrenom}</div>
-                  {livrRue && <div className="ft-addr-line">{livrRue} {livrNumero}</div>}
-                  {livrNpa && <div className="ft-addr-line">{livrNpa} {livrVille}</div>}
-                  {livrTelEffectif && <div className="ft-addr-tel">📞 {livrTelEffectif}</div>}
-                  {clientEmail && <div className="ft-addr-email">✉ {clientEmail}</div>}
+                  {livrSocieteFT && <div className="ft-addr-line">{livrSocieteFT}</div>}
+                  <div className="ft-addr-name">{livrNomFT} {livrPrenomFT}</div>
+                  {livrRueFT && <div className="ft-addr-line">{livrRueFT} {livrNumeroFT}</div>}
+                  {livrNpaFT && <div className="ft-addr-line">{livrNpaFT} {livrVilleFT}</div>}
+                  {livrTelFTeff && <div className="ft-addr-tel">📞 {livrTelFTeff}</div>}
+                  {data.email && <div className="ft-addr-email">✉ {data.email}</div>}
                 </>
               )}
             </div>
@@ -606,10 +587,12 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           </div>
         )}
 
-        {data.accesLivraison && data.accesLivraison.trim() && !isPickup && (
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+        {(data as any).accesLivraison && (data as any).accesLivraison.trim() && !isPickup && (
           <div className="ft-acces">
             <div className="ft-acces-title">🏢 Accès livraison / étage</div>
-            <div className="ft-acces-text">{data.accesLivraison}</div>
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            <div className="ft-acces-text">{(data as any).accesLivraison}</div>
           </div>
         )}
 
@@ -617,19 +600,19 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           <thead>
             <tr>
               <th style={{width:56}}></th>
-              <th className="th-center" style={{width:54}}></th>
-              <th className="th-center" style={{width:60}}>Qté</th>
-              <th className="th-left">Description / SKU / Code-barres</th>
-              <th className="th-right" style={{width:70}}>Prix/pce</th>
-              <th className="th-right" style={{width:78}}>Total</th>
-              <th className="th-center" style={{width:78}}>Stock</th>
+              <th className="ft-th-center" style={{width:54}}></th>
+              <th className="ft-th-center" style={{width:60}}>Qté</th>
+              <th className="ft-th-left">Description / SKU / Code-barres</th>
+              <th className="ft-th-right" style={{width:70}}>Prix/pce</th>
+              <th className="ft-th-right" style={{width:78}}>Total</th>
+              <th className="ft-th-center" style={{width:78}}>Stock</th>
             </tr>
           </thead>
           <tbody>
             {data.lines.length === 0 && (
               <tr><td colSpan={7} style={{textAlign:"center", padding:"20px", color:"#aaa", fontStyle:"italic"}}>Aucun article</td></tr>
             )}
-            {data.lines.map((line) => {
+            {data.lines.map((line: QuoteLine) => {
               if (line.type === "comment") {
                 return (
                   <tr key={line.id} className="ft-tr-comment">
@@ -653,7 +636,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
               const isMultiQty = line.qty > 1;
               return (
-                <tr key={line.id} className="row-product">
+                <tr key={line.id} className="ft-row-product">
                   <td className="ft-td-img">
                     {line.image ? <img src={line.image} alt="" /> : <div className="ft-td-img-placeholder">{isCustom ? "✏️" : "—"}</div>}
                   </td>
@@ -676,7 +659,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     {line.sku ? (
                       <>
                         <div className="ft-item-sku-text">SKU : {line.sku}</div>
-                        <div className="ft-item-barcode"><svg className="barcode-sku" data-sku={line.sku}></svg></div>
+                        <div className="ft-item-barcode"><svg className="barcode-sku-all" data-sku={line.sku}></svg></div>
                       </>
                     ) : (
                       <span className="ft-item-no-sku">⚠ Sans SKU</span>
@@ -738,7 +721,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               <tbody>
                 <tr><td className="ft-pt-label">Sous-total articles</td><td className="ft-pt-value">{formatMoney(totals.subTotal)}</td></tr>
                 {totals.discountValue > 0 && <tr><td className="ft-pt-label">Remise</td><td className="ft-pt-value" style={{color:"#2a8a2a"}}>− {formatMoney(totals.discountValue)}</td></tr>}
-                {totals.discountValue > 0 && <tr><td className="ft-pt-label">Après remise</td><td className="ft-pt-value">{formatMoney(totals.totalAfterDiscount)}</td></tr>}
+                {totals.discountValue > 0 && <tr><td className="ft-pt-label">Après remise</td><td className="ft-pt-value">{formatMoney(subTotal - discountValue)}</td></tr>}
                 {activeServices.length > 0 && (
                   <>
                     <tr><td className="ft-pt-label">Services</td><td className="ft-pt-value">{formatMoney(totals.serviceTotal)}</td></tr>
@@ -766,98 +749,192 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* ═══════════ PAGE 2 — COMMANDE CLIENT ═════════════════════════ */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* ═══════════════ PAGE 2 — COMMANDE CLIENT ════════════════════════ */}
+      {/* ═══ Reproduit fidèlement app/print/offre/[slug]/page.tsx ═════════ */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
       <div className="doc-wrap-all page-break">
+        {/* HEADER */}
         <div className="cc-header">
           <div className="cc-header-left">
             <img className="cc-logo"
               src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
               alt="Jardin-Confort" />
-            <div className="cc-doc-type">{typeDocument === "Offre" ? "Offre" : "Commande"}</div>
-            <div className="cc-doc-num">N° {numeroAffiche}</div>
+            <div className="cc-type">{data.formType}</div>
+            <table className="cc-meta-table">
+              <tbody>
+                <tr>
+                  <td className="cc-meta-label">N° {data.formType === "Offre" ? "d'offre" : "de commande"}</td>
+                  <td>{numeroAffiche || data.offerNumber}</td>
+                </tr>
+                {data.reference && (
+                  <tr><td className="cc-meta-label">Référence</td><td>{data.reference}</td></tr>
+                )}
+                <tr><td className="cc-meta-label">Date</td><td>{formatDate(data.date)}</td></tr>
+                <tr><td className="cc-meta-label">Commercial</td><td>{data.commercial}</td></tr>
+                <tr><td className="cc-meta-label">Mode de paiement</td><td>{data.paymentMode}</td></tr>
+                {data.leadTime && (
+                  <tr><td className="cc-meta-label">Délai de livraison</td><td>{data.leadTime}</td></tr>
+                )}
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {(data as any).validiteDuree && (
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  <tr><td className="cc-meta-label">Validité de l&apos;offre</td><td>{(data as any).validiteDuree}</td></tr>
+                )}
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {(data as any).deliveryMode && (
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  <tr><td className="cc-meta-label">Mode de livraison</td><td>{(data as any).deliveryMode}</td></tr>
+                )}
+                {data.email && (
+                  <tr><td className="cc-meta-label">E-mail</td><td>{data.email}</td></tr>
+                )}
+                {data.customerNumber && (
+                  <tr><td className="cc-meta-label">N° client</td><td>{data.customerNumber}</td></tr>
+                )}
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {(data as any).accesLivraison && (data as any).deliveryMode !== "À l'emporter" && (
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  <tr><td className="cc-meta-label">Accès livraison</td><td style={{fontStyle:"italic"}}>{(data as any).accesLivraison}</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          <div className="cc-header-right">
-            <strong>Jardin-Confort SA</strong><br/>
-            Route de Lavaux 425<br/>
-            1095 Lutry · Suisse<br/>
-            +41 21 791 36 71<br/>
-            www.jardin-confort.ch
-          </div>
-        </div>
 
-        <div className="cc-addresses">
-          <div className="cc-addr-block">
-            <div className="cc-addr-title">💼 Facturation</div>
-            {data.societe && <div className="cc-addr-line">{data.societe}</div>}
-            <div className="cc-addr-name">{data.nom} {data.prenom}</div>
-            {data.rue && <div className="cc-addr-line">{data.rue} {data.numero}</div>}
-            {data.npa && <div className="cc-addr-line">{data.npa} {data.ville}</div>}
-            <div className="cc-addr-contact">
-              {data.telephone1 && <span>📞 {data.telephone1}</span>}{data.telephone1 && data.email && " · "}
-              {data.email && <span>✉ {data.email}</span>}
+          <div className="cc-header-right">
+            <div className="cc-addr-window">
+              <div className="cc-addr-ref">{numeroAffiche || data.offerNumber}</div>
+              {data.societe && <div className="cc-addr-line">{data.societe}</div>}
+              <div className="cc-addr-name">{data.nom} {data.prenom}</div>
+              {data.rue && <div className="cc-addr-line">{data.rue} {data.numero}</div>}
+              {data.npa && <div className="cc-addr-line">{data.npa} {data.ville}</div>}
+              {data.telephone1 && <div className="cc-addr-line" style={{marginTop:8, fontSize:16}}>Tél. {data.telephone1}</div>}
             </div>
           </div>
-          <div className="cc-addr-block">
-            <div className="cc-addr-title">📦 Livraison</div>
-            {isPickup ? (
-              <>
-                <div className="cc-addr-name" style={{color: ORANGE}}>⚠ À L&apos;EMPORTER</div>
-                <div className="cc-addr-line">Jardin-Confort SA · Route de Lavaux 425 · 1095 Lutry</div>
-              </>
-            ) : (
-              <>
-                {livrSociete && <div className="cc-addr-line">{livrSociete}</div>}
-                <div className="cc-addr-name">{livrNom} {livrPrenom}</div>
-                {livrRue && <div className="cc-addr-line">{livrRue} {livrNumero}</div>}
-                {livrNpa && <div className="cc-addr-line">{livrNpa} {livrVille}</div>}
-                {livrTelEffectif && <div className="cc-addr-contact">📞 {livrTelEffectif}</div>}
-              </>
-            )}
+        </div>
+
+        <hr className="cc-hr" />
+
+        {/* ADRESSES */}
+        <div className="cc-addresses">
+          <div className="cc-addr-row">
+            <div className="cc-addr-group">
+              <div className="cc-addr-inner">
+                <span className="cc-addr-title">Adresse de facturation</span>
+                <div className="cc-addr-content">
+                  {data.societe && <div>{data.societe}</div>}
+                  <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                  {data.rue && <div>{data.rue} {data.numero}</div>}
+                  {data.npa && <div>{data.npa} {data.ville}</div>}
+                  {data.telephone1 && <div>Tél. {data.telephone1}</div>}
+                  {data.telephone2 && <div>Tél. {data.telephone2}</div>}
+                  {data.email && <div>{data.email}</div>}
+                </div>
+              </div>
+            </div>
+            <div className="cc-addr-group">
+              <div className="cc-addr-inner">
+                <span className="cc-addr-title">Adresse de livraison</span>
+                <div className="cc-addr-content">
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {(data as any).deliveryMode === "À l'emporter" ? (
+                    <div style={{
+                      background: "#FFF8E1",
+                      border: "1.5px solid #f59e0b",
+                      borderRadius: 6,
+                      padding: "8px 12px",
+                      fontWeight: 700,
+                      color: "#7B5E00",
+                    }}>
+                      📦 RETRAIT EN MAGASIN — À l&apos;emporter
+                      <div style={{fontWeight: 400, fontSize: 11, marginTop: 4, color: "#666"}}>
+                        Jardin-Confort SA<br/>
+                        Route de Lavaux 425 · 1095 Lutry
+                      </div>
+                    </div>
+                  ) : data.livrDiff ? (
+                    <>
+                      {data.livrSociete && <div>{data.livrSociete}</div>}
+                      <div style={{fontWeight:700}}>{data.livrNom} {data.livrPrenom}</div>
+                      {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
+                      {data.livrNpa && <div>{data.livrNpa} {data.livrVille}</div>}
+                      {data.livrTel && <div>Tél. {data.livrTel}</div>}
+                    </>
+                  ) : (
+                    <>
+                      {data.societe && <div>{data.societe}</div>}
+                      <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                      {data.rue && <div>{data.rue} {data.numero}</div>}
+                      {data.npa && <div>{data.npa} {data.ville}</div>}
+                      {data.telephone1 && <div>Tél. {data.telephone1}</div>}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="cc-meta-bar">
-          <span className="cc-meta-item"><strong>{dateLabel} :</strong> {formatDate(dateDocument)}</span>
-          {data.commercial && <span className="cc-meta-item"><strong>Commercial :</strong> {data.commercial}</span>}
-          {data.leadTime && <span className="cc-meta-item"><strong>Délai :</strong> {data.leadTime}</span>}
-          {data.paymentMode && <span className="cc-meta-item"><strong>Paiement :</strong> {data.paymentMode}</span>}
-          {data.reference && <span className="cc-meta-item"><strong>Réf :</strong> {data.reference}</span>}
-        </div>
-
+        {/* TABLEAU ARTICLES */}
         <table className="cc-table">
           <thead>
             <tr>
-              <th style={{width:60}}></th>
-              <th className="th-left">Article / SKU</th>
-              <th className="th-center" style={{width:55}}>Qté</th>
-              <th className="th-right" style={{width:80}}>Prix unit.</th>
-              <th className="th-right" style={{width:90}}>Total</th>
+              <th style={{width:56}}></th>
+              <th className="cc-th-left">Description de l&apos;article</th>
+              <th className="cc-th-center" style={{width:62}}>Qté</th>
+              <th className="cc-th-right" style={{width:90}}>Prix/pce</th>
+              <th className="cc-th-right" style={{width:100}}>Total</th>
             </tr>
           </thead>
           <tbody>
             {data.lines.length === 0 && (
               <tr><td colSpan={5} style={{textAlign:"center", padding:"20px", color:"#aaa", fontStyle:"italic"}}>Aucun article</td></tr>
             )}
-            {data.lines.map((line) => {
+            {data.lines.map((line: QuoteLine) => {
               if (line.type === "comment") {
                 return (
-                  <tr key={line.id} className="cc-comment-row">
-                    <td colSpan={5}>💬 {line.title || <em>(commentaire)</em>}</td>
+                  <tr key={line.id} className="cc-tr-comment">
+                    <td colSpan={5} className="cc-td-comment">{line.title}</td>
                   </tr>
                 );
               }
               const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
               return (
                 <tr key={line.id}>
-                  <td className="cc-td-img">{line.image ? <img src={line.image} alt="" /> : "—"}</td>
-                  <td>
+                  <td className="cc-td-img">{line.image && <img src={line.image} alt="" />}</td>
+                  <td className="cc-td-desc">
                     <div className="cc-item-title">{line.title}</div>
-                    {line.sku && <div className="cc-item-sku">SKU : {line.sku}</div>}
+                    {line.sku && <div className="cc-item-sku">{line.sku}</div>}
+                    {(line.lineDiscount || 0) > 0 && (
+                      <div className="cc-item-discount">Remise : − {formatMoney(line.lineDiscount || 0)}</div>
+                    )}
+                    {data.formType === "Commande" && (() => {
+                      const sn = typeof line.stock === "number" ? line.stock : null;
+                      const isSC = line.stock === "sur_commande" || (sn !== null && sn < 1);
+                      const isOk = sn !== null && sn > 2;
+                      const isLow = sn !== null && sn > 0 && sn <= 2;
+                      const baseStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, marginTop: 4 };
+                      if (isSC) return (
+                        <div style={{ ...baseStyle, color: "#E67E22" }}>
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          📦 {(line as any).delaiLivraison || "Sur commande"}
+                        </div>
+                      );
+                      if (isOk) return (
+                        <div style={{ ...baseStyle, color: "#2C7E3F" }}>
+                          ✓ En stock ({sn} pce{sn! > 1 ? "s" : ""})
+                        </div>
+                      );
+                      if (isLow) return (
+                        <div style={{ ...baseStyle, color: "#E67E22" }}>
+                          ⚠ Stock limité ({sn} pce{sn! > 1 ? "s" : ""})
+                        </div>
+                      );
+                      return null;
+                    })()}
                   </td>
-                  <td className="cc-td-qty">{line.qty}</td>
-                  <td className="cc-td-price">{formatMoney(line.unitPrice)}</td>
+                  <td className="cc-td-center">× {line.qty}</td>
+                  <td className="cc-td-right">{formatMoney(line.unitPrice)}</td>
                   <td className="cc-td-total">{formatMoney(lineTotal)}</td>
                 </tr>
               );
@@ -865,180 +942,481 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           </tbody>
         </table>
 
-        <div className="cc-totals-row">
-          <div className="cc-remarks-block">
-            {data.remarks && data.remarks.trim() ? (
+        {/* NOTES + TOTAUX + SIGNATURE CLIENT */}
+        <div className="cc-bottom-wrap">
+          <div className="cc-notes-sign-col">
+            {data.remarks && (
               <>
-                <div className="cc-remarks-title">📝 Remarques</div>
-                <div>{data.remarks}</div>
+                <div className="cc-notes-title">Notes</div>
+                <div className="cc-notes-text">{data.remarks}</div>
               </>
-            ) : (
-              <div style={{color:"#92400e", fontStyle:"italic"}}>Aucune remarque particulière.</div>
+            )}
+            {data.formType === "Offre" && (
+              <div className="cc-sign-block">
+                <div className="cc-sign-name">Bon pour accord — {data.nom} {data.prenom}</div>
+                <div className="cc-sign-line" />
+                <div className="cc-sign-sub">Signature &amp; date</div>
+              </div>
             )}
           </div>
-          <div className="cc-totals-block">
-            <table className="cc-totals-table">
+
+          <div className="cc-totals-col">
+            <table className="cc-pricing">
               <tbody>
-                <tr><td className="cc-tot-label">Sous-total</td><td className="cc-tot-val">{formatMoney(totals.subTotal)}</td></tr>
-                {totals.discountValue > 0 && <tr><td className="cc-tot-label">Remise</td><td className="cc-tot-val" style={{color:"#2a8a2a"}}>− {formatMoney(totals.discountValue)}</td></tr>}
-                {totals.serviceTotal > 0 && <tr><td className="cc-tot-label">Services</td><td className="cc-tot-val">{formatMoney(totals.serviceTotal)}</td></tr>}
-                {totals.roundingValue !== 0 && <tr><td className="cc-tot-label">Arrondi</td><td className="cc-tot-val">{formatMoney(totals.roundingValue)}</td></tr>}
-                {totals.isPrivateTTC ? (
-                  <tr><td className="cc-tot-label" style={{fontSize:10.5, color:"#666"}}>TVA 8.1% incluse</td><td className="cc-tot-val" style={{fontSize:10.5, color:"#666"}}>{formatMoney(totals.tvaAmount)}</td></tr>
-                ) : (
+                <tr>
+                  <td className="cc-pt-label">Sous-total articles</td>
+                  <td className="cc-pt-value">{formatMoney(subTotal)}</td>
+                </tr>
+                {discountValue > 0 && (
+                  <tr>
+                    <td className="cc-pt-label">Remise</td>
+                    <td className="cc-pt-value" style={{color:"#2a8a2a"}}>− {formatMoney(discountValue)}</td>
+                  </tr>
+                )}
+                {discountValue > 0 && (
+                  <tr>
+                    <td className="cc-pt-label">Après remise</td>
+                    <td className="cc-pt-value">{formatMoney(subTotal - discountValue)}</td>
+                  </tr>
+                )}
+                {activeServices.length > 0 && (
                   <>
-                    <tr><td className="cc-tot-label">Total HT</td><td className="cc-tot-val">{formatMoney(totals.totalAfterRounding)}</td></tr>
-                    <tr><td className="cc-tot-label" style={{fontSize:10.5, color:"#666"}}>+ TVA 8.1%</td><td className="cc-tot-val" style={{fontSize:10.5, color:"#666"}}>{formatMoney(totals.tvaAmount)}</td></tr>
+                    <tr>
+                      <td className="cc-pt-label">Services</td>
+                      <td className="cc-pt-value" style={{fontSize:11, fontStyle:"italic", color:"#888"}}>inclus</td>
+                    </tr>
+                    {activeServices.map((srv, i) => (
+                      <tr key={i}>
+                        <td className="cc-pt-label cc-pt-sub">↳ {srv.label}</td>
+                        <td className="cc-pt-value" style={{fontSize:11}}>
+                          {srv.amount === 0 ? "Offert" : formatMoney(srv.amount)}
+                        </td>
+                      </tr>
+                    ))}
                   </>
                 )}
-                <tr className="cc-grand"><td className="cc-tot-label">TOTAL {totals.isPrivateTTC ? "TTC" : "HT + TVA"}</td><td className="cc-tot-val">{formatMoney(totals.finalTotal)}</td></tr>
+                {roundingValue !== 0 && (
+                  <tr>
+                    <td className="cc-pt-label">Arrondi</td>
+                    <td className="cc-pt-value">{formatMoney(roundingValue)}</td>
+                  </tr>
+                )}
+                {isPrivateTTC ? (
+                  <tr className="cc-pt-tva">
+                    <td className="cc-pt-label">TVA 8.1% (incluse)</td>
+                    <td className="cc-pt-value">{formatMoney(tvaAmount)}</td>
+                  </tr>
+                ) : (
+                  <>
+                    <tr>
+                      <td className="cc-pt-label">Total HT</td>
+                      <td className="cc-pt-value">{formatMoney(totals.totalAfterRounding)}</td>
+                    </tr>
+                    <tr className="cc-pt-tva">
+                      <td className="cc-pt-label">+ TVA 8.1%</td>
+                      <td className="cc-pt-value">{formatMoney(tvaAmount)}</td>
+                    </tr>
+                  </>
+                )}
+                <tr className="cc-pt-total">
+                  <td className="cc-pt-total-label">TOTAL {isPrivateTTC ? "TTC" : "HT + TVA"}</td>
+                  <td className="cc-pt-total-value">{formatMoney(finalTotal)}</td>
+                </tr>
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Images d'ambiance (si présentes) */}
+        {/* LIEN VALIDATION EN LIGNE — offres uniquement */}
+        {data.formType === "Offre" && (
+        <div style={{
+          margin: "0 0 6mm 0",
+          background: "linear-gradient(135deg, #EEF6FF 0%, #E8F4FF 100%)",
+          border: "1.5px solid #2b8ad1",
+          borderRadius: 12,
+          padding: "14px 20px",
+          display: "flex",
+          alignItems: "center",
+          gap: 20,
+        }}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13, fontWeight:700, color:"#0a1551", marginBottom:4}}>
+              ✍️ Signature électronique disponible
+            </div>
+            <div style={{fontSize:11, color:"#5e678f", lineHeight:1.6, marginBottom:10}}>
+              Vous pouvez valider et signer cette offre directement en ligne depuis votre smartphone ou ordinateur, sans impression nécessaire.
+            </div>
+            <a href={validationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-block",
+                background: "#2b8ad1",
+                color: "white",
+                borderRadius: 20,
+                padding: "8px 18px",
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                textDecoration: "none",
+              }}>
+              ✅ Valider mon offre en ligne →
+            </a>
+            <div style={{marginTop:6, fontSize:10, color:"#5e678f", wordBreak:"break-all"}}>
+              {validationUrl}
+            </div>
+          </div>
+          <div style={{flexShrink:0, textAlign:"center"}}>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(validationUrl)}`}
+              alt="QR Code validation"
+              style={{width:110, height:110, borderRadius:8, border:"1px solid #c7dff5"}}
+            />
+            <div style={{fontSize:9, color:"#5e678f", marginTop:4}}>Scanner pour valider</div>
+          </div>
+        </div>
+        )}
+
+        {/* REMERCIEMENTS */}
+        <p className="cc-thanks">
+          Nous nous réjouissons de pouvoir traiter votre commande. Merci d&apos;avance pour votre confiance !
+        </p>
+        <p className="cc-terms">
+          En validant cette offre et/ou en passant une commande, vous confirmez avoir pris connaissance et accepté{" "}
+          <a href="https://www.jardin-confort.ch/pages/conditions-generales">nos conditions générales</a>.<br/>
+          Les quantités, articles et frais mentionnés peuvent différer de la version finale validée.
+          Seule la confirmation de commande fait foi.
+        </p>
+
+        {/* PIED DE PAGE */}
+        <div className="cc-footer">
+          <div><strong>Jardin-Confort SA</strong></div>
+          <div>Route de Lavaux 425 · 1095 Lutry · Suisse</div>
+          <div>contact@jardinconfort.ch · +41 21 791 36 71</div>
+          <div>TVA : CHE-100.142.327</div>
+          <div>Banque Cantonale Vaudoise · IBAN CH72 0076 7000 K033 3796 5 · SWIFT BCVLCH2LXXX</div>
+          <div className="cc-footer-url">www.jardin-confort.ch</div>
+          <div className="cc-footer-social">
+            <img src="https://cdn.shopify.com/s/files/1/0398/5025/files/Fb_icon.jpg?11755453313570768267" alt="Facebook" />
+            <img src="https://cdn.shopify.com/s/files/1/0398/5025/files/instagram_9.png?576915513262272927" alt="Instagram" />
+          </div>
+        </div>
+
+        {/* IMAGES D'AMBIANCE */}
         {data.ambianceImages && data.ambianceImages.length > 0 && (
-          <div className="cc-ambiance-section">
-            <div className="cc-ambiance-title">🌿 Images d&apos;ambiance</div>
+          <div style={{marginTop: "8mm"}}>
+            <div style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 16,
+              marginBottom: "5mm",
+              borderBottom: `2px solid ${THEME}`,
+              paddingBottom: "4mm",
+            }}>
+              <img style={{maxWidth:130, maxHeight:50, objectFit:"contain"}}
+                src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
+                alt="Jardin-Confort" />
+              <div>
+                <div style={{fontSize:18, fontWeight:700, color:THEME}}>
+                  Images d&apos;illustration — {numeroAffiche || data.offerNumber}
+                </div>
+                <div style={{fontSize:11, color:"#aaa", fontStyle:"italic", marginTop:2}}>
+                  Images non contractuelles · {data.nom} {data.prenom} · {formatDate(data.date)}
+                </div>
+              </div>
+            </div>
             <div className="cc-ambiance-grid">
-              {data.ambianceImages.map((img, i) => (
-                <img key={i} src={img} alt={`Ambiance ${i + 1}`} />
+              {data.ambianceImages.map((img: AmbianceImage) => (
+                <div key={img.id} className="cc-ambiance-item">
+                  <img src={img.dataUrl} alt={img.legende || "Illustration"} />
+                  {img.legende && <div className="cc-ambiance-caption">{img.legende}</div>}
+                </div>
               ))}
             </div>
           </div>
         )}
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* ═══════════ PAGE 3 — PAGE DE GARDE COLIS ═════════════════════ */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* ═══════════════ PAGE 3 — PAGE DE GARDE COLIS ════════════════════ */}
+      {/* ═══ Reproduit fidèlement app/print/page-garde-colis/[slug]/... ══ */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
       <div className="doc-wrap-all page-break">
         <div className="pg-wrap">
-          <div className="pg-left">
-            <img className="pg-logo"
-              src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
-              alt="Jardin-Confort" />
-            <div className="pg-company">JARDIN<br/>CONFORT</div>
-            <div className="pg-company-addr">
-              Route de Lavaux 425<br/>
-              1095 Lutry · Suisse<br/>
-              +41 21 791 36 71
+          <div className="pg-top-row">
+            <div className="pg-return-block">
+              <img className="pg-return-logo"
+                src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/Logo_Jardin-Confort_et_adresse_vertical-01.png?v=1723586050"
+                alt="Jardin-Confort" />
+            </div>
+
+            <div className="pg-client-addr">
+              {pgSociete && <div className="pg-client-addr-line">{pgSociete}</div>}
+              <div className="pg-client-addr-name">{pgNom} {pgPrenom}</div>
+              {pgRue && <div className="pg-client-addr-line">{pgRue} {pgNumero}</div>}
+              {pgNpa && <div className="pg-client-addr-line">{pgNpa} {pgVille}</div>}
             </div>
           </div>
 
-          <div className="pg-right">
-            <div>
-              <div className="pg-destinataire-label">📦 Destinataire</div>
-              {livrSociete && <div className="pg-address" style={{marginBottom: "4mm"}}>{livrSociete}</div>}
-              <div className="pg-name">{livrNom} {livrPrenom}</div>
-              <div className="pg-address">
-                {livrRue && <>{livrRue} {livrNumero}<br/></>}
-                {livrNpa && <>{livrNpa} {livrVille}</>}
-              </div>
-              {livrTelEffectif && <div className="pg-address" style={{marginTop:"5mm", fontSize:18}}>📞 {livrTelEffectif}</div>}
-            </div>
+          <div className="pg-accent-bar" />
 
-            <div className="pg-bottom-info">
-              <strong>Commande :</strong> {numeroAffiche}<br/>
-              <strong>Date :</strong> {formatDate(dateDocument)}<br/>
-              {data.commercial && <><strong>Commercial :</strong> {data.commercial}<br/></>}
-              {totalQty > 0 && <><strong>Articles :</strong> {totalQty} pce{totalQty > 1 ? "s" : ""}</>}
+          <div className="pg-order-info">
+            <div className="pg-order-info-line">
+              <strong>N° de commande :</strong> {numeroAffiche || data.offerNumber}
             </div>
+            <div className="pg-order-info-line">
+              <strong>Date :</strong> {formatDate(data.date)}
+            </div>
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {(data as any).deliveryMode && (
+              <div className="pg-order-info-line">
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                <strong>Expédition :</strong> {(data as any).deliveryMode}
+              </div>
+            )}
+            {data.commercial && (
+              <div className="pg-order-info-line">
+                <strong>Commercial :</strong> {data.commercial}
+              </div>
+            )}
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {(data as any).accesLivraison && (data as any).deliveryMode !== "À l'emporter" && (
+              <div className="pg-order-info-line" style={{fontStyle:"italic", color:GREY, marginTop: 6}}>
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                <strong style={{color:BLACK}}>Accès :</strong> {(data as any).accesLivraison}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* ═══════════ PAGE 4 — BULLETIN DE LIVRAISON ═══════════════════ */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* ═══════════════ PAGE 4 — BULLETIN DE LIVRAISON ══════════════════ */}
+      {/* ═══ Reproduit fidèlement app/print/bulletin-livraison/[slug]/... ═ */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
       <div className="doc-wrap-all page-break">
-        <div className="bl-banner">
-          <span>🚚 BULLETIN DE LIVRAISON</span>
-          <span style={{fontSize: 10, fontWeight: 400, opacity: 0.9}}>À conserver par le client</span>
-        </div>
-
+        {/* HEADER */}
         <div className="bl-header">
           <div className="bl-header-left">
-            <img className="cc-logo"
+            <img className="bl-logo"
               src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
               alt="Jardin-Confort" />
-            <div className="bl-doc-type">Bulletin de livraison</div>
-            <div className="bl-doc-num">N° {numeroAffiche}</div>
+            <div className="bl-type">Bulletin de livraison</div>
+            <table className="bl-meta-table">
+              <tbody>
+                <tr>
+                  <td className="bl-meta-label">N° de commande</td>
+                  <td>{numeroAffiche || data.offerNumber}</td>
+                </tr>
+                {data.reference && (
+                  <tr><td className="bl-meta-label">Référence</td><td>{data.reference}</td></tr>
+                )}
+                <tr><td className="bl-meta-label">Date</td><td>{formatDate(data.date)}</td></tr>
+                <tr><td className="bl-meta-label">Commercial</td><td>{data.commercial}</td></tr>
+                {data.leadTime && (
+                  <tr><td className="bl-meta-label">Délai de livraison</td><td>{data.leadTime}</td></tr>
+                )}
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {(data as any).deliveryMode && (
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  <tr><td className="bl-meta-label">Mode de livraison</td><td>{(data as any).deliveryMode}</td></tr>
+                )}
+                {data.email && (
+                  <tr><td className="bl-meta-label">E-mail</td><td>{data.email}</td></tr>
+                )}
+                {data.customerNumber && (
+                  <tr><td className="bl-meta-label">N° client</td><td>{data.customerNumber}</td></tr>
+                )}
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {(data as any).accesLivraison && (data as any).deliveryMode !== "À l'emporter" && (
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  <tr><td className="bl-meta-label">Accès livraison</td><td style={{fontStyle:"italic"}}>{(data as any).accesLivraison}</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
+
           <div className="bl-header-right">
-            <strong>Jardin-Confort SA</strong><br/>
-            Route de Lavaux 425 · 1095 Lutry<br/>
-            +41 21 791 36 71<br/>
-            <strong>Date :</strong> {formatDate(dateDocument)}
+            <div className="bl-addr-window">
+              <div className="bl-addr-ref">{numeroAffiche || data.offerNumber}</div>
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              {(data as any).deliveryMode === "À l'emporter" ? (
+                <>
+                  {data.societe && <div className="bl-addr-line">{data.societe}</div>}
+                  <div className="bl-addr-name">{data.nom} {data.prenom}</div>
+                  <div style={{
+                    marginTop: 8,
+                    background: "#FFF8E1",
+                    border: "1.5px solid #f59e0b",
+                    borderRadius: 6,
+                    padding: "8px 12px",
+                    fontWeight: 700,
+                    fontSize: 14,
+                    color: "#7B5E00",
+                  }}>
+                    📦 RETRAIT EN MAGASIN
+                  </div>
+                </>
+              ) : data.livrDiff ? (
+                <>
+                  {data.livrSociete && <div className="bl-addr-line">{data.livrSociete}</div>}
+                  <div className="bl-addr-name">{data.livrNom} {data.livrPrenom}</div>
+                  {data.livrRue && <div className="bl-addr-line">{data.livrRue} {data.livrNumero}</div>}
+                  {data.livrNpa && <div className="bl-addr-line">{data.livrNpa} {data.livrVille}</div>}
+                  {data.livrTel && <div className="bl-addr-line" style={{marginTop:8, fontSize:16}}>Tél. {data.livrTel}</div>}
+                </>
+              ) : (
+                <>
+                  {data.societe && <div className="bl-addr-line">{data.societe}</div>}
+                  <div className="bl-addr-name">{data.nom} {data.prenom}</div>
+                  {data.rue && <div className="bl-addr-line">{data.rue} {data.numero}</div>}
+                  {data.npa && <div className="bl-addr-line">{data.npa} {data.ville}</div>}
+                  {data.telephone1 && <div className="bl-addr-line" style={{marginTop:8, fontSize:16}}>Tél. {data.telephone1}</div>}
+                </>
+              )}
+            </div>
           </div>
         </div>
 
+        <hr className="bl-hr" />
+
+        {/* ADRESSES */}
         <div className="bl-addresses">
-          <div className="bl-addr-block">
-            <div className="bl-addr-title">📦 Livré à</div>
-            {livrSociete && <div className="bl-addr-line">{livrSociete}</div>}
-            <div className="bl-addr-name">{livrNom} {livrPrenom}</div>
-            {livrRue && <div className="bl-addr-line">{livrRue} {livrNumero}</div>}
-            {livrNpa && <div className="bl-addr-line">{livrNpa} {livrVille}</div>}
-            {livrTelEffectif && <div className="bl-addr-line" style={{marginTop:4}}>📞 {livrTelEffectif}</div>}
-          </div>
-          <div className="bl-addr-block">
-            <div className="bl-addr-title">ℹ Informations</div>
-            <div className="bl-addr-line"><strong>Total articles :</strong> {totalQty} pce{totalQty > 1 ? "s" : ""}</div>
-            {data.commercial && <div className="bl-addr-line"><strong>Commercial :</strong> {data.commercial}</div>}
-            {data.deliveryMode && <div className="bl-addr-line"><strong>Mode :</strong> {data.deliveryMode}</div>}
-            {data.leadTime && <div className="bl-addr-line"><strong>Délai :</strong> {data.leadTime}</div>}
+          <div className="bl-addr-row">
+            <div className="bl-addr-group">
+              <div className="bl-addr-inner">
+                <span className="bl-addr-title">Adresse de facturation</span>
+                <div className="bl-addr-content">
+                  {data.societe && <div>{data.societe}</div>}
+                  <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                  {data.rue && <div>{data.rue} {data.numero}</div>}
+                  {data.npa && <div>{data.npa} {data.ville}</div>}
+                  {data.telephone1 && <div>Tél. {data.telephone1}</div>}
+                  {data.telephone2 && <div>Tél. {data.telephone2}</div>}
+                  {data.email && <div>{data.email}</div>}
+                </div>
+              </div>
+            </div>
+            <div className="bl-addr-group">
+              <div className="bl-addr-inner">
+                <span className="bl-addr-title">Adresse de livraison</span>
+                <div className="bl-addr-content">
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {(data as any).deliveryMode === "À l'emporter" ? (
+                    <div style={{
+                      background: "#FFF8E1",
+                      border: "1.5px solid #f59e0b",
+                      borderRadius: 6,
+                      padding: "8px 12px",
+                      fontWeight: 700,
+                      color: "#7B5E00",
+                    }}>
+                      📦 RETRAIT EN MAGASIN — À l&apos;emporter
+                      <div style={{fontWeight: 400, fontSize: 11, marginTop: 4, color: "#666"}}>
+                        Jardin-Confort SA<br/>
+                        Route de Lavaux 425 · 1095 Lutry
+                      </div>
+                    </div>
+                  ) : data.livrDiff ? (
+                    <>
+                      {data.livrSociete && <div>{data.livrSociete}</div>}
+                      <div style={{fontWeight:700}}>{data.livrNom} {data.livrPrenom}</div>
+                      {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
+                      {data.livrNpa && <div>{data.livrNpa} {data.livrVille}</div>}
+                      {data.livrTel && <div>Tél. {data.livrTel}</div>}
+                    </>
+                  ) : (
+                    <>
+                      {data.societe && <div>{data.societe}</div>}
+                      <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                      {data.rue && <div>{data.rue} {data.numero}</div>}
+                      {data.npa && <div>{data.npa} {data.ville}</div>}
+                      {data.telephone1 && <div>Tél. {data.telephone1}</div>}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
+        {/* TABLEAU ARTICLES (sans prix) */}
         <table className="bl-table">
           <thead>
             <tr>
-              <th style={{width:60}}></th>
-              <th className="th-left">Article / SKU</th>
-              <th className="th-center" style={{width:70}}>Quantité</th>
+              <th style={{width:56}}></th>
+              <th className="bl-th-left">Description de l&apos;article</th>
+              <th className="bl-th-center" style={{width:80}}>Qté</th>
             </tr>
           </thead>
           <tbody>
-            {data.lines.filter(l => l.type !== "comment").length === 0 && (
+            {data.lines.length === 0 && (
               <tr><td colSpan={3} style={{textAlign:"center", padding:"20px", color:"#aaa", fontStyle:"italic"}}>Aucun article</td></tr>
             )}
-            {data.lines.filter(l => l.type !== "comment").map((line) => (
-              <tr key={line.id}>
-                <td className="bl-td-img">{line.image ? <img src={line.image} alt="" /> : "—"}</td>
-                <td>
-                  <div className="bl-item-title">{line.title}</div>
-                  {line.sku && <div className="bl-item-sku">SKU : {line.sku}</div>}
-                </td>
-                <td className="bl-td-qty">{line.qty}</td>
-              </tr>
-            ))}
+            {data.lines.map((line: QuoteLine) => {
+              if (line.type === "comment") {
+                return (
+                  <tr key={line.id} className="bl-tr-comment">
+                    <td colSpan={3} className="bl-td-comment">{line.title}</td>
+                  </tr>
+                );
+              }
+              return (
+                <tr key={line.id}>
+                  <td className="bl-td-img">{line.image && <img src={line.image} alt="" />}</td>
+                  <td className="bl-td-desc">
+                    <div className="bl-item-title">{line.title}</div>
+                    {line.sku && <div className="bl-item-sku">{line.sku}</div>}
+                  </td>
+                  <td className="bl-td-center">× {line.qty}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
-        {activeServices.length > 0 && (
-          <div className="bl-services">
-            <div className="bl-services-title">🛠 Services inclus</div>
+        {/* SERVICES (sans prix) */}
+        {activeServicesNoPrice.length > 0 && (
+          <div className="bl-services-box">
+            <div className="bl-services-title">Services inclus</div>
             <div className="bl-services-list">
-              {activeServices.map((srv, i) => (
-                <div key={i}>✓ {srv.label}</div>
+              {activeServicesNoPrice.map((srv, i) => (
+                <div key={i}>↳ {srv.label}</div>
               ))}
             </div>
           </div>
         )}
 
-        <div className="bl-thanks">
-          <div className="bl-thanks-title">🌿 Merci pour vos achats !</div>
+        {/* NOTES */}
+        {data.remarks && (
+          <div className="bl-notes-block">
+            <div className="bl-notes-title">Notes</div>
+            <div className="bl-notes-text">{data.remarks}</div>
+          </div>
+        )}
+
+        {/* MESSAGE DE REMERCIEMENT */}
+        <div className="bl-thanks-block">
+          <div className="bl-thanks-title">Merci pour vos achats !</div>
           <div className="bl-thanks-text">
-            L&apos;équipe Jardin-Confort vous remercie de votre confiance.<br/>
-            Pour toute question, contactez-nous au +41 21 791 36 71 ou sur www.jardin-confort.ch
+            Les éventuels articles non livrés de cette commande ont fait/font/feront partie d&apos;une livraison parallèle ou ultérieure.<br/>
+            Si vous avez la moindre question, n&apos;hésitez pas à nous contacter.
           </div>
         </div>
 
-        <div className="bl-partial-notice">
-          ℹ <strong>En cas de livraison partielle :</strong> ce bulletin reflète les articles livrés ce jour. Les articles manquants vous seront livrés ultérieurement et feront l&apos;objet d&apos;un nouveau bulletin de livraison.
+        {/* PIED DE PAGE */}
+        <div className="bl-footer">
+          <div><strong>Jardin-Confort SA</strong></div>
+          <div>Route de Lavaux 425 · 1095 Lutry · Suisse</div>
+          <div>contact@jardinconfort.ch · +41 21 791 36 71</div>
+          <div>TVA : CHE-100.142.327</div>
+          <div className="bl-footer-url">www.jardin-confort.ch</div>
+          <div className="bl-footer-social">
+            <img src="https://cdn.shopify.com/s/files/1/0398/5025/files/Fb_icon.jpg?11755453313570768267" alt="Facebook" />
+            <img src="https://cdn.shopify.com/s/files/1/0398/5025/files/instagram_9.png?576915513262272927" alt="Instagram" />
+          </div>
         </div>
+
       </div>
     </>
   );
