@@ -442,18 +442,19 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         /* ═══ STYLES PAGE DE GARDE COLIS (page 3) — préfixe .pg- ═══════════ */
         /* ═══ Reproduit fidèlement app/print/page-garde-colis/[slug]/page.tsx ═ */
         /* ════════════════════════════════════════════════════════════════════ */
-        .pg-wrap { position: relative; }
+        .pg-wrap { position: relative; padding: 30px 30px 0 30px; }
         @media screen { .pg-wrap { min-height: 1000px; } }
-        .pg-top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 20mm; gap: 20px; }
+        @media print { .pg-wrap { padding: 30px 30px 0 30px; } }
+        .pg-top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 8mm; gap: 20px; }
         .pg-return-block { display: flex; gap: 18px; align-items: flex-start; flex: 0 0 auto; }
-        .pg-return-logo { max-width: 130px; max-height: 80px; object-fit: contain; }
-        .pg-client-addr { flex: 0 0 auto; padding: 12px 24px; min-width: 90mm; margin-top: 10mm; }
+        .pg-return-logo { max-width: 320px; max-height: 200px; object-fit: contain; }
+        .pg-client-addr { flex: 0 0 auto; padding: 12px 24px; min-width: 90mm; margin-top: 30mm; }
         .pg-client-addr-line { font-size: 22px; color: ${BLACK}; line-height: 1.35; font-weight: 400; }
         .pg-client-addr-name { font-size: 24px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin-bottom: 2px; }
-        .pg-order-info { margin-top: 30mm; padding-left: 0; }
+        .pg-order-info { margin-top: 6mm; padding-left: 0; }
         .pg-order-info-line { font-size: 14px; color: ${BLACK}; line-height: 1.7; }
         .pg-order-info-line strong { font-weight: 700; }
-        .pg-accent-bar { width: 60mm; height: 3px; background: ${THEME}; margin-top: 6mm; }
+        .pg-accent-bar { width: 60mm; height: 3px; background: ${THEME}; margin-top: 8mm; }
 
         /* ════════════════════════════════════════════════════════════════════ */
         /* ═══ STYLES BULLETIN DE LIVRAISON (page 4) — préfixe .bl- ═══════ */
