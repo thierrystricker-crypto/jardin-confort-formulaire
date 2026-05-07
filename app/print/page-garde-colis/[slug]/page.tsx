@@ -123,8 +123,8 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
           flex: 0 0 auto;
         }
         .return-logo {
-          max-width: 130px;
-          max-height: 80px;
+          max-width: 455px;
+          max-height: 280px;
           object-fit: contain;
         }
         .return-addr {
