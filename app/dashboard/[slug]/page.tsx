@@ -637,12 +637,12 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   {!isCommandeDirecte && (
                     <a href={urlPublique} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
-                      👁 Page client
+                      👁 Page confirmation client
                     </a>
                   )}
                   <a href={urlPrint} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
-                    🖨 Aperçu impression
+                    🖨 Page commande version client
                   </a>
                   {isCommande && (
                     <>
