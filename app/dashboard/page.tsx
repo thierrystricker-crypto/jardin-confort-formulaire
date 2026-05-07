@@ -10,6 +10,7 @@ type OffreRecord = {
   id: number; slug: string; type_document: TypeDocument
   numero_offre: string|null; numero_commande: string|null; offre_origine: string|null
   numero_affiche: string; statut: OffreStatut; date_document: string|null
+  reference: string|null
   commercial: string|null; payment_mode: string|null; delivery_mode: string|null
   lead_time: string|null; client_societe: string|null; client_nom: string|null
   client_prenom: string|null; client_email: string|null; client_tel1: string|null
@@ -230,7 +231,8 @@ export default function DashboardPage() {
       list=list.filter(o=>
         nomClient(o).toLowerCase().includes(q)||(o.numero_affiche||"").toLowerCase().includes(q)||
         (o.client_email||"").toLowerCase().includes(q)||(o.client_ville||"").toLowerCase().includes(q)||
-        (o.commercial||"").toLowerCase().includes(q))
+        (o.commercial||"").toLowerCase().includes(q)||
+        (o.reference||"").toLowerCase().includes(q))
     }
     return [...list].sort((a,b)=>{
       let av:string|number="",bv:string|number=""
@@ -392,7 +394,12 @@ export default function DashboardPage() {
                         className={`${rowBg} cursor-pointer border-t border-white/5 text-zinc-200 transition hover:bg-white/10`}>
                         <td className="px-4 py-4">
                           <div className="font-semibold text-zinc-100">{o.numero_affiche}</div>
-                          <div className="text-xs text-zinc-500">{o.type_document}</div>
+                          {o.reference && (
+                            <div className="text-xs text-amber-300 mt-0.5 italic" title="Référence client">
+                              📌 {o.reference}
+                            </div>
+                          )}
+                          <div className="text-xs text-zinc-500 mt-0.5">{o.type_document}</div>
                           {o.statut==="Convertie" && o.numero_commande && (
                             <div className="text-xs text-emerald-400 mt-0.5">→ {o.numero_commande}</div>
                           )}
