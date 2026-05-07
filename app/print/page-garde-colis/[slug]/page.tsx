@@ -111,7 +111,7 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          margin-top: 20mm;
+          margin-top: 8mm;
           gap: 20px;
         }
 
@@ -123,8 +123,8 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
           flex: 0 0 auto;
         }
         .return-logo {
-          max-width: 455px;
-          max-height: 280px;
+          max-width: 320px;
+          max-height: 200px;
           object-fit: contain;
         }
         .return-addr {
@@ -146,7 +146,7 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
           flex: 0 0 auto;
           padding: 12px 24px;
           min-width: 90mm;
-          margin-top: 10mm;
+          margin-top: 30mm;
         }
         .client-addr-line {
           font-size: 22px;
@@ -164,7 +164,7 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
 
         /* Bloc infos commande (en bas du bloc retour, sous le logo) */
         .order-info {
-          margin-top: 30mm;
+          margin-top: 6mm;
           padding-left: 0;
         }
         .order-info-line {
@@ -179,7 +179,7 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
           width: 60mm;
           height: 3px;
           background: ${THEME};
-          margin-top: 6mm;
+          margin-top: 8mm;
         }
       `}</style>
 
