@@ -206,7 +206,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
   const livrTelFTeff = (data.livrDiff && data.livrTel) ? data.livrTel : data.telephone1;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isPickup = (data as any).deliveryMode === "À l'emporter";
-  const totalQty = data.lines.reduce((s, l) => l.type === "comment" ? s : s + l.qty, 0);
+  const totalQty = data.lines.reduce((s, l) => (l.type === "comment" || l.type === "media") ? s : s + l.qty, 0);
   const numeroLabel = typeDocument === "Offre" ? "N° d'offre" : "N° de commande";
   const dateLabel = typeDocument === "Offre" ? "Date offre" : "Date commande";
 
@@ -507,6 +507,29 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .bl-footer-url { font-weight: 700; color: ${THEME}; }
         .bl-footer-social { margin-top: 5px; text-align: center; display: block; width: 100%; }
         .bl-footer-social img { width: 18px; height: 18px; margin: 0 4px; vertical-align: middle; display: inline-block; }
+
+        /* ════════════════════════════════════════════════════════════════════ */
+        /* ═══ STYLES LIGNES MÉDIA — partagés entre ft / cc / bl ═══════════ */
+        /* ════════════════════════════════════════════════════════════════════ */
+        .ft-tr-media td {
+          background: white !important;
+          padding: 12px 4px !important;
+          text-align: center !important;
+          border-bottom: 1px solid #d1d5db !important;
+          border-left: 3px solid #a855f7 !important;
+        }
+        .cc-tr-media td, .bl-tr-media td {
+          background: white !important;
+          padding: 14px 4px !important;
+          text-align: center !important;
+          border-bottom: 1px solid #efefef;
+        }
+        .ft-tr-media img, .cc-tr-media img, .bl-tr-media img {
+          width: auto; object-fit: contain; display: inline-block; vertical-align: middle;
+        }
+        .media-small  { height: 30px !important; max-height: 30px !important; }
+        .media-medium { height: 50px !important; max-height: 50px !important; }
+        .media-large  { height: 80px !important; max-height: 80px !important; }
       `}</style>
 
       <div className="printall-info">
@@ -622,6 +645,19 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                   </tr>
                 );
               }
+              if (line.type === "media") {
+                if (!line.mediaUrl) return null;
+                const sizeClass = line.mediaSize === "small" ? "media-small" : line.mediaSize === "large" ? "media-large" : "media-medium";
+                return (
+                  <tr key={line.id} className="ft-tr-media">
+                    <td colSpan={7}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={line.mediaUrl} alt={line.title || ""} className={sizeClass} />
+                    </td>
+                  </tr>
+                );
+              }
+              const isCustom = line.type === "custom";
               const isCustom = line.type === "custom";
               let stockDisplay: React.ReactNode;
               if (line.stock === undefined || line.stock === null) {
@@ -897,6 +933,18 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 return (
                   <tr key={line.id} className="cc-tr-comment">
                     <td colSpan={5} className="cc-td-comment">{line.title}</td>
+                  </tr>
+                );
+              }
+              if (line.type === "media") {
+                if (!line.mediaUrl) return null;
+                const sizeClass = line.mediaSize === "small" ? "media-small" : line.mediaSize === "large" ? "media-large" : "media-medium";
+                return (
+                  <tr key={line.id} className="cc-tr-media">
+                    <td colSpan={5}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={line.mediaUrl} alt={line.title || ""} className={sizeClass} />
+                    </td>
                   </tr>
                 );
               }
@@ -1360,6 +1408,18 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 return (
                   <tr key={line.id} className="bl-tr-comment">
                     <td colSpan={3} className="bl-td-comment">{line.title}</td>
+                  </tr>
+                );
+              }
+              if (line.type === "media") {
+                if (!line.mediaUrl) return null;
+                const sizeClass = line.mediaSize === "small" ? "media-small" : line.mediaSize === "large" ? "media-large" : "media-medium";
+                return (
+                  <tr key={line.id} className="bl-tr-media">
+                    <td colSpan={3}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={line.mediaUrl} alt={line.title || ""} className={sizeClass} />
+                    </td>
                   </tr>
                 );
               }
