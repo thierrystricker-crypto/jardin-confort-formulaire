@@ -795,23 +795,22 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
           </div>
 
           <div className="fb-stat-strip">
-              <span><strong>{totalLines}</strong> ligne{totalLines > 1 ? "s" : ""} · <strong>{totalQty}</strong> pce{totalQty > 1 ? "s" : ""}</span>
-              <span>Jardin-Confort SA · Route de Lavaux 425 · 1095 Lutry · TVA CHE-100.142.327</span>
-              <span style={{fontStyle: "italic", color: "#555"}}>Doc interne — ne pas distribuer</span>
-            </div>
-
+            <span><strong>{totalLines}</strong> ligne{totalLines > 1 ? "s" : ""} · <strong>{totalQty}</strong> pce{totalQty > 1 ? "s" : ""}</span>
+            <span>Jardin-Confort SA · Route de Lavaux 425 · 1095 Lutry · TVA CHE-100.142.327</span>
+            <span style={{fontStyle: "italic", color: "#555"}}>Doc interne — ne pas distribuer</span>
           </div>
 
-          {/* ═══ Coin à couper après archivage ═══ */}
-          <div className="fb-cut-corner">
-            <div className="fb-cut-corner-bg"></div>
-            <div className="fb-cut-corner-line"></div>
-            <div className="fb-cut-corner-scissors">✂</div>
-            <div className="fb-cut-corner-label">Couper après<br/>classement</div>
-          </div>
+        </div>{/* fin fb-content */}
 
+        {/* ═══ Coin à couper après archivage ═══ */}
+        <div className="fb-cut-corner">
+          <div className="fb-cut-corner-bg"></div>
+          <div className="fb-cut-corner-line"></div>
+          <div className="fb-cut-corner-scissors">✂</div>
+          <div className="fb-cut-corner-label">Couper après<br/>classement</div>
         </div>
-      </div>
+
+      </div>{/* fin fb-page */}
     </>
   );
 }
