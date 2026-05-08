@@ -523,8 +523,11 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const urlPrint=`${APP_URL}/print/offre/${offre.slug}`
   const isAbandonne=offre.statut==="Abandonnée"
   const isOffre=offre.type_document==="Offre"&&!["Convertie","Acceptée"].includes(offre.statut)
-  const isCommande = offre.type_document === "Commande" || ["Acceptée", "Convertie"].includes(offre.statut)
-  const isCommandeDirecte = offre.type_document === "Commande" && !offre.offre_origine
+const isCommande = offre.type_document === "Commande" || ["Acceptée", "Convertie"].includes(offre.statut)
+    // isCommandeReelle = true uniquement pour les CMD-XXXXX (pas pour les offres converties)
+    // → utilisée pour décider si on affiche les boutons fiche de travail / bulletin / page de garde / Print All
+    const isCommandeReelle = offre.type_document === "Commande"
+    const isCommandeDirecte = offre.type_document === "Commande" && !offre.offre_origine
 
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
@@ -561,7 +564,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </div>
 
               {/* Groupe 4 — Outils internes */}
-              {isCommande && (
+              {isCommandeReelle && (
                 <div>
                   <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                     Outils internes
@@ -644,7 +647,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                     className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
                     🖨 {isOffre ? "Page de l\u0027offre" : "Page commande version client"}
                   </a>
-                  {isCommande && (
+                  {isCommandeReelle && (
                     <>
                       <a href={`${APP_URL}/print/bulletin-livraison/${offre.slug}`} target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20"
@@ -704,7 +707,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                       <span className="relative">{qrGenerating ? "⏳ Génération QR…" : "🧾 Générer QR paiement"}</span>
                     </button>
                   )}
-                  {isCommande && (
+                  {isCommandeReelle && (
                     <>
                       {ficheTravailInitialUrl ? (
                         <a href={ficheTravailInitialUrl} target="_blank" rel="noopener noreferrer" download
@@ -816,7 +819,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </section>
             </div>
 
-            {isCommande && <StockMovementsBlock slug={slug} />}
+            {isCommandeReelle && <StockMovementsBlock slug={slug} />}
 
             {/* PROBABILITÉ DE CLOSING */}
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
@@ -978,7 +981,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
               </section>
             )}
 
-            {isCommande && (ficheTravailInitialUrl || ficheTravailUrl) && (
+            {isCommandeReelle && (ficheTravailInitialUrl || ficheTravailUrl) && (
               <FicheTravailPreview
                 initialUrl={ficheTravailInitialUrl}
                 currentUrl={ficheTravailUrl}
