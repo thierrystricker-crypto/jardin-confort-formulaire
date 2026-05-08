@@ -350,13 +350,17 @@ export default function DashboardPage() {
             </label>
           </div>
 
-         <div className="flex flex-wrap gap-2">
-            {quickFilters.map(f=>(
-              <button key={f.value} type="button" onClick={()=>setQuickFilter(f.value)}
-                className={`rounded-full px-4 py-2 text-sm transition ${quickFilter===f.value?"bg-zinc-100 text-zinc-900":"border border-white/10 bg-[#34383d] text-zinc-200 hover:bg-[#40454b]"}`}>
-                {f.label}
-              </button>
-            ))}
+         <div className="flex flex-wrap items-stretch gap-3">
+            <div className="flex flex-wrap gap-2 items-center flex-shrink-0">
+              {quickFilters.map(f=>(
+                <button key={f.value} type="button" onClick={()=>setQuickFilter(f.value)}
+                  className={`rounded-full px-4 py-2 text-sm transition ${quickFilter===f.value?"bg-zinc-100 text-zinc-900":"border border-white/10 bg-[#34383d] text-zinc-200 hover:bg-[#40454b]"}`}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {/* Stats CA jour/mois inline avec les boutons de filtres */}
+            <StatsCards />
           </div>
 
           {/* ─── Filtres rapides par probabilité de closing ─── */}
@@ -379,7 +383,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_minmax(0,1.6fr)]">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard title="Offres actives" value={statsFiltered.totalOffres} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(statsFiltered.caOffres)} potentiel`}
             onClick={()=>setQuickFilter(quickFilter==="offres"?"all":"offres")} active={quickFilter==="offres"}/>
           <KpiCard title="Commandes" value={statsFiltered.totalCommandes} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(statsFiltered.caCommandes)} confirmé`}
@@ -388,8 +392,6 @@ export default function DashboardPage() {
             onClick={()=>setQuickFilter(quickFilter==="relance"?"all":"relance")} active={quickFilter==="relance"}/>
           <KpiCard title="Abandonnées" value={statsFiltered.totalAbandonnes} sub={`${offres.length} dossiers total`}
             onClick={()=>setQuickFilter(quickFilter==="abandonnes"?"all":"abandonnes")} active={quickFilter==="abandonnes"}/>
-          {/* ─── Stats CA jour/mois — occupe l'espace libre à droite des 4 KPI ─── */}
-          <StatsCards />
         </div>
 
         

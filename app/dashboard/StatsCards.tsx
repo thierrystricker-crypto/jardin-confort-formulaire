@@ -1,8 +1,8 @@
 "use client";
 // ═══════════════════════════════════════════════════════════════
 //  app/dashboard/StatsCards.tsx
-//  Cards "Chiffre du jour" + "Chiffre du mois" en haut du dashboard
-//  Dark theme assorti au dashboard Jardin-Confort
+//  2 mini-cards compactes côte à côte
+//  Conçues pour s'intégrer à droite des boutons de filtres rapides
 // ═══════════════════════════════════════════════════════════════
 
 import { useEffect, useState } from "react";
@@ -21,97 +21,83 @@ type SummaryData = {
   byCommercial: CommercialRow[];
 };
 
-function formatCHF(n: number) {
-  return new Intl.NumberFormat("fr-CH", {
-    style: "currency",
-    currency: "CHF",
-    maximumFractionDigits: 0,
+function fmtCHF(n: number) {
+  return "CHF\u00a0" + new Intl.NumberFormat("de-CH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(n);
 }
 
-function StatCard({
+function MiniCard({
   title,
   emoji,
   data,
   loading,
-  accentClass,
+  accentBorder,
   accentBg,
+  accentText,
 }: {
   title: string;
   emoji: string;
   data: SummaryData | null;
   loading: boolean;
-  accentClass: string;     // tailwind border-t color class (e.g. "border-t-sky-500")
-  accentBg: string;        // tailwind bg color class for progress bars
+  accentBorder: string;
+  accentBg: string;
+  accentText: string;
 }) {
+  const top = data?.byCommercial[0];
+  const rest = data?.byCommercial.slice(1) || [];
+  const restCount = rest.length;
+  const pct = top && data && data.totals.total_montant > 0
+    ? (top.total_montant / data.totals.total_montant) * 100
+    : 0;
+
   return (
-    <div className={`flex-1 min-w-[280px] rounded-2xl border border-white/10 bg-[#2a2d31] border-t-4 ${accentClass} p-5`}>
-      <div className="mb-2 flex items-baseline justify-between">
-        <div className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+    <div className={`flex-1 min-w-0 rounded-xl border border-white/10 bg-[#2a2d31] border-l-2 ${accentBorder} px-3 py-2`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className={`text-[9px] font-bold uppercase tracking-wider ${accentText} whitespace-nowrap`}>
           {emoji} {title}
-        </div>
-        {data && (
-          <div className="text-[11px] italic text-zinc-500">
-            {data.period}
-          </div>
-        )}
+        </span>
+        <span className="text-[9px] italic text-zinc-500 whitespace-nowrap">
+          {data?.period || ""}
+        </span>
       </div>
 
       {loading ? (
-        <div className="py-5 text-center text-sm text-zinc-500">Chargement…</div>
+        <div className="text-xs text-zinc-500 mt-0.5">Chargement…</div>
       ) : !data ? (
-        <div className="py-5 text-center text-sm text-rose-400">Erreur de chargement</div>
+        <div className="text-xs text-rose-400 mt-0.5">Erreur</div>
       ) : (
         <>
-          <div className="mb-1 text-3xl font-extrabold leading-tight tracking-tight text-zinc-100">
-            {formatCHF(data.totals.total_montant)}
-          </div>
-          <div className="mb-3 text-xs text-zinc-400">
-            <span className="font-bold text-zinc-200">{data.totals.nb_commandes}</span> commande{data.totals.nb_commandes > 1 ? "s" : ""}
-            {" · "}
-            <span className="font-bold text-zinc-200">{data.totals.total_qty}</span> pce{data.totals.total_qty > 1 ? "s" : ""}
+          <div className="flex items-baseline justify-between gap-2 mt-0.5">
+            <span className="text-base font-extrabold leading-none tracking-tight text-zinc-100 whitespace-nowrap">
+              {fmtCHF(data.totals.total_montant)}
+            </span>
+            <span className="text-[10px] text-zinc-400 whitespace-nowrap">
+              <span className="font-bold text-zinc-200">{data.totals.nb_commandes}</span> cmd ·{" "}
+              <span className="font-bold text-zinc-200">{data.totals.total_qty}</span> p
+            </span>
           </div>
 
-          {data.byCommercial.length > 0 ? (
-            <div className="border-t border-white/5 pt-3">
-              <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                Par commercial
+          {top && (
+            <div className="mt-1 text-[10px]" title={`${top.commercial} · ${top.nb_commandes} cmd · ${top.total_qty} pces${restCount > 0 ? ` · + ${restCount} autre${restCount > 1 ? "s" : ""}` : ""}`}>
+              <div className="flex items-baseline justify-between gap-2 truncate">
+                <span className="font-semibold text-zinc-300 truncate">
+                  {top.commercial}
+                  {restCount > 0 && <span className="text-zinc-500 italic font-normal"> +{restCount}</span>}
+                </span>
+                <span className={`font-bold ${accentText} whitespace-nowrap`}>
+                  {fmtCHF(top.total_montant)}
+                </span>
               </div>
-              <div className="space-y-2">
-                {data.byCommercial.map((row) => {
-                  const pct = data.totals.total_montant > 0
-                    ? (row.total_montant / data.totals.total_montant) * 100
-                    : 0;
-                  return (
-                    <div key={row.commercial} className="text-xs">
-                      <div className="mb-1 flex items-baseline justify-between gap-2">
-                        <span className="truncate font-semibold text-zinc-200">
-                          {row.commercial}
-                        </span>
-                        <span className="whitespace-nowrap font-bold text-zinc-100">
-                          {formatCHF(row.total_montant)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/5">
-                          <div
-                            className={`h-full ${accentBg} transition-all`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <span className="min-w-[80px] whitespace-nowrap text-right text-[10px] text-zinc-500">
-                          {row.nb_commandes} cmd · {row.total_qty} pce{row.total_qty > 1 ? "s" : ""}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="h-0.5 mt-0.5 overflow-hidden rounded-full bg-white/5">
+                <div className={`h-full ${accentBg}`} style={{ width: `${pct}%` }} />
               </div>
             </div>
-          ) : (
-            <div className="border-t border-white/5 pt-3 text-center text-xs italic text-zinc-500">
-              Aucune commande sur cette période
-            </div>
+          )}
+
+          {data.byCommercial.length === 0 && (
+            <div className="text-[10px] italic text-zinc-500 mt-1">Aucune commande</div>
           )}
         </>
       )}
@@ -147,36 +133,32 @@ export default function StatsCards() {
   }, []);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400">
-          📊 Activité commerciale
-        </h2>
-        <Link
-          href="/dashboard/statistiques"
-          className="inline-flex items-center gap-1 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-300 transition hover:bg-sky-500/20"
-        >
-          Voir toutes les statistiques →
-        </Link>
-      </div>
-      <div className="flex flex-wrap gap-4">
-        <StatCard
-          title="Chiffre du jour"
-          emoji="📅"
-          data={today}
-          loading={loading}
-          accentClass="border-t-sky-500"
-          accentBg="bg-sky-500"
-        />
-        <StatCard
-          title="Chiffre du mois"
-          emoji="📈"
-          data={month}
-          loading={loading}
-          accentClass="border-t-emerald-500"
-          accentBg="bg-emerald-500"
-        />
-      </div>
+    <div className="flex items-stretch gap-2 flex-1 min-w-0">
+      <MiniCard
+        title="Chiffre du jour"
+        emoji="📅"
+        data={today}
+        loading={loading}
+        accentBorder="border-l-sky-500"
+        accentBg="bg-sky-500"
+        accentText="text-sky-300"
+      />
+      <MiniCard
+        title="Chiffre du mois"
+        emoji="📈"
+        data={month}
+        loading={loading}
+        accentBorder="border-l-emerald-500"
+        accentBg="bg-emerald-500"
+        accentText="text-emerald-300"
+      />
+      <Link
+        href="/dashboard/statistiques"
+        className="flex-shrink-0 inline-flex items-center justify-center gap-1 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 text-[11px] font-semibold text-sky-300 transition hover:bg-sky-500/20 whitespace-nowrap"
+        title="Voir toutes les statistiques"
+      >
+        📊 →
+      </Link>
     </div>
   );
 }
