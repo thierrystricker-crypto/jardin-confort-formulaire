@@ -791,9 +791,14 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                         title="Page de garde A4 pour envoi de colis">
                         📦 Page de garde colis
                       </a>
+                      <a href={`${APP_URL}/print/fiche-bleue/${offre.slug}`} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center rounded-xl border border-blue-400/40 bg-blue-500/15 px-4 py-2 text-sm text-blue-200 transition hover:bg-blue-500/25"
+                        title="Fiche bleue archive — 1 page A4 condensée pour le classeur papier">
+                        🗂 Fiche bleue archive
+                      </a>
                       <a href={`${APP_URL}/print/all/${offre.slug}`} target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center rounded-xl border-2 border-sky-500/60 bg-sky-500/20 px-4 py-2 text-sm font-bold text-sky-200 transition hover:bg-sky-500/30"
-                        title="Imprime les 4 documents en un seul jeu : Fiche de travail → Commande → Page de garde → Bulletin">
+                        title="Imprime les 5 documents en un seul jeu : Fiche de travail → Commande → Page de garde → Bulletin → Fiche bleue archive">
                         🖨 Imprimer le jeu complet
                       </a>
                     </>
