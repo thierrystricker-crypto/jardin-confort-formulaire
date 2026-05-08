@@ -464,7 +464,23 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
 
 <table style="border-radius:16px;border:1px solid #E8EAF3;max-width:600px;width:100%;" border="0" cellspacing="0" cellpadding="0" bgcolor="#FFFFFF"><tbody>
 
-<tr><td style="padding:28px 28px 6px 28px;text-align:center;">
+<tr><td style="padding:28px 28px 18px 28px;">
+  <div style="font-size:14px;color:#0a1551;line-height:1.7;">
+    Bonjour ${nomComplet},
+  </div>
+  <div style="margin-top:14px;font-size:14px;color:#0a1551;line-height:1.7;">
+    Je me permets de reprendre contact avec vous suite à nos différents échanges et à notre offre concernant l&rsquo;acquisition de mobilier d&rsquo;extérieur.
+  </div>
+  <div style="margin-top:14px;font-size:14px;color:#0a1551;line-height:1.7;">
+    Est-ce que vous avez eu l&rsquo;occasion de consulter notre offre ? Vous trouverez ci-dessous les liens pour la consulter et la valider en ligne.
+  </div>
+  <div style="margin-top:18px;font-size:14px;color:#0a1551;line-height:1.7;">
+    Avec mes meilleures salutations,<br>
+    <strong>${offre.commercial || ""}</strong>
+  </div>
+</td></tr>
+
+<tr><td style="padding:6px 28px 6px 28px;text-align:center;">
   <img style="display:block;width:260px;max-width:100%;height:auto;margin:0 auto 18px auto;"
     src="https://www.jotform.com/uploads/Lutry/form_files/logo%20jardin%20confort%202025%20bleu%20comme%20instagram.698a4ad6553317.03187337.png"
     alt="Jardin-Confort"/>
@@ -550,6 +566,10 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   </div>
   <div style="margin-top:14px;font-size:14px;color:#0a1551;line-height:1.7;">
     Je reste bien entendu à votre disposition pour toute question ou ajustement.
+  </div>
+  <div style="margin-top:18px;font-size:14px;color:#0a1551;line-height:1.7;">
+    Avec mes meilleures salutations,<br>
+    <strong>${offre.commercial || ""}</strong>
   </div>
 </td></tr>
 
