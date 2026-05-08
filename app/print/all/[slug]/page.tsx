@@ -406,12 +406,12 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .cc-item-discount { font-size: 11px; color: #2a8a2a; margin-top: 3px; }
         .cc-tr-comment td { background: #eef4fb !important; }
         .cc-td-comment { padding: 6px 10px !important; font-style: italic; color: #445 !important; font-size: 12px; }
-        .cc-bottom-wrap { display: flex; gap: 20px; margin-bottom: 8mm; align-items: flex-end; }
+        .cc-bottom-wrap { display: flex; gap: 20px; margin-bottom: 8mm; align-items: flex-end; page-break-inside: avoid; break-inside: avoid; }
         .cc-notes-sign-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; }
         .cc-totals-col { flex: 0 0 44%; }
         .cc-notes-title { font-weight: 700; color: ${BLACK}; margin-bottom: 5px; font-size: 12px; }
         .cc-notes-text { font-size: 12px; color: ${GREY}; line-height: 1.55; white-space: pre-wrap; margin-bottom: 12px; }
-        .cc-sign-block { margin-top: auto; background: #f0faf2; border: 1.5px solid #a7d9b0; border-radius: 10px; padding: 14px 18px 12px; }
+        .cc-sign-block { margin-top: auto; background: #f0faf2; border: 1.5px solid #a7d9b0; border-radius: 10px; padding: 14px 18px 12px; page-break-inside: avoid; break-inside: avoid; }
         .cc-sign-name { font-weight: 700; color: ${BLACK}; font-size: 12px; margin-bottom: 24px; }
         .cc-sign-line { border-bottom: 1.5px solid #5a9e6a; margin-bottom: 5px; }
         .cc-sign-sub { font-size: 10px; color: #5a9e6a; font-style: italic; }
