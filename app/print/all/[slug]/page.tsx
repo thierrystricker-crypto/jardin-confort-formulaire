@@ -535,10 +535,18 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .fb-header-left { flex: 0 0 auto; }
         .fb-header-right { flex: 1; text-align: right; }
         .fb-logo-bleue { max-height: 14mm; max-width: 50mm; object-fit: contain; }
-        .fb-doc-title { font-size: 18px; font-weight: 900; color: #4a7ba7; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 2mm; }
+        .fb-doc-title { font-size: 16px; font-weight: 900; color: #4a7ba7; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 2mm; }
+        .fb-doc-title-fb { display: inline-block; background: #4a7ba7; color: white; padding: 2px 10px; border-radius: 3px; font-size: 13px; font-weight: 900; letter-spacing: 0.08em; margin-left: 6px; vertical-align: middle; }
         .fb-doc-subtitle { font-size: 9px; color: #222; font-style: italic; margin-top: 1mm; letter-spacing: 0.02em; }
         .fb-doc-num { font-size: 22px; font-weight: 900; color: #000; line-height: 1; }
+        .fb-doc-date-big { font-size: 28px; font-weight: 900; color: #4a7ba7; line-height: 1; margin-top: 4mm; letter-spacing: 0.02em; }
         .fb-doc-date { font-size: 11px; color: #222; margin-top: 1mm; }
+        /* Coin "à couper" en bas à droite */
+        .fb-cut-corner { position: absolute; bottom: 0; right: 0; width: 30mm; height: 30mm; z-index: 5; pointer-events: none; }
+        .fb-cut-corner-bg { position: absolute; bottom: 0; right: 0; width: 0; height: 0; border-left: 30mm solid transparent; border-bottom: 30mm solid rgba(74, 123, 167, 0.35); }
+        .fb-cut-corner-line { position: absolute; bottom: 30mm; right: 0; width: 42mm; height: 2px; background: repeating-linear-gradient(to right, #4a7ba7 0, #4a7ba7 3px, transparent 3px, transparent 6px); transform-origin: bottom right; transform: rotate(-45deg); }
+        .fb-cut-corner-scissors { position: absolute; bottom: 17mm; right: 17mm; font-size: 14px; transform: rotate(-45deg); color: #4a7ba7; font-weight: 900; }
+        .fb-cut-corner-label { position: absolute; bottom: 4mm; right: 4mm; font-size: 8px; color: #4a7ba7; font-style: italic; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; transform: rotate(-45deg); transform-origin: center; }
         .fb-info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4mm; margin-bottom: 3mm; }
         .fb-info-block { background: rgba(255,255,255,0.75); border: 1px solid #a8c5e0; border-radius: 4px; padding: 5px 8px; }
         .fb-info-title { font-size: 8px; font-weight: 700; color: #4a7ba7; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; padding-bottom: 2px; border-bottom: 1px solid #a8c5e0; }
@@ -588,7 +596,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .fb-sign-title { font-size: 8px; font-weight: 700; color: #4a7ba7; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px; }
         .fb-sign-line { border-bottom: 1px solid #555; height: 14px; margin-bottom: 1mm; }
         .fb-sign-sub { font-size: 8px; color: #666; font-style: italic; }
-        .fb-stat-strip { margin-top: 3mm; display: flex; justify-content: space-between; align-items: center; font-size: 8.5px; color: #000; padding: 3px 8px; background: rgba(255,255,255,0.6); border-radius: 3px; }
+        .fb-stat-strip { margin-top: 3mm; display: flex; justify-content: space-between; align-items: center; font-size: 8.5px; color: #000; padding: 3px 8px; background: rgba(255,255,255,0.6); border-radius: 3px; padding-right: 32mm; }
 
         /* ════════════════════════════════════════════════════════════════════ */
         /* ═══ STYLES LIGNES MÉDIA — partagés entre ft / cc / bl ═══════════ */
@@ -615,7 +623,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       `}</style>
 
       <div className="printall-info">
-        🖨 Jeu complet — {numeroAffiche} · 4 pages
+        🖨 Jeu complet — {numeroAffiche} · 5 pages
       </div>
       <button className="print-btn-all" onClick={() => window.print()}>
         🖨 Imprimer
@@ -1576,20 +1584,35 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 <img className="fb-logo-bleue"
                   src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
                   alt="Jardin-Confort" />
-                <div className="fb-doc-title">{typeDocument === "Offre" ? "Offre" : "Commande"} · Archive</div>
+                <div className="fb-doc-title">
+                  {typeDocument === "Offre" ? "Offre" : "Commande"} · Archive
+                  <span className="fb-doc-title-fb">FICHE BLEUE</span>
+                </div>
                 <div className="fb-doc-subtitle">Fiche d&apos;archive — Classeur papier · Conservation interne</div>
               </div>
               <div className="fb-header-right">
                 <div className="fb-doc-num">{numeroAffiche}</div>
-                <div className="fb-doc-date">{typeDocument === "Offre" ? "N° offre" : "N° commande"} · {formatDate(dateDocument || data.date)}</div>
-                {data.reference && <div className="fb-doc-date" style={{fontStyle: "italic"}}>Réf. {data.reference}</div>}
+                <div className="fb-doc-date">{typeDocument === "Offre" ? "N° offre" : "N° commande"}</div>
+                <div className="fb-doc-date-big">{formatDate(dateDocument || data.date)}</div>
+                {data.reference && <div className="fb-doc-date" style={{fontStyle: "italic", marginTop: "2mm"}}>Réf. {data.reference}</div>}
               </div>
             </div>
 
             {/* INFO STRIP */}
             <div className="fb-info-grid">
               <div className="fb-info-block">
-                <div className="fb-info-title">👤 Client / Facturation</div>
+                <div className="fb-info-title">💼 Commercial / Paiement</div>
+                <div className="fb-info-content">
+                  <div><strong>Commercial :</strong></div>
+                  <div className="fb-info-name">{data.commercial}</div>
+                  <div style={{marginTop: 3}}><strong>Mode paiement :</strong></div>
+                  <div style={{fontSize: 9}}>{data.paymentMode}</div>
+                  <div style={{marginTop: 3}}><strong>Type client :</strong> {data.clientType}</div>
+                </div>
+              </div>
+
+              <div className="fb-info-block">
+                <div className="fb-info-title">📦 Livraison</div>div className="fb-info-title">👤 Client / Facturation</div>
                 <div className="fb-info-content">
                   {data.societe && <div>{data.societe}</div>}
                   <div className="fb-info-name">{data.nom} {data.prenom}</div>
@@ -1636,13 +1659,15 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               </div>
 
               <div className="fb-info-block">
-                <div className="fb-info-title">💼 Commercial / Paiement</div>
+                <div className="fb-info-title">👤 Client / Facturation</div>
                 <div className="fb-info-content">
-                  <div><strong>Commercial :</strong></div>
-                  <div className="fb-info-name">{data.commercial}</div>
-                  <div style={{marginTop: 3}}><strong>Mode paiement :</strong></div>
-                  <div style={{fontSize: 9}}>{data.paymentMode}</div>
-                  <div style={{marginTop: 3}}><strong>Type client :</strong> {data.clientType}</div>
+                  {data.societe && <div>{data.societe}</div>}
+                  <div className="fb-info-name">{data.nom} {data.prenom}</div>
+                  {data.rue && <div>{data.rue} {data.numero}</div>}
+                  {data.npa && <div>{data.npa} {data.ville}</div>}
+                  {data.telephone1 && <div>📞 {data.telephone1}</div>}
+                  {data.email && <div style={{fontSize: 9}}>✉ {data.email}</div>}
+                  {data.customerNumber && <div style={{fontSize: 9, color: "#555", marginTop: 2}}>N° client : {data.customerNumber}</div>}
                 </div>
               </div>
             </div>
@@ -1827,6 +1852,15 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
             </div>
 
           </div>
+
+          {/* Coin à couper après archivage */}
+          <div className="fb-cut-corner">
+            <div className="fb-cut-corner-bg"></div>
+            <div className="fb-cut-corner-line"></div>
+            <div className="fb-cut-corner-scissors">✂</div>
+            <div className="fb-cut-corner-label">Couper après<br/>classement</div>
+          </div>
+
         </div>
       </div>
     </>
