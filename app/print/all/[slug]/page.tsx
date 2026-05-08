@@ -281,7 +281,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .ft-qr-label { font-size: 8px; color: #666; margin-top: 2px; letter-spacing: 0.04em; text-transform: uppercase; text-align: center; }
         .ft-header-right { flex: 1; min-width: 0; }
         .ft-logo { max-width: 150px; max-height: 52px; object-fit: contain; display: block; margin-bottom: 4px; }
-        .ft-type { font-size: 20px; font-weight: 900; color: ${THEME}; margin-bottom: 4px; line-height: 1.05; letter-spacing: 0.02em; text-transform: uppercase; }
+        .ft-type { font-size: 22px; font-weight: 400; color: ${THEME}; margin-bottom: 4px; line-height: 1.05; letter-spacing: 0; text-transform: none; }
         .ft-meta-table { border-collapse: collapse; width: 100%; }
         .ft-meta-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 11px; line-height: 1.3; }
         .ft-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 50%; }
@@ -315,8 +315,8 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .ft-td-price { width: 70px; text-align: right; vertical-align: middle; }
         .ft-td-total { width: 78px; text-align: right; vertical-align: middle; font-weight: 700; }
         .ft-td-desc { padding-left: 6px !important; }
-        .ft-check-circle { display: inline-block; width: 16px; height: 16px; border: 1.8px solid #000; border-radius: 50%; margin: 0 1.5px; vertical-align: middle; }
-        .ft-check-circles-labels { display: block; font-size: 7.5px; color: #555; letter-spacing: 0.05em; margin-top: 2px; font-weight: 600; }
+        .ft-check-circle { display: inline-block; width: 11px; height: 11px; border: 1.4px solid #000; border-radius: 50%; margin: 0 1px; vertical-align: middle; }
+        .ft-check-circles-labels { display: block; font-size: 6.5px; color: #555; letter-spacing: 0.04em; margin-top: 2px; font-weight: 600; }
         .ft-qty-num { font-size: 24px; font-weight: 400; color: ${BLACK}; line-height: 1; }
         .ft-qty-num-multi { color: ${QTY_HIGHLIGHT}; font-weight: 700; }
         .ft-qty-x { font-size: 13px; color: #777; margin-left: 1px; }
@@ -544,7 +544,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       {/* ═══════════════════════════════════════════════════════════════════ */}
       <div className="doc-wrap-all">
         <div className="ft-banner">
-          <span>📋 FICHE DE TRAVAIL — USAGE INTERNE</span>
+          <span>📋 FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · ${numeroAffiche}` : ""}</span>
           <span className="ft-banner-printed">Imprimée le {printedAt}</span>
         </div>
 
