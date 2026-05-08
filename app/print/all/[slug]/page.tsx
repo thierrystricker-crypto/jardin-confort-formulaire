@@ -1612,19 +1612,6 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               </div>
 
               <div className="fb-info-block">
-                <div className="fb-info-title">📦 Livraison</div>div className="fb-info-title">👤 Client / Facturation</div>
-                <div className="fb-info-content">
-                  {data.societe && <div>{data.societe}</div>}
-                  <div className="fb-info-name">{data.nom} {data.prenom}</div>
-                  {data.rue && <div>{data.rue} {data.numero}</div>}
-                  {data.npa && <div>{data.npa} {data.ville}</div>}
-                  {data.telephone1 && <div>📞 {data.telephone1}</div>}
-                  {data.email && <div style={{fontSize: 9}}>✉ {data.email}</div>}
-                  {data.customerNumber && <div style={{fontSize: 9, color: "#555", marginTop: 2}}>N° client : {data.customerNumber}</div>}
-                </div>
-              </div>
-
-              <div className="fb-info-block">
                 <div className="fb-info-title">📦 Livraison</div>
                 <div className="fb-info-content">
                   {isPickup ? (
