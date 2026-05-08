@@ -637,12 +637,12 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   {!isCommandeDirecte && (
                     <a href={urlPublique} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
-                      👁 Page confirmation client
+                      👁 {isOffre ? "Page validation offre" : "Page confirmation client"}
                     </a>
                   )}
                   <a href={urlPrint} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
-                    🖨 Page commande version client
+                    🖨 {isOffre ? "Page de l\u0027offre" : "Page commande version client"}
                   </a>
                   {isCommande && (
                     <>
@@ -675,7 +675,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                   {pdfUrl ? (
                     <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
                       className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
-                      📄 Commande version client PDF
+                      📄 {isOffre ? "Offre PDF" : "Commande PDF"}
                     </a>
                   ) : (
                     <button onClick={generatePdf} disabled={pdfGenerating}
@@ -685,7 +685,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
                           <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
                         </span>
                       )}
-                      <span className="relative">{pdfGenerating ? "📄 Génération…" : "📄 Générer commande client PDF"}</span>
+                      <span className="relative">{pdfGenerating ? "📄 Génération…" : (isOffre ? "📄 Générer offre PDF" : "📄 Générer commande PDF")}</span>
                     </button>
                   )}
                   {qrUrl ? (
