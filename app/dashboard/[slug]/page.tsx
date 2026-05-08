@@ -522,7 +522,10 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const urlPublique=`${APP_URL}/offre/${offre.slug}`
   const urlPrint=`${APP_URL}/print/offre/${offre.slug}`
   const isAbandonne=offre.statut==="Abandonnée"
-  const isOffre=offre.type_document==="Offre"&&!["Convertie","Acceptée"].includes(offre.statut)
+  // isOffre = vraie offre encore "ouverte" (utilisée pour afficher les boutons Convertir / Abandonner)
+    const isOffre=offre.type_document==="Offre"&&!["Convertie","Acceptée"].includes(offre.statut)
+    // isTypeOffre = simplement le type du document (utilisé pour les libellés des boutons Pages web / Documents PDF)
+    const isTypeOffre = offre.type_document === "Offre"
 const isCommande = offre.type_document === "Commande" || ["Acceptée", "Convertie"].includes(offre.statut)
     // isCommandeReelle = true uniquement pour les CMD-XXXXX (pas pour les offres converties)
     // → utilisée pour décider si on affiche les boutons fiche de travail / bulletin / page de garde / Print All
@@ -640,12 +643,12 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                   {!isCommandeDirecte && (
                     <a href={urlPublique} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
-                      👁 {isOffre ? "Page validation offre" : "Page confirmation client"}
+                      👁 {isTypeOffre ? "Page validation offre" : "Page confirmation client"}
                     </a>
                   )}
                   <a href={urlPrint} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
-                    🖨 {isOffre ? "Page de l\u0027offre" : "Page commande version client"}
+                    🖨 {isTypeOffre ? "Page de l\u0027offre" : "Page commande client"}
                   </a>
                   {isCommandeReelle && (
                     <>
@@ -678,7 +681,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                   {pdfUrl ? (
                     <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
                       className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
-                      📄 {isOffre ? "Offre PDF" : "Commande PDF"}
+                      📄 {isTypeOffre ? "Offre PDF" : "Commande PDF"}
                     </a>
                   ) : (
                     <button onClick={generatePdf} disabled={pdfGenerating}
@@ -688,7 +691,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                           <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
                         </span>
                       )}
-                      <span className="relative">{pdfGenerating ? "📄 Génération…" : (isOffre ? "📄 Générer offre PDF" : "📄 Générer commande PDF")}</span>
+                      <span className="relative">{pdfGenerating ? "📄 Génération…" : (isTypeOffre ? "📄 Générer offre PDF" : "📄 Générer commande PDF")}</span>
                     </button>
                   )}
                   {qrUrl ? (
