@@ -236,6 +236,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           -webkit-print-color-adjust: exact;
         }
         @page { size: A4 portrait; margin: 14mm 16mm 14mm 14mm; }
+@page fb-archive { size: A4 portrait; margin: 0; }
         @media screen {
           .doc-wrap-all {
             max-width: 794px; margin: 0 auto; padding: 20px 28px;
@@ -513,16 +514,21 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         /* ═══ STYLES FICHE BLEUE ARCHIVE (page 5) — préfixe .fb- ══════════ */
         /* ════════════════════════════════════════════════════════════════════ */
         .fb-page-wrap {
-          width: 210mm; min-height: 287mm; max-height: 287mm;
-          position: relative;
-          background: radial-gradient(ellipse at center, #e8f0f8 0%, #e8f0f8 35%, #a8c5e0 75%, #4a7ba7 100%);
-          padding: 8mm 10mm;
-          overflow: hidden;
-          margin: 0 auto;
-        }
-        @media print {
-          .fb-page-wrap { box-shadow: none; }
-        }
+  width: 210mm; height: 297mm;
+  position: relative;
+  background: radial-gradient(ellipse at center, #e8f0f8 0%, #e8f0f8 35%, #a8c5e0 75%, #4a7ba7 100%);
+  padding: 8mm 10mm;
+  overflow: hidden;
+  margin: 0 auto;
+  page: fb-archive;
+}
+@media print {
+  .fb-page-wrap {
+    box-shadow: none;
+    width: 210mm; height: 297mm;
+    margin: 0;
+  }
+}
         .fb-watermark {
           position: absolute; top: 50%; left: 50%;
           transform: translate(-50%, -50%) rotate(-30deg);
@@ -1573,7 +1579,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* ═══════════════ PAGE 5 — FICHE BLEUE ARCHIVE ════════════════════ */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      <div className="doc-wrap-all page-break" style={{padding: 0, margin: 0, maxWidth: "100%"}}>
+      <div className="page-break" style={{padding: 0, margin: 0, maxWidth: "100%"}}>
         <div className="fb-page-wrap">
           <div className="fb-watermark">ARCHIVE · {numeroAffiche}</div>
           <div className="fb-content">
