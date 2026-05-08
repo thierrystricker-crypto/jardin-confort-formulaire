@@ -1,8 +1,9 @@
 "use client";
 // ═══════════════════════════════════════════════════════════════
 //  app/dashboard/StatsCards.tsx
-//  2 mini-cards compactes côte à côte
-//  Conçues pour s'intégrer à droite des boutons de filtres rapides
+//  2 cards compactes côte à côte
+//  Calées en hauteur sur 2 lignes (quick-filters + probabilité)
+//  Affichent breakdown commercial complet avec barres
 // ═══════════════════════════════════════════════════════════════
 
 import { useEffect, useState } from "react";
@@ -45,17 +46,16 @@ function MiniCard({
   accentBg: string;
   accentText: string;
 }) {
-  const top = data?.byCommercial[0];
-  const rest = data?.byCommercial.slice(1) || [];
-  const restCount = rest.length;
-  const pct = top && data && data.totals.total_montant > 0
-    ? (top.total_montant / data.totals.total_montant) * 100
-    : 0;
+  // Top 3 commerciaux + reste agrégé
+  const topRows = data?.byCommercial.slice(0, 3) || [];
+  const restRows = data?.byCommercial.slice(3) || [];
+  const restTotal = restRows.reduce((s, r) => s + r.total_montant, 0);
 
   return (
-    <div className={`flex-1 min-w-0 rounded-xl border border-white/10 bg-[#2a2d31] border-l-2 ${accentBorder} px-3 py-2`}>
+    <div className={`flex flex-col flex-1 min-w-0 rounded-xl border border-white/10 bg-[#2a2d31] border-l-2 ${accentBorder} px-3 py-2.5`}>
+      {/* Header : titre + période */}
       <div className="flex items-center justify-between gap-2">
-        <span className={`text-[9px] font-bold uppercase tracking-wider ${accentText} whitespace-nowrap`}>
+        <span className={`text-[10px] font-bold uppercase tracking-wider ${accentText} whitespace-nowrap`}>
           {emoji} {title}
         </span>
         <span className="text-[9px] italic text-zinc-500 whitespace-nowrap">
@@ -64,13 +64,14 @@ function MiniCard({
       </div>
 
       {loading ? (
-        <div className="text-xs text-zinc-500 mt-0.5">Chargement…</div>
+        <div className="text-xs text-zinc-500 mt-1 flex-1 flex items-center justify-center">Chargement…</div>
       ) : !data ? (
-        <div className="text-xs text-rose-400 mt-0.5">Erreur</div>
+        <div className="text-xs text-rose-400 mt-1 flex-1 flex items-center justify-center">Erreur</div>
       ) : (
         <>
+          {/* Montant total + nb cmd/pces */}
           <div className="flex items-baseline justify-between gap-2 mt-0.5">
-            <span className="text-base font-extrabold leading-none tracking-tight text-zinc-100 whitespace-nowrap">
+            <span className="text-lg font-extrabold leading-tight tracking-tight text-zinc-100 whitespace-nowrap">
               {fmtCHF(data.totals.total_montant)}
             </span>
             <span className="text-[10px] text-zinc-400 whitespace-nowrap">
@@ -79,25 +80,40 @@ function MiniCard({
             </span>
           </div>
 
-          {top && (
-            <div className="mt-1 text-[10px]" title={`${top.commercial} · ${top.nb_commandes} cmd · ${top.total_qty} pces${restCount > 0 ? ` · + ${restCount} autre${restCount > 1 ? "s" : ""}` : ""}`}>
-              <div className="flex items-baseline justify-between gap-2 truncate">
-                <span className="font-semibold text-zinc-300 truncate">
-                  {top.commercial}
-                  {restCount > 0 && <span className="text-zinc-500 italic font-normal"> +{restCount}</span>}
-                </span>
-                <span className={`font-bold ${accentText} whitespace-nowrap`}>
-                  {fmtCHF(top.total_montant)}
-                </span>
-              </div>
-              <div className="h-0.5 mt-0.5 overflow-hidden rounded-full bg-white/5">
-                <div className={`h-full ${accentBg}`} style={{ width: `${pct}%` }} />
-              </div>
+          {/* Breakdown par commercial */}
+          {data.byCommercial.length > 0 ? (
+            <div className="border-t border-white/5 mt-1.5 pt-1.5 space-y-1 flex-1">
+              {topRows.map((row) => {
+                const pct = data.totals.total_montant > 0
+                  ? (row.total_montant / data.totals.total_montant) * 100
+                  : 0;
+                return (
+                  <div key={row.commercial} className="text-[10px]" title={`${row.commercial} · ${row.nb_commandes} cmd · ${row.total_qty} pces`}>
+                    <div className="flex items-baseline justify-between gap-2 truncate">
+                      <span className="font-semibold text-zinc-200 truncate">
+                        {row.commercial}
+                      </span>
+                      <span className={`font-bold ${accentText} whitespace-nowrap`}>
+                        {fmtCHF(row.total_montant)}
+                      </span>
+                    </div>
+                    <div className="h-0.5 mt-0.5 overflow-hidden rounded-full bg-white/5">
+                      <div className={`h-full ${accentBg}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {restRows.length > 0 && (
+                <div className="flex items-baseline justify-between gap-2 text-[9px] text-zinc-500 italic pt-0.5">
+                  <span>+ {restRows.length} autre{restRows.length > 1 ? "s" : ""}</span>
+                  <span className="whitespace-nowrap">{fmtCHF(restTotal)}</span>
+                </div>
+              )}
             </div>
-          )}
-
-          {data.byCommercial.length === 0 && (
-            <div className="text-[10px] italic text-zinc-500 mt-1">Aucune commande</div>
+          ) : (
+            <div className="border-t border-white/5 mt-1.5 pt-2 text-[10px] italic text-zinc-500 text-center flex-1 flex items-center justify-center">
+              Aucune commande
+            </div>
           )}
         </>
       )}
@@ -133,7 +149,7 @@ export default function StatsCards() {
   }, []);
 
   return (
-    <div className="flex items-stretch gap-2 flex-1 min-w-0">
+    <div className="flex items-stretch gap-2 flex-1 min-w-0 self-stretch">
       <MiniCard
         title="Chiffre du jour"
         emoji="📅"
@@ -154,10 +170,12 @@ export default function StatsCards() {
       />
       <Link
         href="/dashboard/statistiques"
-        className="flex-shrink-0 inline-flex items-center justify-center gap-1 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 text-[11px] font-semibold text-sky-300 transition hover:bg-sky-500/20 whitespace-nowrap"
+        className="flex-shrink-0 inline-flex flex-col items-center justify-center gap-1 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 text-[11px] font-semibold text-sky-300 transition hover:bg-sky-500/20 whitespace-nowrap"
         title="Voir toutes les statistiques"
       >
-        📊 →
+        <span className="text-base">📊</span>
+        <span>Stats</span>
+        <span>→</span>
       </Link>
     </div>
   );

@@ -350,36 +350,40 @@ export default function DashboardPage() {
             </label>
           </div>
 
-         <div className="flex flex-wrap items-stretch gap-3">
-            <div className="flex flex-wrap gap-2 items-center flex-shrink-0">
-              {quickFilters.map(f=>(
-                <button key={f.value} type="button" onClick={()=>setQuickFilter(f.value)}
-                  className={`rounded-full px-4 py-2 text-sm transition ${quickFilter===f.value?"bg-zinc-100 text-zinc-900":"border border-white/10 bg-[#34383d] text-zinc-200 hover:bg-[#40454b]"}`}>
-                  {f.label}
-                </button>
-              ))}
+         {/* Wrapper : 2 lignes de filtres à gauche + StatsCards à droite occupant la hauteur des 2 lignes */}
+          <div className="flex items-stretch gap-3">
+            {/* Colonne de gauche : 2 lignes empilées (quick-filters + probabilité) */}
+            <div className="flex flex-col gap-2 flex-shrink-0">
+              {/* Ligne 1 : filtres rapides */}
+              <div className="flex flex-wrap gap-2 items-center">
+                {quickFilters.map(f=>(
+                  <button key={f.value} type="button" onClick={()=>setQuickFilter(f.value)}
+                    className={`rounded-full px-4 py-2 text-sm transition ${quickFilter===f.value?"bg-zinc-100 text-zinc-900":"border border-white/10 bg-[#34383d] text-zinc-200 hover:bg-[#40454b]"}`}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              {/* Ligne 2 : probabilités */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Probabilité :</span>
+                {[
+                  {value:"prob_forte" as QuickFilter, icon:"🟢", label:"Forte", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="forte").length},
+                  {value:"prob_moyenne" as QuickFilter, icon:"🟡", label:"Moyenne", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="moyenne").length},
+                  {value:"prob_faible" as QuickFilter, icon:"🔴", label:"Faible", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="faible").length},
+                  {value:"prob_neutre" as QuickFilter, icon:"⚪", label:"Non définie", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&(!o.probabilite||o.probabilite==="neutre")).length},
+                ].map(f=>(
+                  <button key={f.value} type="button" onClick={()=>setQuickFilter(quickFilter===f.value?"all":f.value)}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition ${quickFilter===f.value?"bg-zinc-100 text-zinc-900":"border border-white/10 bg-[#34383d] text-zinc-200 hover:bg-[#40454b]"}`}>
+                    <span>{f.icon}</span>
+                    <span>{f.label}</span>
+                    <span className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-xs font-semibold ${quickFilter===f.value?"bg-zinc-300 text-zinc-700":"bg-white/10 text-zinc-400"}`}>{f.count}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            {/* Stats CA jour/mois inline avec les boutons de filtres */}
-            <StatsCards />
-          </div>
 
-          {/* ─── Filtres rapides par probabilité de closing ─── */}
-          {/* Affichés uniquement pour les offres en cours (pas les commandes) */}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Probabilité :</span>
-            {[
-              {value:"prob_forte" as QuickFilter, icon:"🟢", label:"Forte", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="forte").length},
-              {value:"prob_moyenne" as QuickFilter, icon:"🟡", label:"Moyenne", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="moyenne").length},
-              {value:"prob_faible" as QuickFilter, icon:"🔴", label:"Faible", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="faible").length},
-              {value:"prob_neutre" as QuickFilter, icon:"⚪", label:"Non définie", count:offres.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&(!o.probabilite||o.probabilite==="neutre")).length},
-            ].map(f=>(
-              <button key={f.value} type="button" onClick={()=>setQuickFilter(quickFilter===f.value?"all":f.value)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition ${quickFilter===f.value?"bg-zinc-100 text-zinc-900":"border border-white/10 bg-[#34383d] text-zinc-200 hover:bg-[#40454b]"}`}>
-                <span>{f.icon}</span>
-                <span>{f.label}</span>
-                <span className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-xs font-semibold ${quickFilter===f.value?"bg-zinc-300 text-zinc-700":"bg-white/10 text-zinc-400"}`}>{f.count}</span>
-              </button>
-            ))}
+            {/* Colonne de droite : StatsCards calées sur la hauteur des 2 lignes filtres */}
+            <StatsCards />
           </div>
         </div>
 
