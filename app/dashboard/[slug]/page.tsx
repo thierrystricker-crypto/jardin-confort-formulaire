@@ -169,6 +169,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [emailCopied,setEmailCopied]=useState(false)
   const [clientId,setClientId]=useState<number|null>(null)
   const [offreOrigineSlug, setOffreOrigineSlug] = useState<string|null>(null)
+  const [commandeIssue, setCommandeIssue] = useState<{slug: string; numero: string}|null>(null)
   const [probabilite,setProbabilite]=useState<string>("neutre")
   const [probSaving,setProbSaving]=useState(false)
   const [converting,setConverting]=useState(false)
@@ -234,6 +235,23 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             }
           } catch { /* ignore */ }
         }
+// Si on est sur une offre convertie, chercher la commande qui en est issue
+        if (o.type_document === "Offre" && ["Convertie","Acceptée"].includes(o.statut)) {
+          try {
+            const cRes = await fetch(`/api/dashboard/offres`)
+            if (cRes.ok) {
+              const allDocs = await cRes.json()
+              const list = Array.isArray(allDocs) ? allDocs : []
+              const found = list.find((x: {type_document?: string; offre_origine?: string; slug?: string; numero_affiche?: string}) =>
+                x.type_document === "Commande" && x.offre_origine === o.numero_affiche
+              )
+              if (found?.slug && found?.numero_affiche) {
+                setCommandeIssue({ slug: found.slug, numero: found.numero_affiche })
+              }
+            }
+          } catch { /* ignore */ }
+        }
+
         if (o.client_email || o.client_tel1) {
           try {
             const q = o.client_email || o.client_tel1 || ""
@@ -601,22 +619,16 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                         </span>
                       )}
                     </div>
-                    {offre.offre_origine && (
+                    {/* Badge inverse : sur une offre convertie, lien vers la commande générée */}
+                    {commandeIssue && (
                       <div className="mt-2">
-                        {offreOrigineSlug ? (
-                          <a href={`/dashboard/${offreOrigineSlug}`}
-                            title={`Voir l'offre d'origine ${offre.offre_origine}`}
-                            className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/15 px-3 py-1 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/25 hover:border-violet-400/60">
-                            <span>📄 Issu de l&apos;offre</span>
-                            <span className="font-bold">{offre.offre_origine}</span>
-                            <span className="text-violet-400/70">→</span>
-                          </a>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-300/80">
-                            <span>📄 Issu de l&apos;offre</span>
-                            <span className="font-bold">{offre.offre_origine}</span>
-                          </span>
-                        )}
+                        <a href={`/dashboard/${commandeIssue.slug}`}
+                          title={`Voir la commande générée ${commandeIssue.numero}`}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/25 hover:border-emerald-400/60">
+                          <span>✅ Convertie en commande</span>
+                          <span className="font-bold">{commandeIssue.numero}</span>
+                          <span className="text-emerald-400/70">→</span>
+                        </a>
                       </div>
                     )}
                   </div>
