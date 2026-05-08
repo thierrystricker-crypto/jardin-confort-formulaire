@@ -413,10 +413,17 @@ export default function DashboardPage() {
                     <tr><td colSpan={10} className="px-4 py-10 text-center text-zinc-500">Aucun dossier trouvé.</td></tr>
                   ):filtered.map((o,idx)=>{
                     const days=getDaysOpen(o)
-                    const rowBg=idx%2===0?"bg-white/[0.02]":"bg-white/[0.05]"
+                    // Distinction visuelle : seules les vraies CMD sont vertes, tout le reste bleu (offres)
+                    const isCmd = o.type_document==="Commande"
+                    const rowBg = isCmd
+                      ? (idx%2===0 ? "bg-emerald-500/[0.04]" : "bg-emerald-500/[0.07]")
+                      : (idx%2===0 ? "bg-sky-500/[0.03]" : "bg-sky-500/[0.06]")
+                    const leftBorder = isCmd
+                      ? "border-l-4 border-l-emerald-500/40"
+                      : "border-l-4 border-l-sky-500/40"
                     return (
                       <tr key={o.id} onClick={()=>window.location.href=`/dashboard/${o.slug}`}
-                        className={`${rowBg} cursor-pointer border-t border-white/5 text-zinc-200 transition hover:bg-white/10`}>
+                        className={`${rowBg} ${leftBorder} cursor-pointer border-t border-white/5 text-zinc-200 transition hover:bg-white/10`}>
                         <td className="px-4 py-4">
                           <div className="font-semibold text-zinc-100">{o.numero_affiche}</div>
                           {o.reference && (
