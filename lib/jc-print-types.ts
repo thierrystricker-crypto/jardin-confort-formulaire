@@ -13,7 +13,7 @@ export type OfferStatus  = "En cours" | "Envoyée" | "Acceptée" | "Refusée";
 
 export type QuoteLine = {
   id: string;
-  type: "product" | "custom" | "comment";
+  type: "product" | "custom" | "comment" | "media";
   image?: string;
   sku: string;
   title: string;
@@ -21,6 +21,10 @@ export type QuoteLine = {
   qty: number;
   stock?: number | null | "sur_commande";
   lineDiscount?: number;
+  // ── Lignes média (logo / image de marque) ──
+  mediaUrl?: string;
+  mediaSize?: "small" | "medium" | "large";
+  mediaSource?: "library" | "upload";
 };
 
 export type AmbianceImage = {
@@ -126,7 +130,7 @@ export function computeTotals(data: PrintData) {
   const isPrivateTTC = data.clientType === "Privé (prix TTC)";
 
   const subTotal = data.lines.reduce((s, l) => {
-    if (l.type === "comment") return s;
+    if (l.type === "comment" || l.type === "media") return s;
     return s + l.qty * l.unitPrice - (l.lineDiscount || 0);
   }, 0);
 

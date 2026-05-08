@@ -185,6 +185,24 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
         .tr-comment td { background: #eef4fb !important; }
         .td-comment { padding: 6px 10px !important; font-style: italic; color: #445 !important; font-size: 12px; }
 
+        /* Ligne média (logo / image de marque) */
+        .tr-media td {
+          background: white !important;
+          padding: 14px 4px !important;
+          text-align: center !important;
+          border-bottom: 1px solid #efefef;
+        }
+        .tr-media img {
+          width: auto;
+          object-fit: contain;
+          display: inline-block;
+          vertical-align: middle;
+        }
+        .media-small  { height: 30px !important; max-height: 30px !important; }
+        .media-medium { height: 50px !important; max-height: 50px !important; }
+        .media-large  { height: 80px !important; max-height: 80px !important; }
+        .td-comment { padding: 6px 10px !important; font-style: italic; color: #445 !important; font-size: 12px; }
+
         /* ── ZONE TOTAUX + SIGNATURE CLIENT ── */
         .doc-bottom-wrap {
           display: flex;
