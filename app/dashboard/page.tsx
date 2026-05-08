@@ -416,10 +416,10 @@ export default function DashboardPage() {
                     // Distinction visuelle : seules les vraies CMD sont vertes, tout le reste bleu (offres)
                     const isCmd = o.type_document==="Commande"
                     const rowBg = isCmd
-                      ? (idx%2===0 ? "bg-emerald-500/[0.04]" : "bg-emerald-500/[0.07]")
+                      ? (idx%2===0 ? "bg-emerald-500/[0.10]" : "bg-emerald-500/[0.14]")
                       : (idx%2===0 ? "bg-sky-500/[0.03]" : "bg-sky-500/[0.06]")
                     const leftBorder = isCmd
-                      ? "border-l-4 border-l-emerald-500/40"
+                      ? "border-l-4 border-l-emerald-400/80"
                       : "border-l-4 border-l-sky-500/40"
                     return (
                       <tr key={o.id} onClick={()=>window.location.href=`/dashboard/${o.slug}`}
