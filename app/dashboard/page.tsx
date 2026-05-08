@@ -379,7 +379,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_minmax(0,1.6fr)]">
           <KpiCard title="Offres actives" value={statsFiltered.totalOffres} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(statsFiltered.caOffres)} potentiel`}
             onClick={()=>setQuickFilter(quickFilter==="offres"?"all":"offres")} active={quickFilter==="offres"}/>
           <KpiCard title="Commandes" value={statsFiltered.totalCommandes} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(statsFiltered.caCommandes)} confirmé`}
@@ -388,10 +388,9 @@ export default function DashboardPage() {
             onClick={()=>setQuickFilter(quickFilter==="relance"?"all":"relance")} active={quickFilter==="relance"}/>
           <KpiCard title="Abandonnées" value={statsFiltered.totalAbandonnes} sub={`${offres.length} dossiers total`}
             onClick={()=>setQuickFilter(quickFilter==="abandonnes"?"all":"abandonnes")} active={quickFilter==="abandonnes"}/>
+          {/* ─── Stats CA jour/mois — occupe l'espace libre à droite des 4 KPI ─── */}
+          <StatsCards />
         </div>
-
-        {/* ─── Stats CA jour/mois par commercial ─── */}
-        <StatsCards />
 
         
         <div className="space-y-3">
