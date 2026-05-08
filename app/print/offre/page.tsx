@@ -201,6 +201,23 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
         .media-small  { height: 30px !important; max-height: 30px !important; }
         .media-medium { height: 50px !important; max-height: 50px !important; }
         .media-large  { height: 80px !important; max-height: 80px !important; }
+
+        /* Ligne média (logo / image de marque) */
+        .tr-media td {
+          background: white !important;
+          padding: 14px 4px !important;
+          text-align: center !important;
+          border-bottom: 1px solid #efefef;
+        }
+        .tr-media img {
+          width: auto;
+          object-fit: contain;
+          display: inline-block;
+          vertical-align: middle;
+        }
+        .media-small  { height: 30px !important; max-height: 30px !important; }
+        .media-medium { height: 50px !important; max-height: 50px !important; }
+        .media-large  { height: 80px !important; max-height: 80px !important; }
         .td-comment { padding: 6px 10px !important; font-style: italic; color: #445 !important; font-size: 12px; }
 
         /* ── ZONE TOTAUX + SIGNATURE CLIENT ── */
@@ -448,6 +465,22 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
                 return (
                   <tr key={line.id} className="tr-comment">
                     <td colSpan={5} className="td-comment">{line.title}</td>
+                  </tr>
+                );
+              }
+              if (line.type === "media") {
+                if (!line.mediaUrl) return null;
+                const sizeClass = line.mediaSize === "small"
+                  ? "media-small"
+                  : line.mediaSize === "large"
+                  ? "media-large"
+                  : "media-medium";
+                return (
+                  <tr key={line.id} className="tr-media">
+                    <td colSpan={5}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={line.mediaUrl} alt={line.title || ""} className={sizeClass} />
+                    </td>
                   </tr>
                 );
               }
