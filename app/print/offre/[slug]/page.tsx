@@ -306,11 +306,24 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
             {data.lines.length === 0 && (
               <tr><td colSpan={5} style={{textAlign:"center", padding:"20px", color:"#aaa", fontStyle:"italic"}}>Aucun article</td></tr>
             )}
-            {data.lines.map((line: QuoteLine) => {
+           {data.lines.map((line: QuoteLine) => {
               if (line.type === "comment") {
                 return (
                   <tr key={line.id} className="tr-comment">
                     <td colSpan={5} className="td-comment">{line.title}</td>
+                  </tr>
+                );
+              }
+              if (line.type === "media") {
+                if (!(line as any).mediaUrl) return null;
+                const mSize = (line as any).mediaSize;
+                const sizeClass = mSize === "small" ? "media-small" : mSize === "large" ? "media-large" : "media-medium";
+                return (
+                  <tr key={line.id} className="tr-media">
+                    <td colSpan={5}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={(line as any).mediaUrl} alt={line.title || ""} className={sizeClass} />
+                    </td>
                   </tr>
                 );
               }

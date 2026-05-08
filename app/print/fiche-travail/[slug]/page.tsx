@@ -30,7 +30,7 @@ const serviceOptions: ServiceItem[] = [
 
 type QuoteLine = {
   id: string;
-  type: "product" | "custom" | "comment";
+  type: "product" | "custom" | "comment" | "media";
   image?: string;
   sku: string;
   title: string;
@@ -38,6 +38,10 @@ type QuoteLine = {
   qty: number;
   stock?: number | null | "sur_commande";
   lineDiscount?: number;
+  // ── Lignes média ──
+  mediaUrl?: string;
+  mediaSize?: "small" | "medium" | "large";
+  mediaSource?: "library" | "upload";
 };
 
 type PrintData = {
@@ -103,7 +107,7 @@ function computeTotals(d: PrintData) {
   const isPrivateTTC = d.clientType === "Privé (prix TTC)";
 
   const subTotal = d.lines.reduce((s, l) => {
-    if (l.type === "comment") return s;
+    if (l.type === "comment" || l.type === "media") return s;
     return s + (l.qty * l.unitPrice - (l.lineDiscount || 0));
   }, 0);
 
@@ -255,7 +259,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
   const clientEmail = data.email;
 
   const isPickup = data.deliveryMode === "À l'emporter";
-  const totalQty = data.lines.reduce((s, l) => l.type === "comment" ? s : s + l.qty, 0);
+  const totalQty = data.lines.reduce((s, l) => (l.type === "comment" || l.type === "media") ? s : s + l.qty, 0);
 
   const totals = computeTotals(data);
 
@@ -612,6 +616,19 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           border-left: 3px solid ${THEME} !important;
         }
 
+        /* ── Lignes média (logo / image) ── */
+        .tr-media td {
+          background: white !important;
+          padding: 12px 4px !important;
+          text-align: center !important;
+          border-bottom: 1px solid #d1d5db !important;
+          border-left: 3px solid #a855f7 !important;
+        }
+        .tr-media img { width: auto; object-fit: contain; display: inline-block; vertical-align: middle; }
+        .media-small  { height: 30px !important; max-height: 30px !important; }
+        .media-medium { height: 50px !important; max-height: 50px !important; }
+        .media-large  { height: 80px !important; max-height: 80px !important; }
+
         /* ══ BOTTOM ══ */
         .doc-bottom-wrap {
           display: flex;
@@ -904,6 +921,20 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                 return (
                   <tr key={line.id} className="tr-comment">
                     <td colSpan={7}>💬 {line.title || <em style={{opacity:0.6}}>(commentaire vide)</em>}</td>
+                  </tr>
+                );
+              }
+
+              // ─── Ligne MÉDIA (logo de marque, sépare visuellement les groupes) ───
+              if (line.type === "media") {
+                if (!line.mediaUrl) return null;
+                const sizeClass = line.mediaSize === "small" ? "media-small" : line.mediaSize === "large" ? "media-large" : "media-medium";
+                return (
+                  <tr key={line.id} className="tr-media">
+                    <td colSpan={7}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={line.mediaUrl} alt={line.title || ""} className={sizeClass} />
+                    </td>
                   </tr>
                 );
               }

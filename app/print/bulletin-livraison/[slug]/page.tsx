@@ -128,6 +128,17 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
         .item-sku { font-size: 11px; color: #777; margin-top: 2px; font-weight: 400; }
         .tr-comment td { background: #eef4fb !important; }
         .td-comment { padding: 6px 10px !important; font-style: italic; color: #445 !important; font-size: 12px; }
+
+        .tr-media td {
+          background: white !important;
+          padding: 14px 4px !important;
+          text-align: center !important;
+          border-bottom: 1px solid #efefef;
+        }
+        .tr-media img { width: auto; object-fit: contain; display: inline-block; vertical-align: middle; }
+        .media-small  { height: 30px !important; max-height: 30px !important; }
+        .media-medium { height: 50px !important; max-height: 50px !important; }
+        .media-large  { height: 80px !important; max-height: 80px !important; }
         .doc-services-box { margin-bottom: 6mm; padding: 12px 16px; background: #f0f7ff; border-left: 3px solid ${THEME}; border-radius: 4px; }
         .doc-services-title { font-size: 12px; font-weight: 700; color: ${BLACK}; margin-bottom: 6px; }
         .doc-services-list { font-size: 12px; color: ${GREY}; line-height: 1.7; }
@@ -306,6 +317,19 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
                 return (
                   <tr key={line.id} className="tr-comment">
                     <td colSpan={3} className="td-comment">{line.title}</td>
+                  </tr>
+                );
+              }
+              if (line.type === "media") {
+                if (!(line as any).mediaUrl) return null;
+                const mSize = (line as any).mediaSize;
+                const sizeClass = mSize === "small" ? "media-small" : mSize === "large" ? "media-large" : "media-medium";
+                return (
+                  <tr key={line.id} className="tr-media">
+                    <td colSpan={3}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={(line as any).mediaUrl} alt={line.title || ""} className={sizeClass} />
+                    </td>
                   </tr>
                 );
               }
