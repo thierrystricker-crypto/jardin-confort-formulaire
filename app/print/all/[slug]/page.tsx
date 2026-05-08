@@ -658,7 +658,6 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 );
               }
               const isCustom = line.type === "custom";
-              const isCustom = line.type === "custom";
               let stockDisplay: React.ReactNode;
               if (line.stock === undefined || line.stock === null) {
                 stockDisplay = <span className="ft-stock-na">—</span>;
