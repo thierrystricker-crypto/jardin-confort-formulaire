@@ -393,9 +393,7 @@ export default function DashboardPage() {
         {/* ─── Stats CA jour/mois par commercial ─── */}
         <StatsCards />
 
-        <div className="space-y-3">
-          <div className="text-sm text-zinc-400">{filtered.length} résultat(s)</div>
-
+        
         <div className="space-y-3">
           <div className="text-sm text-zinc-400">{filtered.length} résultat(s)</div>
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#2a2d31]">
