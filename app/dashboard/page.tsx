@@ -1,6 +1,7 @@
 "use client";
 // app/dashboard/page.tsx
 
+import StatsCards from "./StatsCards";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 
@@ -388,6 +389,12 @@ export default function DashboardPage() {
           <KpiCard title="Abandonnées" value={statsFiltered.totalAbandonnes} sub={`${offres.length} dossiers total`}
             onClick={()=>setQuickFilter(quickFilter==="abandonnes"?"all":"abandonnes")} active={quickFilter==="abandonnes"}/>
         </div>
+
+        {/* ─── Stats CA jour/mois par commercial ─── */}
+        <StatsCards />
+
+        <div className="space-y-3">
+          <div className="text-sm text-zinc-400">{filtered.length} résultat(s)</div>
 
         <div className="space-y-3">
           <div className="text-sm text-zinc-400">{filtered.length} résultat(s)</div>
