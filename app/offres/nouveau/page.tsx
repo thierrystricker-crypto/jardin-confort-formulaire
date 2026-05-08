@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import MediaLinePicker from "./MediaLinePicker";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
@@ -29,14 +30,18 @@ type ShopifyItem = {
 
 type QuoteLine = {
   id: string;
-  type: "product" | "custom" | "comment"; // comment = ligne de texte sans prix
+  type: "product" | "custom" | "comment" | "media";
   image?: string;
   sku: string;
   title: string;
   unitPrice: number;
   qty: number;
   stock?: number | null | "sur_commande";
-  lineDiscount?: number; // remise en CHF sur cette ligne uniquement
+  lineDiscount?: number;
+  // ── Lignes média uniquement ──
+  mediaUrl?: string;
+  mediaSize?: "small" | "medium" | "large";
+  mediaSource?: "library" | "upload";
 };
 
 type DraftSnapshot = {
@@ -440,7 +445,7 @@ const [savedSlug, setSavedSlug]           = useState("");
 
   const subTotal = useMemo(() =>
     lines.reduce((s, l) => {
-      if (l.type === "comment") return s;
+      if (l.type === "comment" || l.type === "media") return s;
       const lineTotal = l.qty * l.unitPrice - (l.lineDiscount || 0);
       return s + lineTotal;
     }, 0),
@@ -1433,6 +1438,26 @@ const [savedSlug, setSavedSlug]           = useState("");
               >💬 Ligne commentaire</button>
               <button
                 className="jc-btn jc-btn-ghost screenOnly"
+                style={{fontSize:12, padding:"5px 12px", background:"rgba(168,85,247,0.1)", color:"#a855f7", borderColor:"rgba(168,85,247,0.25)"}}
+                onClick={() => {
+                  captureUndo();
+                  const id = `media-${Date.now()}`;
+                  setLines((c) => [...c, {
+                    id,
+                    type: "media",
+                    sku: "",
+                    title: "",
+                    unitPrice: 0,
+                    qty: 1,
+                    mediaUrl: "",
+                    mediaSize: "medium",
+                    mediaSource: "library",
+                  }]);
+                  highlightAdded(id);
+                }}
+              >🖼️ Logo / Image</button>
+              <button
+                className="jc-btn jc-btn-ghost screenOnly"
                 style={{fontSize:12, padding:"5px 12px"}}
                 onClick={() => {
                   captureUndo();
@@ -1441,7 +1466,7 @@ const [savedSlug, setSavedSlug]           = useState("");
                   highlightAdded(id);
                 }}
               >✏️ Article à la volée</button>
-              <span className="jc-badge screenOnly">{lines.filter(l => l.type !== "comment").length} article{lines.filter(l => l.type !== "comment").length !== 1 ? "s" : ""}</span>
+              <span className="jc-badge screenOnly">{lines.filter(l => l.type !== "comment" && l.type !== "media").length} article{lines.filter(l => l.type !== "comment" && l.type !== "media").length !== 1 ? "s" : ""}</span>
             </div>
           </div>
           <p className="jc-drag-hint screenOnly">⬆⬇ Glisser-déposer pour réordonner</p>
@@ -1466,7 +1491,69 @@ const [savedSlug, setSavedSlug]           = useState("");
                 )}
                 {lines.map((line, idx) => {
                   const isComment = line.type === "comment";
-                  const lineTotal = isComment ? 0 : line.qty * line.unitPrice - (line.lineDiscount || 0);
+                  const isMedia = line.type === "media";
+                  const lineTotal = (isComment || isMedia) ? 0 : line.qty * line.unitPrice - (line.lineDiscount || 0);
+
+                  // ── Ligne média : rendu dédié sur toute la largeur ──
+                  if (isMedia) {
+                    return (
+                      <tr
+                        key={line.id}
+                        draggable
+                        onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", line.id); setDraggedLineId(line.id); }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => { e.preventDefault(); const from = e.dataTransfer.getData("text/plain") || draggedLineId; if (from) reorderLines(from, line.id); setDraggedLineId(null); }}
+                        onDragEnd={() => setDraggedLineId(null)}
+                        className={[
+                          "tr-media",
+                          draggedLineId === line.id ? "tr-dragging" : "",
+                          justAddedLineId === line.id ? "tr-added" : "",
+                        ].join(" ")}
+                      >
+                        <td className="td-num">🖼️</td>
+                        <td colSpan={7} className="td-media-cell">
+                          <MediaLinePicker
+                            line={{
+                              kind: "media",
+                              id: line.id,
+                              image_url: line.mediaUrl || "",
+                              name: line.title || undefined,
+                              source: line.mediaSource || "library",
+                              size: line.mediaSize || "medium",
+                            }}
+                            onChange={(updated) => {
+                              updateLine(line.id, {
+                                mediaUrl: updated.image_url,
+                                title: updated.name || "",
+                                mediaSource: updated.source,
+                                mediaSize: updated.size,
+                              });
+                            }}
+                            onRemove={() => removeLine(line.id)}
+                          />
+                        </td>
+                        <td className="screenOnly">
+                          <div className="jc-action-btns">
+                            <button
+                              className="jc-dup-btn" title="Dupliquer"
+                              onClick={() => {
+                                captureUndo();
+                                const newId = `media-dup-${Date.now()}`;
+                                setLines((c) => {
+                                  const idx2 = c.findIndex((l) => l.id === line.id);
+                                  const clone2 = [...c];
+                                  clone2.splice(idx2 + 1, 0, { ...line, id: newId });
+                                  return clone2;
+                                });
+                                highlightAdded(newId);
+                              }}
+                            >⧉</button>
+                            <button className="jc-trash-btn" onClick={() => removeLine(line.id)}>🗑</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
 
                   return (
                     <tr
@@ -2728,6 +2815,17 @@ const [savedSlug, setSavedSlug]           = useState("");
           border-color: rgba(96,165,250,0.15) !important;
         }
         .td-comment-cell { padding: 8px 10px; }
+
+        /* ── LIGNE MEDIA (logo / image) ── */
+        .tr-media td {
+          background: rgba(168,85,247,0.05) !important;
+          border-color: rgba(168,85,247,0.18) !important;
+        }
+        .td-media-cell { padding: 6px 8px; }
+        .light-mode .tr-media td {
+          background: rgba(168,85,247,0.06) !important;
+          border-color: rgba(168,85,247,0.22) !important;
+        }
         .jc-comment-input {
           width: 100%;
           font-style: italic;
