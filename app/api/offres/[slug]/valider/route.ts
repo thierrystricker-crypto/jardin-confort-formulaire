@@ -74,9 +74,14 @@ export async function POST(
     const cmdSlug = numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" + token;
 
     // 3. Mise à jour de l'offre originale
+    // ⚠️ On enregistre numero_commande au niveau colonne (pas seulement dans data)
+    // pour que /api/offres/[slug] GET puisse retrouver la commande liée et
+    // retourner ses pdf_url, qr_url et stock J0 quand le client revient sur
+    // /offre/dev-XXX après signature.
     await supabaseAdmin
       .from("offres")
       .update({
+        numero_commande: numeroCommande,  // ✅ Lien explicite vers la CMD
         data: {
           ...(offre.data as Record<string, unknown>),
           signataire,
