@@ -89,6 +89,30 @@ export async function POST(
 
     // 4. Créer la nouvelle ligne commande
     const offreNumero = offre.numero_offre || offre.numero_affiche
+    
+    // 🔒 FIGER LE STOCK AU MOMENT DE LA CONVERSION
+    // On appelle l'API GET de l'offre originale qui va faire refreshStock() Shopify.
+    // On extrait les lines avec stock à jour pour les snapshotter dans la commande.
+    // Ce stock figé représente la PREUVE du stock vu par le client au moment de la commande.
+    // ⚠️ Doit s'exécuter AVANT la création de la commande pour que cmdRow.data contienne le stock figé.
+    let frozenLines = (offre.data as { lines?: unknown[] })?.lines || [];
+    let stockFreezeOk = false;
+    try {
+      const refreshRes = await fetch(`${BASE_URL}/api/offres/${slug}`, { cache: "no-store" });
+      if (refreshRes.ok) {
+        const refreshJson = await refreshRes.json();
+        const refreshedLines = refreshJson?.offre?.data?.lines;
+        if (Array.isArray(refreshedLines) && refreshedLines.length > 0) {
+          frozenLines = refreshedLines;
+          stockFreezeOk = true;
+          console.log("[valider] Stock figé pour", refreshedLines.length, "lignes");
+        }
+      }
+    } catch (e) {
+      console.error("[valider] Stock freeze fail (using offer stock):", e);
+      // En cas d'échec, on garde le stock du moment de l'offre (mieux que rien)
+    }
+    
     const cmdRow = {
       slug: cmdSlug,
       type_document: "Commande",
@@ -132,11 +156,13 @@ export async function POST(
       remarques: offre.remarques,
       data: {
         ...(offre.data as Record<string, unknown>),
+        lines: frozenLines,  // 🔒 Stock figé au moment de la conversion
         formType: "Commande",
         offerNumber: numeroCommande,
         signataire,
         date_signature,
         date_validation: new Date().toISOString(),
+        stock_frozen_at: stockFreezeOk ? new Date().toISOString() : null,
       },
     };
 

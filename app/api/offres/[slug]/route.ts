@@ -174,10 +174,19 @@ export async function GET(
       });
     }
 
-    // Sinon : re-fetcher le stock Shopify en temps réel
-    const freshLines = await refreshStock(
-      (offre.data as { lines?: Array<{ type: string; sku?: string; stock?: unknown }> })?.lines ?? []
-    );
+    // Pour les COMMANDES, le stock est figé au moment de la conversion offre→commande.
+    // Il représente le stock vu par le client à la commande (preuve juridique).
+    // → On NE refresh PAS le stock Shopify, on retourne le data brut de la base.
+    //
+    // Pour les OFFRES, on refresh le stock en temps réel pour aider le commercial
+    // à voir l'état actuel des stocks avant validation/envoi.
+    const dataLines = (offre.data as { lines?: Array<{ type: string; sku?: string; stock?: unknown }> })?.lines ?? [];
+    const isCommande = offre.type_document === "Commande";
+    const stockFrozen = isCommande && (offre.data as Record<string, unknown>)?.stock_frozen_at;
+
+    const freshLines = isCommande
+      ? dataLines  // 🔒 Stock figé à la commande, on garde tel quel
+      : await refreshStock(dataLines);  // 🔄 Stock live pour les offres
 
     const freshData = {
       ...(offre.data as Record<string, unknown>),
@@ -201,7 +210,9 @@ export async function GET(
         ...offre,
         data: freshData,
         isSnapshot: false,
-        stockRefreshedAt: new Date().toISOString(),
+        stockFrozen: !!stockFrozen,
+        stockFrozenAt: stockFrozen || null,
+        stockRefreshedAt: isCommande ? null : new Date().toISOString(),
         numero_client: numeroClient,
       },
     });
