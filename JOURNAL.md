@@ -27,6 +27,7 @@
 - `NEXT_PUBLIC_APP_URL` = `https://offres.jardin-confort.ch`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `MAKE_WEBHOOK_VALIDATION_URL` = `https://hook.eu1.make.com/tqqhnrzkcwfhybguktd75drtmqv9ah49`
+- `SUPABASE_SERVICE_ROLE_KEY` (clé secrète, jamais commitée)
 
 ### Identifiants Shopify clés
 - **Admin slug** : `le-meuble` (NOT `jardinconfort`)
@@ -52,6 +53,12 @@ URL pattern : `https://www.jardin-confort.ch/apps/download-pdf/orders/{templateI
 ### Salespeople actuels
 Brice Chappé · Alejandro Gallegos · Fabian Coquoz · Michel Gédéon · Sabrina Striberni · Team Jardin-Confort · Thierry Stricker
 
+### Exercices comptables
+**Du 1er octobre au 30 septembre** (chevauche les années civiles)
+- Exercice 2024 : 1.10.2023 → 30.09.2024
+- Exercice 2025 : 1.10.2024 → 30.09.2025
+- Exercice 2026 : 1.10.2025 → 30.09.2026
+
 ---
 
 ## 🗄️ Schemas Supabase clés
@@ -70,13 +77,47 @@ Brice Chappé · Alejandro Gallegos · Fabian Coquoz · Michel Gédéon · Sabri
 - **PDFs** : `pdf_url`, `qr_url`, `fiche_travail_pdf_url`, `fiche_travail_initial_url`
 - ⚠️ **Pas de `client_id`** — liaison via `client_numero_client` + email fallback + nom+npa
 
-### Table `clients` (18 878 lignes)
-- Sources : manuels + WinBiz + Shopify CSV
-- `numero_client` : `CL-XXXXX`
-- `>50%` n'ont pas d'email
+### Table `clients` (~22 000 lignes au 9 mai 2026)
+**Schéma complet** :
+| Colonne | Type | Notes |
+|---|---|---|
+| `id` | bigint | PK |
+| `numero_client` | text | Format `CL-XXXXX` |
+| `nom` | text NOT NULL | |
+| `prenom` | text | |
+| `societe` | text | |
+| `email` | text | |
+| `tel1`, `tel2` | text | |
+| `rue`, `numero_rue`, `rue2` | text | |
+| `npa`, `ville`, `pays` | text | `pays` = code ISO (CH, FR, etc.) |
+| `notes` | text | |
+| `source` | text | `shopify` \| `winbiz` \| `offre` \| `manuel` |
+| `created_at`, `updated_at` | timestamptz | |
+| `livr_*` (10 colonnes) | text | Adresse de livraison alternative |
 
-### Table `factures_winbiz` (1 520 lignes)
-- A `client_id` (figé à l'import WinBiz)
+**Répartition par source au 9 mai 2026** :
+- `shopify` : 10 630 (56%)
+- `winbiz` : 8 256 (44%)
+- `offre` : 9
+- `manuel` : 6
+
+**⚠️ Règle CRITIQUE — "ID bas = client Shopify enrichi"** (vérifiée empiriquement) :
+- Les imports Shopify ont été faits **AVANT** les imports WinBiz → IDs bas = Shopify
+- Lors de l'import WinBiz, fusion automatique si adresse identique
+- Conséquence : pour un même client, l'**ID le plus bas** a souvent **email + tel** (origine Shopify enrichie de l'adresse postale WinBiz)
+- En cas de doublon dû aux accents (ex. Engelhard Loic vs Loïc), prendre l'ID le plus bas
+
+**Adresses partiellement écrasées par Shopify** : certaines adresses WinBiz "sales" (typos, formats divers) ont été remplacées par les versions Shopify "propres" lors de la fusion. Le matching par rue ne peut donc pas être strict — les adresses dans les PDFs WinBiz peuvent différer de l'adresse en base.
+
+### Table `factures_winbiz` (~2 300 lignes au 10 mai 2026)
+- **A `client_id`** (figé à l'import)
+- `numero_facture` (TEXT) — **unique par construction WinBiz** (pas de doublons possibles côté source)
+- `date_facture` (DATE)
+- `nom_fichier` (TEXT) — nom brut du PDF
+- `pdf_url` (TEXT) — URL Supabase Storage publique
+- `montant` (NUMERIC)
+- `match_auto` (BOOL) — true si match automatique, false si correction manuelle
+- `match_confiance` (TEXT) — `"auto"` ou `"manuel"`
 
 ### Table `commandes_shopify` (10 244 lignes — Jan 2021 → Mai 2026)
 - `shopify_order_id` UNIQUE
@@ -85,17 +126,14 @@ Brice Chappé · Alejandro Gallegos · Fabian Coquoz · Michel Gédéon · Sabri
 - CHF 3 229 839 CA payé total
 - **0 orphelines** (rattrapage SQL effectué)
 
-### Table `shopify_sync_log`
-- Logs des syncs Shopify (durée, nb commandes, erreurs)
+### Table `shopify_sync_log`, `stock_movements`, `notifications`, `make_pings`, `brand_logos`
+Voir sections dédiées plus bas.
 
-### Table `stock_movements`
-- Logs des décrémentations Shopify
-
-### Table `notifications`
-- Notifications dashboard
-
-### Table `make_pings`
-- Logs des appels webhook Make
+### Bucket Storage Supabase `factures`
+Structure : `factures/{exercice}/facture_{numeroFacture}_{clientId}.pdf`
+- `factures/2024/` — exercice 2024 (721 factures importées)
+- `factures/2025/` — exercice 2025 (importé fin avril 2026)
+- `factures/2026/` — exercice 2026 en cours (premiers imports + 65 factures du 10 mai 2026)
 
 ---
 
@@ -186,6 +224,8 @@ Brice Chappé · Alejandro Gallegos · Fabian Coquoz · Michel Gédéon · Sabri
 - `app/print/offre/page.tsx` — Preview PDF
 - `app/print/offre/[slug]/page.tsx` — PDF officiel
 - `app/print/fiche-travail/[slug]/page.tsx` — Fiche de travail interne
+- `app/print/bulletin-livraison/[slug]/page.tsx` — Bulletin de livraison sans prix
+- `app/print/page-garde-colis/[slug]/page.tsx` — Page de garde pour colis
 
 ### API routes clés
 - `app/api/offres/[slug]/valider/route.ts` — Validation offre + webhook Make
@@ -193,6 +233,7 @@ Brice Chappé · Alejandro Gallegos · Fabian Coquoz · Michel Gédéon · Sabri
 - `app/api/offres/[slug]/qr/route.ts` — Génération QR paiement
 - `app/api/offres/[slug]/fiche-travail-pdf/route.ts` — Fiche de travail
 - `app/api/shopify/sync-orders/route.ts` — Sync Shopify chunked
+- `app/api/stats/summary/route.ts` — Stats Chiffre du jour/mois
 
 ### Libraries
 - `lib/shopify-orders.ts` — Sync Shopify (OAuth + bulk upsert + cache)
@@ -201,6 +242,7 @@ Brice Chappé · Alejandro Gallegos · Fabian Coquoz · Michel Gédéon · Sabri
 - `lib/jc-print-types.ts` — Types partagés PrintData
 - `lib/supabase.ts` — Clients Supabase
 - `lib/notifications.ts` — Création notifications
+- `lib/media-line-types.ts` — Types lignes média/logos
 
 ---
 
@@ -227,6 +269,19 @@ git push
 - **Workaround actuel** : SQL cleanup post-sync
 - **Fix futur** : dedupe `pendingClients` by lowercase email avant insert dans `lib/shopify-orders.ts`
 
+### Doublons clients identifiés au cours des imports factures
+À fusionner manuellement un jour :
+- Engelhard Loic (7173) / Loïc (16245)
+- Demaurex Gaétan (4117) / Gaetan (15780)
+- Grobéty (6700) / Grobety (17129)
+- Iacobelli (8842) / Iacibelli (15732)
+- Capobianco (14967) / Copobianco (15397)
+
+Pattern de fusion :
+1. Identifier le client_id à conserver (ID bas, src=shopify)
+2. Mettre à jour toutes les FK qui pointent vers le doublon (`factures_winbiz.client_id`, etc.)
+3. Supprimer le doublon
+
 ---
 
 ## 📋 TODO / Prochaines sessions
@@ -245,10 +300,20 @@ git push
 - Endpoint à créer : `app/api/shopify/webhook/orders/route.ts`
 - Configurer dans Shopify Admin : Settings → Notifications → Webhooks
 
-### 🎯 Priorité 3 — Améliorations diverses
+### 🎯 Priorité 3 — Page Stats v2 (`/dashboard/statistiques`)
+- Tableau commercial filtré par période + panier moyen
+- Line chart 30/90/365j (Recharts)
+- Comparatif exercices N vs N-1
+- Top 20 SKUs par CA
+
+### 🎯 Priorité 4 — Améliorations diverses
 - Dedup emails dans bulk insert (cf. bug connu)
 - Améliorer recherche clients (fuzzy matching nom+npa)
 - Stats CA mensuel par commercial sur dashboard
+- Fusion des doublons clients (Engelhard, Demaurex, Grobéty, Iacobelli, Capobianco...)
+
+### 🎯 Priorité 5 — Import incrémental clients WinBiz
+Voir section dédiée plus bas — outil à créer pour rafraîchir périodiquement les adresses sans créer de doublons.
 
 ---
 
@@ -256,25 +321,371 @@ git push
 
 ```
 MAKE_WEBHOOK_API_KEY = "jc_validation_2026_K9mP4xT7qL2vN8aR5wF1"
+SUPABASE_SERVICE_ROLE_KEY = (dans Vercel uniquement)
 ```
 
 ---
 
 ## 📅 Historique des sessions
 
-### Session du 5-6 mai 2026 (~22h00 → 1h30) — 7h30 de dev
-**Réalisations majeures** :
+### Session du 5-6 mai 2026 — Sync Shopify + Mode livraison + UX
 - ✅ Sync Shopify chunked complet (10 244 commandes importées)
 - ✅ Cleanup test data (73 offres supprimées)
 - ✅ Boutons PDF Order Printer Pro sur fiche client
-- ✅ Mode livraison "À l'emporter" obligatoire avec gestion sur tous documents
-- ✅ Champ "Accès livraison / étage" sur tous les documents
+- ✅ Mode livraison "À l'emporter" obligatoire
+- ✅ Champ "Accès livraison / étage"
 - ✅ Filtre "Masquer abandonnées" persistant
-- ✅ Blocage validation pour commandes directes (côté client + dashboard)
-- ✅ 3 fixes visuels page client (point manquant, spacing services, radius TOTAL TTC)
+- ✅ Blocage validation pour commandes directes
 - ✅ Prix services mis à jour (9, 59, 79, 119)
 - ✅ UX select-on-focus
-- ✅ Bloc validation placeholder sur preview offre
+
+### Session du 6 mai 2026 (suite) — Recherche multi-source + Templates print
+- ✅ Recherche dashboard clients étendue à : DEV-XXXXX, CMD-XXXXX, n° facture WinBiz, n° commande Shopify
+- ✅ Cohérence badges Documents avec fiche client
+- ✅ Bulletin de livraison sans prix : `/print/bulletin-livraison/[slug]`
+- ✅ Page de garde colis : `/print/page-garde-colis/[slug]`
+
+### Session du 9 mai 2026 — Lignes média + Stats + Stock J0 + Garde-fou offres signées
+- ✅ Bibliothèque de logos avec recherche fuzzy + upload à la volée
+- ✅ Stats cards "Chiffre du jour/mois" sur le dashboard
+- ✅ **Figement du stock J0** pour les commandes (preuve juridique)
+- ✅ Avertissement avant régénération fiche de travail "actuelle"
+- ✅ Bandeau date sur l'aperçu PDF de commande
+- ✅ Page web dynamique pour les offres (au lieu de PDF)
+- ✅ Affichage stock affiné : "Stock partiel (X/Y)" + délai dynamique
+- ✅ Écran "déjà validée" sur lien d'offre signée
+- ✅ Stock J0 + PDF + QR de la commande liée pour offres signées
+- ✅ Migration `numero_commande` au niveau colonne (9 offres signées)
+- ✅ Fix formule `numero_affiche` (respecte `type_document`)
+
+### Session du 10 mai 2026 — Import factures WinBiz exercice 2026 (2e moitié)
+- ✅ 65 factures du dossier `2026-2` importées (numéros 53706 à 80162)
+- ✅ Score parfait : 65/65 (100%) en 0 erreur
+- ✅ 1 client créé en base (Fondation Asile des Aveugles, CL-22088)
+- ✅ Pipeline match → fix → import éprouvé et documenté
+- ✅ Anti-doublon double niveau implémenté (match + import)
+- ✅ Mode `--dry-run` ajouté pour simulation sécurisée
+- 📖 Voir section dédiée **"Import factures WinBiz"** ci-dessous
+
+---
+
+# 📥 Import factures WinBiz — Documentation complète
+
+> Cette section documente le système d'import des factures PDF WinBiz vers Supabase (Storage + table `factures_winbiz`). Elle est volontairement détaillée car le pipeline est ré-utilisé périodiquement (typiquement par exercice ou par batch).
+
+## 🎯 Vue d'ensemble
+
+**Objectif** : prendre des PDFs de factures WinBiz exportés sur Google Drive, les uploader dans Supabase Storage, et insérer les métadonnées (n° facture, date, montant, lien client) dans la table `factures_winbiz`.
+
+**Volumétrie historique** :
+- Exercice 2024 : 721 factures importées (mai 2026)
+- Exercice 2025 : ~600 factures importées (fin avril 2026)
+- Exercice 2026 : en cours, dont 65 factures du batch `2026-2` (10 mai 2026)
+
+**Localisation des PDFs** : `G:\Mon Drive\Factures_winbiz\<dossier>\`
+
+**Format des noms de fichier WinBiz** :
+```
+CLIENT-{civilité}  {NOM Prénom}  {Rue n°}  {NPA Ville}  codex  {champs supplémentaires}__FACTURE-{n°}__DATE-{DD.MM.YYYY}__TOTAL_CHF-{montant}.pdf
+```
+Séparateur principal : **double espace**. Métadonnées en suffixe : `__FACTURE-XXXXX__DATE-DD.MM.YYYY__TOTAL_CHF-X'XXX.XX`.
+
+---
+
+## 🔄 Pipeline en 3-4 étapes
+
+### Étape 0 (optionnelle) — Création de clients manquants
+Si tu sais déjà qu'un client n'est pas en base (ex. nouvelle entreprise non encore importée via Shopify ou WinBiz), il faut le créer avant le matching pour qu'il soit reconnu.
+
+**Script type** : `creer-{nom-court}.js`
+
+**Pattern** :
+1. Vérifier qu'aucun client similaire n'existe (anti-doublon par société/nom)
+2. Trouver le `numero_client` suivant disponible (`CL-XXXXX`)
+3. INSERT dans `clients` avec `source: "winbiz"` (ou `"manuel"` selon le cas)
+4. Retourner l'ID + une ligne JSON prête à coller dans le fix
+
+**Exemples historiques** :
+- `creer-leffondre.js` (Karl Leffondre, MENETREY SA, 2024) → CL-21937, ID 21939
+- `creer-fondation-asile.js` (Fondation Asile des Aveugles, 2026-2) → CL-22088, ID 22089
+
+### Étape 1 — Matching (lecture seule)
+**Script** : `match-factures-{exercice}.js`
+
+**Ce qu'il fait** :
+1. Liste tous les PDFs du dossier source
+2. Parse chaque nom de fichier (NPA, ville, rue, nom, n° facture, date, montant)
+3. Pour chaque facture :
+   - **Anti-doublon niveau 1** : check si `numero_facture` existe déjà dans `factures_winbiz` → catégorie `alreadyImported`
+   - Recherche en cascade dans `clients` :
+     - Tentative 1 : NPA + ville + rue strict
+     - Tentative 2 : NPA + ville (fallback)
+     - Tentative 3 (si 0 candidat ou >30 candidats sans nom matchant) : recherche par nom seul (cas adresse changée)
+   - Scoring nom+prénom sur les candidats multiples → résolution auto si 1 seul score haut
+   - En cas de tie : prendre l'**ID le plus bas** (= client Shopify enrichi)
+4. Classe en : `matched` / `multiple` / `notFound` / `errors` / `alreadyImported`
+5. Écrit `factures_results_{exercice}.json`
+
+**Stratégies de match (output enrichi)** :
+| Strategy | Signification |
+|---|---|
+| `unique` | 1 seul candidat sur l'adresse |
+| `score_unique` | Plusieurs candidats mais un seul a un score nom+prénom > 0 |
+| `score_clear` | Plusieurs candidats, le top dépasse le 2e de >30 points |
+| `tie_lowest_id` | Plusieurs candidats à égalité parfaite, ID bas pris |
+| `name_only` | Adresse introuvable → match par nom seul (1 résultat) |
+
+### Étape 2 — Corrections manuelles
+**Script** : `fix-factures-{exercice}.js`
+
+**Ce qu'il fait** :
+1. Lit le JSON brut du match
+2. Applique les corrections manuelles définies dans 2 dictionnaires :
+   - `CORRECTIONS = { "numero_facture": { id, numero_client, ... } }` pour les `multiple`
+   - `NOT_FOUND_CORRECTIONS = { ... }` pour les `notFound`
+3. Écrit `factures_results_{exercice}_corrected.json`
+
+**Workflow humain** :
+- Inspecter les sections `multiple` et `notFound` du JSON brut
+- Pour chaque cas, identifier le bon client en base (ou décider de le créer via étape 0)
+- Remplir les dictionnaires
+- Re-run jusqu'à 0 multiple / 0 notFound
+
+### Étape 3 — Import (écriture)
+**Script** : `import-factures-{exercice}.js`
+
+**Ce qu'il fait** :
+1. Lit le JSON corrigé (`*_corrected.json`)
+2. Pour chaque facture matched :
+   - **Anti-doublon niveau 2** : recheck `numero_facture` dans `factures_winbiz` (paranoid)
+   - Upload PDF vers Storage : `factures/{exercice}/facture_{numeroFacture}_{clientId}.pdf` (avec `x-upsert: true`)
+   - INSERT dans `factures_winbiz` avec `client_id`, `numero_facture`, `date_facture`, `nom_fichier`, `pdf_url`, `montant`, `match_auto`, `match_confiance`
+3. Écrit log dans `factures_import_log_{exercice}.json`
+
+**Mode `--dry-run`** (depuis 2026-2) :
+- Simule tout sans rien écrire
+- Vérifie l'existence des PDFs en local
+- Recommandé avant le vrai run
+
+---
+
+## 📦 Sécurités intégrées
+
+| Niveau | Mécanisme | Étape |
+|---|---|---|
+| 1 | Anti-doublon SQL au match | match (skip silencieux dans `alreadyImported`) |
+| 2 | **Recheck `numero_facture` avant chaque INSERT** | import |
+| 3 | `x-upsert: true` côté Storage | import (uploads idempotents) |
+| 4 | `match_confiance: "auto" \| "manuel"` en base | import (trace persistante) |
+| 5 | Mode `--dry-run` | import (test à blanc) |
+| 6 | `numero_facture` unique par construction WinBiz | source (pas de doublons possibles côté WinBiz) |
+
+→ **Tu peux Ctrl+C un import en plein milieu et le relancer sans risque de doublon.**
+
+---
+
+## 🎯 Améliorations du parser au fil des sessions
+
+### Améliorations apportées dans le `match-factures-2026-2.js`
+
+| # | Amélioration | Effet |
+|---|---|---|
+| 1 | **Anti-doublon SQL** | Skip silencieux des factures déjà en base |
+| 2 | **Préfixe pays** (`CH \| F \| D \| I \| A \| FL \| FR \| DE \| IT \| AT \| LI`) | Strip avant test NPA — cas "CH - 1180 Aubonne" |
+| 3 | **Civilités étendues** : "Madame et Monsieur", "Messieurs", "Mesdames" | Nom client mieux extrait |
+| 4 | **Compléments d'adresse ignorés** (Case postale, Villa, Bât., Étage, App.) | Vraie rue retrouvée même avec ces intercalaires |
+| 5 | **Scoring nom+prénom intégré au match** | Résolution auto des cas où 1 seul candidat a un score haut |
+| 6 | **Règle "ID le plus bas en cas de tie"** | Privilégie le client Shopify enrichi |
+| 7 | **Cap "trop de candidats"** (>30 sans nom matchant + recherche par nom seul en fallback) | Évite la pollution massive sur un homonyme inexistant |
+| 8 | **Recherche par nom seul** si rue introuvable ou aucun candidat | Récupère les cas "adresse changée" |
+| 9 | **Output enrichi** : `matchStrategy` + `bestGuess` sur chaque entrée | Facilite l'inspection du JSON |
+
+### Statistiques d'évolution
+- **Exercice 2024** (parser v1) : 90% auto, 10% à corriger manuellement (72 multiple + 1 notFound sur 721)
+- **Exercice 2026-2** (parser v2 amélioré) : 95% auto, 5% à corriger (3 multiple sur 65) — le scoring intégré a remonté ~5 points
+
+---
+
+## 🐛 Pièges connus & cas tordus rencontrés
+
+### 1. Adresse PDF différente de la base (fusion Shopify)
+**Cause** : Lors de l'import WinBiz, fusion automatique avec un client Shopify existant à la même adresse → l'adresse Shopify "propre" écrase l'adresse WinBiz "sale". Le PDF WinBiz garde la version originale.
+
+**Exemples concrets** :
+- MENEGALLI Orlando : PDF dit "Rjue des Alpes 8, 1006 Lausanne" / base dit "Avenue de Provence 10, 1007 Lausanne" (déménagement)
+- VENETZ-SUTTER Laurent : PDF dit "Chemin de Bellecombe 22B" / base dit "Route de la Conversion 308" (déménagement ou 2e résidence)
+
+**Solution** : la recherche par nom seul (étape 3 du matching) récupère ces cas.
+
+### 2. Doublons clients dus aux accents
+Documenté dans la section "Bugs connus".
+
+### 3. Adresses tronquées (ancien format de fichier WinBiz)
+Sur l'exercice 2025, certains noms de fichiers étaient coupés (Windows / WinBiz limit). Exemples :
+- `...Faubourg de l'Hôpit__FACTURE-...`
+- `...Avenue des Bains 9 __FACTURE-...`
+
+→ **Résolu** : depuis 2026, WinBiz inclut une partie de la description article dans le titre, le rendant beaucoup plus long. Plus de troncatures.
+
+### 4. Sociétés multi-contacts
+Une société peut avoir plusieurs contacts en base (ex. MENETREY SA avait Brossard 18735, Kurzen 18736, Matthey-Doret 18738). Le PDF nomme parfois un autre contact (Karl Leffondre) qui n'existe pas en base.
+
+**Solution** : créer le contact manquant via script `creer-XXX.js` et l'utiliser pour le matching.
+
+### 5. Clients étrangers (1% des cas)
+Préfixes pays (`CH - `, `FR - `, etc.) gérés par la regex `stripCountryPrefix`. Pour les NPA français à 5 chiffres ou autres formats, le parser tombe en `errors` → traitement manuel via le fix.
+
+### 6. Faux positif numéro avant NPA
+Cas exotique : `Service des Finances  107.00 Service des Resources Humaines  Faubourg de l'Hôpit...`. Le `107.00` n'est pas un NPA mais peut perturber. La regex `^(\d{4})\s+(.+)$` filtre correctement (4 chiffres puis espace + texte) — pas de faux positif observé.
+
+---
+
+## 📋 Workflow type pour un futur batch
+
+Pour ton prochain run (ex: `2026-3` dans 1 mois) :
+
+```powershell
+# 1. Place les nouveaux PDFs dans G:\Mon Drive\Factures_winbiz\2026-3
+# 2. Adapte les chemins en haut des 3 scripts :
+#    PDF_FOLDER, OUTPUT_FILE / RESULTS_FILE / LOG_FILE → "2026-3"
+#    (le bucket Storage reste sur "2026" — pas besoin de le changer)
+
+cd C:\Users\ezefi
+
+# 3. Match (lecture seule)
+node match-factures-2026-2.js
+# → Produit factures_results_2026-3.json
+
+# 4. Inspecte les "multiple" et "notFound" dans le JSON
+#    Si nouveau client à créer → étape 4a
+#    Sinon → étape 5
+
+# 4a. (si nécessaire) Crée les clients manquants
+# Adapte un script du type creer-XXX.js
+
+# 5. Remplis fix-factures-2026-2.js avec les corrections
+node fix-factures-2026-2.js
+# → Produit factures_results_2026-3_corrected.json
+
+# 6. Dry-run (recommandé)
+node import-factures-2026-2.js --dry-run
+
+# 7. Import réel
+node import-factures-2026-2.js
+# → Upload Storage + INSERT factures_winbiz + log
+
+# 8. Vérification SQL
+# SELECT COUNT(*) FROM factures_winbiz WHERE created_at > NOW() - INTERVAL '1 hour';
+```
+
+---
+
+## 📖 Tableau récapitulatif des scripts
+
+| Script | Rôle | Réutilisable ? |
+|---|---|---|
+| `match-factures-{ex}.js` | Parsing PDFs + matching client + anti-doublon niveau 1 | ✅ Oui (changer chemins en haut) |
+| `fix-factures-{ex}.js` | Corrections manuelles des multiples/notFound | ⚠️ Spécifique à chaque batch (corrections différentes) |
+| `import-factures-{ex}.js` | Upload Storage + INSERT + anti-doublon niveau 2 + dry-run | ✅ Oui (changer chemins) |
+| `creer-XXX.js` | Création one-shot d'un client manquant | ❌ One-shot, à dupliquer pour chaque cas |
+| `verifier-clients.js` | Inspection BDD (colonnes, doublons connus, recherches ciblées) | ✅ Oui (modifier les recherches) |
+| `verifier-2-clients.js` | Recherches client ad-hoc | ✅ Oui (modifier les filtres) |
+
+**Tous ces scripts vivent dans `C:\Users\ezefi\`** (pas dans le repo Next.js).
+**Pas de git push à faire après leur exécution.**
+
+---
+
+## 🧹 Limites du système actuel & recommandations
+
+### Limite 1 — Le titre PDF ne contient ni email ni tel
+Quand on crée un client à la volée (cas Leffondre, Fondation Asile), il aura `email = null` et `tel1 = null`. Si ce même client existe dans Shopify avec un email, on rate l'opportunité de fusion riche.
+
+**Recommandation** : faire un **import incrémental WinBiz tous les 3-6 mois** pour rafraîchir les adresses et chopper les nouveaux clients sans les créer à la volée. Ça évite l'accumulation de "clients orphelins" à créer un par un.
+
+### Limite 2 — Pas de numéro client WinBiz d'origine en base
+Quand on crée un client à la volée, il reçoit un nouveau `numero_client` Supabase (ex. CL-22088). Mais WinBiz a son propre numéro client interne. Si plus tard on réimporte WinBiz "proprement", on peut avoir des doublons.
+
+**Recommandation future** : ajouter une colonne `winbiz_client_id` à `clients` pour stocker le n° WinBiz d'origine et éviter les doublons lors de futurs réimports.
+
+### Limite 3 — Le `fix-factures` est manuel et fastidieux pour les gros volumes
+Sur 2024 : 72 corrections manuelles. Sur 2026-2 : 3. Le scoring intégré au match a beaucoup réduit le besoin, mais il reste des cas tordus (sociétés multi-contacts, adresses changées) qui requièrent une décision humaine.
+
+**Recommandation** : pas d'amélioration urgente, le pipeline tient bien la route. À surveiller seulement si un batch génère >10% de multiples.
+
+### TODO futur — Script d'import incrémental WinBiz
+Si ça devient utile, écrire un `import-clients-winbiz-incremental.js` qui :
+- Lit l'export WinBiz CSV/Excel
+- Pour chaque client : check si déjà en base (par nom+npa+ville)
+- Si oui : update les champs vides (email, tel) avec les infos WinBiz si plus riches
+- Si non : crée
+- Sort un rapport `created` / `updated` / `skipped`
+
+---
+
+## 🛠️ Commandes utiles (rappel)
+
+### PowerShell — exécution scripts
+```powershell
+cd C:\Users\ezefi
+node match-factures-2026-2.js
+node fix-factures-2026-2.js
+node import-factures-2026-2.js --dry-run
+node import-factures-2026-2.js
+```
+
+### PowerShell — vérification taille fichier
+```powershell
+Get-Item C:\Users\ezefi\fix-factures-2026-2.js | Select-Object Name, Length
+# ❌ ~3 ko = squelette vide
+# ✅ ~10-16 ko = corrections remplies
+```
+
+### SQL — vérification import
+```sql
+-- Compter les factures importées récemment
+SELECT COUNT(*) FROM factures_winbiz
+WHERE created_at > NOW() - INTERVAL '1 hour';
+
+-- Compter par exercice
+SELECT
+  CASE
+    WHEN date_facture BETWEEN '2023-10-01' AND '2024-09-30' THEN '2024'
+    WHEN date_facture BETWEEN '2024-10-01' AND '2025-09-30' THEN '2025'
+    WHEN date_facture BETWEEN '2025-10-01' AND '2026-09-30' THEN '2026'
+    ELSE 'autre'
+  END as exercice,
+  COUNT(*)
+FROM factures_winbiz
+GROUP BY 1
+ORDER BY 1;
+
+-- Vérifier répartition match auto vs manuel
+SELECT match_confiance, COUNT(*)
+FROM factures_winbiz
+GROUP BY 1;
+
+-- Trouver les factures d'un client spécifique
+SELECT numero_facture, date_facture, montant, pdf_url
+FROM factures_winbiz
+WHERE client_id = <ID>
+ORDER BY date_facture DESC;
+```
+
+### SQL — exploration table clients
+```sql
+-- Schéma complet
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'clients'
+ORDER BY ordinal_position;
+
+-- Répartition par source
+SELECT source, COUNT(*) FROM clients GROUP BY source ORDER BY 2 DESC;
+
+-- Trouver le dernier numero_client utilisé
+SELECT numero_client FROM clients ORDER BY numero_client DESC LIMIT 5;
+```
 
 ---
 
@@ -287,7 +698,7 @@ Quand tu démarres un nouveau chat Claude :
    Je continue le projet jardin-confort-formulaire.
    Voici le contenu de mon JOURNAL.md à la racine du projet :
    [colle le contenu de ce fichier]
-   
+
    Aujourd'hui je veux faire :
    - [TON OBJECTIF]
    ```
@@ -299,590 +710,4 @@ Quand tu démarres un nouveau chat Claude :
 
 ---
 
-### Session du 6 mai 2026 (suite) — Recherche multi-source + Badges Documents fiables
-**Réalisations** :
-- ✅ Recherche dashboard clients étendue à : DEV-XXXXX, CMD-XXXXX, n° facture WinBiz, n° commande Shopify (#65351, JAR12345, 152034 — tolère tous les préfixes historiques #, JAR, 6, 1)
-- ✅ Détection automatique du type de query par regex en tête de `searchByDocumentNumber()`
-- ✅ Fallback intelligent vers recherche classique si pas de match document
-- ✅ Cohérence badges Documents avec fiche client : email matching en `ilike` (case-insensitive)
-- ✅ Triple voie de matching offres : numero_client + email + fallback nom+npa
-- ✅ Toutes les offres comptent dans les badges (statuts Refusée/Abandonnée inclus)
-- ✅ Batches `.in()` parallélisés (Promise.all) avec taille 200 max + error logging Vercel
-- ✅ Limite affichage liste : 100 résultats récents par défaut (vs 1000 avant) — cohérent avec 18 890 clients en base et croissant
-
-**Bug racine identifié** :
-- Les `.in()` Supabase de >500 IDs étaient silencieusement tronqués/échoués
-- Cause manifeste : limite URL/PostgREST sur les querystrings longs
-- Fix appliqué : chunks de 200 + parallélisation + `console.error` sur erreurs
-
-**Fichiers modifiés** :
-- `app/api/clients/route.ts` — recherche multi-source + `enrichWithCounts` robuste
-- `app/dashboard/clients/page.tsx` — limit 100 + texte du compteur clarifié
-
-
-### Session du 6 mai 2026 (suite) — Nouveaux templates print
-- ✅ Bulletin de livraison sans prix : `/print/bulletin-livraison/[slug]`
-  - Copie du template Commande sans prix/totaux/TVA/signature
-  - Services listés sans prix
-  - Bloc vert "Merci pour vos achats !" + message livraison partielle
-- ✅ Page de garde colis : `/print/page-garde-colis/[slug]`
-  - Logo Jardin-Confort vertical à gauche
-  - Adresse client en grand à droite (style enveloppe)
-  - Infos commande minimales (N°, date, expédition)
-  - Sans QR ni code-barres (différent du Order Printer Pro Shopify)
-- Uniquement pour les commandes internes CMD-XXXXX
-
-### Session du 9 mai 2026 (~21h00 → 1h00) — Lignes média (logos / images)
-
-**Réalisations majeures** :
-- ✅ Nouvelle bibliothèque de logos de marques avec recherche fuzzy (cane, cane-line, caneline → tous matchent)
-- ✅ Upload de logo "à la volée" pour images uniques non bibliothèquées
-- ✅ 3 tailles d'affichage (Small 30px / Medium 50px / Large 80px, hauteur fixe largeur auto)
-- ✅ Page admin `/dashboard/brand-logos` avec thème sombre cohérent
-- ✅ Intégration dans le formulaire d'offre : bouton "🖼️ Logo / Image" dans la barre des lignes
-- ✅ Rendu propre dans tous les templates print (preview, PDF officiel, fiche travail, bulletin livraison, page groupée /print/all)
-- ✅ Saut de page contrôlé : bloc signature et totaux insécables (`page-break-inside: avoid`)
-- ✅ UX fiche de travail : titre en casse normale, numéro de commande dans bandeau bleu, ronds Rès/cdé réduits
-
-#### 🗄️ Setup Supabase
-
-- **Bucket Storage** `brand-logos` — public, max 2 MB, MIME `image/*`
-- **Table** `brand_logos` :
-  - `id` UUID PK
-  - `name` TEXT (ex: "Cane-line")
-  - `slug` TEXT UNIQUE (ex: "cane-line")
-  - `search_terms` TEXT[] avec index GIN (alias auto-générés depuis nom + variantes sans tirets)
-  - `image_url` TEXT (URL publique Supabase Storage)
-  - `created_at` TIMESTAMPTZ
-- **Indexes** : `brand_logos_slug_idx`, `brand_logos_search_terms_idx` (GIN)
-- **Variable Vercel ajoutée** : `SUPABASE_SERVICE_ROLE_KEY` (clé secrète, jamais commitée)
-
-#### 📂 Nouveaux fichiers
-
-- `lib/media-line-types.ts` — Types `MediaSize`, `MediaLine`, `BrandLogo` + helper `normalizeSearchTerm()` (lowercase + retrait accents/tirets/espaces pour fuzzy match)
-- `app/api/brand-logos/route.ts` — `GET ?q=...` recherche fuzzy ou liste complète
-- `app/api/brand-logos/upload/route.ts` — `POST multipart` mode `library` (ajout DB+storage) ou `ephemeral` (upload temporaire) + `DELETE ?id=...`
-- `app/dashboard/brand-logos/page.tsx` — Page admin upload/gestion bibliothèque
-- `app/offres/nouveau/MediaLinePicker.tsx` — Composant React avec recherche live debounced + upload à la volée + sélecteur S/M/L
-
-#### 🔧 Fichiers modifiés
-
-- `lib/jc-print-types.ts` — Type `QuoteLine` étendu avec `"media"` + champs `mediaUrl`, `mediaSize`, `mediaSource`. `computeTotals()` exclut médias du `subTotal`.
-- `app/offres/nouveau/page.tsx` — Bouton "🖼️ Logo / Image", branche de rendu pour `kind === "media"`, exclusion média du subtotal et compteur d'articles, CSS `.tr-media`/`.td-media-cell`
-- `app/print/offre/page.tsx` — CSS `.tr-media` + `.media-small/medium/large` + branche rendu colSpan=5
-- `app/print/offre/[slug]/page.tsx` — Idem + bloc signature et totaux insécables (`page-break-inside: avoid`)
-- `app/print/fiche-travail/[slug]/page.tsx` — Type `QuoteLine` local étendu, exclusion média de `subTotal` + `totalQty`, CSS `.tr-media` (avec barre violette à gauche pour distinguer des commentaires en bleu), branche rendu colSpan=7. Titre en casse normale, numéro dans bandeau, ronds Rès/cdé réduits 16→11px.
-- `app/print/bulletin-livraison/[slug]/page.tsx` — CSS + branche rendu colSpan=3
-- `app/print/all/[slug]/page.tsx` — Patches identiques sur les 3 templates internes (`.ft-`, `.cc-`, `.bl-`), totaux et signature insécables, mêmes ajustements UX que la fiche-travail standalone
-
-#### 🎨 Logique de la recherche fuzzy
-
-`normalizeSearchTerm("Cane-line")` → `"caneline"`. Le serveur compare avec `.includes()` sur le nom, slug et chaque `search_term` du logo, tous normalisés. Donc "cane", "Cane Line", "caneline", "cane-line" → tous matchent "Cane-line".
-
-À l'upload mode `library`, des termes auto sont générés : nom complet normalisé + chaque mot ≥ 3 caractères. L'utilisateur peut en plus ajouter des alias custom en CSV.
-
-#### 🐛 Pièges rencontrés
-
-- **Confusion policy SQL bucket Storage** : avec toggle "Public bucket" activé, la policy SELECT est automatique. Pas besoin du SQL `create policy "Public read brand-logos"`.
-- **Build Vercel coincé** sur un deployment "Initializing" pendant 5+ min — résolu via Cancel + commit vide pour forcer rebuild
-- **Doublon `const isCustom`** dans `print/all/[slug]/page.tsx` après application du patch (Find & Replace mal calé) — corrigé en supprimant la ligne dupliquée
-- **Cache PDF Supabase Storage** : les PDFs déjà générés ne reflètent pas les nouveaux templates tant qu'on ne régénère pas via `POST /api/offres/{slug}/pdf`
-
-#### 💡 Patterns réutilisables pour la suite
-
-- **Page-break-inside: avoid** pour tout bloc qu'on veut garder entier sur une page (signatures, totaux, encadrés importants)
-- **Fuzzy search côté serveur** sans pg_trgm : `normalizeSearchTerm()` + filtrage JavaScript suffit pour tables < 200 lignes
-- **Mode dual upload** : library (réutilisable) vs ephemeral (one-shot) — pattern utile pour autres types de médias futurs
-
-
-
-
-### Session du 9 mai 2026 (suite) — Cards "Chiffre du jour/mois" + RPC stats
-
-**Réalisations** :
-- ✅ RPC SQL Supabase `stats_commandes_periode(date_from, date_to)` 
-  - Filtre : `type_document = 'Commande'` (exclut offres acceptées pour éviter doublon)
-  - Statut filtré : exclut Refusée/Abandonnée
-  - Source montant : `o.total_ttc` (figé par computeTotals côté Next, source de vérité)
-  - Source quantité : `o.nb_articles`
-  - Groupement par commercial avec fallback "Non assigne"
-- ✅ API route `/api/stats/summary` avec param `period` : today | month | year | exercice | custom
-  - `exercice` calcule l'exercice comptable suisse 1.10 → 30.09 en cours
-- ✅ Composant `<StatsCards />` dark theme
-  - 2 mini-cards compactes calées en hauteur sur les 2 lignes de filtres (quick + probabilité)
-  - Format CHF suisse uniforme : CHF 11'743.00
-  - Top 3 commerciaux affichés avec barres de progression sky/emerald
-  - "+ N autres" agrégé pour le reste
-  - Lien latéral vers /dashboard/statistiques
-- ✅ Placeholder `/dashboard/statistiques` pour livraison 2
-
-**Pièges rencontrés** :
-- v1 RPC : `value::TEXT::NUMERIC` sur jsonb_each → erreur "invalid input syntax for type numeric '\"9\"'" car les guillemets JSON étaient gardés. Fix : `jsonb_each_text` + `NULLIF(x, '')::NUMERIC`.
-- v2 RPC : commentaires accentués + délimiteur `$$` cassaient le parser de Supabase Dashboard. Fix : `$func$` + zéro commentaire SQL.
-- v2 RPC : recalculait le total à partir du JSONB → divergeait du `total_ttc` fi
-
-
-
-
-# 📓 JOURNAL — Session du 9 mai 2026
-
-## 🎯 Objectifs de la session
-
-Grosse session axée sur la **fiabilité juridique** et la **clarté métier** :
-
-1. ✅ Fix d'impression de la fiche bleue (margins A4)
-2. ✅ Stats cards "Chiffre du jour / mois" sur le dashboard
-3. ✅ **Figement du stock J0 pour les commandes** (preuve juridique)
-4. ✅ Avertissement avant régénération fiche de travail "actuelle"
-5. ✅ Bandeau date sur l'aperçu PDF de commande
-6. ✅ **Page web dynamique** pour les offres (au lieu de PDF)
-7. ✅ **Affichage stock affiné** : "Stock partiel (X/Y)" + délai dynamique depuis tags Shopify
-
----
-
-## 1. 🖨️ Fix impression fiche bleue (page 5 du jeu d'archive)
-
-### Problème
-La page 5 (fiche bleue d'archive) sortait avec des marges incohérentes par rapport aux 4 autres pages lors de l'impression du jeu complet via `/print/all/[slug]`.
-
-### Solution appliquée
-**`app/print/all/[slug]/page.tsx`** :
-- Ajout d'une règle `@page` nommée pour la fiche bleue : `@page fb-archive { size: A4 portrait; margin: 0; }`
-- `.fb-page-wrap` utilise maintenant `page: fb-archive` + `width: 210mm; height: 297mm`
-- Retrait de la classe `doc-wrap-all` du wrapper page 5 pour éviter le padding global
-- Les 4 autres pages conservent `@page { margin: 14mm 16mm 14mm 14mm; }`
-
-### Statut
-✅ Pushé. Test papier validé.
-
----
-
-## 2. 📊 Stats cards "Chiffre du jour / mois" sur le dashboard
-
-### Décision métier
-- Filtrage strict : `type_document = 'Commande'` uniquement
-- Exclusion des offres "Acceptée" (évite double comptage)
-- Exclusion des statuts `Refusée` / `Abandonnée`
-- Pas de Shopify pour le moment (à intégrer plus tard via webhooks automatiques)
-
-### Architecture technique
-
-**Supabase RPC `stats_commandes_periode(date_from, date_to)` (v3 finale)**
-- Source de vérité : `o.total_ttc` et `o.nb_articles` directement (pas de recalcul JSONB)
-- Group by `commercial` avec fallback `'Non assigne'` (frontend convertit en `— Non assigné`)
-- Calcul exercice comptable suisse (1.10 → 30.09) : `startYear = month >= 9 ? year : year-1`
-
-**Itérations**
-- v1 / v2 : bugs de cast jsonb_each + dollar-quote parsing + divergence avec `discountPercent` sur 2 commandes (CMD-80540 +196.02 CHF, CMD-80542 +403.92 CHF)
-- v3 : alignement parfait avec le KPI dashboard (CHF 18'025.00)
-- ⚠️ Rappel : éviter SQL avec accents français dans Supabase Dashboard, utiliser `$func$` au lieu de `$$` pour les delimiters
-
-### Fichiers créés/modifiés
-
-| Fichier | Rôle |
-|---|---|
-| `app/api/stats/summary/route.ts` | API endpoint (params: `period=today\|month\|year\|exercice\|custom`, `from`, `to`) |
-| `app/dashboard/StatsCards.tsx` | Composant 2 mini-cards horizontales (sky-500 jour, emerald-500 mois) |
-| `app/dashboard/statistiques/page.tsx` | Placeholder pour stats v2 (panier moyen, line chart, comparatif exercices, top 20 SKUs) |
-| `app/dashboard/page.tsx` | Intégration : flex parent avec quick-filters à gauche + StatsCards à droite |
-
-### Format CHF
-```ts
-"CHF\u00a0" + Intl.NumberFormat("de-CH", { 
-  minimumFractionDigits: 2, 
-  maximumFractionDigits: 2 
-}).format(n)
-// → "CHF 11'743.00"
-```
-
-### Statut
-✅ Pushé. À enrichir lors de la **Livraison 2** : page `/dashboard/statistiques` complète.
-
----
-
-## 3. 🔒 CRITIQUE — Figement du stock J0 pour les commandes
-
-### Problème métier identifié
-Avant ce fix, les pages `/print/*` d'une commande affichaient le stock Shopify **LIVE** au lieu du stock vu par le client à la commande. Risque légal majeur sur les documents imprimés plus tard (jeu de 5 pages, fiche bleue, etc.).
-
-### Architecture du système avant fix
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ CONVERSION OFFRE → COMMANDE                                      │
-│ ✅ Génère PDFs figés (T+0) AVANT décrémentation Shopify         │
-│ ❌ Mais data.lines[].stock n'est jamais figé en base            │
-├──────────────────────────────────────────────────────────────────┤
-│ AFFICHAGE PAGE /print/* (ouverte plus tard)                      │
-│ ❌ /api/offres/[slug] fait toujours refreshStock() Shopify      │
-│ ❌ Stock affiché = stock du jour, PAS J0                        │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### Solution appliquée — Option A (Single Source of Truth)
-
-**Principe** : figer le stock dans `data.lines[].stock` à la conversion. Une seule source de vérité.
-- Pour les **commandes** : `data` est figé pour toujours, l'API ne refresh PAS
-- Pour les **offres** : `data` est complété en live par `refreshStock()` à chaque appel
-
-### Modif 1 — `app/api/offres/[slug]/valider/route.ts`
-
-Avant la création de `cmdRow`, on appelle l'API GET de l'offre originale (qui fait `refreshStock()` Shopify) et on extrait les lines avec stock à jour :
-
-```tsx
-// 🔒 FIGER LE STOCK AU MOMENT DE LA CONVERSION
-let frozenLines = (offre.data as { lines?: unknown[] })?.lines || [];
-let stockFreezeOk = false;
-try {
-  const refreshRes = await fetch(`${BASE_URL}/api/offres/${slug}`, { cache: "no-store" });
-  if (refreshRes.ok) {
-    const refreshJson = await refreshRes.json();
-    const refreshedLines = refreshJson?.offre?.data?.lines;
-    if (Array.isArray(refreshedLines) && refreshedLines.length > 0) {
-      frozenLines = refreshedLines;
-      stockFreezeOk = true;
-      console.log("[valider] Stock figé pour", refreshedLines.length, "lignes");
-    }
-  }
-} catch (e) {
-  console.error("[valider] Stock freeze fail (using offer stock):", e);
-}
-```
-
-Et injection dans `cmdRow.data` :
-```tsx
-data: {
-  ...(offre.data as Record<string, unknown>),
-  lines: frozenLines,                                              // 🔒 Stock figé
-  formType: "Commande",
-  // ...
-  stock_frozen_at: stockFreezeOk ? new Date().toISOString() : null, // Audit
-}
-```
-
-### Modif 2 — `app/api/offres/[slug]/route.ts` (GET)
-
-```tsx
-const dataLines = (offre.data as { lines?: ... })?.lines ?? [];
-const isCommande = offre.type_document === "Commande";
-const stockFrozen = isCommande && (offre.data as ...)?.stock_frozen_at;
-
-const freshLines = isCommande
-  ? dataLines                              // 🔒 Stock figé J0
-  : await refreshStock(dataLines);         // 🔄 Stock live pour les offres
-```
-
-Et enrichissement du return :
-```tsx
-return NextResponse.json({
-  offre: {
-    ...offre,
-    data: freshData,
-    isSnapshot: false,
-    stockFrozen: !!stockFrozen,
-    stockFrozenAt: stockFrozen || null,
-    stockRefreshedAt: isCommande ? null : new Date().toISOString(),
-    numero_client: numeroClient,
-  },
-});
-```
-
-### Décisions métier
-
-- ✅ **Pas de migration** des commandes existantes (acceptable : elles afficheront le stock du dernier `freshData` enregistré)
-- ✅ **Architecture polyvalente** : aucune modif des pages `/print/*` nécessaire (elles passent par l'API qui retourne déjà le bon stock selon le `type_document`)
-- ✅ **Robustesse** : fallback sur stock offre en cas d'échec Shopify
-- ⏱️ **Fenêtre critique** ~11s entre lecture stock et décrémentation Shopify (acceptable vu volume ~5 cmd/jour)
-
-### Audit SQL
-
-```sql
-SELECT 
-  numero_affiche, 
-  type_document,
-  data->>'stock_frozen_at' AS stock_frozen_at,
-  jsonb_path_query_array(data->'lines', '$[*].stock') AS stocks_figes
-FROM offres
-WHERE type_document = 'Commande'
-ORDER BY created_at DESC
-LIMIT 5;
-```
-
-### Statut
-✅ Pushé. Tests OK : stock ne bouge plus après modif Shopify post-commande.
-
----
-
-## 4. ⚠️ Avertissement avant régénération fiche de travail "actuelle"
-
-### Problème métier
-Risque qu'un commercial régénère par erreur la fiche initiale et écrase mentalement la "preuve" stock J0.
-
-### Solution
-**`app/dashboard/[slug]/page.tsx`** : ajout d'un `confirm()` strict avant le mode `current` :
-
-```tsx
-if (mode === "current") {
-  const confirmed = confirm(
-    "⚠️ ATTENTION — Fiche de travail ACTUELLE\n\n" +
-    "Le nouveau document généré affichera le STOCK DU JOUR — donc " +
-    "potentiellement différent de celui vu par le client au moment de la commande.\n\n" +
-    "👉 Cette version sert pour la préparation et la livraison.\n\n" +
-    "🔵 Pour conserver la preuve juridique du stock vendu, utilisez la " +
-    "fiche INITIALE (figée à la commande), qui reste intacte.\n\n" +
-    "Confirmer la génération avec le stock actuel ?"
-  );
-  if (!confirmed) return;
-}
-```
-
-Bouton "Régénérer fiche actuelle" passé en couleur **amber** (au lieu d'emerald) pour le distinguer visuellement de la fiche initiale (verte/bleue).
-
-### Statut
-✅ Pushé.
-
----
-
-## 5. 📅 Bandeau date sur l'aperçu PDF de commande
-
-### Solution
-Ajout d'un bandeau bleu identique à celui de la fiche initiale, au-dessus de l'iframe PDF de commande dans `/dashboard/[slug]` :
-
-```tsx
-{!isTypeOffre && offre.created_at && (
-  <div className="mb-3 text-xs text-blue-300/80 bg-blue-500/5 border border-blue-500/20 rounded-lg px-3 py-2">
-    🔵 Stock figé à la commande · {new Date(offre.created_at).toLocaleString("fr-CH")}
-  </div>
-)}
-```
-
-Source de la date : `offre.created_at` (timestamp PostgreSQL de création, précis à la seconde).
-
-### Statut
-✅ Pushé.
-
----
-
-## 6. 🔄 Page web dynamique pour les offres (au lieu de PDF)
-
-### Changement de logique métier
-
-**Décision finale** :
-- 📄 **PDF d'offre** : cache le stock (ne deviendra pas obsolète une fois figé)
-- 🌐 **Page web d'offre** : affiche le stock LIVE Shopify (utile au client qui consulte le lien)
-- 🔒 **PDF de commande** : affiche le stock figé J0 (déjà OK avant)
-- 🌐 **Page web de commande** : affiche le stock figé J0 (grâce au fix #3)
-
-### Stratégie technique : query param `?nostock=1`
-
-**Modif A — `app/print/offre/[slug]/page.tsx`** :
-- Ajout de l'import `useSearchParams`
-- Lecture du param : `const hideStock = searchParams.get("nostock") === "1"`
-- Condition d'affichage : `{!hideStock && (...)}` au lieu de `{data.formType === "Commande" && (...)}`
-
-**Modif B — `app/api/offres/[slug]/pdf/route.ts`** :
-```tsx
-const isOffre = offre.type_document === "Offre"
-const printUrl = `${APP_URL}/print/offre/${slug}${isOffre ? "?nostock=1" : ""}`
-```
-
-→ Seul le PDF d'offre passe `?nostock=1` à pdf.co. La page web normale affiche tout.
-
-### Tableau récapitulatif
-
-| Document | Stock affiché ? | Source |
-|---|---|---|
-| **PDF offre** (figé après envoi) | ❌ Non | — |
-| **Page offre print** `/print/offre/[slug]` | ✅ Live Shopify | `refreshStock()` |
-| **Page validation client** `/offre/[slug]` | ✅ Live Shopify | `refreshStock()` |
-| **Page commande print** `/print/offre/cmd-XXX` | ✅ Figé J0 | `data.lines[].stock` |
-| **PDF commande** | ✅ Figé J0 | `data.lines[].stock` |
-| **Fiche travail initiale** (PDF) | ✅ Figé J0 | Généré à T+0 |
-| **Fiche travail "actuelle"** (PDF, à la demande) | 🔄 Live au moment de la régen | Bordereau prépa |
-| **Fiche bleue** (page 5 archive) | ✅ Figé J0 si commande | `data.lines[].stock` |
-
-### Statut
-✅ Pushé. Permet d'envoyer un lien web au client (stock toujours à jour) au lieu d'un PDF d'offre.
-
----
-
-## 7. 🟠 Affichage stock affiné : "Stock partiel (X/Y)" + délai dynamique
-
-### Problème métier identifié
-
-L'affichage actuel était **trompeur** :
-- "Stock limité (1 pce)" pour une commande de 3 pces avec stock 1 → manque non indiqué
-- "Sur commande" générique sans délai estimé
-
-### Solution : 3 cas distincts
-
-```ts
-if (stock >= qty)        → "✓ En stock (X pces)"             vert
-else if (stock > 0)      → "🟠 Stock partiel (X / Y pces)"     orange
-else                     → "📦 [Délai estimé selon tags]"      orange
-```
-
-### Mapping tags Shopify → délai (cohérent avec template Liquid Order Printer Pro)
-
-| Tag | Label affiché |
-|---|---|
-| `1week` | 1–2 semaines |
-| `2weeks` | 2–3 semaines |
-| `3weeks` | 3–4 semaines |
-| `4weeks` | 4–5 semaines |
-| `5weeks` | 5–6 semaines |
-| `6weeks` | 6–8 semaines |
-| `8weeks` | 8–10 semaines |
-| `10weeks` | 10–12 semaines |
-| (aucun) | Sur commande (fallback) |
-
-### Modif 1 — `app/api/offres/[slug]/route.ts` `refreshStock()`
-
-**Ajouts à la query GraphQL** :
-```graphql
-productVariants(first: 50, query: $query) {
-  nodes {
-    sku
-    product {
-      tags          # ← nouveau
-    }
-    inventoryItem { ... }
-  }
-}
-```
-
-**Helper `getDelayFromTags()`** + **`skuMap` enrichi** avec `{ stock, delay }` au lieu d'un simple `stockMap`.
-
-**Enrichissement de chaque ligne** :
-```ts
-return {
-  ...line,
-  stock: fresh.stock < 1 ? "sur_commande" : fresh.stock,
-  delaiLivraison: fresh.delay,  // 🚚 Délai estimé depuis tags Shopify
-};
-```
-
-### Modif 2 — `app/print/offre/[slug]/page.tsx`
-
-Remplacement de `isLow` (seuil hardcodé `<= 2`) par `isPartial` (comparaison à `qty`) :
-```tsx
-const isSC = line.stock === "sur_commande" || (sn !== null && sn < 1);
-const isPartial = sn !== null && sn > 0 && sn < qty;
-const isOk = sn !== null && sn >= qty;
-```
-
-### Modif 3 — `app/offre/[slug]/page.tsx` (page client)
-
-Même logique appliquée pour cohérence visuelle entre la page print et la page validation client.
-
-### Effet métier
-
-| Cas | Avant | Après |
-|---|---|---|
-| Cdé 1 / Stock 35 | ✓ En stock (35 pces) | ✓ En stock (35 pces) |
-| Cdé 3 / Stock 1 | ⚠ Stock limité (1 pce) ❌ | 🟠 **Stock partiel (1 / 3 pces)** ✅ |
-| Cdé 5 / Stock 0 (tag `4weeks`) | 📦 Sur commande ❌ | 📦 **4–5 semaines** ✅ |
-| Cdé 1 / Stock 1 | ⚠ Stock limité (1 pce) ❌ | ✓ **En stock (1 pce)** ✅ |
-| Cdé 5 / Stock 4 | ✓ En stock (4 pces) ❌ | 🟠 **Stock partiel (4 / 5 pces)** ✅ |
-
-### Statut
-✅ Pushé. Cohérence avec le template Liquid Order Printer Pro maintenue.
-
----
-
-## 📋 Règles métier consolidées (à garder en mémoire)
-
-### Stock visible vs stock figé
-
-| Contexte | Type doc | Affichage | Pourquoi |
-|---|---|---|---|
-| Aperçu dashboard | Offre | Page dynamique (live) | Aide commercial avant validation |
-| Aperçu dashboard | Commande | PDF figé | Preuve stock J0 |
-| `/print/offre/[slug]` (web) | Offre | Live Shopify | Lien à envoyer au client |
-| `/print/offre/[slug]` (web) | Commande | Figé J0 | Cohérence avec PDFs |
-| `/print/offre/[slug]?nostock=1` | Offre | Caché | PDF d'offre (deviendrait obsolète) |
-| Fiche travail "initiale" | Commande | PDF figé J0 | **Preuve juridique** |
-| Fiche travail "actuelle" | Commande | PDF live (à la régen) | Bordereau prépa/livraison |
-| Fiche bleue (jeu d'archive) | Commande | Figé J0 | Cohérence archive papier |
-
-### Règle générale
-> Tout document associé à une commande qui **engage juridiquement** (fait foi du stock vu par le client) reste figé. Seule l'offre, **avant validation**, bénéficie de l'affichage dynamique parce qu'elle n'engage rien tant que le client ne l'a pas signée.
-
-### Affichage stock — 3 cas
-1. **Sur commande** (stock = 0 ou `"sur_commande"`) → délai depuis tags Shopify
-2. **Stock partiel** (0 < stock < qty) → indique combien manque
-3. **En stock** (stock ≥ qty) → couvre la commande
-
----
-
-## 🚧 Pending (Livraisons futures)
-
-### Livraison 2 — Stats avancées
-- Page `/dashboard/statistiques` complète :
-  - Tableau commercial filtré par période + panier moyen
-  - Line chart 30/90/365j (Recharts)
-  - Comparatif exercices N vs N-1
-  - Top 20 SKUs par CA
-
-### Optionnel — Modif 3 du dashboard
-Iframe page dynamique pour les commandes (au lieu de PDF figé) maintenant que le stock est garanti figé côté API. Cosmétique, pas urgent.
-
-### Tags Shopify
-S'assurer que tous les produits "sur commande" ont les tags adéquats (`1week`, `2weeks`, etc.) dans Shopify Admin. Sinon le fallback "Sur commande" générique s'applique (sûr mais moins informatif).
-
-### Tests à faire
-- [x] Test papier fiche bleue (validé)
-- [x] Test stock figé J0 sur nouvelle commande (validé)
-- [ ] Audit SQL régulier des nouvelles commandes (vérifier que `stock_frozen_at` est bien rempli)
-- [ ] Vérifier les commandes existantes affichent un stock cohérent (à auditer ponctuellement)
-
----
-
-## 🛠️ Commandes utiles (rappel)
-
-### PowerShell
-```powershell
-# Crochets [slug] dans les paths : utiliser -LiteralPath
-Get-Content -LiteralPath "app\api\offres\[slug]\route.ts"
-
-# Recherche dans dossier avec crochets : Get-ChildItem -Recurse contourne le souci
-Get-ChildItem -Path "app\print\offre" -Recurse -Filter "page.tsx" | Select-String -Pattern '...'
-```
-
-### Push standard
-```powershell
-cd C:\Users\ezefi\jardin-confort-formulaire
-git add .
-git commit -m "..."
-git push
-```
-
-### SQL — vérification stock figé
-```sql
-SELECT 
-  numero_affiche, 
-  type_document,
-  data->>'stock_frozen_at' AS stock_frozen_at,
-  jsonb_path_query_array(data->'lines', '$[*].stock') AS stocks_figes
-FROM offres
-WHERE type_document = 'Commande'
-ORDER BY created_at DESC
-LIMIT 5;
-```
-
-### Logs Vercel à surveiller
-- `[valider] Stock figé pour X lignes` → succès du figement
-- `[valider] Stock freeze fail (using offer stock)` → fallback sur stock offre
-- `[after] Stock movements err` → erreur décrémentation Shopify post-commande
-
----
-
-## ✅ Résumé en 1 phrase
-
-Cette session a sécurisé la **chaîne juridique de la commande** (figement stock J0 partout) tout en améliorant la **clarté métier** (affichage "partiel" + délai dynamique) et l'**ergonomie commerciale** (page web dynamique pour les offres, stats temps réel).
-
----
-
-*Journal généré le 9 mai 2026 — sauvegarder dans `JOURNAL.md` à la racine du projet.*
-
-*Dernière mise à jour : 9 mai 2026, 2h00 du matin (CET)* 🌙
+*Dernière mise à jour : 10 mai 2026 (ajout section import factures WinBiz)*
