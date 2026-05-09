@@ -209,11 +209,14 @@ export async function GET(
     // à voir l'état actuel des stocks avant validation/envoi.
     const dataLines = (offre.data as { lines?: Array<{ type: string; sku?: string; stock?: unknown }> })?.lines ?? [];
     const isCommande = offre.type_document === "Commande";
-    const stockFrozen = isCommande && (offre.data as Record<string, unknown>)?.stock_frozen_at;
+    // Une offre signée et convertie en commande est figée juridiquement → on ne refresh plus
+    const isOffreConvertie = !isCommande && (offre.statut === "Convertie" || offre.statut === "Acceptée");
+    const isFrozen = isCommande || isOffreConvertie;
+    const stockFrozen = isFrozen && (offre.data as Record<string, unknown>)?.stock_frozen_at;
 
-    const freshLines = isCommande
-      ? dataLines  // 🔒 Stock figé à la commande, on garde tel quel
-      : await refreshStock(dataLines);  // 🔄 Stock live pour les offres
+    const freshLines = isFrozen
+      ? dataLines  // 🔒 Stock figé (commande OU offre signée), on garde tel quel
+      : await refreshStock(dataLines);  // 🔄 Stock live uniquement pour les offres en cours
 
     const freshData = {
       ...(offre.data as Record<string, unknown>),
@@ -239,7 +242,7 @@ export async function GET(
         isSnapshot: false,
         stockFrozen: !!stockFrozen,
         stockFrozenAt: stockFrozen || null,
-        stockRefreshedAt: isCommande ? null : new Date().toISOString(),
+        stockRefreshedAt: isFrozen ? null : new Date().toISOString(),
         numero_client: numeroClient,
       },
     });

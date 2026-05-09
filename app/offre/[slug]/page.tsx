@@ -651,7 +651,7 @@ useEffect(() => {
                 <div><strong style={{ fontWeight: 700 }}>Paiement : </strong>{payMode}</div>
                 <div><strong style={{ fontWeight: 700 }}>Conseiller : </strong>{offre.commercial}</div>
                 <div><strong style={{ fontWeight: 700 }}>Date : </strong>{fmtDate(offre.date_document)}</div>
-                {dateExpiration && (
+                {dateExpiration && !isOffreConvertie && !isAcceptee && !isCommande && (
                   <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 12,
                     background: isExpire ? "#FEF2F2" : joursRestants !== null && joursRestants <= 7 ? "#FFF8E1" : "#E8F5E9",
                     border: `1px solid ${isExpire ? "#FECACA" : joursRestants !== null && joursRestants <= 7 ? "#FFE082" : "#A5D6A7"}`,
@@ -761,13 +761,21 @@ useEffect(() => {
                   <div style={{ fontWeight: 700, color: C.blue, fontSize: 16, marginBottom: 6 }}>
                       {isCommande
                         ? "Confirmation de votre commande"
-                        : "Offre personnalisée en attente de votre validation"}
+                        : (isOffreConvertie || isAcceptee)
+                          ? "Votre offre a été validée"
+                          : "Offre personnalisée en attente de votre validation"}
                     </div>
                     <div style={{ fontSize: 15, color: C.text, lineHeight: 1.8 }}>
                       {isCommande ? (
                         <>
                           Bonjour <strong>{nomClient}</strong>, veuillez trouver les détails de votre commande
                           créée par notre équipe. Pour toute question, contactez-nous au +41 21 791 36 71.
+                        </>
+                      ) : (isOffreConvertie || isAcceptee) ? (
+                        <>
+                          Bonjour <strong>{nomClient}</strong>, votre offre a bien été acceptée et confirmée.
+                          Vous trouverez ci-dessous les détails de votre commande ainsi que les modalités de paiement.
+                          Pour toute question, contactez-nous au +41 21 791 36 71.
                         </>
                       ) : (
                         <>
@@ -786,9 +794,18 @@ useEffect(() => {
               </div>
               {/* Note paiement */}
               <div style={{ marginTop: 18, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16, padding: "12px 18px", fontSize: 14, color: C.text, lineHeight: 1.7 }}>
-                Veuillez vérifier attentivement votre offre avant de la valider.
-                {payMode === "Paiement d'avance à la commande" && " Le traitement de votre commande se fera sur la base d'un paiement d'avance à la commande."}
-                {payMode === "Acompte de 50% à la commande" && " Le traitement de votre commande se fera sur la base d'un acompte de 50% à la commande."}
+                {(isCommande || isOffreConvertie || isAcceptee) ? (
+                  <>
+                    {payMode === "Paiement d'avance à la commande" && "Le paiement d'avance est à effectuer dans les meilleurs délais pour permettre le traitement de votre commande."}
+                    {payMode === "Acompte de 50% à la commande" && `L'acompte de 50% (${fmt(montantAPayer)}) est à régler pour lancer le traitement de votre commande.`}
+                  </>
+                ) : (
+                  <>
+                    Veuillez vérifier attentivement votre offre avant de la valider.
+                    {payMode === "Paiement d'avance à la commande" && " Le traitement de votre commande se fera sur la base d'un paiement d'avance à la commande."}
+                    {payMode === "Acompte de 50% à la commande" && " Le traitement de votre commande se fera sur la base d'un acompte de 50% à la commande."}
+                  </>
+                )}
               </div>
             </Card>
 
