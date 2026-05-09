@@ -264,9 +264,9 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
     load();
   }, [params]);
 
-  // ─── Auto-poll pour récupérer URL QR si pas encore prêt (offre acceptée) ───
+  // ─── Auto-poll pour récupérer URL QR si pas encore prêt (offre acceptée OU convertie) ───
   useEffect(() => {
-    if (!offre || offre.statut !== "Acceptée" || qrUrl || !slug) return;
+    if (!offre || !["Acceptée", "Convertie"].includes(offre.statut) || qrUrl || !slug) return;
     let attempts = 0;
     const maxAttempts = 12; // 12 × 5s = 60s max
     const interval = setInterval(async () => {
@@ -289,7 +289,7 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
 
   // ─── Auto-poll pour récupérer PDF commande si pas encore prêt ───
   useEffect(() => {
-    if (!offre || offre.statut !== "Acceptée" || pdfUrl || !slug) return;
+    if (!offre || !["Acceptée", "Convertie"].includes(offre.statut) || pdfUrl || !slug) return;
     let attempts = 0;
     const maxAttempts = 12;
     const interval = setInterval(async () => {
@@ -474,6 +474,11 @@ useEffect(() => {
   const isAcceptee = offre.statut === "Acceptée";
   const isCommande = offre.type_document === "Commande";
 
+  // 🔒 Une OFFRE déjà signée et convertie en commande → on traite comme "Acceptée"
+  // pour afficher le même écran (PDF + QR + montant) sur l'URL de l'offre.
+  // Évite que le client tombe sur la page de signature après avoir signé.
+  const isOffreConvertie = !isCommande && (offre.statut === "Convertie" || offre.statut === "Acceptée");
+
   // Calcul expiration
   const validiteDuree = offre.validite_duree || d.validiteDuree || "30 jours"
   const joursValidite = parseInt(validiteDuree) || 30
@@ -625,7 +630,7 @@ useEffect(() => {
         <h1 style={{ fontSize: 36, fontWeight: 500, color: C.text, letterSpacing: "-0.02em", marginBottom: 28 }}>
             {isCommande
               ? `Votre commande ${offre.numero_affiche}`
-              : isAcceptee
+              : (isAcceptee || isOffreConvertie)
                 ? "Votre offre validée"
                 : "Confirmez ici votre offre en 1 clic !"}
           </h1>
@@ -680,8 +685,8 @@ useEffect(() => {
               </Card>
             )}
 
-            {/* ─── Statut Acceptée — 2 boutons directs (PDF commande + QR paiement) ─── */}
-            {isAcceptee && (
+            {/* ─── Statut Acceptée OU Offre Convertie — 2 boutons directs (PDF commande + QR paiement) ─── */}
+            {(isAcceptee || isOffreConvertie) && (
               <Card style={{ padding: 24, background: "#E8F5E9", border: `1px solid ${C.green}` }}>
                 <div style={{ fontWeight: 700, color: C.green, fontSize: 18, marginBottom: 8 }}>✅ Offre déjà validée</div>
                 <div style={{ fontSize: 14, color: "#2e7d32", lineHeight: 1.7, marginBottom: 16 }}>
