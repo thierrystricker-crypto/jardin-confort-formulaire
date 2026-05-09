@@ -202,21 +202,50 @@ export async function GET(
     }
 
     // Pour les COMMANDES, le stock est figé au moment de la conversion offre→commande.
-    // Il représente le stock vu par le client à la commande (preuve juridique).
-    // → On NE refresh PAS le stock Shopify, on retourne le data brut de la base.
-    //
-    // Pour les OFFRES, on refresh le stock en temps réel pour aider le commercial
-    // à voir l'état actuel des stocks avant validation/envoi.
+    // Pour les OFFRES SIGNÉES (Convertie/Acceptée), on récupère le stock J0 + PDF + QR
+    // de la commande liée (cohérence parfaite entre /offre/dev-XXX et /offre/cmd-XXX).
+    // Pour les OFFRES EN COURS, on refresh le stock Shopify en temps réel.
     const dataLines = (offre.data as { lines?: Array<{ type: string; sku?: string; stock?: unknown }> })?.lines ?? [];
     const isCommande = offre.type_document === "Commande";
-    // Une offre signée et convertie en commande est figée juridiquement → on ne refresh plus
     const isOffreConvertie = !isCommande && (offre.statut === "Convertie" || offre.statut === "Acceptée");
-    const isFrozen = isCommande || isOffreConvertie;
-    const stockFrozen = isFrozen && (offre.data as Record<string, unknown>)?.stock_frozen_at;
 
-    const freshLines = isFrozen
-      ? dataLines  // 🔒 Stock figé (commande OU offre signée), on garde tel quel
-      : await refreshStock(dataLines);  // 🔄 Stock live uniquement pour les offres en cours
+    let freshLines: typeof dataLines;
+    let stockFrozen: string | null = null;
+    let frozenPdfUrl: string | null = null;
+    let frozenQrUrl: string | null = null;
+
+    if (isCommande) {
+      // 🔒 Commande : stock figé J0 dans data.lines, on garde tel quel
+      freshLines = dataLines;
+      stockFrozen = (offre.data as Record<string, unknown>)?.stock_frozen_at as string || null;
+    } else if (isOffreConvertie && offre.numero_commande) {
+      // 🔒 Offre signée → on va chercher le stock J0 + PDF + QR de la commande liée
+      const { data: cmd } = await supabase
+        .from("offres")
+        .select("data, pdf_url, qr_url")
+        .eq("numero_commande", offre.numero_commande)
+        .eq("type_document", "Commande")
+        .single();
+
+      if (cmd?.data) {
+        const cmdLines = (cmd.data as { lines?: typeof dataLines }).lines;
+        if (Array.isArray(cmdLines) && cmdLines.length > 0) {
+          freshLines = cmdLines;  // ✅ Stock J0 de la commande
+          stockFrozen = (cmd.data as Record<string, unknown>)?.stock_frozen_at as string || null;
+          frozenPdfUrl = cmd.pdf_url || null;  // ✅ PDF de la commande
+          frozenQrUrl = cmd.qr_url || null;    // ✅ QR paiement de la commande
+        } else {
+          freshLines = dataLines;  // Fallback : stock de l'offre
+        }
+      } else {
+        freshLines = dataLines;  // Fallback : commande introuvable
+      }
+    } else {
+      // 🔄 Offre en cours : stock live Shopify
+      freshLines = await refreshStock(dataLines);
+    }
+
+    const isFrozen = isCommande || isOffreConvertie;
 
     const freshData = {
       ...(offre.data as Record<string, unknown>),
@@ -239,6 +268,11 @@ export async function GET(
       offre: {
         ...offre,
         data: freshData,
+        // Pour une offre signée : on remplace pdf_url ET qr_url par ceux de la commande liée
+        // (les boutons "Télécharger la confirmation PDF" et "Télécharger le QR paiement"
+        //  pointent ainsi vers les bons documents — ceux de la CMD, pas de l'offre)
+        pdf_url: frozenPdfUrl || offre.pdf_url,
+        qr_url: frozenQrUrl || offre.qr_url,
         isSnapshot: false,
         stockFrozen: !!stockFrozen,
         stockFrozenAt: stockFrozen || null,

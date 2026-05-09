@@ -272,11 +272,12 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
     const interval = setInterval(async () => {
       attempts++;
       try {
-        const res = await fetch(`/api/offres/${slug}/qr`);
+        // On utilise le GET global qui retourne maintenant qr_url de la CMD liée si offre signée
+        const res = await fetch(`/api/offres/${slug}`);
         if (res.ok) {
           const json = await res.json();
-          if (json.qr_url) {
-            setQrUrl(json.qr_url);
+          if (json.offre?.qr_url) {
+            setQrUrl(json.offre.qr_url);
             clearInterval(interval);
             return;
           }
@@ -337,12 +338,12 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
         await new Promise(r => setTimeout(r, 5000));
         elapsed += 5;
         try {
-          const res = await fetch(`/api/offres/${slug}/qr`);
+          const res = await fetch(`/api/offres/${slug}`);
           if (res.ok) {
             const json = await res.json();
-            if (json.qr_url) {
-              setQrUrl(json.qr_url);
-              window.open(json.qr_url, "_blank");
+            if (json.offre?.qr_url) {
+              setQrUrl(json.offre.qr_url);
+              window.open(json.offre.qr_url, "_blank");
               setQrDownloading(false);
               return;
             }
