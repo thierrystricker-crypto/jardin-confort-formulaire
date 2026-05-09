@@ -1182,47 +1182,71 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
           {/* Droite — aperçus */}
           <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
 
-            <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-              <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                  Aperçu {isTypeOffre ? "offre" : "commande"}
-                  <span className="text-xs font-normal text-emerald-300/70 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5" title="Le stock est rechargé à chaque ouverture, contrairement au PDF figé">
-                    🔄 Stock dynamique
-                  </span>
-                </h2>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(urlPrint)
-                      const btn = document.activeElement as HTMLButtonElement
-                      if (btn) {
-                        const original = btn.innerText
-                        btn.innerText = "✓ Copié"
-                        setTimeout(() => { btn.innerText = original }, 2000)
-                      }
-                    }}
-                    className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]"
-                    title="Copier l'URL d'aperçu">
-                    🔗 Copier l&apos;URL
-                  </button>
-                  <a href={urlPrint} target="_blank" rel="noopener noreferrer"
-                    className="rounded-xl border border-sky-500/30 bg-sky-500/15 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/25"
-                    title="Ouvrir la page en plein écran">
-                    ⛶ Plein écran
-                  </a>
-                  {pdfUrl && (
-                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
-                      className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/20"
-                      title="Télécharger le PDF figé">
-                      📄 PDF
+            {/* Pour les OFFRES : aperçu page dynamique avec stock live (utile au commercial)
+                Pour les COMMANDES : aperçu PDF figé (preuve juridique du stock vu par le client) */}
+            {isTypeOffre ? (
+              <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+                <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+                  <h2 className="text-xl font-semibold flex items-center gap-2">
+                    Aperçu offre
+                    <span className="text-xs font-normal text-emerald-300/70 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5" title="Le stock est rechargé à chaque ouverture, contrairement au PDF figé">
+                      🔄 Stock dynamique
+                    </span>
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(urlPrint)
+                        const btn = document.activeElement as HTMLButtonElement
+                        if (btn) {
+                          const original = btn.innerText
+                          btn.innerText = "✓ Copié"
+                          setTimeout(() => { btn.innerText = original }, 2000)
+                        }
+                      }}
+                      className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]"
+                      title="Copier l'URL d'aperçu">
+                      🔗 Copier l&apos;URL
+                    </button>
+                    <a href={urlPrint} target="_blank" rel="noopener noreferrer"
+                      className="rounded-xl border border-sky-500/30 bg-sky-500/15 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/25"
+                      title="Ouvrir la page en plein écran">
+                      ⛶ Plein écran
                     </a>
-                  )}
+                    {pdfUrl && (
+                      <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
+                        className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/20"
+                        title="Télécharger le PDF figé">
+                        📄 PDF
+                      </a>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="overflow-hidden rounded-2xl border border-white/10 bg-white">
-                <iframe src={urlPrint} title={`Aperçu ${isTypeOffre ? "offre" : "commande"}`} className="h-[900px] w-full border-0"/>
-              </div>
-            </section>
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-white">
+                  <iframe src={urlPrint} title="Aperçu offre" className="h-[900px] w-full border-0"/>
+                </div>
+              </section>
+            ) : (
+              pdfUrl && (
+                <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+                  <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                      Aperçu commande
+                      <span className="text-xs font-normal text-blue-300/70 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-0.5" title="PDF figé au moment de la commande — preuve du stock vu par le client">
+                        🔒 Stock figé
+                      </span>
+                    </h2>
+                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
+                      className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">
+                      Télécharger ↓
+                    </a>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                    <iframe src={pdfUrl} title="Aperçu commande PDF" className="h-[800px] w-full border-0"/>
+                  </div>
+                </section>
+              )
+            )}
 
             {isCommandeReelle && (ficheTravailInitialUrl || ficheTravailUrl) && (
               <FicheTravailPreview
