@@ -59,6 +59,9 @@ async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: u
         productVariants(first: 50, query: $query) {
           nodes {
             sku
+            product {
+              tags
+            }
             inventoryItem {
               inventoryLevels(first: 5) {
                 nodes {
@@ -89,6 +92,7 @@ async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: u
         productVariants?: {
           nodes?: Array<{
             sku: string | null;
+            product?: { tags?: string[] } | null;
             inventoryItem?: {
               inventoryLevels?: {
                 nodes?: Array<{
@@ -101,25 +105,48 @@ async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: u
       };
     };
 
-    // Construire la map SKU → stock
-    const stockMap = new Map<string, number>();
+    // Helper : calcule le délai depuis les tags Shopify
+    // Cohérence métier : mêmes tags utilisés dans le template Liquid Order Printer Pro
+    const DELAY_MAP: Array<{ tag: string; label: string }> = [
+      { tag: "1week",   label: "1–2 semaines" },
+      { tag: "2weeks",  label: "2–3 semaines" },
+      { tag: "3weeks",  label: "3–4 semaines" },
+      { tag: "4weeks",  label: "4–5 semaines" },
+      { tag: "5weeks",  label: "5–6 semaines" },
+      { tag: "6weeks",  label: "6–8 semaines" },
+      { tag: "8weeks",  label: "8–10 semaines" },
+      { tag: "10weeks", label: "10–12 semaines" },
+    ];
+    function getDelayFromTags(tags: string[] | undefined | null): string {
+      if (!tags || tags.length === 0) return "Sur commande";
+      const tagList = tags.map((t) => t.toLowerCase().trim());
+      for (const { tag, label } of DELAY_MAP) {
+        if (tagList.includes(tag)) return label;
+      }
+      return "Sur commande";
+    }
+
+    // Construire la map SKU → { stock, delay }
+    const skuMap = new Map<string, { stock: number; delay: string }>();
     for (const node of json.data?.productVariants?.nodes ?? []) {
       const sku = node.sku ?? "";
       const qty =
         node.inventoryItem?.inventoryLevels?.nodes?.[0]?.quantities?.find(
           (q) => q.name === "available"
         )?.quantity ?? 0;
-      if (sku) stockMap.set(sku, qty);
+      const delay = getDelayFromTags(node.product?.tags);
+      if (sku) skuMap.set(sku, { stock: qty, delay });
     }
 
-    // Mettre à jour le stock dans chaque ligne
+    // Mettre à jour le stock + délai dans chaque ligne
     return lines.map((line) => {
       if (line.type === "comment" || !line.sku) return line;
-      const freshStock = stockMap.get(line.sku as string);
-      if (freshStock === undefined) return line;
+      const fresh = skuMap.get(line.sku as string);
+      if (!fresh) return line;
       return {
         ...line,
-        stock: freshStock < 1 ? "sur_commande" : freshStock,
+        stock: fresh.stock < 1 ? "sur_commande" : fresh.stock,
+        delaiLivraison: fresh.delay, // 🚚 Délai estimé depuis tags Shopify
       };
     });
 

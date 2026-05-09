@@ -894,9 +894,14 @@ useEffect(() => {
                     );
                     const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
                     const sn = typeof line.stock === "number" ? line.stock : null;
+                    const qty = line.qty || 0;
+                    // 3 cas distincts métier :
+                    // - Sur commande : stock = "sur_commande" OU stock <= 0 → délai depuis tags
+                    // - Stock partiel : 0 < stock < qty commandée
+                    // - En stock complet : stock >= qty commandée
                     const isSC = line.stock === "sur_commande" || (sn !== null && sn < 1);
-                    const isOk = sn !== null && sn > 2;
-                    const isLow = sn !== null && sn > 0 && sn <= 2;
+                    const isPartial = sn !== null && sn > 0 && sn < qty;
+                    const isOk = sn !== null && sn >= qty;
                     return (
                       <tr key={line.id} style={{ borderTop: `1px solid ${C.border}`, background: i % 2 === 0 ? "white" : C.bg }}>
                         <td className="hide-mobile" style={{ padding: "12px 16px", textAlign: "center", verticalAlign: "middle" }}>
@@ -912,8 +917,8 @@ useEffect(() => {
                           )}
                           <div style={{ marginTop: 4, fontSize: 13, fontWeight: 600 }}>
                             {isSC ? <span style={{ color: C.orange }}>📦 {line.delaiLivraison || "Sur commande"}</span>
-                              : isOk ? <span style={{ color: C.green }}>✓ En stock ({sn} pce{sn! > 1 ? "s" : ""})</span>
-                                : isLow ? <span style={{ color: C.orange }}>⚠ Stock limité ({sn} pce{sn! > 1 ? "s" : ""})</span>
+                              : isPartial ? <span style={{ color: C.orange }}>🟠 Stock partiel ({sn} / {qty} pce{qty > 1 ? "s" : ""})</span>
+                                : isOk ? <span style={{ color: C.green }}>✓ En stock ({sn} pce{sn! > 1 ? "s" : ""})</span>
                                   : null}
                           </div>
                         </td>

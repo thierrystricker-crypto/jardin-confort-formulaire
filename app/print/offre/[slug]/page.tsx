@@ -375,25 +375,41 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                         d'offre, pour ne pas figer un stock obsolète dans le PDF). */}
                     {!hideStock && (() => {
                       const sn = typeof line.stock === "number" ? line.stock : null;
+                      const qty = line.qty || 0;
+
+                      // 3 cas distincts pour un affichage métier précis :
+                      // 1. Sur commande     : stock = "sur_commande" OU stock <= 0 → délai depuis tags
+                      // 2. Stock partiel    : 0 < stock < qty commandée (il manque des pièces)
+                      // 3. En stock complet : stock >= qty commandée
                       const isSC = line.stock === "sur_commande" || (sn !== null && sn < 1);
-                      const isOk = sn !== null && sn > 2;
-                      const isLow = sn !== null && sn > 0 && sn <= 2;
+                      const isPartial = sn !== null && sn > 0 && sn < qty;
+                      const isOk = sn !== null && sn >= qty;
+
                       const baseStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, marginTop: 4 };
-                      if (isSC) return (
-                        <div style={{ ...baseStyle, color: "#E67E22" }}>
-                          📦 {(line as any).delaiLivraison || "Sur commande"}
-                        </div>
-                      );
-                      if (isOk) return (
-                        <div style={{ ...baseStyle, color: "#2C7E3F" }}>
-                          ✓ En stock ({sn} pce{sn! > 1 ? "s" : ""})
-                        </div>
-                      );
-                      if (isLow) return (
-                        <div style={{ ...baseStyle, color: "#E67E22" }}>
-                          ⚠ Stock limité ({sn} pce{sn! > 1 ? "s" : ""})
-                        </div>
-                      );
+
+                      if (isSC) {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const delay = (line as any).delaiLivraison || "Sur commande";
+                        return (
+                          <div style={{ ...baseStyle, color: "#E67E22" }}>
+                            📦 {delay}
+                          </div>
+                        );
+                      }
+                      if (isPartial) {
+                        return (
+                          <div style={{ ...baseStyle, color: "#E67E22" }}>
+                            🟠 Stock partiel ({sn} / {qty} pce{qty > 1 ? "s" : ""})
+                          </div>
+                        );
+                      }
+                      if (isOk) {
+                        return (
+                          <div style={{ ...baseStyle, color: "#2C7E3F" }}>
+                            ✓ En stock ({sn} pce{sn! > 1 ? "s" : ""})
+                          </div>
+                        );
+                      }
                       return null;
                     })()}
                   </td>
