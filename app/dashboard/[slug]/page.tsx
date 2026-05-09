@@ -300,6 +300,21 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
 
   async function generateFicheTravail(mode: "initial" | "current" = "current", force = false) {
     if(!slug) return
+
+    // ⚠️ Confirmation avant régénération de la fiche "actuelle" : le stock affiché
+    // sera celui du jour, potentiellement DIFFÉRENT de celui vu par le client à
+    // la commande. La fiche initiale, elle, reste figée pour preuve juridique.
+    if (mode === "current") {
+      const confirmed = confirm(
+        "⚠️ ATTENTION — Fiche de travail ACTUELLE\n\n" +
+        "Le nouveau document généré affichera le STOCK DU JOUR — donc potentiellement différent de celui vu par le client au moment de la commande.\n\n" +
+        "👉 Cette version sert pour la préparation et la livraison (état actuel des stocks).\n\n" +
+        "🔵 Pour conserver la preuve juridique du stock vendu, utilisez la fiche INITIALE (figée à la commande), qui reste intacte.\n\n" +
+        "Confirmer la génération avec le stock actuel ?"
+      )
+      if (!confirmed) return
+    }
+
     setFicheTravailGenerating(true)
     try {
       const res = await fetch(`/api/offres/${slug}/fiche-travail-pdf`, {
@@ -860,8 +875,8 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                         </button>
                       )}
                       <button onClick={() => generateFicheTravail("current")} disabled={ficheTravailGenerating}
-                        className="relative inline-flex items-center gap-1.5 overflow-hidden rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-80"
-                        title="Génère une nouvelle fiche avec le stock actuel — pour la préparation/livraison">
+                        className="relative inline-flex items-center gap-1.5 overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-80"
+                        title="⚠ Génère une nouvelle fiche avec le STOCK DU JOUR — différent du stock vu par le client à la commande. Pour la prépa/livraison.">
                         {ficheTravailGenerating && (
                           <span className="absolute inset-0 overflow-hidden rounded-xl">
                             <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
@@ -1167,18 +1182,47 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
           {/* Droite — aperçus */}
           <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
 
-            {pdfUrl && (
-              <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Aperçu PDF</h2>
-                  <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
-                    className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">Télécharger ↓</a>
+            <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+              <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  Aperçu {isTypeOffre ? "offre" : "commande"}
+                  <span className="text-xs font-normal text-emerald-300/70 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5" title="Le stock est rechargé à chaque ouverture, contrairement au PDF figé">
+                    🔄 Stock dynamique
+                  </span>
+                </h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(urlPrint)
+                      const btn = document.activeElement as HTMLButtonElement
+                      if (btn) {
+                        const original = btn.innerText
+                        btn.innerText = "✓ Copié"
+                        setTimeout(() => { btn.innerText = original }, 2000)
+                      }
+                    }}
+                    className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]"
+                    title="Copier l'URL d'aperçu">
+                    🔗 Copier l&apos;URL
+                  </button>
+                  <a href={urlPrint} target="_blank" rel="noopener noreferrer"
+                    className="rounded-xl border border-sky-500/30 bg-sky-500/15 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/25"
+                    title="Ouvrir la page en plein écran">
+                    ⛶ Plein écran
+                  </a>
+                  {pdfUrl && (
+                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
+                      className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/20"
+                      title="Télécharger le PDF figé">
+                      📄 PDF
+                    </a>
+                  )}
                 </div>
-                <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                  <iframe src={pdfUrl} title="Aperçu PDF" className="h-[800px] w-full border-0"/>
-                </div>
-              </section>
-            )}
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-white">
+                <iframe src={urlPrint} title={`Aperçu ${isTypeOffre ? "offre" : "commande"}`} className="h-[900px] w-full border-0"/>
+              </div>
+            </section>
 
             {isCommandeReelle && (ficheTravailInitialUrl || ficheTravailUrl) && (
               <FicheTravailPreview

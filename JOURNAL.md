@@ -299,7 +299,6 @@ Quand tu démarres un nouveau chat Claude :
 
 ---
 
-*Dernière mise à jour : 6 mai 2026, 1h30 du matin (CET)* 🌙
 ### Session du 6 mai 2026 (suite) — Recherche multi-source + Badges Documents fiables
 **Réalisations** :
 - ✅ Recherche dashboard clients étendue à : DEV-XXXXX, CMD-XXXXX, n° facture WinBiz, n° commande Shopify (#65351, JAR12345, 152034 — tolère tous les préfixes historiques #, JAR, 6, 1)
@@ -332,3 +331,94 @@ Quand tu démarres un nouveau chat Claude :
   - Infos commande minimales (N°, date, expédition)
   - Sans QR ni code-barres (différent du Order Printer Pro Shopify)
 - Uniquement pour les commandes internes CMD-XXXXX
+
+### Session du 9 mai 2026 (~21h00 → 1h00) — Lignes média (logos / images)
+
+**Réalisations majeures** :
+- ✅ Nouvelle bibliothèque de logos de marques avec recherche fuzzy (cane, cane-line, caneline → tous matchent)
+- ✅ Upload de logo "à la volée" pour images uniques non bibliothèquées
+- ✅ 3 tailles d'affichage (Small 30px / Medium 50px / Large 80px, hauteur fixe largeur auto)
+- ✅ Page admin `/dashboard/brand-logos` avec thème sombre cohérent
+- ✅ Intégration dans le formulaire d'offre : bouton "🖼️ Logo / Image" dans la barre des lignes
+- ✅ Rendu propre dans tous les templates print (preview, PDF officiel, fiche travail, bulletin livraison, page groupée /print/all)
+- ✅ Saut de page contrôlé : bloc signature et totaux insécables (`page-break-inside: avoid`)
+- ✅ UX fiche de travail : titre en casse normale, numéro de commande dans bandeau bleu, ronds Rès/cdé réduits
+
+#### 🗄️ Setup Supabase
+
+- **Bucket Storage** `brand-logos` — public, max 2 MB, MIME `image/*`
+- **Table** `brand_logos` :
+  - `id` UUID PK
+  - `name` TEXT (ex: "Cane-line")
+  - `slug` TEXT UNIQUE (ex: "cane-line")
+  - `search_terms` TEXT[] avec index GIN (alias auto-générés depuis nom + variantes sans tirets)
+  - `image_url` TEXT (URL publique Supabase Storage)
+  - `created_at` TIMESTAMPTZ
+- **Indexes** : `brand_logos_slug_idx`, `brand_logos_search_terms_idx` (GIN)
+- **Variable Vercel ajoutée** : `SUPABASE_SERVICE_ROLE_KEY` (clé secrète, jamais commitée)
+
+#### 📂 Nouveaux fichiers
+
+- `lib/media-line-types.ts` — Types `MediaSize`, `MediaLine`, `BrandLogo` + helper `normalizeSearchTerm()` (lowercase + retrait accents/tirets/espaces pour fuzzy match)
+- `app/api/brand-logos/route.ts` — `GET ?q=...` recherche fuzzy ou liste complète
+- `app/api/brand-logos/upload/route.ts` — `POST multipart` mode `library` (ajout DB+storage) ou `ephemeral` (upload temporaire) + `DELETE ?id=...`
+- `app/dashboard/brand-logos/page.tsx` — Page admin upload/gestion bibliothèque
+- `app/offres/nouveau/MediaLinePicker.tsx` — Composant React avec recherche live debounced + upload à la volée + sélecteur S/M/L
+
+#### 🔧 Fichiers modifiés
+
+- `lib/jc-print-types.ts` — Type `QuoteLine` étendu avec `"media"` + champs `mediaUrl`, `mediaSize`, `mediaSource`. `computeTotals()` exclut médias du `subTotal`.
+- `app/offres/nouveau/page.tsx` — Bouton "🖼️ Logo / Image", branche de rendu pour `kind === "media"`, exclusion média du subtotal et compteur d'articles, CSS `.tr-media`/`.td-media-cell`
+- `app/print/offre/page.tsx` — CSS `.tr-media` + `.media-small/medium/large` + branche rendu colSpan=5
+- `app/print/offre/[slug]/page.tsx` — Idem + bloc signature et totaux insécables (`page-break-inside: avoid`)
+- `app/print/fiche-travail/[slug]/page.tsx` — Type `QuoteLine` local étendu, exclusion média de `subTotal` + `totalQty`, CSS `.tr-media` (avec barre violette à gauche pour distinguer des commentaires en bleu), branche rendu colSpan=7. Titre en casse normale, numéro dans bandeau, ronds Rès/cdé réduits 16→11px.
+- `app/print/bulletin-livraison/[slug]/page.tsx` — CSS + branche rendu colSpan=3
+- `app/print/all/[slug]/page.tsx` — Patches identiques sur les 3 templates internes (`.ft-`, `.cc-`, `.bl-`), totaux et signature insécables, mêmes ajustements UX que la fiche-travail standalone
+
+#### 🎨 Logique de la recherche fuzzy
+
+`normalizeSearchTerm("Cane-line")` → `"caneline"`. Le serveur compare avec `.includes()` sur le nom, slug et chaque `search_term` du logo, tous normalisés. Donc "cane", "Cane Line", "caneline", "cane-line" → tous matchent "Cane-line".
+
+À l'upload mode `library`, des termes auto sont générés : nom complet normalisé + chaque mot ≥ 3 caractères. L'utilisateur peut en plus ajouter des alias custom en CSV.
+
+#### 🐛 Pièges rencontrés
+
+- **Confusion policy SQL bucket Storage** : avec toggle "Public bucket" activé, la policy SELECT est automatique. Pas besoin du SQL `create policy "Public read brand-logos"`.
+- **Build Vercel coincé** sur un deployment "Initializing" pendant 5+ min — résolu via Cancel + commit vide pour forcer rebuild
+- **Doublon `const isCustom`** dans `print/all/[slug]/page.tsx` après application du patch (Find & Replace mal calé) — corrigé en supprimant la ligne dupliquée
+- **Cache PDF Supabase Storage** : les PDFs déjà générés ne reflètent pas les nouveaux templates tant qu'on ne régénère pas via `POST /api/offres/{slug}/pdf`
+
+#### 💡 Patterns réutilisables pour la suite
+
+- **Page-break-inside: avoid** pour tout bloc qu'on veut garder entier sur une page (signatures, totaux, encadrés importants)
+- **Fuzzy search côté serveur** sans pg_trgm : `normalizeSearchTerm()` + filtrage JavaScript suffit pour tables < 200 lignes
+- **Mode dual upload** : library (réutilisable) vs ephemeral (one-shot) — pattern utile pour autres types de médias futurs
+
+
+
+
+### Session du 9 mai 2026 (suite) — Cards "Chiffre du jour/mois" + RPC stats
+
+**Réalisations** :
+- ✅ RPC SQL Supabase `stats_commandes_periode(date_from, date_to)` 
+  - Filtre : `type_document = 'Commande'` (exclut offres acceptées pour éviter doublon)
+  - Statut filtré : exclut Refusée/Abandonnée
+  - Source montant : `o.total_ttc` (figé par computeTotals côté Next, source de vérité)
+  - Source quantité : `o.nb_articles`
+  - Groupement par commercial avec fallback "Non assigne"
+- ✅ API route `/api/stats/summary` avec param `period` : today | month | year | exercice | custom
+  - `exercice` calcule l'exercice comptable suisse 1.10 → 30.09 en cours
+- ✅ Composant `<StatsCards />` dark theme
+  - 2 mini-cards compactes calées en hauteur sur les 2 lignes de filtres (quick + probabilité)
+  - Format CHF suisse uniforme : CHF 11'743.00
+  - Top 3 commerciaux affichés avec barres de progression sky/emerald
+  - "+ N autres" agrégé pour le reste
+  - Lien latéral vers /dashboard/statistiques
+- ✅ Placeholder `/dashboard/statistiques` pour livraison 2
+
+**Pièges rencontrés** :
+- v1 RPC : `value::TEXT::NUMERIC` sur jsonb_each → erreur "invalid input syntax for type numeric '\"9\"'" car les guillemets JSON étaient gardés. Fix : `jsonb_each_text` + `NULLIF(x, '')::NUMERIC`.
+- v2 RPC : commentaires accentués + délimiteur `$$` cassaient le parser de Supabase Dashboard. Fix : `$func$` + zéro commentaire SQL.
+- v2 RPC : recalculait le total à partir du JSONB → divergeait du `total_ttc` fi
+
+*Dernière mise à jour : 9 mai 2026, 2h00 du matin (CET)* 🌙
