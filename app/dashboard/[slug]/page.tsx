@@ -1241,6 +1241,11 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                       Télécharger ↓
                     </a>
                   </div>
+                  {offre.created_at && (
+                    <div className="mb-3 text-xs text-blue-300/80 bg-blue-500/5 border border-blue-500/20 rounded-lg px-3 py-2">
+                      🔵 Stock figé à la commande · {new Date(offre.created_at).toLocaleString("fr-CH")}
+                    </div>
+                  )}
                   <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
                     <iframe src={pdfUrl} title="Aperçu commande PDF" className="h-[800px] w-full border-0"/>
                   </div>
