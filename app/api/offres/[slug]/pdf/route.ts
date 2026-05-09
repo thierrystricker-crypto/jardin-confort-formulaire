@@ -32,7 +32,13 @@ export async function POST(
     }
 
     // 2. URL de la page print
-    const printUrl = `${APP_URL}/print/offre/${slug}`
+    // Pour les OFFRES : on cache le stock dans le PDF (?nostock=1) car le PDF
+    // sera figé et le stock affiché deviendrait rapidement obsolète. Le stock
+    // reste visible sur la page web dynamique elle-même.
+    // Pour les COMMANDES : on garde le stock visible dans le PDF (figé J0
+    // grâce au snapshot dans data.lines à la conversion).
+    const isOffre = offre.type_document === "Offre"
+    const printUrl = `${APP_URL}/print/offre/${slug}${isOffre ? "?nostock=1" : ""}`
 
     // 3. Appel pdf.co — URL vers PDF
     const pdfcoRes = await fetch("https://api.pdf.co/v1/pdf/convert/from/url", {

@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   PrintData, QuoteLine, AmbianceImage,
   serviceOptions, formatMoney, formatDate, generateCustomerNumber,
@@ -31,7 +32,8 @@ const EMPTY: PrintData = {
 } as any;
 
 export default function PrintOffreSlug({ params }: { params: Promise<{ slug: string }> }) {
-  const [data, setData] = useState<PrintData>(EMPTY);
+  const searchParams = useSearchParams();
+  const hideStock = searchParams.get("nostock") === "1";const [data, setData] = useState<PrintData>(EMPTY);
   const [ready, setReady] = useState(false);
   const [numeroAffiche, setNumeroAffiche] = useState("");
   const [offreSlug, setOffreSlug] = useState("");
@@ -189,7 +191,21 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
       `}</style>
 
       <button className="print-btn" onClick={() => window.print()}>🖨 Imprimer</button>
-
+{!hideStock && data.formType === "Offre" && (
+  <div style={{
+    background: "#e8f5e9",
+    border: "1px solid #66bb6a",
+    borderRadius: 8,
+    padding: "8px 14px",
+    fontSize: 12,
+    color: "#1b5e20",
+    margin: "0 auto 12px auto",
+    maxWidth: 794,
+    fontStyle: "italic",
+  }}>
+    🔄 Stock en temps réel — mis à jour à chaque ouverture de cette page
+  </div>
+)}
       <div className="doc-wrap">
 
         {/* HEADER */}
@@ -352,13 +368,12 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                     {(line.lineDiscount || 0) > 0 && (
                       <div className="item-discount">Remise : − {formatMoney(line.lineDiscount || 0)}</div>
                     )}
-                    {/* ─── Badge stock + délai (commandes uniquement) ─── */}
-                    {/* Stock affiché UNIQUEMENT pour les CMD : pour les offres (DEV)
-                        on n'affiche pas le stock car ça figerait une info volatile dans
-                        un PDF qui peut être consulté plus tard. Pour les commandes, le
-                        stock vient de ?snapshot=false (live Shopify) ET le PDF est
-                        généré AVANT la décrémentation grâce à la séquence d'after(). */}
-                    {data.formType === "Commande" && (() => {
+                    {/* ─── Badge stock + délai ─── */}
+                    {/* Stock affiché par défaut sur la page web (live pour offres,
+                        figé J0 pour commandes — géré côté API).
+                        Caché uniquement quand ?nostock=1 (utilisé par la route PDF
+                        d'offre, pour ne pas figer un stock obsolète dans le PDF). */}
+                    {!hideStock && (() => {
                       const sn = typeof line.stock === "number" ? line.stock : null;
                       const isSC = line.stock === "sur_commande" || (sn !== null && sn < 1);
                       const isOk = sn !== null && sn > 2;
