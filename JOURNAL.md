@@ -55,6 +55,8 @@ Brice Chappé · Alejandro Gallegos · Fabian Coquoz · Michel Gédéon · Sabri
 
 ### Exercices comptables
 **Du 1er octobre au 30 septembre** (chevauche les années civiles)
+- Exercice 2022 : 1.10.2021 → 30.09.2022
+- Exercice 2023 : 1.10.2022 → 30.09.2023
 - Exercice 2024 : 1.10.2023 → 30.09.2024
 - Exercice 2025 : 1.10.2024 → 30.09.2025
 - Exercice 2026 : 1.10.2025 → 30.09.2026
@@ -77,7 +79,7 @@ Brice Chappé · Alejandro Gallegos · Fabian Coquoz · Michel Gédéon · Sabri
 - **PDFs** : `pdf_url`, `qr_url`, `fiche_travail_pdf_url`, `fiche_travail_initial_url`
 - ⚠️ **Pas de `client_id`** — liaison via `client_numero_client` + email fallback + nom+npa
 
-### Table `clients` (~22 000 lignes au 9 mai 2026)
+### Table `clients` (~22 094 lignes au 10 mai 2026, nuit)
 **Schéma complet** :
 | Colonne | Type | Notes |
 |---|---|---|
@@ -95,9 +97,9 @@ Brice Chappé · Alejandro Gallegos · Fabian Coquoz · Michel Gédéon · Sabri
 | `created_at`, `updated_at` | timestamptz | |
 | `livr_*` (10 colonnes) | text | Adresse de livraison alternative |
 
-**Répartition par source au 9 mai 2026** :
-- `shopify` : 10 630 (56%)
-- `winbiz` : 8 256 (44%)
+**Répartition par source au 10 mai 2026 (nuit)** :
+- `shopify` : 10 630 (48%)
+- `winbiz` : 8 258 (37%)
 - `offre` : 9
 - `manuel` : 6
 
@@ -109,7 +111,7 @@ Brice Chappé · Alejandro Gallegos · Fabian Coquoz · Michel Gédéon · Sabri
 
 **Adresses partiellement écrasées par Shopify** : certaines adresses WinBiz "sales" (typos, formats divers) ont été remplacées par les versions Shopify "propres" lors de la fusion. Le matching par rue ne peut donc pas être strict — les adresses dans les PDFs WinBiz peuvent différer de l'adresse en base.
 
-### Table `factures_winbiz` (~2 904 lignes au 10 mai 2026, soir)
+### Table `factures_winbiz` (4 362 lignes au 10 mai 2026, nuit — total CHF 11 844 144)
 - **A `client_id`** (figé à l'import)
 - `numero_facture` (TEXT) — **unique par construction WinBiz** (pas de doublons possibles côté source)
 - `date_facture` (DATE)
@@ -131,9 +133,10 @@ Voir sections dédiées plus bas.
 
 ### Bucket Storage Supabase `factures`
 Structure : `factures/{exercice}/facture_{numeroFacture}_{clientId}.pdf`
-- `factures/2023/` — exercice 2023 complet (1000 factures, importé 10 mai 2026)
-- `factures/2024/` — exercice 2024 (721 factures importées, batch 2024-2 à venir avec #52325 et al.)
-- `factures/2025/` — exercice 2025 complet (675 batch 1 + 319 batch 2 = 994 factures)
+- `factures/2022/` — exercice 2022 complet (1 109 factures, importé 10 mai 2026 nuit)
+- `factures/2023/` — exercice 2023 complet (1 000 factures, importé 10 mai 2026)
+- `factures/2024/` — exercice 2024 quasi complet (721 batch 1 + 349 batch 2 = 1 070 factures)
+- `factures/2025/` — exercice 2025 quasi complet (675 batch 1 + 319 batch 2 = 994 factures)
 - `factures/2026/` — exercice 2026 en cours (124 batch 1 + 65 batch 2 = 189 factures à mi-parcours)
 
 ---
@@ -295,10 +298,49 @@ git push
 - Nordmann Philippe : 3 entrées (4451 Shopify avec email, 19251, 19476)
 - Abrial Jacques : 2 entrées (14205, 21847)
 
+**Doublons supplémentaires identifiés sur l'exercice 2022** :
+- Marchesi Francine : **4 entrées** (18539, 18540, 21925, 21926)
+- Parmigiani Tino : 2 entrées (19436, 19478)
+- Tercier (sans prénom) : 2 entrées (21080, 21412)
+- Berthod Julie : 4 entrées (3327, 14648, 18031, 21858)
+- Bossaert Kristine : 4 entrées (3607, 14652, 18035, 21862)
+- Ben-Amara Rose-Marie : 4 entrées (3250, 14645, 18028, 21855)
+- Collins Dorli : 2 entrées (15336, 21872)
+- Galfetti Laurie : 3 entrées (16720, 21897, 21902)
+- Burri-Cordonier Caroline : 2 entrées (14861, 21867)
+- Therrien Julie [AROBUZZ INC] : 2 entrées (14411, 21852)
+- Hotel Montreux Palace SA : 2 entrées (17487, 17488)
+
 **Convention de fusion** (cf. règle "ID bas = client Shopify enrichi") :
 1. Identifier le client_id à conserver = **ID le plus bas** (généralement src=shopify avec email)
 2. Mettre à jour toutes les FK qui pointent vers les doublons (`factures_winbiz.client_id`, etc.)
 3. Supprimer les doublons
+
+### ⚠️ Bug pattern "adresse partagée" — clients différents à la même adresse
+**Découvert le 10 mai 2026 nuit, après import 2022**
+
+**Symptôme** : 7 factures Grill & More Lausanne Sàrl (Rue du Lion d'Or 6, 1003 Lausanne) ont été mal rattachées à **Société des Produits Nestlé SA Invoice Center** (CL-17616) au lieu de **Grill & More Company SA** (CL-16981).
+
+**Cause** : Pour ce sous-ensemble d'adresses, plusieurs clients distincts partagent la même adresse postale (par exemple le centre comptable d'un groupe). Le matcher actuel se base uniquement sur le tuple (NPA, ville, rue) et tranche les cas multiples au "score le plus haut" puis à "l'ID le plus bas" — ce qui peut tomber sur le mauvais client.
+
+**Détection** : invisible au moment du match (les 7 factures avaient une `matchStrategy` d'auto-résolution). Le bug n'a été repéré qu'à la consultation manuelle de la fiche client Nestlé qui affichait des factures de mobilier de jardin Grill & More.
+
+**Correction appliquée le 10 mai 2026 nuit** : script `reassigner-factures-grill-more.js` qui UPDATE `factures_winbiz.client_id` de 17616 vers 16981 pour les 7 factures concernées (#49263, #49277, #49325, #49631, #49702, #50714, #50826). 7/7 réassignées sans erreur.
+
+**Recommandation future** :
+1. Sur les batchs futurs (et rétroactif si temps), faire un audit SQL périodique du type :
+   ```sql
+   SELECT c.numero_client, c.nom, c.societe, COUNT(*) AS nb_factures,
+          STRING_AGG(DISTINCT f.nom_fichier::text, ' | ') AS noms_fichiers
+   FROM factures_winbiz f
+   JOIN clients c ON c.id = f.client_id
+   GROUP BY c.id, c.numero_client, c.nom, c.societe
+   HAVING COUNT(*) > 1
+   ORDER BY nb_factures DESC;
+   ```
+   Puis chercher visuellement les cas où plusieurs `nom_fichier` ne se ressemblent pas (= clients différents).
+
+2. **Améliorer le parser v3 futur** : ajouter au scoring un check sur le **premier segment** du `nom_fichier` (`CLIENT-XXX`) contre le `nom` ET la `societe` du client candidat. Si aucune correspondance fuzzy → marquer en `multiple` même si l'adresse matche.
 
 ---
 
@@ -328,25 +370,30 @@ git push
 - Dedup emails dans bulk insert (cf. bug connu)
 - Améliorer recherche clients (fuzzy matching nom+npa)
 - Stats CA mensuel par commercial sur dashboard
-- Fusion des doublons clients (Engelhard, Demaurex, Grobéty, Iacobelli, Capobianco...)
+- Fusion des doublons clients (la liste ne cesse de grandir — Engelhard, Demaurex, Grobéty, Iacobelli, Capobianco, Marchesi, Parmigiani, Tercier, Berthod, Bossaert, Ben-Amara, Galfetti, etc.)
 
-### 🎯 Priorité 5 — Import incrémental clients WinBiz
+### 🎯 Priorité 5 — Audit "adresse partagée" rétroactif
+**Suite au bug Grill & More découvert le 10 mai 2026 :**
+- Faire tourner la requête SQL d'audit (cf. section bugs)
+- Identifier tous les clients ayant des factures avec `nom_fichier` divergents → vérifier visuellement
+- Corriger les éventuels autres faux positifs avant qu'ils ne deviennent invisibles
+
+### 🎯 Priorité 6 — Import incrémental clients WinBiz
 Voir section dédiée plus bas — outil à créer pour rafraîchir périodiquement les adresses sans créer de doublons.
 
-### 🎯 Priorité 6 — Batchs factures WinBiz à venir
-- **Batch 2024-2** : factures dates 2024 manquantes du batch initial, dont au moins :
-  - #52325 (Deguemp Cécile, 20.07.2024, à mapper à CL-7851)
-  - Probablement d'autres
+### 🎯 Priorité 7 — Batchs factures WinBiz à venir
 - **Batch 2026-3** : suite de l'exercice 2026 en cours (~130-150 factures attendues d'ici fin septembre 2026)
-- Workflow rodé : dupliquer les scripts `2025-2` ou `2023` → adapter chemins → run
+- Workflow rodé sur 5 batchs : dupliquer les scripts `2024-2` → adapter chemins (PDF_FOLDER, RESULTS_FILE, LOG_FILE, FOLDER Storage) → run match → inspecter JSON → fix → dry-run → import
+- Le parser v2.1 (avec détection `anonymous_winbiz`) reste réutilisable tel quel
 
-### 🎯 Priorité 7 — Améliorations parser
-Identifiées le 10 mai 2026, à intégrer dans une `match-factures-v3.js` future :
-- **Détection adresse magasin** : si `npa=1095 AND ville=Lutry AND rue=Route de Lavaux 425` → basculer directement sur recherche par nom seul
+### 🎯 Priorité 8 — Améliorations parser (v3 future)
+Identifiées à travers les 5 batchs effectués, à intégrer dans une `match-factures-v3.js` future :
+- **Détection adresse magasin** : si `npa=1095 AND ville=Lutry AND rue=Route de Lavaux 425` → basculer directement sur recherche par nom seul (évite les 7+ candidats sans intérêt)
 - **Normalisation ville `F-VILLE`** : ajouter `ville.replace(/^(F|D|I|A|FL)-/i, '')` pour gérer `74440 F-CHAMONIX`
 - **Tolérance NPA tronqué** : si NPA semble coupé (< 4 chiffres), basculer sur recherche par nom+société
+- **Anti adresse partagée** : ajouter au scoring un check sur le premier segment du `nom_fichier` (`CLIENT-XXX`) contre `nom` ET `societe` du candidat. Si aucune correspondance fuzzy → marquer en `multiple` même si l'adresse matche parfaitement (cas Grill & More vs Nestlé)
 
-Pas urgent — le pipeline actuel atteint 97% auto.
+Pas urgent — le pipeline actuel atteint 96-97% auto.
 
 ---
 
@@ -419,33 +466,68 @@ SUPABASE_SERVICE_ROLE_KEY = (dans Vercel uniquement)
   - **Préfixe pays collé au NPA sans espace** : `74440 F-CHAMONIX` (au lieu de `F - 74440 Chamonix`) → parser cassé sur ce format
   - **Cas "Deguemp Cécile"** : adresse en base (Chemin de Villardiez) différente de l'adresse de facturation (Av. des Désertes) — c'est le même client, on rattache sans état d'âme à CL-7851
 
-### 🏆 Bilan global du 10 mai 2026
+### Session du 10 mai 2026 (suite 3) — Import factures WinBiz exercice 2024 (complément)
+- ✅ 349 factures du dossier `2024-2` importées (complément du batch 1 qui en avait 721)
+- ✅ Score auto : 341/350 (97.4%) — meilleur score de la journée
+- ✅ Score final : 349/350 (100%) après 8 corrections — **0 client créé** (tous existaient déjà)
+- ✅ Total exercice 2024 maintenant : **1070 factures**
+- ✅ **Innovation parser v2.1** : détection automatique des `anonymous_winbiz` ("X mister X") → 2 factures auto-résolues sans passer par les errors
+- ✅ Confirmation des décisions de référence sur 4 cas connus (Deguemp, Gallegos, Bulgari) + 4 nouveaux clients identifiés en base (Tavassoli, Edwards David, Burnand Jérôme, Ruedi Kym)
+
+### Session du 10 mai 2026 (nuit) — Import factures WinBiz exercice 2022 complet + correction bug Grill & More
+- ✅ **1109 factures** du dossier `2022` importées (numéros 49193 à 50308)
+- ✅ Score auto : 1064/1109 (96.0%)
+- ✅ Score final : **1109/1109 (100%)** après 45 corrections manuelles
+- ✅ **2 clients créés** : Pittet Anne / TRICYLE Sàrl (CL-22093, restaurant Café Saint Pierre Lausanne) et Weiss Yael (CL-22094)
+- ✅ **1 client retrouvé** : Rochat-Guignard Isabelle existait déjà sous **CL-19697** (créée lors d'un import WinBiz antérieur, format "Rochat - Guignard" avec espaces — c'est pour ça que mes recherches initiales ne la trouvaient pas)
+- ✅ 1 erreur upload transient (HTTP 502 sur #49298) résolue au 2e run grâce à l'anti-doublon
+- ✅ Total `factures_winbiz` désormais : **4 362 factures, CHF 11 844 144**
+
+**🐛 Bug majeur découvert et corrigé immédiatement** :
+Repéré par hasard sur la fiche client Nestlé : 7 factures Grill & More Lausanne Sàrl (Rue du Lion d'Or 6, 1003 Lausanne) avaient été mal rattachées à **Société des Produits Nestlé SA Invoice Center** (CL-17616) au lieu de **Grill & More Company SA** (CL-16981). Le matcher avait trouvé que les deux clients partageaient l'adresse postale et avait tranché au mauvais ID. Script `reassigner-factures-grill-more.js` créé et appliqué (mode read-only puis --apply) → 7/7 factures réassignées sans erreur. CL-16981 a maintenant ses 14 factures complètes (7 ex-Nestlé + 7 déjà bien rattachées format "GMH SA"). Bug pattern documenté dans la section "Bugs connus".
+
+### 🏆 Bilan global du 10 mai 2026 (5 sessions, marathon factures)
 | Session | Volume | Score auto | Erreurs |
 |---|---|---|---|
-| 2026 (batch 2) | 65 | 95% | 0 |
-| 2023 (complet) | 1000 | 97.5% | 0 |
+| 2026 (batch 2) | 65 | 95.4% | 0 |
+| 2023 (complet) | 1 000 | 97.5% | 0 |
 | 2025 (complément) | 319 | 96.6% | 0 |
-| **TOTAL JOURNÉE** | **1 384 factures** | **96.7%** | **0** |
+| 2024 (complément) | 349 | 97.4% | 0 |
+| **2022 (complet)** | **1 109** | **96.0%** | **0** |
+| **TOTAL JOURNÉE** | **2 842 factures** | **96.6%** | **0** |
 
-**4 clients créés** : Fondation Asile des Aveugles (CL-22088), Varone Christelle (CL-22089), Anonyme (CL-22090), HOPITAL JULES GONIN - FAA (CL-22091)
+**6 clients créés** : Fondation Asile des Aveugles (CL-22088), Varone Christelle (CL-22089), Anonyme (CL-22090), HOPITAL JULES GONIN - FAA (CL-22091), Pittet Anne / TRICYLE Sàrl (CL-22093), Weiss Yael (CL-22094)
+**1 client retrouvé existant** : Rochat-Guignard Isabelle (CL-19697)
+**1 bug critique corrigé** : 7 factures Grill & More mal rattachées à Nestlé → réassignées vers Grill & More Company SA
 
 **Décisions de référence durables** (réutilisables pour batchs futurs) :
-- Bulgari Horlogerie SA → **CL-14830** (Girolimetto Yoann)
-- Services Industriels de Genève (SIG) → **CL-20708** (entité société)
+- Bulgari Horlogerie SA → **CL-14830** (Girolimetto Yoann) — utilisée 4 fois sur 2023, 2025, 2024
+- Services Industriels de Genève (SIG) → **CL-20708** (entité société) — utilisée 5 fois (2 sur 2023, 3 sur 2022)
 - EGEL Sàrl → **CL-16162** (Ly Van-Loc)
 - MENETREY SA → **CL-21937** (Leffondre Karl, créé 2024)
-- Gallegos Alejandro (commercial JC) → **CL-16732**
+- Gallegos Alejandro (commercial JC) → **CL-16732** — utilisée 3 fois sur 2023 et 2024
 - Hôtel Bellerive → **CL-17470** (entité société)
 - Tennis Club Seeblick → **CL-6232** (Bernhard Andreas)
+- Deguemp Cécile → **CL-7851** — utilisée 4 fois (2023, 2025, 2024-2)
+- TIR CRS SA / Transfusion Interrégionale CRS SA → **CL-21191** (nouvelle ref 2022)
+- H.M.C. Hôtel Management → **CL-17233** — utilisée 2 fois (2025, 2022)
+- TCS Training et Loisir SA → **CL-21071** — utilisée 2 fois (2026-2, 2022)
+- Burnand Jérôme → **CL-04274** (Shopify avec email) — utilisée 3 fois (2024, 2022 ×2)
+- Edwards David → **CL-16156** — utilisée 4 fois (2024, 2022 ×3)
+- Hôtel Montreux Palace SA → **CL-17487** (ref 2022)
+- Grill & More Company SA → **CL-16981** (14 factures rattachées après correction)
 
-**État final de la table `factures_winbiz` au soir du 10 mai 2026** :
+**État final de la table `factures_winbiz` au 10 mai 2026, nuit** :
 | Exercice | Période | Nb factures | Total CHF |
 |---|---|---|---|
+| **2022** | **1.10.21 → 30.09.22** | **1 109** | **2 798 845** (approx) |
 | 2023 | 1.10.22 → 30.09.23 | 1 000 | 2 798 845.70 |
-| 2024 | 1.10.23 → 30.09.24 | 721 | 2 131 363.55 |
-| 2025 | 1.10.24 → 30.09.25 | 994 | ~2 300 000 (estimé) |
+| 2024 | 1.10.23 → 30.09.24 | 1 070 | 2 810 772.50 |
+| 2025 | 1.10.24 → 30.09.25 | 994 | 2 807 118.05 |
 | 2026 (en cours) | 1.10.25 → 30.09.26 | 189 | 628 562.75 |
-| **TOTAL** | | **~2 904** | **~7 858 000** |
+| **TOTAL** | | **4 362** | **~11 844 000** |
+
+**Observation** : les 4 exercices complets (2022, 2023, 2024, 2025) ont un CA très stable entre 2.79M et 2.81M CHF — activité régulière depuis 4 ans.
 
 ---
 
@@ -457,12 +539,13 @@ SUPABASE_SERVICE_ROLE_KEY = (dans Vercel uniquement)
 
 **Objectif** : prendre des PDFs de factures WinBiz exportés sur Google Drive, les uploader dans Supabase Storage, et insérer les métadonnées (n° facture, date, montant, lien client) dans la table `factures_winbiz`.
 
-**Volumétrie historique au 10 mai 2026** :
-- Exercice 2023 : 1000 factures importées (10 mai 2026)
-- Exercice 2024 : 721 factures importées (mai 2026, batch initial)
+**Volumétrie historique au 10 mai 2026, nuit** :
+- Exercice 2022 : 1 109 factures importées (10 mai 2026 nuit)
+- Exercice 2023 : 1 000 factures importées (10 mai 2026)
+- Exercice 2024 : 1 070 factures importées (721 batch 1 mai + 349 batch 2 le 10 mai)
 - Exercice 2025 : 994 factures importées (675 batch 1 fin avril + 319 batch 2 le 10 mai)
 - Exercice 2026 : 189 factures en cours (124 batch 1 + 65 batch 2 le 10 mai)
-- **Total : ~2 904 factures, ~7.8 millions CHF**
+- **Total : 4 362 factures, ~CHF 11 844 000**
 
 **Localisation des PDFs** : `G:\Mon Drive\Factures_winbiz\<dossier>\`
 
@@ -490,6 +573,10 @@ Si tu sais déjà qu'un client n'est pas en base (ex. nouvelle entreprise non en
 **Exemples historiques** :
 - `creer-leffondre.js` (Karl Leffondre, MENETREY SA, 2024) → CL-21937, ID 21939
 - `creer-fondation-asile.js` (Fondation Asile des Aveugles, 2026-2) → CL-22088, ID 22089
+- `creer-cafe-saint-pierre.js` (Pittet Anne / TRICYLE Sàrl, 2022) → CL-22093, ID 22093
+- `creer-weiss-yael.js` (Weiss Yael, 2022) → CL-22094, ID 22094
+
+⚠️ **Toujours vérifier d'abord les éventuels doublons avec recherche flexible** : sur 2022, "Rochat-Guignard" avait été créé sous "Rochat - Guignard" (espaces autour du tiret) lors d'un import antérieur — la recherche `nom=ilike.*rochat*guignard*` ne le trouvait pas. Faire des recherches `nom=ilike.*rochat*` + `nom=ilike.*guignard*` pour être sûr.
 
 ### Étape 1 — Matching (lecture seule)
 **Script** : `match-factures-{exercice}.js`
@@ -517,21 +604,24 @@ Si tu sais déjà qu'un client n'est pas en base (ex. nouvelle entreprise non en
 | `tie_lowest_id` | Plusieurs candidats à égalité parfaite, ID bas pris |
 | `name_only` | Adresse introuvable → match par nom seul (1 résultat) |
 
+⚠️ **Limite connue** : la stratégie ne détecte pas les cas "adresse partagée" où plusieurs clients distincts résident à la même adresse (cf. bug Grill & More vs Nestlé). À auditer manuellement ou via SQL d'audit.
+
 ### Étape 2 — Corrections manuelles
 **Script** : `fix-factures-{exercice}.js`
 
 **Ce qu'il fait** :
 1. Lit le JSON brut du match
-2. Applique les corrections manuelles définies dans 2 dictionnaires :
+2. Applique les corrections manuelles définies dans 3 dictionnaires :
    - `CORRECTIONS = { "numero_facture": { id, numero_client, ... } }` pour les `multiple`
    - `NOT_FOUND_CORRECTIONS = { ... }` pour les `notFound`
+   - `ERROR_CORRECTIONS = { ... }` pour les `errors` (parser cassé sur NPA/ville)
 3. Écrit `factures_results_{exercice}_corrected.json`
 
 **Workflow humain** :
-- Inspecter les sections `multiple` et `notFound` du JSON brut
+- Inspecter les sections `multiple`, `notFound` et `errors` du JSON brut
 - Pour chaque cas, identifier le bon client en base (ou décider de le créer via étape 0)
 - Remplir les dictionnaires
-- Re-run jusqu'à 0 multiple / 0 notFound
+- Re-run jusqu'à 0 multiple / 0 notFound / 0 errors
 
 ### Étape 3 — Import (écriture)
 **Script** : `import-factures-{exercice}.js`
@@ -568,7 +658,7 @@ Si tu sais déjà qu'un client n'est pas en base (ex. nouvelle entreprise non en
 
 ## 🎯 Améliorations du parser au fil des sessions
 
-### Améliorations apportées dans le `match-factures-2026-2.js`
+### Améliorations apportées dans le `match-factures-2024-2.js` (parser v2.1, réutilisé pour 2022)
 
 | # | Amélioration | Effet |
 |---|---|---|
@@ -581,17 +671,20 @@ Si tu sais déjà qu'un client n'est pas en base (ex. nouvelle entreprise non en
 | 7 | **Cap "trop de candidats"** (>30 sans nom matchant + recherche par nom seul en fallback) | Évite la pollution massive sur un homonyme inexistant |
 | 8 | **Recherche par nom seul** si rue introuvable ou aucun candidat | Récupère les cas "adresse changée" |
 | 9 | **Output enrichi** : `matchStrategy` + `bestGuess` sur chaque entrée | Facilite l'inspection du JSON |
+| 10 | **Détection `anonymous_winbiz`** (v2.1) : titre `X mister X X X X X X` → rattachement client générique CL-22090 | Auto-résolution des factures WinBiz masquées |
 
-### Statistiques d'évolution (au 10 mai 2026, soir)
+### Statistiques d'évolution (au 10 mai 2026, nuit)
 | Batch | Volume | Score auto | Corrections | Parser |
 |---|---|---|---|---|
 | Exercice 2024 (initial) | 721 | 90.0% | 72 multiple + 1 notFound | v1 |
 | Exercice 2026 (batch 2) | 65 | 95.4% | 3 multiple | v2 |
-| Exercice 2023 (complet) | 1000 | 97.5% | 18 multiple + 5 notFound + 2 errors | v2 |
+| Exercice 2023 (complet) | 1 000 | 97.5% | 18 multiple + 5 notFound + 2 errors | v2 |
 | Exercice 2025 (batch 2) | 320 | 96.6% | 5 multiple + 5 errors | v2 |
+| Exercice 2024 (batch 2) | 350 | 97.4% | 6 multiple + 1 notFound + 1 error | v2.1 |
+| Exercice 2022 (complet) | 1 109 | 96.0% | 24 multiple + 10 notFound + 11 errors | v2.1 |
 
-**Score moyen pondéré sur 1384 factures (3 batchs récents, parser v2)** : **97.0% en automatique**
-Le scoring nom+prénom intégré au match a fait gagner ~7 points de précision par rapport au parser v1.
+**Score moyen pondéré sur 2 844 factures (5 batchs récents, parser v2/v2.1)** : **96.6% en automatique**
+Le scoring nom+prénom intégré au match a fait gagner ~7 points de précision par rapport au parser v1. La détection automatique des "X mister X" introduite en v2.1 a auto-résolu plusieurs cas qui auraient été en errors auparavant.
 
 ---
 
@@ -601,13 +694,14 @@ Le scoring nom+prénom intégré au match a fait gagner ~7 points de précision 
 **Cause** : Lors de l'import WinBiz, fusion automatique avec un client Shopify existant à la même adresse → l'adresse Shopify "propre" écrase l'adresse WinBiz "sale". Le PDF WinBiz garde la version originale.
 
 **Exemples concrets** :
-- MENEGALLI Orlando : PDF dit "Rjue des Alpes 8, 1006 Lausanne" / base dit "Avenue de Provence 10, 1007 Lausanne" (déménagement)
+- MENEGALLI Orlando : PDF dit "Rue des Alpes 8, 1006 Lausanne" / base dit "Avenue de Provence 10, 1007 Lausanne" (déménagement)
 - VENETZ-SUTTER Laurent : PDF dit "Chemin de Bellecombe 22B" / base dit "Route de la Conversion 308" (déménagement ou 2e résidence)
+- Hermann Nadia : PDF dit "Rte de Morlens 95, 1674 Morlens" / base dit "Rte de l'Ancienne Ferme 10, 1680 Romont FR" (déménagement)
 
 **Solution** : la recherche par nom seul (étape 3 du matching) récupère ces cas.
 
-### 2. Doublons clients dus aux accents
-Documenté dans la section "Bugs connus".
+### 2. Doublons clients dus aux accents et variantes typographiques
+Documenté dans la section "Bugs connus". À noter : **les variantes d'espaces** comme "Rochat-Guignard" vs "Rochat - Guignard" (espaces autour du tiret) cassent aussi les recherches strictes. Toujours élargir le pattern de recherche quand on cherche un doublon potentiel.
 
 ### 3. Adresses tronquées (ancien format de fichier WinBiz)
 Sur l'exercice 2025, certains noms de fichiers étaient coupés (Windows / WinBiz limit). Exemples :
@@ -630,7 +724,8 @@ Cas exotique : `Service des Finances  107.00 Service des Resources Humaines  Fau
 ### 7. Adresse magasin imposée par WinBiz (clients "à l'emporter")
 **Cause** : Quand un client achète au magasin sans donner d'adresse personnelle, WinBiz force l'adresse magasin (`Route de Lavaux 425, 1095 Lutry`) pour l'export. Ces clients existent en base mais avec `rue=null, npa=null, ville=null` (importés vides), ce qui rend le matching par adresse impossible (le filtre renvoie tous les clients résidant au magasin).
 
-**Exemples concrets (exercice 2023)** : 9 factures concernées — FELL Claude, ABBONDANZIERI Katia, Hi Ying Mei, BOURGOZ Dominique, LAURENT Frédéric, NORDMANN Philippe, FAIVELEY François, DE KERCHOVE Vincent, BARBIER.
+**Exemples concrets sur 2022** (7 factures) : MARCHESI Francine, MOREL-FAVRE Christine, RENEVEY Carole, ROCHAT-GUIGNARD Isabelle, PARMIGIANI Tino, TERCIER, WATTS Robert.
+**Exemples concrets sur 2023** (9 factures) : FELL Claude, ABBONDANZIERI Katia, Hi Ying Mei, BOURGOZ Dominique, LAURENT Frédéric, NORDMANN Philippe, FAIVELEY François, DE KERCHOVE Vincent, BARBIER.
 
 **Solution** : recherche par nom seul (étape 3 du matching). Les clients sont en base — il suffit de les trouver autrement que par adresse.
 
@@ -646,21 +741,30 @@ Cas exotique : `Service des Finances  107.00 Service des Resources Humaines  Fau
 ### 9. Préfixe pays collé au NPA sans espace (`74440 F-CHAMONIX`)
 **Cause** : Format français inversé — au lieu de `F - 74440 Chamonix` (que mon stripper gère), WinBiz exporte `74440 F-CHAMONIX` (NPA puis `F-` collé à la ville).
 
-**Exemple concret** : facture #53452 DUNAND Valérie F-Chamonix → parser tombe en `errors` car la regex `^(\d{4})\s+(.+)$` matche bien `74440 F-CHAMONIX`, mais la ville extraite (`F-CHAMONIX`) ne match aucun client en base.
+**Exemples concrets** : facture #53452 (2025) et #49408 (2022) DUNAND Valérie F-Chamonix → parser tombe en `errors`. Le client était bien en base (id=16085).
 
-**Solution actuelle** : traitement manuel via le fix. Le client était bien en base (id=16085) avec exactement le même format `F-CHAMONIX` — donc en pratique, modifier la regex pour reconnaître `F-VILLE` permettrait de matcher automatiquement.
+**Solution actuelle** : traitement manuel via le fix.
 
-**Amélioration future possible** : ajouter au parser un nettoyage `ville = ville.replace(/^(F|D|I|A|FL)-/i, '')` après extraction, pour normaliser.
+**Amélioration future possible** : ajouter au parser un nettoyage `ville = ville.replace(/^(F|D|I|A|FL)-/i, '')` après extraction.
 
 ### 10. NPA tronqué juste avant `__FACTURE`
 **Cause** : Certains noms de fichiers très longs tronquent juste après les premiers chiffres du NPA. Exemple :
 `...BULGARI HORLOGERIE SA  Mesdames  Sonia Roca et Jenny De Marco  Rue de Monruz 34  Case postale 82  2__FACTURE-53153__...`
 
-Le NPA `2000` est coupé à `2` (les 3 derniers chiffres sont mangés par `__`).
+Le NPA `2000` est coupé à `2`. **Solution** : traitement manuel via le fix.
 
-**Exemples concrets** : factures #53153 et #53681 (Bulgari Neuchâtel 2000, exercice 2025).
+### 11. ⚠️ Adresse partagée par plusieurs clients distincts (bug Grill & More vs Nestlé)
+**Cause** : Plusieurs clients distincts en base partagent exactement la même adresse postale (par exemple Nestlé Invoice Center à Vevey et Grill & More Company SA à Lausanne — adresses différentes mais le matcher avait trouvé une intersection sur la Rue du Lion d'Or). Le matcher tranche au scoring nom puis ID bas, et peut tomber sur le mauvais.
 
-**Solution** : traitement manuel via le fix. La décision de référence pour Bulgari est désormais **CL-14830** (Girolimetto Yoann, BULGARI HORLOGERIE SA Livraison) — utilisée déjà sur 2023 #50912.
+**Exemple concret** : 7 factures Grill & More Lausanne Sàrl (2021-2023) rattachées à CL-17616 (Société des Produits Nestlé SA Invoice Center) au lieu de CL-16981 (Grill & More Company SA).
+
+**Détection** : invisible au moment du match (matchStrategy `auto`). Repéré manuellement via consultation de la fiche client.
+
+**Solution appliquée** : script `reassigner-factures-grill-more.js` (lecture seule par défaut, `--apply` pour UPDATE). 7/7 factures réassignées.
+
+**Recommandation future** :
+1. **Audit SQL périodique** des clients ayant des factures avec `nom_fichier` divergents (cf. requête dans section "Bugs connus")
+2. **Améliorer parser v3** : si plusieurs candidats à la même adresse, comparer le `CLIENT-XXX` du nom de fichier contre `nom` ET `societe` de chaque candidat. Pas de match fuzzy → marquer en `multiple` plutôt qu'auto-résoudre.
 
 ---
 
@@ -677,29 +781,33 @@ Pour ton prochain run (ex: `2026-3` dans 1 mois) :
 cd C:\Users\ezefi
 
 # 3. Match (lecture seule)
-node match-factures-2026-2.js
+node match-factures-2026-3.js
 # → Produit factures_results_2026-3.json
 
-# 4. Inspecte les "multiple" et "notFound" dans le JSON
+# 4. Inspecte les "multiple", "notFound" et "errors" dans le JSON
 #    Si nouveau client à créer → étape 4a
 #    Sinon → étape 5
 
 # 4a. (si nécessaire) Crée les clients manquants
 # Adapte un script du type creer-XXX.js
+# ⚠️ Vérifie d'abord les doublons avec recherche flexible (variantes d'espaces, tirets, accents)
 
-# 5. Remplis fix-factures-2026-2.js avec les corrections
-node fix-factures-2026-2.js
+# 5. Remplis fix-factures-2026-3.js avec les corrections
+node fix-factures-2026-3.js
 # → Produit factures_results_2026-3_corrected.json
 
 # 6. Dry-run (recommandé)
-node import-factures-2026-2.js --dry-run
+node import-factures-2026-3.js --dry-run
 
 # 7. Import réel
-node import-factures-2026-2.js
+node import-factures-2026-3.js
 # → Upload Storage + INSERT factures_winbiz + log
 
 # 8. Vérification SQL
 # SELECT COUNT(*) FROM factures_winbiz WHERE created_at > NOW() - INTERVAL '1 hour';
+
+# 9. AUDIT POST-IMPORT (nouveau, suite au bug Grill & More) :
+# Faire tourner la requête SQL d'audit pour repérer les clients avec nom_fichier divergents
 ```
 
 ---
@@ -712,25 +820,44 @@ Quand les mêmes clients reviennent dans plusieurs exercices, on conserve la mê
 | Société / pattern | Client retenu | ID | Origine décision |
 |---|---|---|---|
 | MENETREY SA (Bioley-Orjulaz) | Leffondre Karl | CL-21937 (id 21939) | Créé pour 2024 #52201 |
-| Services Industriels de Genève (SIG) | SERVICES INDUSTRIELS DE GENEVE (entité) | CL-20708 | 2023 #50434, #50442 |
-| BULGARI HORLOGERIE SA (Neuchâtel 2000) | Girolimetto Yoann (Livraison) | CL-14830 | 2023 #50912, 2025 #53153, #53681 |
+| Services Industriels de Genève (SIG) | SERVICES INDUSTRIELS DE GENEVE (entité) | CL-20708 | 2023, 2022 (5 factures cumulées) |
+| BULGARI HORLOGERIE SA (Neuchâtel 2000) | Girolimetto Yoann (Livraison) | CL-14830 | 2023 #50912, 2025 #53153 et #53681, 2024 #52583 |
 | EGEL Sàrl | Ly Van-Loc | CL-16162 | 2023 #50495, #50927, #50950 |
 | Tennis Club Seeblick (Zürich) | Bernhard Andreas | CL-6232 | 2023 #51202 |
 | Hôtel Bellerive (Lausanne) | Hôtel Bellerive (entité société) | CL-17470 | 2025 #53653 |
-| H.M.C. Hôtel Management Corp. SA | Bellevue C/o Victoria-Jungfrau AG | CL-17233 | 2025 #53368 |
-| TCS Training et Loisir SA (Vernier) | C/o Touring Club Suisse | CL-21071 | 2026-2 #80112, #53872 |
+| H.M.C. Hôtel Management Corp. SA | Bellevue C/o Victoria-Jungfrau AG | CL-17233 | 2025 #53368, 2022 #49498 |
+| TCS Training et Loisir SA (Vernier) | C/o Touring Club Suisse | CL-21071 | 2026-2 #80112/#53872, 2022 #49369 |
 | ASICC Cercle de Corsier | Petersen Helena | CL-14435 | 2023 #51388 |
+| TIR CRS SA Bern | Transfusion Interrégionale CRS SA (Finances & Controlling) | CL-21191 | 2022 #49258 |
+| EMS La Sombaille (Chaux-de-Fonds) | Veya Jean-Pierre | CL-08860 (Shopify avec email) | 2022 #50052 |
+| LEDUNFLY SA (Nyon) | Geindreau Antoine (LEDUNFLY Operations) | CL-18207 | 2022 #49468 |
+| EDI Médical Sàrl (Pully) | Dizdari Ernal | CL-16152 | 2022 #49871 |
+| Grill & More Company SA (Lausanne) | Grill & More Company SA [GMH SA - Grill & More Lausanne Sàrl] | CL-16981 | 14 factures (2021-2025) après correction bug 10 mai 2026 |
 
 ### Cas particuliers
 | Cas | Décision | Note |
 |---|---|---|
-| Gallegos Alejandro (commercial JC) | CL-16732 (le plus bas des 3 doublons) | À titre privé |
+| Gallegos Alejandro (commercial JC) | CL-16732 (le plus bas des 3 doublons) | Utilisé 3 fois (2023 #51299/#50957, 2024 #52389) |
 | Stricker Thierry | CL-20963 | Factures internes Jardin-Confort |
-| Deguemp Cécile | CL-7851 (Shopify avec email) | Adresse en base ≠ adresse facturation, c'est OK |
-| BEHR CREATEUR D'INTERIEURS | CL-3226 | 2023 #50524, 2026-2 #54085 |
+| Deguemp Cécile | CL-7851 (Shopify avec email) | Utilisée 4 fois (2023 #50408, 2025 #52695/#53096, 2024 #52325) — adresse base ≠ adresse facturation OK |
+| BEHR CREATEUR D'INTERIEURS | CL-3226 | 2023 #50524, 2026-2 #54085, 2022 #49338/#49713 (Lutry — décision Thierry de rassembler avec Aubonne) |
 | Begault Christine (BRUELLAN) | CL-3216 (Crans-Montana) | 2023 #51116 |
-| Dunand Valérie F-Chamonix | CL-16085 | Cliente française |
+| Dunand Valérie F-Chamonix | CL-16085 | Cliente française (utilisée 2025 et 2022) |
 | Abrial Jacques (France) | CL-14205 | 2023 #51031 |
+| Tavassoli Alexandre / CLINIQUE LES ALPES | CL-17476 | 2024 #52530, 2022 #49255 |
+| Edwards David | CL-16156 | 2024 #51550, 2022 ×3 (#49284, #50276, #49500) |
+| Burnand Jérôme | CL-4274 (Shopify avec email) | 2024 #51629, 2022 ×2 (#49508, #49838) |
+| Ruedi Kym | CL-19865 (Frenkendorf) | 2024 #52571 (a probablement déménagé à Basel) |
+| Hermann Nadia | CL-17371 (Romont, base ≠ Morlens facture) | 2022 #49699 |
+| Pariente Steven (Conches) | CL-19429 | 2022 #49865 |
+| Cornu Anne-Sophie (Epalinges) | CL-15418 | 2022 #49989 |
+| Biolley et Pollini (Lausanne) | CL-3430 | 2022 #49793 |
+| Nicod Cyril | CL-19200 (St-Gingolph 1898) | 2022 #50308 (Bouveret 1897 sur facture — décision Thierry : même client, NPA voisin) |
+| Gosselke - Zbinden Jacqueline | CL-17037 (Montreux, base ≠ Forel-Lavaux facture) | 2022 #49297 |
+| Mermoud André (Lausanne) | CL-18761 | 2022 #50087 |
+| Hôtel Montreux Palace SA | CL-17487 (2 doublons, ID bas) | 2022 #49893, #50133 |
+| AROBUZZ INC / Therrien Julie (Canada) | CL-14411 (2 doublons, ID bas) | 2022 #50018 |
+| FINM CO / D'Angelo Giovanni (Canada) | CL-16466 | 2022 #50019 |
 
 ### Clients créés ex nihilo (clients qui n'existaient pas en base avant)
 | Client | Numero / ID | Créé pour |
@@ -740,6 +867,8 @@ Quand les mêmes clients reviennent dans plusieurs exercices, on conserve la mê
 | Varone Christelle | CL-22089 / id 22090 | 2023 #51078, #51210 |
 | Anonyme (factures masquées WinBiz) | CL-22090 / id 22091 | 2025-2 #52617, #52619 |
 | HOPITAL JULES GONIN - FAA | CL-22091 / id 22092 | 2025-2 #52999 |
+| **Pittet Anne / TRICYLE Sàrl (Café Saint Pierre)** | **CL-22093 / id 22093** | **2022 #49193, #49459** |
+| **Weiss Yael** | **CL-22094 / id 22094** | **2022 #49924** |
 
 → **Pattern récurrent à anticiper** : si une facture concerne un acteur public/médical/société complexe non encore en base, c'est probablement à créer. Le script `creer-XXX.js` est à dupliquer/adapter à chaque fois.
 
@@ -750,11 +879,13 @@ Quand les mêmes clients reviennent dans plusieurs exercices, on conserve la mê
 | Script | Rôle | Réutilisable ? |
 |---|---|---|
 | `match-factures-{ex}.js` | Parsing PDFs + matching client + anti-doublon niveau 1 | ✅ Oui (changer chemins en haut) |
-| `fix-factures-{ex}.js` | Corrections manuelles des multiples/notFound | ⚠️ Spécifique à chaque batch (corrections différentes) |
+| `fix-factures-{ex}.js` | Corrections manuelles des multiples/notFound/errors | ⚠️ Spécifique à chaque batch (corrections différentes) |
 | `import-factures-{ex}.js` | Upload Storage + INSERT + anti-doublon niveau 2 + dry-run | ✅ Oui (changer chemins) |
 | `creer-XXX.js` | Création one-shot d'un client manquant | ❌ One-shot, à dupliquer pour chaque cas |
-| `verifier-clients.js` | Inspection BDD (colonnes, doublons connus, recherches ciblées) | ✅ Oui (modifier les recherches) |
-| `verifier-2-clients.js` | Recherches client ad-hoc | ✅ Oui (modifier les filtres) |
+| `verifier-clients-{ex}.js` | Recherches client ad-hoc (recherches en base) | ✅ Oui (modifier les `search()` selon les besoins) |
+| `verifier-dernier-numero-client.js` | Trouve le prochain CL-XXXXX libre | ✅ Oui |
+| `diagnostic-grill-more.js` | Audit "factures avec keyword X regroupées par client" | ✅ Oui (modifier le keyword) — modèle pour audit "adresse partagée" |
+| `reassigner-factures-grill-more.js` | UPDATE `client_id` en bulk pour réassigner des factures | ✅ Oui (template à adapter pour chaque correction de masse) |
 
 **Tous ces scripts vivent dans `C:\Users\ezefi\`** (pas dans le repo Next.js).
 **Pas de git push à faire après leur exécution.**
@@ -764,19 +895,24 @@ Quand les mêmes clients reviennent dans plusieurs exercices, on conserve la mê
 ## 🧹 Limites du système actuel & recommandations
 
 ### Limite 1 — Le titre PDF ne contient ni email ni tel
-Quand on crée un client à la volée (cas Leffondre, Fondation Asile), il aura `email = null` et `tel1 = null`. Si ce même client existe dans Shopify avec un email, on rate l'opportunité de fusion riche.
+Quand on crée un client à la volée (cas Leffondre, Fondation Asile, Pittet, Weiss), il aura `email = null` et `tel1 = null`. Si ce même client existe dans Shopify avec un email, on rate l'opportunité de fusion riche.
 
 **Recommandation** : faire un **import incrémental WinBiz tous les 3-6 mois** pour rafraîchir les adresses et chopper les nouveaux clients sans les créer à la volée. Ça évite l'accumulation de "clients orphelins" à créer un par un.
 
 ### Limite 2 — Pas de numéro client WinBiz d'origine en base
-Quand on crée un client à la volée, il reçoit un nouveau `numero_client` Supabase (ex. CL-22088). Mais WinBiz a son propre numéro client interne. Si plus tard on réimporte WinBiz "proprement", on peut avoir des doublons.
+Quand on crée un client à la volée, il reçoit un nouveau `numero_client` Supabase (ex. CL-22093). Mais WinBiz a son propre numéro client interne. Si plus tard on réimporte WinBiz "proprement", on peut avoir des doublons.
 
 **Recommandation future** : ajouter une colonne `winbiz_client_id` à `clients` pour stocker le n° WinBiz d'origine et éviter les doublons lors de futurs réimports.
 
 ### Limite 3 — Le `fix-factures` est manuel et fastidieux pour les gros volumes
-Sur 2024 : 72 corrections manuelles. Sur 2026-2 : 3. Le scoring intégré au match a beaucoup réduit le besoin, mais il reste des cas tordus (sociétés multi-contacts, adresses changées) qui requièrent une décision humaine.
+Sur 2024 : 72 corrections manuelles. Sur 2022 : 45. Sur 2026-2 : 3. Le scoring intégré au match a beaucoup réduit le besoin, mais il reste des cas tordus (sociétés multi-contacts, adresses changées, adresses partagées) qui requièrent une décision humaine.
 
 **Recommandation** : pas d'amélioration urgente, le pipeline tient bien la route. À surveiller seulement si un batch génère >10% de multiples.
+
+### Limite 4 — Bug "adresse partagée" invisible
+Voir bug Grill & More vs Nestlé : le matcher peut auto-résoudre vers le mauvais client sans aucun signal d'alerte.
+
+**Recommandation** : audit SQL post-import (cf. section bugs) pour détecter les clients avec `nom_fichier` divergents.
 
 ### TODO futur — Script d'import incrémental WinBiz
 Si ça devient utile, écrire un `import-clients-winbiz-incremental.js` qui :
@@ -793,15 +929,15 @@ Si ça devient utile, écrire un `import-clients-winbiz-incremental.js` qui :
 ### PowerShell — exécution scripts
 ```powershell
 cd C:\Users\ezefi
-node match-factures-2026-2.js
-node fix-factures-2026-2.js
-node import-factures-2026-2.js --dry-run
-node import-factures-2026-2.js
+node match-factures-2022.js
+node fix-factures-2022.js
+node import-factures-2022.js --dry-run
+node import-factures-2022.js
 ```
 
 ### PowerShell — vérification taille fichier
 ```powershell
-Get-Item C:\Users\ezefi\fix-factures-2026-2.js | Select-Object Name, Length
+Get-Item C:\Users\ezefi\fix-factures-2022.js | Select-Object Name, Length
 # ❌ ~3 ko = squelette vide
 # ✅ ~10-16 ko = corrections remplies
 ```
@@ -815,12 +951,15 @@ WHERE created_at > NOW() - INTERVAL '1 hour';
 -- Compter par exercice
 SELECT
   CASE
+    WHEN date_facture BETWEEN '2021-10-01' AND '2022-09-30' THEN '2022'
+    WHEN date_facture BETWEEN '2022-10-01' AND '2023-09-30' THEN '2023'
     WHEN date_facture BETWEEN '2023-10-01' AND '2024-09-30' THEN '2024'
     WHEN date_facture BETWEEN '2024-10-01' AND '2025-09-30' THEN '2025'
     WHEN date_facture BETWEEN '2025-10-01' AND '2026-09-30' THEN '2026'
     ELSE 'autre'
   END as exercice,
-  COUNT(*)
+  COUNT(*),
+  SUM(montant) as total_chf
 FROM factures_winbiz
 GROUP BY 1
 ORDER BY 1;
@@ -835,6 +974,20 @@ SELECT numero_facture, date_facture, montant, pdf_url
 FROM factures_winbiz
 WHERE client_id = <ID>
 ORDER BY date_facture DESC;
+
+-- 🆕 AUDIT "adresse partagée" — clients avec nom_fichier divergents
+-- (à lancer après chaque batch pour repérer les éventuels bugs type Grill & More)
+SELECT
+  c.id, c.numero_client, c.nom, c.societe,
+  COUNT(*) AS nb_factures,
+  COUNT(DISTINCT LEFT(f.nom_fichier, 50)) AS nb_motifs_distincts,
+  STRING_AGG(DISTINCT LEFT(f.nom_fichier, 80)::text, ' | ' ORDER BY LEFT(f.nom_fichier, 80)::text) AS motifs
+FROM factures_winbiz f
+JOIN clients c ON c.id = f.client_id
+GROUP BY c.id, c.numero_client, c.nom, c.societe
+HAVING COUNT(*) > 1 AND COUNT(DISTINCT LEFT(f.nom_fichier, 50)) > 1
+ORDER BY nb_motifs_distincts DESC, nb_factures DESC
+LIMIT 50;
 ```
 
 ### SQL — exploration table clients
@@ -875,4 +1028,4 @@ Quand tu démarres un nouveau chat Claude :
 
 ---
 
-*Dernière mise à jour : 10 mai 2026, soir — ajout des 2 batchs supplémentaires (2023 complet + 2025-2) et de tous les patterns/décisions de référence accumulés*
+*Dernière mise à jour : 10 mai 2026, nuit — exercice 2022 importé (1 109 factures, score parfait 100%) ; bug "adresse partagée" Grill & More vs Nestlé corrigé (7 factures réassignées) ; total base 4 362 factures / CHF ~11 844 000 sur 5 exercices ; pattern bug documenté + recommandation audit SQL future.*
