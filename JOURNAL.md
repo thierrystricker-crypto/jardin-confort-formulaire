@@ -109,7 +109,7 @@ Brice Chappé · Alejandro Gallegos · Fabian Coquoz · Michel Gédéon · Sabri
 
 **Adresses partiellement écrasées par Shopify** : certaines adresses WinBiz "sales" (typos, formats divers) ont été remplacées par les versions Shopify "propres" lors de la fusion. Le matching par rue ne peut donc pas être strict — les adresses dans les PDFs WinBiz peuvent différer de l'adresse en base.
 
-### Table `factures_winbiz` (~2 300 lignes au 10 mai 2026)
+### Table `factures_winbiz` (~2 904 lignes au 10 mai 2026, soir)
 - **A `client_id`** (figé à l'import)
 - `numero_facture` (TEXT) — **unique par construction WinBiz** (pas de doublons possibles côté source)
 - `date_facture` (DATE)
@@ -131,9 +131,10 @@ Voir sections dédiées plus bas.
 
 ### Bucket Storage Supabase `factures`
 Structure : `factures/{exercice}/facture_{numeroFacture}_{clientId}.pdf`
-- `factures/2024/` — exercice 2024 (721 factures importées)
-- `factures/2025/` — exercice 2025 (importé fin avril 2026)
-- `factures/2026/` — exercice 2026 en cours (premiers imports + 65 factures du 10 mai 2026)
+- `factures/2023/` — exercice 2023 complet (1000 factures, importé 10 mai 2026)
+- `factures/2024/` — exercice 2024 (721 factures importées, batch 2024-2 à venir avec #52325 et al.)
+- `factures/2025/` — exercice 2025 complet (675 batch 1 + 319 batch 2 = 994 factures)
+- `factures/2026/` — exercice 2026 en cours (124 batch 1 + 65 batch 2 = 189 factures à mi-parcours)
 
 ---
 
@@ -271,16 +272,33 @@ git push
 
 ### Doublons clients identifiés au cours des imports factures
 À fusionner manuellement un jour :
+
+**Doublons accents/typos** :
 - Engelhard Loic (7173) / Loïc (16245)
 - Demaurex Gaétan (4117) / Gaetan (15780)
 - Grobéty (6700) / Grobety (17129)
 - Iacobelli (8842) / Iacibelli (15732)
 - Capobianco (14967) / Copobianco (15397)
 
-Pattern de fusion :
-1. Identifier le client_id à conserver (ID bas, src=shopify)
-2. Mettre à jour toutes les FK qui pointent vers le doublon (`factures_winbiz.client_id`, etc.)
-3. Supprimer le doublon
+**Doublons d'import successif** (découverts sur exercice 2023 — chaque exercice WinBiz importé semble avoir recréé les clients à l'emporter) :
+- Hi Ying Mei : **5 entrées** (17390, 17539, 17544, 18026, 21910)
+- Bourgoz Dominique : **4 entrées** (3638, 14653, 18036, 21863)
+- Faiveley François : **3 entrées** (16345, 21885, 21892) + 1 société Faiveley Tech (16346)
+- Gallegos Alejandro (commercial JC) : **3 entrées** (16732, 21898, 21903)
+- Abbondanzieri Katia : 2 entrées (14194, 21845)
+- Hi Ying Mei : 5 entrées (cf. ci-dessus)
+- Fell Claude : 2 entrées (16408, 21887)
+- Laurent Frédéric : 2 entrées (18153, 21922)
+- De Kerchove D'o Vincent : 2 entrées (15636, 21876)
+- Geiser Lilia : 3 entrées (16824, 21900, 21905)
+- Barbier (sans prénom) : 2 entrées (14592, 21854)
+- Nordmann Philippe : 3 entrées (4451 Shopify avec email, 19251, 19476)
+- Abrial Jacques : 2 entrées (14205, 21847)
+
+**Convention de fusion** (cf. règle "ID bas = client Shopify enrichi") :
+1. Identifier le client_id à conserver = **ID le plus bas** (généralement src=shopify avec email)
+2. Mettre à jour toutes les FK qui pointent vers les doublons (`factures_winbiz.client_id`, etc.)
+3. Supprimer les doublons
 
 ---
 
@@ -314,6 +332,21 @@ Pattern de fusion :
 
 ### 🎯 Priorité 5 — Import incrémental clients WinBiz
 Voir section dédiée plus bas — outil à créer pour rafraîchir périodiquement les adresses sans créer de doublons.
+
+### 🎯 Priorité 6 — Batchs factures WinBiz à venir
+- **Batch 2024-2** : factures dates 2024 manquantes du batch initial, dont au moins :
+  - #52325 (Deguemp Cécile, 20.07.2024, à mapper à CL-7851)
+  - Probablement d'autres
+- **Batch 2026-3** : suite de l'exercice 2026 en cours (~130-150 factures attendues d'ici fin septembre 2026)
+- Workflow rodé : dupliquer les scripts `2025-2` ou `2023` → adapter chemins → run
+
+### 🎯 Priorité 7 — Améliorations parser
+Identifiées le 10 mai 2026, à intégrer dans une `match-factures-v3.js` future :
+- **Détection adresse magasin** : si `npa=1095 AND ville=Lutry AND rue=Route de Lavaux 425` → basculer directement sur recherche par nom seul
+- **Normalisation ville `F-VILLE`** : ajouter `ville.replace(/^(F|D|I|A|FL)-/i, '')` pour gérer `74440 F-CHAMONIX`
+- **Tolérance NPA tronqué** : si NPA semble coupé (< 4 chiffres), basculer sur recherche par nom+société
+
+Pas urgent — le pipeline actuel atteint 97% auto.
 
 ---
 
@@ -367,6 +400,53 @@ SUPABASE_SERVICE_ROLE_KEY = (dans Vercel uniquement)
 - ✅ Mode `--dry-run` ajouté pour simulation sécurisée
 - 📖 Voir section dédiée **"Import factures WinBiz"** ci-dessous
 
+### Session du 10 mai 2026 (suite) — Import factures WinBiz exercice 2023 complet
+- ✅ 1000 factures du dossier `2023` importées (numéros 5136 à 51443)
+- ✅ Score auto : 975/1000 (97.5%) — meilleur score à ce jour
+- ✅ Score final : 1000/1000 (100%) après 25 corrections manuelles + 1 client créé
+- ✅ 1 client créé en base (Varone Christelle, CL-22089)
+- ✅ 1 erreur upload transient (HTTP 502 sur #51015) résolue au 2e run grâce à l'anti-doublon
+- ✅ Nouveau pattern identifié et résolu : **adresse magasin "Route de Lavaux 425" forcée par WinBiz pour clients à l'emporter** → 9 factures concernées, résolution par recherche nom seul
+
+### Session du 10 mai 2026 (suite 2) — Import factures WinBiz exercice 2025 (complément)
+- ✅ 319 factures du dossier `2025-2` importées (complément du batch 1 qui en avait 675)
+- ✅ Score auto : 309/320 (96.6%)
+- ✅ Score final : 319/319 (100%) après 10 corrections + 2 clients créés
+- ✅ 2 clients créés : "Anonyme" (CL-22090, pour factures WinBiz masquées) et "HOPITAL JULES GONIN - FAA" (CL-22091)
+- ✅ Total exercice 2025 maintenant : **994 factures**
+- ✅ Nouveaux patterns identifiés :
+  - **Clients WinBiz volontairement masqués** : titre fichier `X mister X X X X X X` → rattachés à un client générique "Anonyme"
+  - **Préfixe pays collé au NPA sans espace** : `74440 F-CHAMONIX` (au lieu de `F - 74440 Chamonix`) → parser cassé sur ce format
+  - **Cas "Deguemp Cécile"** : adresse en base (Chemin de Villardiez) différente de l'adresse de facturation (Av. des Désertes) — c'est le même client, on rattache sans état d'âme à CL-7851
+
+### 🏆 Bilan global du 10 mai 2026
+| Session | Volume | Score auto | Erreurs |
+|---|---|---|---|
+| 2026 (batch 2) | 65 | 95% | 0 |
+| 2023 (complet) | 1000 | 97.5% | 0 |
+| 2025 (complément) | 319 | 96.6% | 0 |
+| **TOTAL JOURNÉE** | **1 384 factures** | **96.7%** | **0** |
+
+**4 clients créés** : Fondation Asile des Aveugles (CL-22088), Varone Christelle (CL-22089), Anonyme (CL-22090), HOPITAL JULES GONIN - FAA (CL-22091)
+
+**Décisions de référence durables** (réutilisables pour batchs futurs) :
+- Bulgari Horlogerie SA → **CL-14830** (Girolimetto Yoann)
+- Services Industriels de Genève (SIG) → **CL-20708** (entité société)
+- EGEL Sàrl → **CL-16162** (Ly Van-Loc)
+- MENETREY SA → **CL-21937** (Leffondre Karl, créé 2024)
+- Gallegos Alejandro (commercial JC) → **CL-16732**
+- Hôtel Bellerive → **CL-17470** (entité société)
+- Tennis Club Seeblick → **CL-6232** (Bernhard Andreas)
+
+**État final de la table `factures_winbiz` au soir du 10 mai 2026** :
+| Exercice | Période | Nb factures | Total CHF |
+|---|---|---|---|
+| 2023 | 1.10.22 → 30.09.23 | 1 000 | 2 798 845.70 |
+| 2024 | 1.10.23 → 30.09.24 | 721 | 2 131 363.55 |
+| 2025 | 1.10.24 → 30.09.25 | 994 | ~2 300 000 (estimé) |
+| 2026 (en cours) | 1.10.25 → 30.09.26 | 189 | 628 562.75 |
+| **TOTAL** | | **~2 904** | **~7 858 000** |
+
 ---
 
 # 📥 Import factures WinBiz — Documentation complète
@@ -377,10 +457,12 @@ SUPABASE_SERVICE_ROLE_KEY = (dans Vercel uniquement)
 
 **Objectif** : prendre des PDFs de factures WinBiz exportés sur Google Drive, les uploader dans Supabase Storage, et insérer les métadonnées (n° facture, date, montant, lien client) dans la table `factures_winbiz`.
 
-**Volumétrie historique** :
-- Exercice 2024 : 721 factures importées (mai 2026)
-- Exercice 2025 : ~600 factures importées (fin avril 2026)
-- Exercice 2026 : en cours, dont 65 factures du batch `2026-2` (10 mai 2026)
+**Volumétrie historique au 10 mai 2026** :
+- Exercice 2023 : 1000 factures importées (10 mai 2026)
+- Exercice 2024 : 721 factures importées (mai 2026, batch initial)
+- Exercice 2025 : 994 factures importées (675 batch 1 fin avril + 319 batch 2 le 10 mai)
+- Exercice 2026 : 189 factures en cours (124 batch 1 + 65 batch 2 le 10 mai)
+- **Total : ~2 904 factures, ~7.8 millions CHF**
 
 **Localisation des PDFs** : `G:\Mon Drive\Factures_winbiz\<dossier>\`
 
@@ -500,9 +582,16 @@ Si tu sais déjà qu'un client n'est pas en base (ex. nouvelle entreprise non en
 | 8 | **Recherche par nom seul** si rue introuvable ou aucun candidat | Récupère les cas "adresse changée" |
 | 9 | **Output enrichi** : `matchStrategy` + `bestGuess` sur chaque entrée | Facilite l'inspection du JSON |
 
-### Statistiques d'évolution
-- **Exercice 2024** (parser v1) : 90% auto, 10% à corriger manuellement (72 multiple + 1 notFound sur 721)
-- **Exercice 2026-2** (parser v2 amélioré) : 95% auto, 5% à corriger (3 multiple sur 65) — le scoring intégré a remonté ~5 points
+### Statistiques d'évolution (au 10 mai 2026, soir)
+| Batch | Volume | Score auto | Corrections | Parser |
+|---|---|---|---|---|
+| Exercice 2024 (initial) | 721 | 90.0% | 72 multiple + 1 notFound | v1 |
+| Exercice 2026 (batch 2) | 65 | 95.4% | 3 multiple | v2 |
+| Exercice 2023 (complet) | 1000 | 97.5% | 18 multiple + 5 notFound + 2 errors | v2 |
+| Exercice 2025 (batch 2) | 320 | 96.6% | 5 multiple + 5 errors | v2 |
+
+**Score moyen pondéré sur 1384 factures (3 batchs récents, parser v2)** : **97.0% en automatique**
+Le scoring nom+prénom intégré au match a fait gagner ~7 points de précision par rapport au parser v1.
 
 ---
 
@@ -537,6 +626,41 @@ Préfixes pays (`CH - `, `FR - `, etc.) gérés par la regex `stripCountryPrefix
 
 ### 6. Faux positif numéro avant NPA
 Cas exotique : `Service des Finances  107.00 Service des Resources Humaines  Faubourg de l'Hôpit...`. Le `107.00` n'est pas un NPA mais peut perturber. La regex `^(\d{4})\s+(.+)$` filtre correctement (4 chiffres puis espace + texte) — pas de faux positif observé.
+
+### 7. Adresse magasin imposée par WinBiz (clients "à l'emporter")
+**Cause** : Quand un client achète au magasin sans donner d'adresse personnelle, WinBiz force l'adresse magasin (`Route de Lavaux 425, 1095 Lutry`) pour l'export. Ces clients existent en base mais avec `rue=null, npa=null, ville=null` (importés vides), ce qui rend le matching par adresse impossible (le filtre renvoie tous les clients résidant au magasin).
+
+**Exemples concrets (exercice 2023)** : 9 factures concernées — FELL Claude, ABBONDANZIERI Katia, Hi Ying Mei, BOURGOZ Dominique, LAURENT Frédéric, NORDMANN Philippe, FAIVELEY François, DE KERCHOVE Vincent, BARBIER.
+
+**Solution** : recherche par nom seul (étape 3 du matching). Les clients sont en base — il suffit de les trouver autrement que par adresse.
+
+**Amélioration future possible** : détecter `npa=1095 AND ville=Lutry AND rue=Route de Lavaux 425` au parsing → basculer directement sur recherche par nom seul (skip le filtre adresse).
+
+### 8. Clients WinBiz volontairement masqués (`X mister X`)
+**Cause** : WinBiz exporte certaines factures avec le nom de client masqué (titre `CLIENT-X mister X X  X  X  X X  codex...`). Probablement des factures sans client identifié, des tests, ou des factures avec une exigence de confidentialité.
+
+**Exemples concrets (exercice 2025)** : 2 factures #52617 et #52619 (achats FATBOY 2024 modestes : 278 et 118 CHF).
+
+**Solution adoptée** : création d'un client générique `Anonyme` (CL-22090) en base, avec une `notes` explicative. Les factures sont rattachées à ce client générique pour ne pas perdre la trace comptable.
+
+### 9. Préfixe pays collé au NPA sans espace (`74440 F-CHAMONIX`)
+**Cause** : Format français inversé — au lieu de `F - 74440 Chamonix` (que mon stripper gère), WinBiz exporte `74440 F-CHAMONIX` (NPA puis `F-` collé à la ville).
+
+**Exemple concret** : facture #53452 DUNAND Valérie F-Chamonix → parser tombe en `errors` car la regex `^(\d{4})\s+(.+)$` matche bien `74440 F-CHAMONIX`, mais la ville extraite (`F-CHAMONIX`) ne match aucun client en base.
+
+**Solution actuelle** : traitement manuel via le fix. Le client était bien en base (id=16085) avec exactement le même format `F-CHAMONIX` — donc en pratique, modifier la regex pour reconnaître `F-VILLE` permettrait de matcher automatiquement.
+
+**Amélioration future possible** : ajouter au parser un nettoyage `ville = ville.replace(/^(F|D|I|A|FL)-/i, '')` après extraction, pour normaliser.
+
+### 10. NPA tronqué juste avant `__FACTURE`
+**Cause** : Certains noms de fichiers très longs tronquent juste après les premiers chiffres du NPA. Exemple :
+`...BULGARI HORLOGERIE SA  Mesdames  Sonia Roca et Jenny De Marco  Rue de Monruz 34  Case postale 82  2__FACTURE-53153__...`
+
+Le NPA `2000` est coupé à `2` (les 3 derniers chiffres sont mangés par `__`).
+
+**Exemples concrets** : factures #53153 et #53681 (Bulgari Neuchâtel 2000, exercice 2025).
+
+**Solution** : traitement manuel via le fix. La décision de référence pour Bulgari est désormais **CL-14830** (Girolimetto Yoann, BULGARI HORLOGERIE SA Livraison) — utilisée déjà sur 2023 #50912.
 
 ---
 
@@ -577,6 +701,47 @@ node import-factures-2026-2.js
 # 8. Vérification SQL
 # SELECT COUNT(*) FROM factures_winbiz WHERE created_at > NOW() - INTERVAL '1 hour';
 ```
+
+---
+
+## 🎯 Décisions de référence durables (réutilisables pour batchs futurs)
+
+Quand les mêmes clients reviennent dans plusieurs exercices, on conserve la même décision pour la cohérence. Voici les références accumulées :
+
+### Sociétés multi-contacts résolues
+| Société / pattern | Client retenu | ID | Origine décision |
+|---|---|---|---|
+| MENETREY SA (Bioley-Orjulaz) | Leffondre Karl | CL-21937 (id 21939) | Créé pour 2024 #52201 |
+| Services Industriels de Genève (SIG) | SERVICES INDUSTRIELS DE GENEVE (entité) | CL-20708 | 2023 #50434, #50442 |
+| BULGARI HORLOGERIE SA (Neuchâtel 2000) | Girolimetto Yoann (Livraison) | CL-14830 | 2023 #50912, 2025 #53153, #53681 |
+| EGEL Sàrl | Ly Van-Loc | CL-16162 | 2023 #50495, #50927, #50950 |
+| Tennis Club Seeblick (Zürich) | Bernhard Andreas | CL-6232 | 2023 #51202 |
+| Hôtel Bellerive (Lausanne) | Hôtel Bellerive (entité société) | CL-17470 | 2025 #53653 |
+| H.M.C. Hôtel Management Corp. SA | Bellevue C/o Victoria-Jungfrau AG | CL-17233 | 2025 #53368 |
+| TCS Training et Loisir SA (Vernier) | C/o Touring Club Suisse | CL-21071 | 2026-2 #80112, #53872 |
+| ASICC Cercle de Corsier | Petersen Helena | CL-14435 | 2023 #51388 |
+
+### Cas particuliers
+| Cas | Décision | Note |
+|---|---|---|
+| Gallegos Alejandro (commercial JC) | CL-16732 (le plus bas des 3 doublons) | À titre privé |
+| Stricker Thierry | CL-20963 | Factures internes Jardin-Confort |
+| Deguemp Cécile | CL-7851 (Shopify avec email) | Adresse en base ≠ adresse facturation, c'est OK |
+| BEHR CREATEUR D'INTERIEURS | CL-3226 | 2023 #50524, 2026-2 #54085 |
+| Begault Christine (BRUELLAN) | CL-3216 (Crans-Montana) | 2023 #51116 |
+| Dunand Valérie F-Chamonix | CL-16085 | Cliente française |
+| Abrial Jacques (France) | CL-14205 | 2023 #51031 |
+
+### Clients créés ex nihilo (clients qui n'existaient pas en base avant)
+| Client | Numero / ID | Créé pour |
+|---|---|---|
+| Leffondre Karl (MENETREY SA) | CL-21937 / id 21939 | 2024 #52201 |
+| Fondation Asile des Aveugles | CL-22088 / id 22089 | 2026-2 #53854 |
+| Varone Christelle | CL-22089 / id 22090 | 2023 #51078, #51210 |
+| Anonyme (factures masquées WinBiz) | CL-22090 / id 22091 | 2025-2 #52617, #52619 |
+| HOPITAL JULES GONIN - FAA | CL-22091 / id 22092 | 2025-2 #52999 |
+
+→ **Pattern récurrent à anticiper** : si une facture concerne un acteur public/médical/société complexe non encore en base, c'est probablement à créer. Le script `creer-XXX.js` est à dupliquer/adapter à chaque fois.
 
 ---
 
@@ -710,4 +875,4 @@ Quand tu démarres un nouveau chat Claude :
 
 ---
 
-*Dernière mise à jour : 10 mai 2026 (ajout section import factures WinBiz)*
+*Dernière mise à jour : 10 mai 2026, soir — ajout des 2 batchs supplémentaires (2023 complet + 2025-2) et de tous les patterns/décisions de référence accumulés*
