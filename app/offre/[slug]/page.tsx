@@ -507,6 +507,7 @@ useEffect(() => {
   const addrFact = [
     d.societe || null,
     [d.prenom, d.nom].filter(Boolean).join(" ") || null,
+    (d as any).complement_nom || null,
     [d.rue, d.numero].filter(Boolean).join(" ") || null,
     [d.npa, d.ville].filter(Boolean).join(" ") || null,
     d.telephone1 ? `Tél. ${d.telephone1}` : null,
@@ -517,6 +518,7 @@ useEffect(() => {
     ? ["À l'emporter", "Jardin-Confort SA", "Route de Lavaux 425", "1095 Lutry"]
     : d.livrDiff
       ? [d.livrSociete || null, [d.livrNom, d.livrPrenom].filter(Boolean).join(" ") || null,
+         (d as any).livr_complement_nom || null,
          [d.livrRue, d.livrNumero].filter(Boolean).join(" ") || null,
          [d.livrNpa, d.livrVille].filter(Boolean).join(" ") || null,
          d.livrTel ? `Tél. ${d.livrTel}` : null].filter(Boolean) as string[]
