@@ -284,10 +284,11 @@ const [savedSlug, setSavedSlug]           = useState("");
     npa: string | null; ville: string | null;
     complement_nom: string | null; livr_complement_nom: string | null;
   }[]>([]);
-  const [clientSearchField, setClientSearchField] = useState<"nom"|"email"|"tel"|null>(null)
+  const [clientSearchField, setClientSearchField] = useState<"nom"|"email"|"tel"|"societe"|null>(null)
   const [selectedClientId, setSelectedClientId] = useState<number|null>(null)
+  const [clientDropdownIndex, setClientDropdownIndex] = useState<number>(-1)
 
-  async function searchClients(q: string, field: "nom"|"email"|"tel") {
+  async function searchClients(q: string, field: "nom"|"email"|"tel"|"societe") {
     if (q.length < 2) { setClientSuggestions([]); return }
     try {
       let searchQ = q
@@ -322,11 +323,38 @@ const [savedSlug, setSavedSlug]           = useState("");
     setClientSuggestions([])
   }
 
-  function onClientFieldChange(val: string, field: "nom"|"email"|"tel", setter: (v:string)=>void) {
+  function onClientFieldChange(val: string, field: "nom"|"email"|"tel"|"societe", setter: (v:string)=>void) {
     setter(val)
     setSelectedClientId(null)
+    setClientDropdownIndex(-1)
     if (clientSearchRef.current) clearTimeout(clientSearchRef.current)
     clientSearchRef.current = setTimeout(() => searchClients(val, field), 300)
+  }
+
+  // Fermeture manuelle du dropdown (bouton ✕, Escape, clic extérieur)
+  function forceCloseDropdown() {
+    setClientSuggestions([])
+    setClientSearchField(null)
+    setClientDropdownIndex(-1)
+    if (clientSearchRef.current) clearTimeout(clientSearchRef.current)
+  }
+
+  // Navigation clavier dans le dropdown
+  function handleClientKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (clientSuggestions.length === 0) return
+    if (e.key === "Escape") {
+      e.preventDefault()
+      forceCloseDropdown()
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setClientDropdownIndex(i => Math.min(i + 1, clientSuggestions.length - 1))
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setClientDropdownIndex(i => Math.max(i - 1, -1))
+    } else if (e.key === "Enter" && clientDropdownIndex >= 0) {
+      e.preventDefault()
+      applyClient(clientSuggestions[clientDropdownIndex])
+    }
   }
 
   function closeClientDropdown() {
@@ -707,6 +735,19 @@ const [savedSlug, setSavedSlug]           = useState("");
     if (raw) setDraftSavedAt("Brouillon local trouvé");
   }, [formType, offerNumber]);
 
+  // ── Fermer le dropdown client au clic extérieur ──
+  useEffect(() => {
+    if (clientSuggestions.length === 0) return
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      // Si le clic est dans un dropdown ou dans un input avec autocomplétion → ignorer
+      if (target.closest(".jc-client-dropdown") || target.closest(".jc-field-with-autocomplete")) return
+      forceCloseDropdown()
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [clientSuggestions.length])
+
   // ── Préfill depuis URL ?prefill=... (venant du dashboard) ──
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -964,22 +1005,37 @@ const [savedSlug, setSavedSlug]           = useState("");
             </button>
           </div>
           <div className="jc-grid jc-g1">
-            <div className="jc-field">
+            <div className="jc-field jc-field-with-autocomplete" style={{position:"relative"}}>
               <label>Société</label>
-              <input autoComplete="new-password" value={societe} onChange={(e) => setSociete(e.target.value)} placeholder="Nom de l'entreprise (optionnel)" />
+              <input autoComplete="new-password" value={societe}
+                onChange={(e) => onClientFieldChange(e.target.value, "societe", setSociete)}
+                onKeyDown={handleClientKeyDown}
+                placeholder="Nom de l'entreprise (optionnel)" />
+              {clientSuggestions.length > 0 && clientSearchField === "societe" && (
+                <div className="jc-client-dropdown">
+                  <button className="jc-client-dropdown-close" onClick={forceCloseDropdown} title="Fermer (Esc)">✕</button>
+                  {clientSuggestions.map((c, idx) => (
+                    <div key={c.id} className={`jc-client-item${idx === clientDropdownIndex ? " jc-client-item-active" : ""}`} onClick={() => applyClient(c)}>
+                      <div className="jc-client-item-name">{c.societe || "—"} {c.nom && <span className="jc-client-item-soc">· {c.nom} {c.prenom}</span>}</div>
+                      <div className="jc-client-item-detail">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="jc-grid jc-g2 mt12">
-            <div className="jc-field" style={{position:"relative"}}>
+            <div className="jc-field jc-field-with-autocomplete" style={{position:"relative"}}>
               <label>Nom *</label>
               <input className={missingRequired.nom ? "jc-error" : ""} autoComplete="new-password" value={nom}
                 onChange={(e) => onClientFieldChange(e.target.value, "nom", setNom)}
-              onBlur={closeClientDropdown}
-              placeholder="Dupont" />
+                onKeyDown={handleClientKeyDown}
+                placeholder="Dupont" />
               {clientSuggestions.length > 0 && clientSearchField === "nom" && (
                 <div className="jc-client-dropdown">
-                  {clientSuggestions.map(c => (
-                    <div key={c.id} className="jc-client-item" onClick={() => applyClient(c)}>
+                  <button className="jc-client-dropdown-close" onClick={forceCloseDropdown} title="Fermer (Esc)">✕</button>
+                  {clientSuggestions.map((c, idx) => (
+                    <div key={c.id} className={`jc-client-item${idx === clientDropdownIndex ? " jc-client-item-active" : ""}`} onClick={() => applyClient(c)}>
                       <div className="jc-client-item-name">{c.nom} {c.prenom} {c.societe && <span className="jc-client-item-soc">· {c.societe}</span>}</div>
                       <div className="jc-client-item-detail">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
                     </div>
@@ -1030,15 +1086,17 @@ const [savedSlug, setSavedSlug]           = useState("");
             </div>
           </div>
           <div className="jc-grid jc-g3 mt12">
-            <div className="jc-field" style={{position:"relative"}}>
+            <div className="jc-field jc-field-with-autocomplete" style={{position:"relative"}}>
               <label>Téléphone 1</label>
               <input autoComplete="new-password" placeholder="+41 79 000 00 00" value={telephone1}
                 onChange={(e) => onClientFieldChange(e.target.value, "tel", setTelephone1)}
-              onBlur={(e) => { setTelephone1(normalizeSwissPhone(e.target.value)); closeClientDropdown(); }} />
+                onKeyDown={handleClientKeyDown}
+                onBlur={(e) => { setTelephone1(normalizeSwissPhone(e.target.value)); }} />
               {clientSuggestions.length > 0 && clientSearchField === "tel" && (
                 <div className="jc-client-dropdown">
-                  {clientSuggestions.map(c => (
-                    <div key={c.id} className="jc-client-item" onClick={() => applyClient(c)}>
+                  <button className="jc-client-dropdown-close" onClick={forceCloseDropdown} title="Fermer (Esc)">✕</button>
+                  {clientSuggestions.map((c, idx) => (
+                    <div key={c.id} className={`jc-client-item${idx === clientDropdownIndex ? " jc-client-item-active" : ""}`} onClick={() => applyClient(c)}>
                       <div className="jc-client-item-name">{c.nom} {c.prenom} {c.societe && <span className="jc-client-item-soc">· {c.societe}</span>}</div>
                       <div className="jc-client-item-detail">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
                     </div>
@@ -1050,16 +1108,17 @@ const [savedSlug, setSavedSlug]           = useState("");
               <label>Téléphone 2 <span className="jc-label-hint">(international accepté)</span></label>
               <input autoComplete="new-password" placeholder="+33 6 12 34 56 78, +49 30 12345…" value={telephone2} onChange={(e) => setTelephone2(sanitizePhoneInternational(e.target.value))} />
             </div>
-            <div className="jc-field" style={{position:"relative"}}>
+            <div className="jc-field jc-field-with-autocomplete" style={{position:"relative"}}>
               <label>Email *</label>
               <input autoComplete="new-password" className={missingRequired.email ? "jc-error" : ""} type="email" value={email}
                 onChange={(e) => onClientFieldChange(e.target.value, "email", setEmail)}
-              onBlur={closeClientDropdown}
-              placeholder="jean@exemple.ch" />
+                onKeyDown={handleClientKeyDown}
+                placeholder="jean@exemple.ch" />
               {clientSuggestions.length > 0 && clientSearchField === "email" && (
                 <div className="jc-client-dropdown">
-                  {clientSuggestions.map(c => (
-                    <div key={c.id} className="jc-client-item" onClick={() => applyClient(c)}>
+                  <button className="jc-client-dropdown-close" onClick={forceCloseDropdown} title="Fermer (Esc)">✕</button>
+                  {clientSuggestions.map((c, idx) => (
+                    <div key={c.id} className={`jc-client-item${idx === clientDropdownIndex ? " jc-client-item-active" : ""}`} onClick={() => applyClient(c)}>
                       <div className="jc-client-item-name">{c.nom} {c.prenom} {c.societe && <span className="jc-client-item-soc">· {c.societe}</span>}</div>
                       <div className="jc-client-item-detail">{[c.rue, c.npa, c.ville, c.email, c.tel1].filter(Boolean).join(" · ")}</div>
                     </div>
@@ -3082,6 +3141,21 @@ const [savedSlug, setSavedSlug]           = useState("");
         .jc-client-item-name { font-size: 13px; font-weight: 700; color: var(--text); }
         .jc-client-item-soc { font-weight: 400; color: var(--text-muted); }
         .jc-client-item-detail { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .jc-client-item-active { background: rgba(59,130,246,0.18); }
+        .jc-client-item-active:hover { background: rgba(59,130,246,0.22); }
+        .jc-client-dropdown { padding-top: 28px; }
+        .jc-client-dropdown-close {
+          position: absolute; top: 4px; right: 4px;
+          width: 22px; height: 22px;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(248,113,113,0.12); color: var(--danger);
+          border: 1px solid rgba(248,113,113,0.25);
+          border-radius: 50%;
+          font-size: 11px; cursor: pointer;
+          z-index: 2; padding: 0;
+          transition: all 0.15s;
+        }
+        .jc-client-dropdown-close:hover { background: rgba(248,113,113,0.25); }
 
         /* ── PRINT ── */
         .printOnly { display: none; }
