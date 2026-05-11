@@ -391,8 +391,12 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     if(avecClient) {
       Object.assign(prefill, {
         nom: offre.client_nom||"", prenom: offre.client_prenom||"",
-        societe: offre.client_societe||"", email: offre.client_email||"",
+        societe: offre.client_societe||"",
+        complement_nom: (offreData.complement_nom as string) || "",
+        livr_complement_nom: (offreData.livr_complement_nom as string) || "",
+        email: offre.client_email||"",
         telephone1: offre.client_tel1||"", rue: offre.client_rue||"",
+        numero: (offreData.numero as string) || "",
         npa: offre.client_npa||"", ville: offre.client_ville||"",
       })
     }
@@ -1283,8 +1287,11 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
             {offre && (
               <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
                 nom: offre.client_nom||"", prenom: offre.client_prenom||"",
-                societe: offre.client_societe||"", email: offre.client_email||"",
+                societe: offre.client_societe||"",
+                complement_nom: ((offre.data as Record<string,unknown>)?.complement_nom as string) || "",
+                email: offre.client_email||"",
                 telephone1: offre.client_tel1||"", rue: offre.client_rue||"",
+                numero: ((offre.data as Record<string,unknown>)?.numero as string) || "",
                 npa: offre.client_npa||"", ville: offre.client_ville||"",
                 commercial: offre.commercial||"",
               }))}`} target="_blank" rel="noopener noreferrer"

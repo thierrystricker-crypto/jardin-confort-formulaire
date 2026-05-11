@@ -533,7 +533,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               nom: client.nom, prenom: client.prenom || "", societe: client.societe || "",
               complement_nom: client.complement_nom || "",
               email: client.email || "", telephone1: client.tel1 || "",
-              rue: client.rue || "", npa: client.npa || "", ville: client.ville || "",
+              rue: client.rue || "", numero: client.numero_rue || "",
+              npa: client.npa || "", ville: client.ville || "",
             }))}`} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center rounded-xl border border-[#2B8AD1]/40 bg-[#2B8AD1]/15 px-4 py-2 text-sm text-sky-300 hover:bg-[#2B8AD1]/25">
               + Nouvelle offre
@@ -762,7 +763,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     nom: client.nom, prenom: client.prenom || "", societe: client.societe || "",
                     complement_nom: client.complement_nom || "",
                     email: client.email || "", telephone1: client.tel1 || "",
-                    rue: client.rue || "", npa: client.npa || "", ville: client.ville || "",
+                    rue: client.rue || "", numero: client.numero_rue || "",
+                    npa: client.npa || "", ville: client.ville || "",
                   }))}`} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center rounded-xl bg-[#2B8AD1] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2478b8]">
                     + Créer une offre

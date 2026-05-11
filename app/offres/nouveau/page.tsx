@@ -721,7 +721,10 @@ const [savedSlug, setSavedSlug]           = useState("");
           const p = JSON.parse(copyRaw)
           if (p.nom) setNom(p.nom); if (p.prenom) setPrenom(p.prenom)
           if (p.societe) setSociete(p.societe); if (p.email) setEmail(p.email)
+          if (p.complement_nom) setComplementNom(p.complement_nom)
+          if (p.livr_complement_nom) setLivrComplementNom(p.livr_complement_nom)
           if (p.telephone1) setTelephone1(p.telephone1); if (p.rue) setRue(p.rue)
+          if (p.numero) setNumero(p.numero)
           if (p.npa) setNpa(p.npa); if (p.ville) setVille(p.ville)
           if (p.commercial) setCommercial(p.commercial)
           if (p.lines) setLines(p.lines.map((l: QuoteLine) => ({...l, id:`copy-${Date.now()}-${Math.random()}`})))
@@ -746,9 +749,11 @@ const [savedSlug, setSavedSlug]           = useState("");
       if (p.nom) setNom(p.nom);
       if (p.prenom) setPrenom(p.prenom);
       if (p.societe) setSociete(p.societe);
+      if (p.complement_nom) setComplementNom(p.complement_nom);
       if (p.email) setEmail(p.email);
       if (p.telephone1) setTelephone1(p.telephone1);
       if (p.rue) setRue(p.rue);
+      if (p.numero) setNumero(p.numero);
       if (p.npa) setNpa(p.npa);
       if (p.ville) setVille(p.ville);
       if (p.commercial) setCommercial(p.commercial);
