@@ -614,44 +614,177 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
               {editing ? (
                 <div className="space-y-3">
-                  {([
-                    ["Société", "societe"],
-                    ["Nom *", "nom"], ["Prénom", "prenom"],
-                    ["Complément nom (optionnel)", "complement_nom"],
-                    ["Rue", "rue"], ["Complément d'adresse", "rue2"], ["N°", "numero_rue"],
-                    ["NPA", "npa"], ["Ville", "ville"],
-                    ["Téléphone 1", "tel1"], ["Téléphone 2", "tel2"],
-                  ] as [string, keyof Client][]).map(([label, key]) => (
-                    <div key={key}>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">{label}</label>
-                      <input type="text" value={(form[key] as string) || ""}
-                        onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+                  {/* Société */}
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Société</label>
+                    <input type="text" value={(form.societe as string) || ""}
+                      onChange={e => setForm(p => ({ ...p, societe: e.target.value }))}
+                      className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                  </div>
+
+                  {/* Nom + Prénom */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Nom *</label>
+                      <input type="text" value={(form.nom as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, nom: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
-                  ))}
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Prénom</label>
+                      <input type="text" value={(form.prenom as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, prenom: e.target.value }))}
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
+                  </div>
+
+                  {/* Complément nom */}
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Complément nom (optionnel)</label>
+                    <input type="text" value={(form.complement_nom as string) || ""}
+                      onChange={e => setForm(p => ({ ...p, complement_nom: e.target.value }))}
+                      placeholder="conjoint, c/o, contact..."
+                      className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                  </div>
+
+                  {/* Rue + N° */}
+                  <div className="grid grid-cols-[1fr_100px] gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Rue</label>
+                      <input type="text" value={(form.rue as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, rue: e.target.value }))}
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">N°</label>
+                      <input type="text" value={(form.numero_rue as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, numero_rue: e.target.value }))}
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
+                  </div>
+
+                  {/* Complément d'adresse */}
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Complément d&apos;adresse</label>
+                    <input type="text" value={(form.rue2 as string) || ""}
+                      onChange={e => setForm(p => ({ ...p, rue2: e.target.value }))}
+                      placeholder="Bâtiment, case postale, lieu-dit..."
+                      className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                  </div>
+
+                  {/* NPA + Ville */}
+                  <div className="grid grid-cols-[100px_1fr] gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">NPA</label>
+                      <input type="text" value={(form.npa as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, npa: e.target.value }))}
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Ville</label>
+                      <input type="text" value={(form.ville as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, ville: e.target.value }))}
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
+                  </div>
+
+                  {/* Tél 1 + Tél 2 */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Téléphone 1</label>
+                      <input type="text" value={(form.tel1 as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, tel1: e.target.value }))}
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Téléphone 2</label>
+                      <input type="text" value={(form.tel2 as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, tel2: e.target.value }))}
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Email</label>
                     <input type="email" value={(form.email as string) || ""}
                       onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
                       className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                   </div>
-                  <div className="pt-2 border-t border-white/5">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">📦 Adresse de livraison (si différente)</div>
-                    {([
-                      ["Société", "livr_societe"],
-                      ["Nom livraison", "livr_nom"], ["Prénom", "livr_prenom"],
-                      ["Complément nom livraison (optionnel)", "livr_complement_nom"],
-                      ["Rue", "livr_rue"],
-                      ["Complément d'adresse", "livr_rue2"], ["NPA", "livr_npa"],
-                      ["Ville", "livr_ville"], ["Tél.", "livr_tel"],
-                    ] as [string, keyof Client][]).map(([label, key]) => (
-                      <div key={key} className="mb-2">
-                        <label className="mb-1 block text-xs text-zinc-500">{label}</label>
-                        <input type="text" value={(form[key] as string) || ""}
-                          onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+                  <div className="pt-2 border-t border-white/5 space-y-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">📦 Adresse de livraison (si différente)</div>
+
+                    {/* Société livraison */}
+                    <div>
+                      <label className="mb-1 block text-xs text-zinc-500">Société</label>
+                      <input type="text" value={(form.livr_societe as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, livr_societe: e.target.value }))}
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
+
+                    {/* Nom + Prénom livraison */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-xs text-zinc-500">Nom livraison</label>
+                        <input type="text" value={(form.livr_nom as string) || ""}
+                          onChange={e => setForm(p => ({ ...p, livr_nom: e.target.value }))}
                           className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                       </div>
-                    ))}
+                      <div>
+                        <label className="mb-1 block text-xs text-zinc-500">Prénom</label>
+                        <input type="text" value={(form.livr_prenom as string) || ""}
+                          onChange={e => setForm(p => ({ ...p, livr_prenom: e.target.value }))}
+                          className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                      </div>
+                    </div>
+
+                    {/* Complément nom livraison */}
+                    <div>
+                      <label className="mb-1 block text-xs text-zinc-500">Complément nom livraison (optionnel)</label>
+                      <input type="text" value={(form.livr_complement_nom as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, livr_complement_nom: e.target.value }))}
+                        placeholder="conjoint, c/o, contact..."
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
+
+                    {/* Rue livraison (avec n° dedans car pas de colonne livr_numero_rue en base) */}
+                    <div>
+                      <label className="mb-1 block text-xs text-zinc-500">Rue (avec n°)</label>
+                      <input type="text" value={(form.livr_rue as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, livr_rue: e.target.value }))}
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
+
+                    {/* Complément d'adresse livraison */}
+                    <div>
+                      <label className="mb-1 block text-xs text-zinc-500">Complément d&apos;adresse</label>
+                      <input type="text" value={(form.livr_rue2 as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, livr_rue2: e.target.value }))}
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
+
+                    {/* NPA + Ville livraison */}
+                    <div className="grid grid-cols-[100px_1fr] gap-3">
+                      <div>
+                        <label className="mb-1 block text-xs text-zinc-500">NPA</label>
+                        <input type="text" value={(form.livr_npa as string) || ""}
+                          onChange={e => setForm(p => ({ ...p, livr_npa: e.target.value }))}
+                          className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-zinc-500">Ville</label>
+                        <input type="text" value={(form.livr_ville as string) || ""}
+                          onChange={e => setForm(p => ({ ...p, livr_ville: e.target.value }))}
+                          className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                      </div>
+                    </div>
+
+                    {/* Tél livraison */}
+                    <div>
+                      <label className="mb-1 block text-xs text-zinc-500">Tél.</label>
+                      <input type="text" value={(form.livr_tel as string) || ""}
+                        onChange={e => setForm(p => ({ ...p, livr_tel: e.target.value }))}
+                        className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+                    </div>
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Notes</label>
