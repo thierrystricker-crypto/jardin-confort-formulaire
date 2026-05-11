@@ -331,13 +331,7 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
 
                 {/* Lien vers la page de gestion */}
                 
-                  href="/dashboard/brand-logos"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-4 py-2 text-sm font-medium text-purple-300 hover:bg-purple-500/20 transition"
-                >
-                  Gerer les logos
-                </a>
+                  <a href="/dashboard/brand-logos" target="_blank" rel="noopener noreferrer" className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-4 py-2 text-sm font-medium text-purple-300 hover:bg-purple-500/20 transition">Gerer les logos</a>
               </div>
 
               <p className="mt-2 text-[10px] text-zinc-500 text-center">
