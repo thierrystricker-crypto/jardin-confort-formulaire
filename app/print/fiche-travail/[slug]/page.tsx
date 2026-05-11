@@ -629,6 +629,9 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .media-small  { height: 30px !important; max-height: 30px !important; }
         .media-medium { height: 50px !important; max-height: 50px !important; }
         .media-large  { height: 80px !important; max-height: 80px !important; }
+        .media-img-small  { height: 90px !important; max-height: 90px !important; }
+        .media-img-medium { height: 180px !important; max-height: 180px !important; }
+        .media-img-large  { height: 320px !important; max-height: 320px !important; }
 
         /* ══ BOTTOM ══ */
         .doc-bottom-wrap {
@@ -930,7 +933,8 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               // ─── Ligne MÉDIA (logo de marque, sépare visuellement les groupes) ───
               if (line.type === "media") {
                 if (!line.mediaUrl) return null;
-                const sizeClass = line.mediaSize === "small" ? "media-small" : line.mediaSize === "large" ? "media-large" : "media-medium";
+                const prefix = line.mediaSource === "upload" ? "media-img-" : "media-";
+                const sizeClass = line.mediaSize === "small" ? prefix + "small" : line.mediaSize === "large" ? prefix + "large" : prefix + "medium";
                 return (
                   <tr key={line.id} className="tr-media">
                     <td colSpan={7}>

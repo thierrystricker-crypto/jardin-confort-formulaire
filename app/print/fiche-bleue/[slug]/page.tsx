@@ -407,6 +407,9 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
         .fb-media-small  { height: 22px !important; max-height: 22px !important; }
         .fb-media-medium { height: 36px !important; max-height: 36px !important; }
         .fb-media-large  { height: 56px !important; max-height: 56px !important; }
+        .fb-media-img-small  { height: 70px !important; max-height: 70px !important; }
+        .fb-media-img-medium { height: 130px !important; max-height: 130px !important; }
+        .fb-media-img-large  { height: 220px !important; max-height: 220px !important; }
         .fb-line-discount { font-size: 8px; color: #2a8a2a; }
 
         /* ═══ FOOTER : services + totaux + signature ═══ */
@@ -651,7 +654,8 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
                   }
                   if (line.type === "media") {
                     if (!line.mediaUrl) return null;
-                    const sizeClass = line.mediaSize === "small" ? "fb-media-small" : line.mediaSize === "large" ? "fb-media-large" : "fb-media-medium";
+                    const prefix = line.mediaSource === "upload" ? "fb-media-img-" : "fb-media-";
+                    const sizeClass = line.mediaSize === "small" ? prefix + "small" : line.mediaSize === "large" ? prefix + "large" : prefix + "medium";
                     return (
                       <tr key={line.id} className="fb-tr-media">
                         <td colSpan={7}>

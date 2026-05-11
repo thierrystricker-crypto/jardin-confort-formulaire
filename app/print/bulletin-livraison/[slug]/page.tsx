@@ -139,6 +139,9 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
         .media-small  { height: 30px !important; max-height: 30px !important; }
         .media-medium { height: 50px !important; max-height: 50px !important; }
         .media-large  { height: 80px !important; max-height: 80px !important; }
+        .media-img-small  { height: 90px !important; max-height: 90px !important; }
+        .media-img-medium { height: 180px !important; max-height: 180px !important; }
+        .media-img-large  { height: 320px !important; max-height: 320px !important; }
         .doc-services-box { margin-bottom: 6mm; padding: 12px 16px; background: #f0f7ff; border-left: 3px solid ${THEME}; border-radius: 4px; }
         .doc-services-title { font-size: 12px; font-weight: 700; color: ${BLACK}; margin-bottom: 6px; }
         .doc-services-list { font-size: 12px; color: ${GREY}; line-height: 1.7; }
@@ -328,7 +331,9 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
               if (line.type === "media") {
                 if (!(line as any).mediaUrl) return null;
                 const mSize = (line as any).mediaSize;
-                const sizeClass = mSize === "small" ? "media-small" : mSize === "large" ? "media-large" : "media-medium";
+                const mSource = (line as any).mediaSource;
+                const prefix = mSource === "upload" ? "media-img-" : "media-";
+                const sizeClass = mSize === "small" ? prefix + "small" : mSize === "large" ? prefix + "large" : prefix + "medium";
                 return (
                   <tr key={line.id} className="tr-media">
                     <td colSpan={3}>

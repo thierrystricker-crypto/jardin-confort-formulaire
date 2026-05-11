@@ -352,7 +352,9 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
               if (line.type === "media") {
                 if (!(line as any).mediaUrl) return null;
                 const mSize = (line as any).mediaSize;
-                const sizeClass = mSize === "small" ? "media-small" : mSize === "large" ? "media-large" : "media-medium";
+                const mSource = (line as any).mediaSource;
+                const prefix = mSource === "upload" ? "media-img-" : "media-";
+                const sizeClass = mSize === "small" ? prefix + "small" : mSize === "large" ? prefix + "large" : prefix + "medium";
                 return (
                   <tr key={line.id} className="tr-media">
                     <td colSpan={5}>

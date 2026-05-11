@@ -587,6 +587,9 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .fb-media-small  { height: 22px !important; max-height: 22px !important; }
         .fb-media-medium { height: 36px !important; max-height: 36px !important; }
         .fb-media-large  { height: 56px !important; max-height: 56px !important; }
+        .fb-media-img-small  { height: 70px !important; max-height: 70px !important; }
+        .fb-media-img-medium { height: 130px !important; max-height: 130px !important; }
+        .fb-media-img-large  { height: 220px !important; max-height: 220px !important; }
         .fb-line-discount-bleue { font-size: 8px; color: #2a8a2a; }
         .fb-footer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
         .fb-services-box { background: rgba(255,255,255,0.75); border: 1px solid #a8c5e0; border-radius: 4px; padding: 5px 8px; font-size: 9px; }
@@ -628,6 +631,9 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .media-small  { height: 30px !important; max-height: 30px !important; }
         .media-medium { height: 50px !important; max-height: 50px !important; }
         .media-large  { height: 80px !important; max-height: 80px !important; }
+        .media-img-small  { height: 90px !important; max-height: 90px !important; }
+        .media-img-medium { height: 180px !important; max-height: 180px !important; }
+        .media-img-large  { height: 320px !important; max-height: 320px !important; }
       `}</style>
 
       <div className="printall-info">
@@ -746,7 +752,8 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               }
               if (line.type === "media") {
                 if (!line.mediaUrl) return null;
-                const sizeClass = line.mediaSize === "small" ? "media-small" : line.mediaSize === "large" ? "media-large" : "media-medium";
+                const prefix = line.mediaSource === "upload" ? "media-img-" : "media-";
+                const sizeClass = line.mediaSize === "small" ? prefix + "small" : line.mediaSize === "large" ? prefix + "large" : prefix + "medium";
                 return (
                   <tr key={line.id} className="ft-tr-media">
                     <td colSpan={7}>
@@ -1041,7 +1048,8 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               }
               if (line.type === "media") {
                 if (!line.mediaUrl) return null;
-                const sizeClass = line.mediaSize === "small" ? "media-small" : line.mediaSize === "large" ? "media-large" : "media-medium";
+                const prefix = line.mediaSource === "upload" ? "media-img-" : "media-";
+                const sizeClass = line.mediaSize === "small" ? prefix + "small" : line.mediaSize === "large" ? prefix + "large" : prefix + "medium";
                 return (
                   <tr key={line.id} className="cc-tr-media">
                     <td colSpan={5}>
@@ -1522,7 +1530,8 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               }
               if (line.type === "media") {
                 if (!line.mediaUrl) return null;
-                const sizeClass = line.mediaSize === "small" ? "media-small" : line.mediaSize === "large" ? "media-large" : "media-medium";
+                const prefix = line.mediaSource === "upload" ? "media-img-" : "media-";
+                const sizeClass = line.mediaSize === "small" ? prefix + "small" : line.mediaSize === "large" ? prefix + "large" : prefix + "medium";
                 return (
                   <tr key={line.id} className="bl-tr-media">
                     <td colSpan={3}>
@@ -1709,7 +1718,8 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     }
                     if (line.type === "media") {
                       if (!line.mediaUrl) return null;
-                      const sizeClass = line.mediaSize === "small" ? "fb-media-small" : line.mediaSize === "large" ? "fb-media-large" : "fb-media-medium";
+                      const prefix = line.mediaSource === "upload" ? "fb-media-img-" : "fb-media-";
+                      const sizeClass = line.mediaSize === "small" ? prefix + "small" : line.mediaSize === "large" ? prefix + "large" : prefix + "medium";
                       return (
                         <tr key={line.id} className="fb-tr-media-bleue">
                           <td colSpan={7}>

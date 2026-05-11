@@ -201,6 +201,9 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
         .media-small  { height: 30px !important; max-height: 30px !important; }
         .media-medium { height: 50px !important; max-height: 50px !important; }
         .media-large  { height: 80px !important; max-height: 80px !important; }
+        .media-img-small  { height: 90px !important; max-height: 90px !important; }
+        .media-img-medium { height: 180px !important; max-height: 180px !important; }
+        .media-img-large  { height: 320px !important; max-height: 320px !important; }
 
         /* Ligne média (logo / image de marque) */
         .tr-media td {
@@ -218,6 +221,9 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
         .media-small  { height: 30px !important; max-height: 30px !important; }
         .media-medium { height: 50px !important; max-height: 50px !important; }
         .media-large  { height: 80px !important; max-height: 80px !important; }
+        .media-img-small  { height: 90px !important; max-height: 90px !important; }
+        .media-img-medium { height: 180px !important; max-height: 180px !important; }
+        .media-img-large  { height: 320px !important; max-height: 320px !important; }
         .td-comment { padding: 6px 10px !important; font-style: italic; color: #445 !important; font-size: 12px; }
 
         /* ── ZONE TOTAUX + SIGNATURE CLIENT ── */
@@ -474,11 +480,12 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
               }
               if (line.type === "media") {
                 if (!line.mediaUrl) return null;
+                const prefix = line.mediaSource === "upload" ? "media-img-" : "media-";
                 const sizeClass = line.mediaSize === "small"
-                  ? "media-small"
+                  ? prefix + "small"
                   : line.mediaSize === "large"
-                  ? "media-large"
-                  : "media-medium";
+                  ? prefix + "large"
+                  : prefix + "medium";
                 return (
                   <tr key={line.id} className="tr-media">
                     <td colSpan={5}>
