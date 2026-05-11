@@ -57,6 +57,7 @@ type DraftSnapshot = {
   societe: string;
   nom: string;
   prenom: string;
+  complement_nom: string;
   rue: string;
   rue2: string;
   numero: string;
@@ -69,6 +70,7 @@ type DraftSnapshot = {
   livrSociete: string;
   livrNom: string;
   livrPrenom: string;
+  livr_complement_nom: string;
   livrTel: string;
   livrRue: string;
   livrRue2: string;
@@ -197,6 +199,7 @@ export default function JardinConfortV7() {
   const [societe, setSociete]         = useState("");
   const [nom, setNom]                 = useState("");
   const [prenom, setPrenom]           = useState("");
+  const [complementNom, setComplementNom] = useState("");
   const [rue, setRue]                 = useState("");
   const [numero, setNumero]           = useState("");
   const [rue2, setRue2]               = useState("");
@@ -211,6 +214,7 @@ export default function JardinConfortV7() {
   const [livrSociete, setLivrSociete] = useState("");
   const [livrNom, setLivrNom]         = useState("");
   const [livrPrenom, setLivrPrenom]   = useState("");
+  const [livrComplementNom, setLivrComplementNom] = useState("");
   const [livrTel, setLivrTel]         = useState("");
   const [livrRue, setLivrRue]         = useState("");
   const [livrRue2, setLivrRue2]       = useState("");
@@ -278,6 +282,7 @@ const [savedSlug, setSavedSlug]           = useState("");
     societe: string | null; email: string | null; tel1: string | null; tel2: string | null;
     rue: string | null; rue2: string | null; numero_rue: string | null;
     npa: string | null; ville: string | null;
+    complement_nom: string | null; livr_complement_nom: string | null;
   }[]>([]);
   const [clientSearchField, setClientSearchField] = useState<"nom"|"email"|"tel"|null>(null)
   const [selectedClientId, setSelectedClientId] = useState<number|null>(null)
@@ -304,6 +309,7 @@ const [savedSlug, setSavedSlug]           = useState("");
     setNom(c.nom || "")
     setPrenom(c.prenom || "")
     setSociete(c.societe || "")
+    setComplementNom(c.complement_nom || "")
     setEmail(c.email || "")
     setTelephone1(c.tel1 || "")
     setTelephone2(c.tel2 || "")
@@ -552,7 +558,7 @@ const [savedSlug, setSavedSlug]           = useState("");
   }
 
   function makeSnapshot(): DraftSnapshot {
-    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, validiteDuree, accesLivraison, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
+    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, complement_nom: complementNom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livr_complement_nom: livrComplementNom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, validiteDuree, accesLivraison, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
   // ── Sauvegarder dans Supabase + générer numéro + URL publique ──
@@ -582,6 +588,8 @@ const [savedSlug, setSavedSlug]           = useState("");
               nom: nom.trim(),
               prenom: prenom.trim() || null,
               societe: societe.trim() || null,
+              complement_nom: complementNom.trim() || null,
+              livr_complement_nom: livrComplementNom.trim() || null,
               email: email.trim() || null,
               tel1: telephone1.trim() || null,
               tel2: telephone2.trim() || null,
@@ -655,10 +663,12 @@ const [savedSlug, setSavedSlug]           = useState("");
     setOfferStatus(s.offerStatus || "En cours"); setDate(s.date); setCommercial(s.commercial);
     setOfferNumber(s.offerNumber); setReference(s.reference || "");
     setSociete(s.societe); setNom(s.nom); setPrenom(s.prenom);
+    setComplementNom((s as any).complement_nom || "");
     setRue(s.rue); setRue2((s as any).rue2 || ""); setNumero(s.numero); setNpa(s.npa); setVille(s.ville);
     setTelephone1(s.telephone1); setTelephone2(s.telephone2); setEmail(s.email);
     setLivrDiff(s.livrDiff || false); setLivrSociete(s.livrSociete || "");
     setLivrNom(s.livrNom || ""); setLivrPrenom(s.livrPrenom || "");
+    setLivrComplementNom((s as any).livr_complement_nom || "");
     setLivrTel(s.livrTel || ""); setLivrRue(s.livrRue || ""); setLivrRue2((s as any).livrRue2 || "");
     setLivrNumero(s.livrNumero || ""); setLivrNpa(s.livrNpa || ""); setLivrVille(s.livrVille || "");
     setLines(cloneLines(s.lines)); setDiscount(s.discount); setDiscountPercent(s.discountPercent || "0");
@@ -672,9 +682,9 @@ const [savedSlug, setSavedSlug]           = useState("");
   function resetForm() {
     setFormType("Offre"); setClientType("Privé (prix TTC)"); setPaymentMode("Paiement d'avance à la commande");
     setOfferStatus("En cours"); setDate(todayForInput()); setOfferNumber(generateOfferNumber());
-    setReference(""); setSociete(""); setNom(""); setPrenom(""); setRue(""); setRue2(""); setNumero(""); setNpa(""); setVille("");
+    setReference(""); setSociete(""); setNom(""); setPrenom(""); setComplementNom(""); setRue(""); setRue2(""); setNumero(""); setNpa(""); setVille("");
     setTelephone1(""); setTelephone2(""); setEmail(""); setDeliveryMode("Livraison à domicile");
-    setLivrDiff(false); setLivrSociete(""); setLivrNom(""); setLivrPrenom("");
+    setLivrDiff(false); setLivrSociete(""); setLivrNom(""); setLivrPrenom(""); setLivrComplementNom("");
     setLivrTel(""); setLivrRue(""); setLivrRue2(""); setLivrNumero(""); setLivrNpa(""); setLivrVille("");
     setLines([]); setDiscount("0");
     setDiscountPercent("0"); setRemarks(""); setNotesInternes(""); setAmbianceImages([]);
@@ -954,6 +964,12 @@ const [savedSlug, setSavedSlug]           = useState("");
               <input autoComplete="new-password" value={societe} onChange={(e) => setSociete(e.target.value)} placeholder="Nom de l'entreprise (optionnel)" />
             </div>
           </div>
+          <div className="jc-grid jc-g1 mt12">
+            <div className="jc-field">
+              <label>Complément <span className="jc-label-hint">(conjoint, c/o, contact...)</span></label>
+              <input autoComplete="new-password" value={complementNom} onChange={(e) => setComplementNom(e.target.value)} placeholder="Ex: et Marie, c/o Crédit Suisse, Mesdames Roca et De Marco..." />
+            </div>
+          </div>
           <div className="jc-grid jc-g2 mt12">
             <div className="jc-field" style={{position:"relative"}}>
               <label>Nom *</label>
@@ -1168,6 +1184,12 @@ const [savedSlug, setSavedSlug]           = useState("");
                 <div className="jc-field">
                   <label>Prénom</label>
                   <input autoComplete="new-password" value={livrPrenom} onChange={(e) => setLivrPrenom(e.target.value)} placeholder="Jean" />
+                </div>
+              </div>
+              <div className="jc-grid jc-g1 mt12">
+                <div className="jc-field">
+                  <label>Complément livraison <span className="jc-label-hint">(conjoint, c/o, contact...)</span></label>
+                  <input autoComplete="new-password" value={livrComplementNom} onChange={(e) => setLivrComplementNom(e.target.value)} placeholder="Ex: et Marie, c/o..." />
                 </div>
               </div>
               <div className="jc-grid jc-g-addr mt12">

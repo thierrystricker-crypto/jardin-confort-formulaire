@@ -11,6 +11,8 @@ type Client = {
   email: string | null
   nom?: string | null
   npa?: string | null
+  complement_nom?: string | null
+  livr_complement_nom?: string | null
   [key: string]: unknown
 }
 
@@ -482,7 +484,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { nom, prenom, societe, email, tel1, tel2, rue, rue2, numero_rue, npa, ville, pays, notes, source } = body
+    const { nom, prenom, societe, email, tel1, tel2, rue, rue2, numero_rue, npa, ville, pays, notes, source, complement_nom, livr_complement_nom } = body
 
     if (!nom?.trim()) return NextResponse.json({ error: "Nom requis" }, { status: 400 })
 
@@ -492,6 +494,8 @@ export async function POST(request: NextRequest) {
         nom: nom.trim(),
         prenom: prenom?.trim() || null,
         societe: societe?.trim() || null,
+        complement_nom: complement_nom?.trim() || null,
+        livr_complement_nom: livr_complement_nom?.trim() || null,
         email: email?.trim() || null,
         tel1: tel1?.trim() || null,
         tel2: tel2?.trim() || null,

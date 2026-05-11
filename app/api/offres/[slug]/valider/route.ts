@@ -213,6 +213,8 @@ export async function POST(
       societe: offre.client_societe || "",
       nom: offre.client_nom || "",
       prenom: offre.client_prenom || "",
+      complement_nom: offre.client_complement_nom || "",
+      livr_complement_nom: offre.livr_complement_nom || "",
       nom_complet: `${offre.client_prenom || ""} ${offre.client_nom || ""}`.trim(),
       email: offre.client_email || "",
       telephone: offre.client_tel1 || "",
