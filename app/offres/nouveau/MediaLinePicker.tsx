@@ -227,19 +227,8 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
                   )}
                 </div>
 
-                <div className="flex items-center justify-between gap-3 border-t border-white/5 bg-black/20 px-3 py-2 text-[10px] text-zinc-500">
-                  <span>
-                    <kbd className="rounded border border-white/10 bg-white/5 px-1">Esc</kbd> pour fermer
-                  </span>
-                  
-                    href="/dashboard/brand-logos"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1 rounded border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] font-semibold text-purple-300 hover:bg-purple-500/20 transition"
-                  >
-                    Gerer les logos
-                  </a>
+                <div className="border-t border-white/5 bg-black/20 px-3 py-2 text-[10px] text-zinc-500 text-center">
+                  Esc pour fermer
                 </div>
               </div>
             )}
