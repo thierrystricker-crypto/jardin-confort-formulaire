@@ -177,10 +177,14 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
               key={size}
               type="button"
               onClick={() => setSize(size)}
-              className={`px-2.5 py-2 text-xs font-semibold transition ${
+              className={`px-4 py-2 font-semibold transition ${
                 line.size === size
                   ? "bg-purple-600 text-white"
                   : "text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+              } ${
+                size === "small" ? "text-xs" :
+                size === "medium" ? "text-sm" :
+                "text-base"
               }`}
               title={`${MEDIA_SIZE_LABEL[size]} (${MEDIA_SIZE_PX[size]}px)`}
             >
