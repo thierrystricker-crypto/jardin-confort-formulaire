@@ -48,6 +48,7 @@ export type PrintData = {
   societe: string;
   nom: string;
   prenom: string;
+  complement_nom?: string;
   rue: string;
   numero: string;
   npa: string;
@@ -62,6 +63,7 @@ export type PrintData = {
   livrSociete: string;
   livrNom: string;
   livrPrenom: string;
+  livr_complement_nom?: string;
   livrTel: string;
   livrRue: string;
   livrNumero: string;
