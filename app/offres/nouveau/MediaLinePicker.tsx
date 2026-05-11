@@ -26,7 +26,6 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Recherche debounced
   useEffect(() => {
     const t = setTimeout(async () => {
       if (!showDropdown) return;
@@ -47,7 +46,6 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
     return () => clearTimeout(t);
   }, [search, showDropdown]);
 
-  // Fermeture : clic extérieur
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -58,7 +56,6 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Fermeture : touche Escape
   useEffect(() => {
     if (!showDropdown) return;
     function handleEsc(e: KeyboardEvent) {
@@ -85,7 +82,7 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
   async function handleFileUpload(file: File) {
     setUploadErr(null);
     if (!file.type.startsWith("image/")) {
-      setUploadErr("Doit être une image");
+      setUploadErr("Doit etre une image");
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
@@ -132,7 +129,6 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
       ref={containerRef}
       className="relative flex items-start gap-3 rounded-lg border border-purple-500/30 bg-purple-500/5 p-3"
     >
-      {/* Image preview / placeholder */}
       <div
         className="flex shrink-0 items-center justify-center rounded border border-white/10 bg-[#1f2125]"
         style={{ height: heightPx + 16, minWidth: 80, padding: 8 }}
@@ -149,11 +145,10 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
         )}
       </div>
 
-      {/* Controls */}
       <div className="flex-1 min-w-0">
         <div className="mb-2 flex items-center gap-2">
           <span className="rounded bg-purple-500/15 border border-purple-500/30 px-2 py-0.5 text-xs font-medium text-purple-300">
-            🖼️ Logo / Image
+            Logo / Image
           </span>
           {line.name && (
             <span className="truncate text-sm text-zinc-300">{line.name}</span>
@@ -164,7 +159,6 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Search input + dropdown */}
           <div className="relative flex-1 min-w-[240px]">
             <input
               ref={inputRef}
@@ -172,46 +166,35 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onFocus={() => setShowDropdown(true)}
-              placeholder={hasImage ? "Changer le logo..." : "Rechercher (cane, hülsta...)"}
+              placeholder={hasImage ? "Changer le logo..." : "Rechercher (cane, hulsta...)"}
               className="w-full rounded-lg border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400"
             />
 
             {showDropdown && (
               <div className="absolute left-0 right-0 top-full z-50 mt-1.5 rounded-xl border border-purple-500/30 bg-[#2a2d31] shadow-2xl shadow-black/40 overflow-hidden">
-                {/* Header dropdown : compteur + bouton fermer */}
                 <div className="flex items-center justify-between border-b border-white/5 bg-black/20 px-3 py-2">
                   <div className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                    {searching ? "Recherche…" : `${results.length} logo${results.length !== 1 ? "s" : ""}`}
-                    {search.trim() && !searching && (
-                      <span className="ml-1 font-normal normal-case text-zinc-500">pour « {search.trim()} »</span>
-                    )}
+                    {searching ? "Recherche..." : `${results.length} logo${results.length !== 1 ? "s" : ""}`}
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowDropdown(false)}
                     className="flex h-6 w-6 items-center justify-center rounded-full border border-rose-500/30 bg-rose-500/10 text-xs text-rose-300 hover:bg-rose-500/20 transition"
-                    title="Fermer (Esc)"
                   >
-                    ✕
+                    X
                   </button>
                 </div>
 
-                {/* Contenu dropdown */}
                 <div className="max-h-[420px] overflow-y-auto p-3">
                   {searching && (
                     <div className="py-8 text-center text-sm text-zinc-500">
-                      <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-purple-400 border-t-transparent align-middle mr-2"></div>
-                      Recherche en cours…
+                      Recherche en cours...
                     </div>
                   )}
 
                   {!searching && results.length === 0 && (
                     <div className="py-8 text-center text-sm text-zinc-500">
-                      <div className="mb-1 text-2xl">🔍</div>
-                      Aucun logo trouvé{search.trim() ? ` pour « ${search.trim()} »` : ""}.
-                      <div className="mt-2 text-xs text-zinc-600">
-                        Utilise « 📤 Uploader » pour ajouter une image personnalisée.
-                      </div>
+                      Aucun logo trouve. Utilisez Uploader pour ajouter une image personnalisee.
                     </div>
                   )}
 
@@ -223,7 +206,6 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
                           type="button"
                           onClick={() => pickLogo(logo)}
                           className="group flex flex-col items-center gap-2 rounded-lg border border-white/10 bg-[#1f2125] p-2 text-center transition hover:border-purple-400 hover:bg-purple-500/10"
-                          title={logo.name}
                         >
                           <div className="flex h-16 w-full items-center justify-center rounded bg-white p-2 transition group-hover:bg-zinc-50">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -245,10 +227,9 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
                   )}
                 </div>
 
-                {/* Footer du dropdown : raccourci Esc + lien gestion logos */}
                 <div className="flex items-center justify-between gap-3 border-t border-white/5 bg-black/20 px-3 py-2 text-[10px] text-zinc-500">
                   <span>
-                    💡 <kbd className="rounded border border-white/10 bg-white/5 px-1">Esc</kbd> pour fermer
+                    <kbd className="rounded border border-white/10 bg-white/5 px-1">Esc</kbd> pour fermer
                   </span>
                   
                     href="/dashboard/brand-logos"
@@ -256,18 +237,16 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
                     className="inline-flex items-center gap-1 rounded border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] font-semibold text-purple-300 hover:bg-purple-500/20 transition"
-                    title="Ouvrir la page de gestion des logos dans un nouvel onglet"
                   >
-                    ⚙ Gérer les logos →
+                    Gerer les logos
                   </a>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Upload button */}
           <label className="cursor-pointer rounded-lg border border-white/10 bg-[#34383d] px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-[#40454b] transition">
-            {uploading ? "Upload…" : "📤 Uploader"}
+            {uploading ? "Upload..." : "Uploader"}
             <input
               type="file"
               accept="image/*"
@@ -280,7 +259,6 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
             />
           </label>
 
-          {/* Size selector */}
           <div className="flex overflow-hidden rounded-lg border border-white/10 bg-[#1f2125]">
             {(Object.keys(MEDIA_SIZE_PX) as MediaSize[]).map((size) => (
               <button
@@ -299,14 +277,12 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
             ))}
           </div>
 
-          {/* Remove */}
           <button
             type="button"
             onClick={onRemove}
             className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-2 py-2 text-xs text-rose-300 hover:bg-rose-500/20 transition"
-            title="Supprimer cette ligne média"
           >
-            🗑
+            Supprimer
           </button>
         </div>
 
