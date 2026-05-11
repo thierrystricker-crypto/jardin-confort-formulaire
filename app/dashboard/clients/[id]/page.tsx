@@ -614,7 +614,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               {editing ? (
                 <div className="space-y-3">
                   {([
-                    ["Nom *", "nom"], ["Prénom", "prenom"], ["Société", "societe"],
+                    ["Société", "societe"],
+                    ["Nom *", "nom"], ["Prénom", "prenom"],
                     ["Complément nom (optionnel)", "complement_nom"],
                     ["Rue", "rue"], ["Complément d'adresse", "rue2"], ["N°", "numero_rue"],
                     ["NPA", "npa"], ["Ville", "ville"],
@@ -636,8 +637,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   <div className="pt-2 border-t border-white/5">
                     <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">📦 Adresse de livraison (si différente)</div>
                     {([
-                      ["Nom livraison", "livr_nom"], ["Prénom", "livr_prenom"],
                       ["Société", "livr_societe"],
+                      ["Nom livraison", "livr_nom"], ["Prénom", "livr_prenom"],
                       ["Complément nom livraison (optionnel)", "livr_complement_nom"],
                       ["Rue", "livr_rue"],
                       ["Complément d'adresse", "livr_rue2"], ["NPA", "livr_npa"],
@@ -661,8 +662,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               ) : (
                 <div className="space-y-2 text-sm">
                   {([
-                    ["Nom", [client.nom, client.prenom].filter(Boolean).join(" ")],
                     ["Société", client.societe],
+                    ["Nom", [client.nom, client.prenom].filter(Boolean).join(" ")],
                     ["Complément nom", client.complement_nom],
                     ["Rue", [client.rue, client.numero_rue].filter(Boolean).join(" ")],
                     ["Complément d'adresse", client.rue2],
@@ -691,8 +692,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div className="mt-3 rounded-xl border border-white/10 bg-black/10 p-3 space-y-1">
                       <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">📦 Adresse de livraison</div>
                       {([
-                        ["Nom", [client.livr_nom, client.livr_prenom].filter(Boolean).join(" ")],
                         ["Société", client.livr_societe],
+                        ["Nom", [client.livr_nom, client.livr_prenom].filter(Boolean).join(" ")],
                         ["Complément nom livraison", client.livr_complement_nom],
                         ["Rue", client.livr_rue],
                         ["Complément d'adresse", client.livr_rue2],
