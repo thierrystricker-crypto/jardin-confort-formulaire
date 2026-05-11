@@ -258,7 +258,7 @@ export default function MediaLinePicker({ line, onChange, onRemove }: Props) {
                     className="inline-flex items-center gap-1 rounded border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] font-semibold text-purple-300 hover:bg-purple-500/20 transition"
                     title="Ouvrir la page de gestion des logos dans un nouvel onglet"
                   >
-                    ⚙ Gérer les logos ↗
+                    ⚙ Gérer les logos →
                   </a>
                 </div>
               </div>
