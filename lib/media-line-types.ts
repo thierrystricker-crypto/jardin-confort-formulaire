@@ -4,9 +4,9 @@
 export type MediaSize = "small" | "medium" | "large";
 
 export const MEDIA_SIZE_PX: Record<MediaSize, number> = {
-  small: 30,
+  small: 22,
   medium: 50,
-  large: 80,
+  large: 110,
 };
 
 export const MEDIA_SIZE_LABEL: Record<MediaSize, string> = {
