@@ -345,7 +345,7 @@ export default function ClientsPage() {
 
   // Nouveau client state
   const [newClient, setNewClient] = useState({
-    nom:"", prenom:"", societe:"", email:"", tel1:"", tel2:"",
+    nom:"", prenom:"", societe:"", complement_nom:"", email:"", tel1:"", tel2:"",
     rue:"", rue2:"", numero_rue:"", npa:"", ville:"", notes:""
   })
   const [saving, setSaving] = useState(false)
@@ -433,7 +433,7 @@ export default function ClientsPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Erreur")
       setShowNew(false)
-      setNewClient({ nom:"", prenom:"", societe:"", email:"", tel1:"", tel2:"", rue:"", rue2:"", numero_rue:"", npa:"", ville:"", notes:"" })
+      setNewClient({ nom:"", prenom:"", societe:"", complement_nom:"", email:"", tel1:"", tel2:"", rue:"", rue2:"", numero_rue:"", npa:"", ville:"", notes:"" })
       fetchClients(search)
     } catch (e) { setSaveError((e as Error).message) }
     finally { setSaving(false) }
@@ -594,6 +594,15 @@ export default function ClientsPage() {
                 <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Société</label>
                 <input type="text" value={newClient.societe} autoComplete="new-password"
                   onChange={e => setNewClient(p => ({...p, societe: e.target.value}))}
+                  className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
+              </div>
+
+              {/* Complément nom */}
+              <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
+                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Complément nom <span className="text-[10px] font-normal text-zinc-500 normal-case">(optionnel — conjoint, c/o, contact...)</span></label>
+                <input type="text" value={newClient.complement_nom} autoComplete="new-password"
+                  onChange={e => setNewClient(p => ({...p, complement_nom: e.target.value}))}
+                  placeholder="Ex: et Marie, c/o Crédit Suisse, Mesdames Roca et De Marco..."
                   className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
               </div>
 
