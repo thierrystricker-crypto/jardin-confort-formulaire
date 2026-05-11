@@ -68,6 +68,7 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
   const addrSociete = showLivrDiff ? data.livrSociete : data.societe;
   const addrNom = showLivrDiff ? data.livrNom : data.nom;
   const addrPrenom = showLivrDiff ? data.livrPrenom : data.prenom;
+  const addrComplementNom = showLivrDiff ? data.livr_complement_nom : data.complement_nom;
   const addrRue = showLivrDiff ? data.livrRue : data.rue;
   const addrNumero = showLivrDiff ? data.livrNumero : data.numero;
   const addrNpa = showLivrDiff ? data.livrNpa : data.npa;
@@ -198,6 +199,7 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
           <div className="client-addr">
             {addrSociete && <div className="client-addr-line">{addrSociete}</div>}
             <div className="client-addr-name">{addrNom} {addrPrenom}</div>
+            {addrComplementNom && <div className="client-addr-line">{addrComplementNom}</div>}
             {addrRue && <div className="client-addr-line">{addrRue} {addrNumero}</div>}
             {addrNpa && <div className="client-addr-line">{addrNpa} {addrVille}</div>}
           </div>

@@ -251,6 +251,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
   const livrSociete  = data.livrDiff ? data.livrSociete  : data.societe;
   const livrNom      = data.livrDiff ? data.livrNom      : data.nom;
   const livrPrenom   = data.livrDiff ? data.livrPrenom   : data.prenom;
+  const livrComplementNomEffectif = data.livrDiff ? (data as any).livr_complement_nom : (data as any).complement_nom;
   const livrRue      = data.livrDiff ? data.livrRue      : data.rue;
   const livrNumero   = data.livrDiff ? data.livrNumero   : data.numero;
   const livrNpa      = data.livrDiff ? data.livrNpa      : data.npa;
@@ -870,6 +871,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                 <>
                   {livrSociete && <div className="doc-addr-line">{livrSociete}</div>}
                   <div className="doc-addr-name">{livrNom} {livrPrenom}</div>
+                  {livrComplementNomEffectif && <div className="doc-addr-line">{livrComplementNomEffectif}</div>}
                   {livrRue && <div className="doc-addr-line">{livrRue} {livrNumero}</div>}
                   {livrNpa && <div className="doc-addr-line">{livrNpa} {livrVille}</div>}
                   {livrTelEffectif && <div className="doc-addr-tel">📞 {livrTelEffectif}</div>}
@@ -1036,6 +1038,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               <div className="doc-billing-block-content">
                 {data.societe && <div>{data.societe}</div>}
                 <div className="doc-billing-name">{data.nom} {data.prenom}</div>
+                {(data as any).complement_nom && <div>{(data as any).complement_nom}</div>}
                 {data.rue && <div>{data.rue} {data.numero}</div>}
                 {data.npa && <div>{data.npa} {data.ville}</div>}
                 <div className="doc-billing-contact">

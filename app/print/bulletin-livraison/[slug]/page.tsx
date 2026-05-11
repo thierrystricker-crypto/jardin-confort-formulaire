@@ -221,6 +221,7 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
                 <>
                   {data.livrSociete && <div className="doc-addr-line">{data.livrSociete}</div>}
                   <div className="doc-addr-name">{data.livrNom} {data.livrPrenom}</div>
+                  {data.livr_complement_nom && <div className="doc-addr-line">{data.livr_complement_nom}</div>}
                   {data.livrRue && <div className="doc-addr-line">{data.livrRue} {data.livrNumero}</div>}
                   {data.livrNpa && <div className="doc-addr-line">{data.livrNpa} {data.livrVille}</div>}
                   {data.livrTel && <div className="doc-addr-line" style={{marginTop:8, fontSize:16}}>Tél. {data.livrTel}</div>}
@@ -229,6 +230,7 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
                 <>
                   {data.societe && <div className="doc-addr-line">{data.societe}</div>}
                   <div className="doc-addr-name">{data.nom} {data.prenom}</div>
+                  {data.complement_nom && <div className="doc-addr-line">{data.complement_nom}</div>}
                   {data.rue && <div className="doc-addr-line">{data.rue} {data.numero}</div>}
                   {data.npa && <div className="doc-addr-line">{data.npa} {data.ville}</div>}
                   {data.telephone1 && <div className="doc-addr-line" style={{marginTop:8, fontSize:16}}>Tél. {data.telephone1}</div>}
@@ -249,6 +251,7 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
                 <div className="doc-addr-content">
                   {data.societe && <div>{data.societe}</div>}
                   <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                  {data.complement_nom && <div>{data.complement_nom}</div>}
                   {data.rue && <div>{data.rue} {data.numero}</div>}
                   {data.npa && <div>{data.npa} {data.ville}</div>}
                   {data.telephone1 && <div>Tél. {data.telephone1}</div>}
@@ -280,6 +283,7 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
                     <>
                       {data.livrSociete && <div>{data.livrSociete}</div>}
                       <div style={{fontWeight:700}}>{data.livrNom} {data.livrPrenom}</div>
+                      {data.livr_complement_nom && <div>{data.livr_complement_nom}</div>}
                       {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
                       {data.livrNpa && <div>{data.livrNpa} {data.livrVille}</div>}
                       {data.livrTel && <div>Tél. {data.livrTel}</div>}
@@ -288,6 +292,7 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
                     <>
                       {data.societe && <div>{data.societe}</div>}
                       <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                      {data.complement_nom && <div>{data.complement_nom}</div>}
                       {data.rue && <div>{data.rue} {data.numero}</div>}
                       {data.npa && <div>{data.npa} {data.ville}</div>}
                       {data.telephone1 && <div>Tél. {data.telephone1}</div>}

@@ -200,6 +200,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
   const livrSocieteFT = data.livrDiff ? data.livrSociete : data.societe;
   const livrNomFT     = data.livrDiff ? data.livrNom     : data.nom;
   const livrPrenomFT  = data.livrDiff ? data.livrPrenom  : data.prenom;
+  const livrComplementNomFTeff = data.livrDiff ? data.livr_complement_nom : data.complement_nom;
   const livrRueFT     = data.livrDiff ? data.livrRue     : data.rue;
   const livrNumeroFT  = data.livrDiff ? data.livrNumero  : data.numero;
   const livrNpaFT     = data.livrDiff ? data.livrNpa     : data.npa;
@@ -216,6 +217,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
   const pgSociete = showLivrDiffPG ? data.livrSociete : data.societe;
   const pgNom     = showLivrDiffPG ? data.livrNom     : data.nom;
   const pgPrenom  = showLivrDiffPG ? data.livrPrenom  : data.prenom;
+  const pgComplementNom = showLivrDiffPG ? data.livr_complement_nom : data.complement_nom;
   const pgRue     = showLivrDiffPG ? data.livrRue     : data.rue;
   const pgNumero  = showLivrDiffPG ? data.livrNumero  : data.numero;
   const pgNpa     = showLivrDiffPG ? data.livrNpa     : data.npa;
@@ -691,6 +693,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 <>
                   {livrSocieteFT && <div className="ft-addr-line">{livrSocieteFT}</div>}
                   <div className="ft-addr-name">{livrNomFT} {livrPrenomFT}</div>
+                  {livrComplementNomFTeff && <div className="ft-addr-line">{livrComplementNomFTeff}</div>}
                   {livrRueFT && <div className="ft-addr-line">{livrRueFT} {livrNumeroFT}</div>}
                   {livrNpaFT && <div className="ft-addr-line">{livrNpaFT} {livrVilleFT}</div>}
                   {livrTelFTeff && <div className="ft-addr-tel">📞 {livrTelFTeff}</div>}
@@ -826,6 +829,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               <div className="ft-billing-block-content">
                 {data.societe && <div>{data.societe}</div>}
                 <div className="ft-billing-name">{data.nom} {data.prenom}</div>
+                {data.complement_nom && <div>{data.complement_nom}</div>}
                 {data.rue && <div>{data.rue} {data.numero}</div>}
                 {data.npa && <div>{data.npa} {data.ville}</div>}
                 <div className="ft-billing-contact">
@@ -939,6 +943,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               <div className="cc-addr-ref">{numeroAffiche || data.offerNumber}</div>
               {data.societe && <div className="cc-addr-line">{data.societe}</div>}
               <div className="cc-addr-name">{data.nom} {data.prenom}</div>
+              {data.complement_nom && <div className="cc-addr-line">{data.complement_nom}</div>}
               {data.rue && <div className="cc-addr-line">{data.rue} {data.numero}</div>}
               {data.npa && <div className="cc-addr-line">{data.npa} {data.ville}</div>}
               {data.telephone1 && <div className="cc-addr-line" style={{marginTop:8, fontSize:16}}>Tél. {data.telephone1}</div>}
@@ -957,6 +962,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 <div className="cc-addr-content">
                   {data.societe && <div>{data.societe}</div>}
                   <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                  {data.complement_nom && <div>{data.complement_nom}</div>}
                   {data.rue && <div>{data.rue} {data.numero}</div>}
                   {data.npa && <div>{data.npa} {data.ville}</div>}
                   {data.telephone1 && <div>Tél. {data.telephone1}</div>}
@@ -989,6 +995,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     <>
                       {data.livrSociete && <div>{data.livrSociete}</div>}
                       <div style={{fontWeight:700}}>{data.livrNom} {data.livrPrenom}</div>
+                      {data.livr_complement_nom && <div>{data.livr_complement_nom}</div>}
                       {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
                       {data.livrNpa && <div>{data.livrNpa} {data.livrVille}</div>}
                       {data.livrTel && <div>Tél. {data.livrTel}</div>}
@@ -997,6 +1004,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     <>
                       {data.societe && <div>{data.societe}</div>}
                       <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                      {data.complement_nom && <div>{data.complement_nom}</div>}
                       {data.rue && <div>{data.rue} {data.numero}</div>}
                       {data.npa && <div>{data.npa} {data.ville}</div>}
                       {data.telephone1 && <div>Tél. {data.telephone1}</div>}
@@ -1298,6 +1306,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
             <div className="pg-client-addr">
               {pgSociete && <div className="pg-client-addr-line">{pgSociete}</div>}
               <div className="pg-client-addr-name">{pgNom} {pgPrenom}</div>
+              {pgComplementNom && <div className="pg-client-addr-line">{pgComplementNom}</div>}
               {pgRue && <div className="pg-client-addr-line">{pgRue} {pgNumero}</div>}
               {pgNpa && <div className="pg-client-addr-line">{pgNpa} {pgVille}</div>}
             </div>
@@ -1406,6 +1415,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 <>
                   {data.livrSociete && <div className="bl-addr-line">{data.livrSociete}</div>}
                   <div className="bl-addr-name">{data.livrNom} {data.livrPrenom}</div>
+                  {data.livr_complement_nom && <div className="bl-addr-line">{data.livr_complement_nom}</div>}
                   {data.livrRue && <div className="bl-addr-line">{data.livrRue} {data.livrNumero}</div>}
                   {data.livrNpa && <div className="bl-addr-line">{data.livrNpa} {data.livrVille}</div>}
                   {data.livrTel && <div className="bl-addr-line" style={{marginTop:8, fontSize:16}}>Tél. {data.livrTel}</div>}
@@ -1414,6 +1424,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 <>
                   {data.societe && <div className="bl-addr-line">{data.societe}</div>}
                   <div className="bl-addr-name">{data.nom} {data.prenom}</div>
+                  {data.complement_nom && <div className="bl-addr-line">{data.complement_nom}</div>}
                   {data.rue && <div className="bl-addr-line">{data.rue} {data.numero}</div>}
                   {data.npa && <div className="bl-addr-line">{data.npa} {data.ville}</div>}
                   {data.telephone1 && <div className="bl-addr-line" style={{marginTop:8, fontSize:16}}>Tél. {data.telephone1}</div>}
@@ -1434,6 +1445,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 <div className="bl-addr-content">
                   {data.societe && <div>{data.societe}</div>}
                   <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                  {data.complement_nom && <div>{data.complement_nom}</div>}
                   {data.rue && <div>{data.rue} {data.numero}</div>}
                   {data.npa && <div>{data.npa} {data.ville}</div>}
                   {data.telephone1 && <div>Tél. {data.telephone1}</div>}
@@ -1466,6 +1478,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     <>
                       {data.livrSociete && <div>{data.livrSociete}</div>}
                       <div style={{fontWeight:700}}>{data.livrNom} {data.livrPrenom}</div>
+                      {data.livr_complement_nom && <div>{data.livr_complement_nom}</div>}
                       {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
                       {data.livrNpa && <div>{data.livrNpa} {data.livrVille}</div>}
                       {data.livrTel && <div>Tél. {data.livrTel}</div>}
@@ -1474,6 +1487,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     <>
                       {data.societe && <div>{data.societe}</div>}
                       <div style={{fontWeight:700}}>{data.nom} {data.prenom}</div>
+                      {data.complement_nom && <div>{data.complement_nom}</div>}
                       {data.rue && <div>{data.rue} {data.numero}</div>}
                       {data.npa && <div>{data.npa} {data.ville}</div>}
                       {data.telephone1 && <div>Tél. {data.telephone1}</div>}
@@ -1629,6 +1643,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     <>
                       {data.livrSociete && <div>{data.livrSociete}</div>}
                       <div className="fb-info-name">{data.livrNom} {data.livrPrenom}</div>
+                      {data.livr_complement_nom && <div>{data.livr_complement_nom}</div>}
                       {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
                       {data.livrNpa && <div>{data.livrNpa} {data.livrVille}</div>}
                       {data.livrTel && <div>📞 {data.livrTel}</div>}
@@ -1656,6 +1671,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 <div className="fb-info-content">
                   {data.societe && <div>{data.societe}</div>}
                   <div className="fb-info-name">{data.nom} {data.prenom}</div>
+                  {data.complement_nom && <div>{data.complement_nom}</div>}
                   {data.rue && <div>{data.rue} {data.numero}</div>}
                   {data.npa && <div>{data.npa} {data.ville}</div>}
                   {data.telephone1 && <div>📞 {data.telephone1}</div>}

@@ -584,6 +584,7 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
                   <>
                     {data.livrSociete && <div>{data.livrSociete}</div>}
                     <div className="fb-info-name">{data.livrNom} {data.livrPrenom}</div>
+                    {data.livr_complement_nom && <div>{data.livr_complement_nom}</div>}
                     {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
                     {data.livrNpa && <div>{data.livrNpa} {data.livrVille}</div>}
                     {data.livrTel && <div>📞 {data.livrTel}</div>}
@@ -612,6 +613,7 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
               <div className="fb-info-content">
                 {data.societe && <div>{data.societe}</div>}
                 <div className="fb-info-name">{data.nom} {data.prenom}</div>
+                {data.complement_nom && <div>{data.complement_nom}</div>}
                 {data.rue && <div>{data.rue} {data.numero}</div>}
                 {data.npa && <div>{data.npa} {data.ville}</div>}
                 {data.telephone1 && <div>📞 {data.telephone1}</div>}
