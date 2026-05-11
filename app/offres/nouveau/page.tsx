@@ -964,12 +964,6 @@ const [savedSlug, setSavedSlug]           = useState("");
               <input autoComplete="new-password" value={societe} onChange={(e) => setSociete(e.target.value)} placeholder="Nom de l'entreprise (optionnel)" />
             </div>
           </div>
-          <div className="jc-grid jc-g1 mt12">
-            <div className="jc-field">
-              <label>Complément <span className="jc-label-hint">(conjoint, c/o, contact...)</span></label>
-              <input autoComplete="new-password" value={complementNom} onChange={(e) => setComplementNom(e.target.value)} placeholder="Ex: et Marie, c/o Crédit Suisse, Mesdames Roca et De Marco..." />
-            </div>
-          </div>
           <div className="jc-grid jc-g2 mt12">
             <div className="jc-field" style={{position:"relative"}}>
               <label>Nom *</label>
@@ -991,6 +985,12 @@ const [savedSlug, setSavedSlug]           = useState("");
             <div className="jc-field">
               <label>Prénom</label>
               <input autoComplete="new-password" value={prenom} onChange={(e) => setPrenom(e.target.value)} placeholder="Jean" />
+            </div>
+          </div>
+          <div className="jc-grid jc-g1 mt12">
+            <div className="jc-field">
+              <label>Complément nom <span className="jc-label-hint">(optionnel — conjoint, c/o, contact...)</span></label>
+              <input autoComplete="new-password" value={complementNom} onChange={(e) => setComplementNom(e.target.value)} placeholder="Ex: et Marie, c/o Crédit Suisse, Mesdames Roca et De Marco..." />
             </div>
           </div>
           <div className="jc-grid jc-g-addr mt12">
@@ -1188,7 +1188,7 @@ const [savedSlug, setSavedSlug]           = useState("");
               </div>
               <div className="jc-grid jc-g1 mt12">
                 <div className="jc-field">
-                  <label>Complément livraison <span className="jc-label-hint">(conjoint, c/o, contact...)</span></label>
+                  <label>Complément nom livraison <span className="jc-label-hint">(optionnel — conjoint, c/o, contact...)</span></label>
                   <input autoComplete="new-password" value={livrComplementNom} onChange={(e) => setLivrComplementNom(e.target.value)} placeholder="Ex: et Marie, c/o..." />
                 </div>
               </div>

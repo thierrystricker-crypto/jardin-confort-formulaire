@@ -13,6 +13,7 @@ type Client = {
   nom: string
   prenom: string | null
   societe: string | null
+  complement_nom: string | null
   email: string | null
   tel1: string | null
   tel2: string | null
@@ -27,6 +28,7 @@ type Client = {
   livr_societe: string | null
   livr_nom: string | null
   livr_prenom: string | null
+  livr_complement_nom: string | null
   livr_rue: string | null
   livr_rue2: string | null
   livr_npa: string | null
@@ -529,6 +531,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">📊 Dashboard</Link>
             <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
               nom: client.nom, prenom: client.prenom || "", societe: client.societe || "",
+              complement_nom: client.complement_nom || "",
               email: client.email || "", telephone1: client.tel1 || "",
               rue: client.rue || "", npa: client.npa || "", ville: client.ville || "",
             }))}`} target="_blank" rel="noopener noreferrer"
@@ -612,7 +615,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 <div className="space-y-3">
                   {([
                     ["Nom *", "nom"], ["Prénom", "prenom"], ["Société", "societe"],
-                    ["Rue", "rue"], ["Complément", "rue2"], ["N°", "numero_rue"],
+                    ["Complément nom (optionnel)", "complement_nom"],
+                    ["Rue", "rue"], ["Complément d'adresse", "rue2"], ["N°", "numero_rue"],
                     ["NPA", "npa"], ["Ville", "ville"],
                     ["Téléphone 1", "tel1"], ["Téléphone 2", "tel2"],
                   ] as [string, keyof Client][]).map(([label, key]) => (
@@ -633,8 +637,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">📦 Adresse de livraison (si différente)</div>
                     {([
                       ["Nom livraison", "livr_nom"], ["Prénom", "livr_prenom"],
-                      ["Société", "livr_societe"], ["Rue", "livr_rue"],
-                      ["Complément", "livr_rue2"], ["NPA", "livr_npa"],
+                      ["Société", "livr_societe"],
+                      ["Complément nom livraison (optionnel)", "livr_complement_nom"],
+                      ["Rue", "livr_rue"],
+                      ["Complément d'adresse", "livr_rue2"], ["NPA", "livr_npa"],
                       ["Ville", "livr_ville"], ["Tél.", "livr_tel"],
                     ] as [string, keyof Client][]).map(([label, key]) => (
                       <div key={key} className="mb-2">
@@ -657,8 +663,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   {([
                     ["Nom", [client.nom, client.prenom].filter(Boolean).join(" ")],
                     ["Société", client.societe],
+                    ["Complément nom", client.complement_nom],
                     ["Rue", [client.rue, client.numero_rue].filter(Boolean).join(" ")],
-                    ["Complément", client.rue2],
+                    ["Complément d'adresse", client.rue2],
                     ["NPA / Ville", [client.npa, client.ville].filter(Boolean).join(" ")],
                     ["Pays", client.pays],
                     ["Téléphone 1", client.tel1],
@@ -686,8 +693,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                       {([
                         ["Nom", [client.livr_nom, client.livr_prenom].filter(Boolean).join(" ")],
                         ["Société", client.livr_societe],
+                        ["Complément nom livraison", client.livr_complement_nom],
                         ["Rue", client.livr_rue],
-                        ["Complément", client.livr_rue2],
+                        ["Complément d'adresse", client.livr_rue2],
                         ["NPA / Ville", [client.livr_npa, client.livr_ville].filter(Boolean).join(" ")],
                         ["Tél.", client.livr_tel],
                       ] as [string, string | null][]).map(([k, v]) => v ? (
@@ -751,6 +759,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 <div className="mt-4">
                   <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
                     nom: client.nom, prenom: client.prenom || "", societe: client.societe || "",
+                    complement_nom: client.complement_nom || "",
                     email: client.email || "", telephone1: client.tel1 || "",
                     rue: client.rue || "", npa: client.npa || "", ville: client.ville || "",
                   }))}`} target="_blank" rel="noopener noreferrer"
