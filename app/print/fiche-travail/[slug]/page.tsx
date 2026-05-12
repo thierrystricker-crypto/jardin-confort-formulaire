@@ -633,9 +633,6 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .media-img-small  { max-height: 80px !important; max-width: 200px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
         .media-img-medium { max-height: 180px !important; max-width: 400px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
         .media-img-large  { max-height: 320px !important; max-width: 700px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
-        .media-img-small  { height: 90px !important; max-height: 90px !important; }
-        .media-img-medium { height: 180px !important; max-height: 180px !important; }
-        .media-img-large  { height: 320px !important; max-height: 320px !important; }
 
         /* ══ BOTTOM ══ */
         .doc-bottom-wrap {
