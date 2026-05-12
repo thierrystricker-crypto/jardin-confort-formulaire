@@ -1629,8 +1629,9 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* ═══════════════ PAGE 5 — FICHE BLEUE ARCHIVE ════════════════════ */}
+      {/* ═══════════════ PAGE 5 — FICHE BLEUE ARCHIVE — DESACTIVE TEST ═══ */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
+      {false && (
       <div className="page-break" style={{padding: 0, margin: 0, maxWidth: "100%"}}>
         <div className="fb-page-wrap">
           <div className="fb-watermark">ARCHIVE · {numeroAffiche}</div>
@@ -1911,6 +1912,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
 
         </div>
       </div>
+      )}
     </>
   );
 }
