@@ -238,7 +238,6 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           -webkit-print-color-adjust: exact;
         }
         @page { size: A4 portrait; margin: 14mm 16mm 14mm 14mm; }
-@page fb-archive { size: A4 portrait; margin: 0; }
         @media screen {
           .doc-wrap-all {
             max-width: 794px; margin: 0 auto; padding: 20px 28px;
@@ -516,21 +515,22 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         /* ═══ STYLES FICHE BLEUE ARCHIVE (page 5) — préfixe .fb- ══════════ */
         /* ════════════════════════════════════════════════════════════════════ */
         .fb-page-wrap {
-  width: 210mm; height: 297mm;
-  position: relative;
-  background: radial-gradient(ellipse at center, #e8f0f8 0%, #e8f0f8 35%, #a8c5e0 75%, #4a7ba7 100%);
-  padding: 8mm 10mm;
-  overflow: hidden;
-  margin: 0 auto;
-  page: fb-archive;
-}
-@media print {
-  .fb-page-wrap {
-    box-shadow: none;
-    width: 210mm; height: 297mm;
-    margin: 0;
-  }
-}
+          width: 100%;
+          min-height: 265mm;
+          position: relative;
+          background: radial-gradient(ellipse at center, #e8f0f8 0%, #e8f0f8 35%, #a8c5e0 75%, #4a7ba7 100%);
+          padding: 8mm 10mm;
+          overflow: hidden;
+          margin: 0;
+        }
+        @media print {
+          .fb-page-wrap {
+            box-shadow: none;
+            width: 100%;
+            min-height: 265mm;
+            margin: 0;
+          }
+        }
         .fb-watermark {
           position: absolute; top: 50%; left: 50%;
           transform: translate(-50%, -50%) rotate(-30deg);
@@ -590,12 +590,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .fb-media-img-small  { max-height: 60px !important; max-width: 140px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
         .fb-media-img-medium { max-height: 130px !important; max-width: 280px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
         .fb-media-img-large  { max-height: 220px !important; max-width: 480px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
-        .fb-line-discount-bleue { font-size: 8px; color: #2a8a2a; }.media-small  { height: 30px !important; max-height: 30px !important; }
-        .media-medium { height: 50px !important; max-height: 50px !important; }
-        .media-large  { height: 80px !important; max-height: 80px !important; }
-        .media-img-small  { height: 90px !important; max-height: 90px !important; }
-        .media-img-medium { height: 180px !important; max-height: 180px !important; }
-        .media-img-large  { height: 320px !important; max-height: 320px !important; }
+        .fb-line-discount-bleue { font-size: 8px; color: #2a8a2a; }
         .fb-footer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
         .fb-services-box { background: rgba(255,255,255,0.75); border: 1px solid #a8c5e0; border-radius: 4px; padding: 5px 8px; font-size: 9px; }
         .fb-services-title { font-weight: 700; color: #4a7ba7; text-transform: uppercase; font-size: 8px; letter-spacing: 0.04em; margin-bottom: 3px; padding-bottom: 2px; border-bottom: 1px solid #a8c5e0; }
