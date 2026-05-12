@@ -448,9 +448,37 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .pg-top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 8mm; gap: 20px; }
         .pg-return-block { display: flex; gap: 18px; align-items: flex-start; flex: 0 0 auto; }
         .pg-return-logo { max-width: 320px; max-height: 200px; object-fit: contain; }
-        .pg-client-addr { flex: 0 0 auto; padding: 12px 24px; min-width: 90mm; margin-top: 30mm; }
-        .pg-client-addr-line { font-size: 22px; color: ${BLACK}; line-height: 1.35; font-weight: 400; }
-        .pg-client-addr-name { font-size: 24px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin-bottom: 2px; }
+        .pg-client-addr {
+          flex: 1 1 auto;
+          padding: 12px 24px;
+          min-width: 90mm;
+          max-width: 100%;
+          margin-top: 30mm;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          word-break: break-word;
+        }
+        .pg-client-addr-line {
+          font-size: 22px;
+          color: ${BLACK};
+          line-height: 1.35;
+          font-weight: 400;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          word-break: break-word;
+          max-width: 100%;
+        }
+        .pg-client-addr-name {
+          font-size: 24px;
+          font-weight: 700;
+          color: ${BLACK};
+          line-height: 1.3;
+          margin-bottom: 2px;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          word-break: break-word;
+          max-width: 100%;
+        }
         .pg-order-info { margin-top: 6mm; padding-left: 0; }
         .pg-order-info-line { font-size: 14px; color: ${BLACK}; line-height: 1.7; }
         .pg-order-info-line strong { font-weight: 700; }
