@@ -542,7 +542,6 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .fb-page-wrap {
           width: 100%;
           max-width: 100%;
-          min-height: 265mm;
           position: relative;
           background: radial-gradient(ellipse at center, #e8f0f8 0%, #e8f0f8 35%, #a8c5e0 75%, #4a7ba7 100%);
           padding: 8mm 10mm;
@@ -1629,9 +1628,8 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* ═══════════════ PAGE 5 — FICHE BLEUE ARCHIVE — DESACTIVE TEST ═══ */}
+      {/* ═══════════════ PAGE 5 — FICHE BLEUE ARCHIVE ════════════════════ */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {false && (
       <div className="page-break" style={{padding: 0, margin: 0, maxWidth: "100%"}}>
         <div className="fb-page-wrap">
           <div className="fb-watermark">ARCHIVE · {numeroAffiche}</div>
@@ -1912,7 +1910,6 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
 
         </div>
       </div>
-      )}
     </>
   );
 }
