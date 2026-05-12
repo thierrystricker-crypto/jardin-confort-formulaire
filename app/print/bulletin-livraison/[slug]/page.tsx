@@ -143,9 +143,6 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
         .media-img-small  { max-height: 80px !important; max-width: 200px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
         .media-img-medium { max-height: 180px !important; max-width: 400px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
         .media-img-large  { max-height: 320px !important; max-width: 700px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
-        .media-img-small  { height: 90px !important; max-height: 90px !important; }
-        .media-img-medium { height: 180px !important; max-height: 180px !important; }
-        .media-img-large  { height: 320px !important; max-height: 320px !important; }
         .doc-services-box { margin-bottom: 6mm; padding: 12px 16px; background: #f0f7ff; border-left: 3px solid ${THEME}; border-radius: 4px; }
         .doc-services-title { font-size: 12px; font-weight: 700; color: ${BLACK}; margin-bottom: 6px; }
         .doc-services-list { font-size: 12px; color: ${GREY}; line-height: 1.7; }
