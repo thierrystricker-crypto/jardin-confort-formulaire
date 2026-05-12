@@ -552,11 +552,10 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         @media print {
           .fb-page-wrap {
             box-shadow: none;
-            width: 210mm;
-            max-width: 210mm;
-            min-height: 280mm;
-            margin: -14mm -16mm -14mm -14mm;
-            padding: 22mm 26mm 22mm 24mm;
+            width: 100%;
+            max-width: 100%;
+            min-height: 265mm;
+            margin: 0;
             box-sizing: border-box;
           }
         }
