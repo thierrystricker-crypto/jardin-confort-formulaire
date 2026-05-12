@@ -512,20 +512,24 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         /* ═══ STYLES FICHE BLEUE ARCHIVE (page 5) — préfixe .fb- ══════════ */
         /* ════════════════════════════════════════════════════════════════════ */
         .fb-page-wrap {
-          width: 100%;
+          width: 794px;
+          max-width: 794px;
           min-height: 265mm;
           position: relative;
           background: radial-gradient(ellipse at center, #e8f0f8 0%, #e8f0f8 35%, #a8c5e0 75%, #4a7ba7 100%);
           padding: 8mm 10mm;
           overflow: hidden;
-          margin: 0;
+          margin: 0 auto;
+          box-sizing: border-box;
         }
         @media print {
           .fb-page-wrap {
             box-shadow: none;
             width: 100%;
+            max-width: 100%;
             min-height: 265mm;
             margin: 0;
+            box-sizing: border-box;
           }
         }
         .fb-watermark {
