@@ -532,6 +532,12 @@ useEffect(() => {
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+          .media-small  { max-height: 22px !important; max-width: 80px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+          .media-medium { max-height: 50px !important; max-width: 180px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+          .media-large  { max-height: 110px !important; max-width: 350px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+          .media-img-small  { max-height: 80px !important; max-width: 200px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+          .media-img-medium { max-height: 180px !important; max-width: 400px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+          .media-img-large  { max-height: 320px !important; max-width: 700px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
         html, body { font-family: ${FONT}; background: #F3F5F6; color: ${C.text}; font-size: 15px; line-height: 1.6; }
         a { text-decoration: none; color: ${C.text}; }
         .jc-input { width: 100%; border: 1px solid ${C.border}; border-radius: 20px; padding: 12px 16px;
@@ -896,7 +902,7 @@ useEffect(() => {
             {/* 5. Articles */}
             <Card>
               <div style={{ padding: "16px 24px 12px", borderBottom: `1px solid ${C.border}` }}>
-                <SectionTitle>Articles ({lines.filter(l => l.type !== "comment").length})</SectionTitle>
+                <SectionTitle>Articles ({lines.filter(l => l.type !== "comment" && l.type !== "media").length})</SectionTitle>
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
@@ -917,6 +923,21 @@ useEffect(() => {
                         </td>
                       </tr>
                     );
+                    if (line.type === "media") {
+                      if (!(line as any).mediaUrl) return null;
+                      const mSize = (line as any).mediaSize;
+                      const mSource = (line as any).mediaSource;
+                      const prefix = mSource === "upload" ? "media-img-" : "media-";
+                      const sizeClass = mSize === "small" ? prefix + "small" : mSize === "large" ? prefix + "large" : prefix + "medium";
+                      return (
+                        <tr key={line.id} style={{ borderTop: `1px solid ${C.border}`, background: "white" }}>
+                          <td colSpan={5} style={{ padding: "16px 24px", textAlign: "center" }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={(line as any).mediaUrl} alt={line.title || ""} className={sizeClass} />
+                          </td>
+                        </tr>
+                      );
+                    }
                     const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
                     const sn = typeof line.stock === "number" ? line.stock : null;
                     const qty = line.qty || 0;
