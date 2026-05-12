@@ -411,9 +411,6 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
         .fb-media-img-small  { max-height: 60px !important; max-width: 140px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
         .fb-media-img-medium { max-height: 130px !important; max-width: 280px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
         .fb-media-img-large  { max-height: 220px !important; max-width: 480px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
-        .fb-media-img-small  { height: 70px !important; max-height: 70px !important; }
-        .fb-media-img-medium { height: 130px !important; max-height: 130px !important; }
-        .fb-media-img-large  { height: 220px !important; max-height: 220px !important; }
         .fb-line-discount { font-size: 8px; color: #2a8a2a; }
 
         /* ═══ FOOTER : services + totaux + signature ═══ */
