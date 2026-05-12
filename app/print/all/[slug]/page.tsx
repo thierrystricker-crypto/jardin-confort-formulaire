@@ -261,9 +261,27 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           }
         }
         @media print {
+          html, body {
+            width: 178mm !important;
+            max-width: 178mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+          }
           .print-btn-all, .printall-info { display: none !important; }
-          .doc-wrap-all { box-shadow: none; padding: 0; max-width: 100%; }
+          .doc-wrap-all {
+            box-shadow: none;
+            padding: 0;
+            width: 178mm !important;
+            max-width: 178mm !important;
+            margin: 0 !important;
+          }
           .doc-wrap-all + .doc-wrap-all { border-top: none; margin-top: 0; padding-top: 0; }
+          .fb-page-wrap {
+            width: 178mm !important;
+            max-width: 178mm !important;
+            margin: 0 !important;
+          }
           .page-break { page-break-before: always; }
         }
         .page-break { page-break-before: always; }
