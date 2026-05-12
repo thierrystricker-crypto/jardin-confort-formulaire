@@ -234,7 +234,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           print-color-adjust: exact;
           -webkit-print-color-adjust: exact;
         }
-        @page { size: A4 portrait; margin: 14mm 16mm 14mm 14mm; }
+       @page { size: A4 portrait; margin: 8mm 10mm 8mm 10mm; }
         @media screen {
           .doc-wrap-all {
             max-width: 794px; margin: 0 auto; padding: 20px 28px;
@@ -554,7 +554,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
             box-shadow: none;
             width: 100%;
             max-width: 100%;
-            min-height: 265mm;
+            min-height: 277mm;
             margin: 0;
             box-sizing: border-box;
           }
