@@ -56,15 +56,21 @@ function formatDateTime() {
 }
 
 export default function PrintAllPage({ params }: { params: Promise<{ slug: string }> }) {
+  const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<PrintData>(EMPTY);
   const [ready, setReady] = useState(false);
   const [numeroAffiche, setNumeroAffiche] = useState("");
   const [offreSlug, setOffreSlug] = useState("");
   const [dateDocument, setDateDocument] = useState<string>("");
   const [typeDocument, setTypeDocument] = useState<string>("Commande");
-  const [printedAt] = useState(formatDateTime());
-  const printedRef = useRef(false);
+  const [printedAt, setPrintedAt] = useState("");
   const barcodesRendered = useRef(false);
+
+  // ─── Mount côté client uniquement (évite erreur hydratation #418) ───
+  useEffect(() => {
+    setMounted(true);
+    setPrintedAt(formatDateTime());
+  }, []);
 
   // ─── Charge les données une seule fois ───
   useEffect(() => {
@@ -152,17 +158,8 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
     }).catch((err) => console.error("Erreur chargement librairies barcode:", err));
   }, [ready, data.lines, data.nom, numeroAffiche]);
 
-  // ─── Auto-print après que tout soit chargé ───
-  useEffect(() => {
-    if (!ready || printedRef.current) return;
-    printedRef.current = true;
-    const timer = setTimeout(() => {
-      window.print();
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [ready]);
-
-  if (!ready) {
+  // Pas de SSR : on attend le mount côté client pour tout rendre
+  if (!mounted || !ready) {
     return (
       <div style={{padding:40, textAlign:"center", color:GREY, fontFamily:"sans-serif"}}>
         Chargement du jeu complet…
