@@ -38,7 +38,7 @@ const VALIDATION_STEPS = [
 
 type QuoteLine = {
   id: string;
-  type: "product" | "custom" | "comment";
+  type: "product" | "custom" | "comment" | "media";
   image?: string;
   sku?: string;
   title: string;
