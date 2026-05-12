@@ -1289,3 +1289,143 @@ Procédure type :
 1. Phase 1 : ALTER TABLE + patcher types
 2. Phase 2 : patcher formulaire + API + dashboards
 3. Phase 3 : patcher 8 templates avec le même pattern `{champ && <div>{champ}</div>}` à insérer entre Nom et Rue
+
+
+
+---
+
+# Refonte du module Logo / Image (lignes média)
+
+> Date : 2026-05-12
+> Statut : ✅ Terminé et déployé en production
+
+## 🎯 Objectif
+
+Améliorer le module "Logo / Image" qui insère dans le tableau d'articles d'une offre :
+- soit un **logo de marque** (depuis `brand_logos` Supabase)
+- soit une **image personnalisée** uploadée à la volée
+
+**Problèmes initiaux** :
+1. Picker en thème clair (incohérent avec dashboard sombre)
+2. Dropdown tronqué par overflow du tableau (logos cachés sous le pli)
+3. Pas de distinction logo (compact) vs image upload (plus grande)
+4. Sur le rendu PDF, logos en pleine largeur (ratio non contraint)
+5. Page de validation web `/offre/[slug]` n'affichait pas les lignes média
+6. Compteur "Articles (X)" incluait à tort les lignes média
+
+## ✅ Solution livrée
+
+### Architecture
+- **2 jeux de tailles distincts**, choisis automatiquement selon `line.mediaSource` :
+  - `library` (logo de marque) → classes CSS `.media-*` (compactes)
+  - `upload` (image personnalisée) → classes CSS `.media-img-*` (agrandies)
+- Pour la fiche bleue (archive compacte) : classes `.fb-media-*` et `.fb-media-img-*` avec valeurs encore plus petites
+
+### Valeurs CSS unifiées
+
+| Taille | Logo (`.media-*`) | Image upload (`.media-img-*`) |
+|---|---|---|
+| **P** (small) | max-height 22px / max-width 80px | max-height 80px / max-width 200px |
+| **M** (medium) | max-height 50px / max-width 180px | max-height 180px / max-width 400px |
+| **G** (large) | max-height 110px / max-width 350px | max-height 320px / max-width 700px |
+
+| Taille | Fiche bleue logo (`.fb-media-*`) | Fiche bleue image (`.fb-media-img-*`) |
+|---|---|---|
+| **P** | max-height 18px / max-width 60px | max-height 60px / max-width 140px |
+| **M** | max-height 40px / max-width 130px | max-height 130px / max-width 280px |
+| **G** | max-height 80px / max-width 250px | max-height 220px / max-width 480px |
+
+### Propriétés CSS de chaque classe
+```css
+max-height: Xpx !important;
+max-width: Xpx !important;
+width: auto !important;
+height: auto !important;
+object-fit: contain !important;
+display: inline-block !important;
+```
+
+`object-fit: contain` préserve les ratios des logos très allongés (Fermob), `display: inline-block` permet le centrage via `text-align: center` sur le `<td>` parent.
+
+### Logique de choix de classe (dans chaque template)
+```typescript
+const prefix = line.mediaSource === "upload" ? "media-img-" : "media-";
+const sizeClass = line.mediaSize === "small"
+  ? prefix + "small"
+  : line.mediaSize === "large"
+  ? prefix + "large"
+  : prefix + "medium";
+```
+
+Pour la fiche bleue, prefix devient `"fb-media-img-"` ou `"fb-media-"`.
+
+## 📂 Fichiers modifiés
+
+### Picker formulaire
+- `app/offres/nouveau/MediaLinePicker.tsx` — Refonte complète : ancien dropdown custom → `<select>` natif HTML, thème sombre, boutons P/M/G agrandis avec lettres proportionnelles (text-xs / text-sm / text-base), bouton Uploader, lien Gerer vers `/dashboard/brand-logos`
+
+### Page validation web (côté client)
+- `app/offre/[slug]/page.tsx` — Ajout type `"media"` dans `QuoteLine.type`, ajout des 6 classes CSS, ajout branche `if (line.type === "media")` dans `.map()`, compteur "Articles (X)" exclut désormais commentaires ET lignes média
+
+### Templates print (6 fichiers)
+- `app/print/offre/[slug]/page.tsx` — Offre commerciale (avait initialement aucune définition CSS → ajout complet)
+- `app/print/offre/page.tsx` — Preview localStorage (2 blocs CSS dupliqués patchés)
+- `app/print/fiche-travail/[slug]/page.tsx` — Fiche entrepôt interne
+- `app/print/bulletin-livraison/[slug]/page.tsx` — Bulletin sans prix
+- `app/print/fiche-bleue/[slug]/page.tsx` — Archive papier compacte
+- `app/print/all/[slug]/page.tsx` — Jeu complet 5 pages
+
+### Type partagé (inchangé)
+- `lib/media-line-types.ts` : déjà OK avec `MEDIA_SIZE_PX = {small: 22, medium: 50, large: 110}` et le type `MediaLine` avec propriété `source: "library" | "upload"`
+
+## 🐛 Pièges rencontrés
+
+### Bug "balise `<a>` mangée" par le copier-coller
+Le copier-coller a systématiquement supprimé la balise `<a>` ouvrante quand celle-ci était écrite sur plusieurs lignes (probablement protection anti-XSS de Chrome ou interprétation HTML par l'éditeur).
+
+**Règle d'or** : toujours écrire `<a href="..." target="_blank" rel="noopener noreferrer" className="...">Texte</a>` sur **une seule ligne**.
+
+### Bug encodage UTF-8
+Certains caractères Unicode (`↗`, emojis) ont cassé Turbopack. Préférer l'ASCII pur ou vérifier que VS Code est bien en UTF-8.
+
+### Bug PowerShell avec crochets `[slug]`
+Utiliser `-LiteralPath` au lieu de `-Path` pour les fichiers Next.js avec `[slug]` dans le nom (sinon les `[` `]` sont interprétés comme pattern de filtrage).
+
+### Doublons CSS générés par patches successifs
+Plusieurs templates ont eu des classes CSS dupliquées après les premiers patches : la nouvelle déclaration `.media-img-small { max-height: 80px... }` était suivie par l'ancienne `.media-img-small { height: 90px... }` qui l'écrasait (dernière déclaration gagne en CSS).
+
+### Templates sans CSS héritée
+Le template `app/print/offre/[slug]/page.tsx` utilisait `className={sizeClass}` mais ne définissait pas du tout les classes `.media-*` dans son `<style>`. Conséquence : SVG des logos affichés à taille naturelle (ratio non contraint).
+
+## 🎁 Bonus dans la même session
+
+En plus du module logo/image, on a aussi corrigé :
+- **Dropdown autocomplete clients** sur `/offres/nouveau` (Esc / ↑↓ / Enter / clic extérieur, bouton X rouge, recherche par société)
+- **Réordonnancement des champs adresse** sur `/dashboard/clients/[id]` (Rue+N° puis Complément puis NPA+Ville)
+- **Ajout du champ `complement_nom`** dans le modal "Nouveau client" du dashboard
+
+## 🔧 Maintenance future
+
+### Pour ajuster les tailles
+Modifier les valeurs `max-height` et `max-width` des classes CSS dans le template concerné. La logique JS choisit automatiquement le bon préfixe.
+
+### Pour ajouter une 4ème taille (XL)
+1. Ajouter `"xlarge"` dans le type `MediaSize` de `lib/media-line-types.ts`
+2. Ajouter `xlarge: <px>` dans `MEDIA_SIZE_PX` et `MEDIA_SIZE_LABEL`
+3. Ajouter les classes `.media-xlarge` et `.media-img-xlarge` dans les 6 templates
+4. Adapter la logique `sizeClass` dans chaque template
+
+### Pour synchroniser l'aperçu picker avec le rendu PDF
+Actuellement, l'aperçu utilise `MEDIA_SIZE_PX[line.size]` (valeurs logos uniquement). Pour refléter aussi les tailles upload :
+1. Ajouter dans `lib/media-line-types.ts` :
+```typescript
+   export const IMAGE_SIZE_PX: Record<MediaSize, number> = { small: 80, medium: 180, large: 320 };
+   export function getMediaHeight(source: "library" | "upload", size: MediaSize): number {
+     return source === "upload" ? IMAGE_SIZE_PX[size] : MEDIA_SIZE_PX[size];
+   }
+```
+2. Dans le picker, remplacer `const heightPx = MEDIA_SIZE_PX[line.size];` par `const heightPx = getMediaHeight(line.source, line.size);`
+
+## 📌 Note : les images d'ambiance restent intactes
+
+Le mécanisme séparé `ambianceImages` / classes `.jc-ambiance-*` (images de fin d'offre, page 2 séparée) n'a **pas** été touché, comme demandé.
