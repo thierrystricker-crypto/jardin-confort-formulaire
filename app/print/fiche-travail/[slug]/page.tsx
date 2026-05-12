@@ -626,9 +626,13 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           border-left: 3px solid #a855f7 !important;
         }
         .tr-media img { width: auto; object-fit: contain; display: inline-block; vertical-align: middle; }
-        .media-small  { height: 30px !important; max-height: 30px !important; }
-        .media-medium { height: 50px !important; max-height: 50px !important; }
-        .media-large  { height: 80px !important; max-height: 80px !important; }
+        .tr-media td { text-align: center !important; }
+        .media-small  { max-height: 22px !important; max-width: 80px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .media-medium { max-height: 50px !important; max-width: 180px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .media-large  { max-height: 110px !important; max-width: 350px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .media-img-small  { max-height: 80px !important; max-width: 200px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .media-img-medium { max-height: 180px !important; max-width: 400px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .media-img-large  { max-height: 320px !important; max-width: 700px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
         .media-img-small  { height: 90px !important; max-height: 90px !important; }
         .media-img-medium { height: 180px !important; max-height: 180px !important; }
         .media-img-large  { height: 320px !important; max-height: 320px !important; }

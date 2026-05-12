@@ -584,13 +584,18 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .fb-tr-comment-bleue td { background: #fff8dc !important; padding: 3px 8px !important; font-style: italic; font-size: 9px; color: #555 !important; border-left: 2px solid #4a7ba7; }
         .fb-tr-media-bleue td { background: white !important; padding: 4px !important; text-align: center !important; }
         .fb-tr-media-bleue img { width: auto; object-fit: contain; display: inline-block; vertical-align: middle; }
-        .fb-media-small  { height: 22px !important; max-height: 22px !important; }
-        .fb-media-medium { height: 36px !important; max-height: 36px !important; }
-        .fb-media-large  { height: 56px !important; max-height: 56px !important; }
-        .fb-media-img-small  { height: 70px !important; max-height: 70px !important; }
-        .fb-media-img-medium { height: 130px !important; max-height: 130px !important; }
-        .fb-media-img-large  { height: 220px !important; max-height: 220px !important; }
-        .fb-line-discount-bleue { font-size: 8px; color: #2a8a2a; }
+        .fb-media-small  { max-height: 18px !important; max-width: 60px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .fb-media-medium { max-height: 40px !important; max-width: 130px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .fb-media-large  { max-height: 80px !important; max-width: 250px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .fb-media-img-small  { max-height: 60px !important; max-width: 140px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .fb-media-img-medium { max-height: 130px !important; max-width: 280px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .fb-media-img-large  { max-height: 220px !important; max-width: 480px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .fb-line-discount-bleue { font-size: 8px; color: #2a8a2a; }.media-small  { height: 30px !important; max-height: 30px !important; }
+        .media-medium { height: 50px !important; max-height: 50px !important; }
+        .media-large  { height: 80px !important; max-height: 80px !important; }
+        .media-img-small  { height: 90px !important; max-height: 90px !important; }
+        .media-img-medium { height: 180px !important; max-height: 180px !important; }
+        .media-img-large  { height: 320px !important; max-height: 320px !important; }
         .fb-footer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
         .fb-services-box { background: rgba(255,255,255,0.75); border: 1px solid #a8c5e0; border-radius: 4px; padding: 5px 8px; font-size: 9px; }
         .fb-services-title { font-weight: 700; color: #4a7ba7; text-transform: uppercase; font-size: 8px; letter-spacing: 0.04em; margin-bottom: 3px; padding-bottom: 2px; border-bottom: 1px solid #a8c5e0; }
@@ -628,12 +633,12 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .ft-tr-media img, .cc-tr-media img, .bl-tr-media img {
           width: auto; object-fit: contain; display: inline-block; vertical-align: middle;
         }
-        .media-small  { height: 30px !important; max-height: 30px !important; }
-        .media-medium { height: 50px !important; max-height: 50px !important; }
-        .media-large  { height: 80px !important; max-height: 80px !important; }
-        .media-img-small  { height: 90px !important; max-height: 90px !important; }
-        .media-img-medium { height: 180px !important; max-height: 180px !important; }
-        .media-img-large  { height: 320px !important; max-height: 320px !important; }
+        .media-small  { max-height: 22px !important; max-width: 80px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .media-medium { max-height: 50px !important; max-width: 180px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .media-large  { max-height: 110px !important; max-width: 350px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .media-img-small  { max-height: 80px !important; max-width: 200px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .media-img-medium { max-height: 180px !important; max-width: 400px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .media-img-large  { max-height: 320px !important; max-width: 700px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
       `}</style>
 
       <div className="printall-info">

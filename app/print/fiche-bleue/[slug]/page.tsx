@@ -404,9 +404,13 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
           display: inline-block;
           vertical-align: middle;
         }
-        .fb-media-small  { height: 22px !important; max-height: 22px !important; }
-        .fb-media-medium { height: 36px !important; max-height: 36px !important; }
-        .fb-media-large  { height: 56px !important; max-height: 56px !important; }
+        .fb-tr-media td { text-align: center !important; }
+        .fb-media-small  { max-height: 18px !important; max-width: 60px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .fb-media-medium { max-height: 40px !important; max-width: 130px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .fb-media-large  { max-height: 80px !important; max-width: 250px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .fb-media-img-small  { max-height: 60px !important; max-width: 140px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .fb-media-img-medium { max-height: 130px !important; max-width: 280px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
+        .fb-media-img-large  { max-height: 220px !important; max-width: 480px !important; width: auto !important; height: auto !important; object-fit: contain !important; display: inline-block !important; }
         .fb-media-img-small  { height: 70px !important; max-height: 70px !important; }
         .fb-media-img-medium { height: 130px !important; max-height: 130px !important; }
         .fb-media-img-large  { height: 220px !important; max-height: 220px !important; }
