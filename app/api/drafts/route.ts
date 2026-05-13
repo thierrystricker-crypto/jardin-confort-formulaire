@@ -149,3 +149,67 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
+// ─────────────────────────────────────────────────────────────
+// GET /api/drafts — lister les brouillons
+// ─────────────────────────────────────────────────────────────
+// Query params :
+//   - archived : "false" (défaut) | "true" | "all"
+//   - commercial : filtre exact sur le champ commercial
+//   - limit : nombre max de résultats (défaut 100, max 500)
+//
+// Renvoie : { drafts: [...], count }
+// La colonne `data` (JSONB potentiellement lourd) n'est pas renvoyée ici.
+// Pour le détail complet d'un brouillon, utiliser GET /api/drafts/[slug].
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const archivedParam = searchParams.get("archived") || "false";
+    const commercial = searchParams.get("commercial");
+    const limitParam = parseInt(searchParams.get("limit") || "100", 10);
+    const limit = Math.min(Math.max(limitParam, 1), 500); // 1..500
+
+    let query = supabaseAdmin
+      .from("drafts")
+      .select(
+        "id, slug, numero_draft, numero_affiche, reference, " +
+        "client_societe, client_nom, client_prenom, client_email, " +
+        "commercial, total_ttc, nb_articles, " +
+        "created_at, updated_at, " +
+        "transformed_at, transformed_into_offre_slug, archived"
+      )
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+
+    // Filtre archived
+    if (archivedParam === "false") {
+      query = query.eq("archived", false);
+    } else if (archivedParam === "true") {
+      query = query.eq("archived", true);
+    }
+    // "all" → pas de filtre
+
+    // Filtre commercial
+    if (commercial) {
+      query = query.eq("commercial", commercial);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("List drafts error:", error);
+      return NextResponse.json(
+        { error: "Erreur base de données : " + error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      drafts: data || [],
+      count: data?.length || 0,
+    });
+  } catch (err) {
+    console.error("List drafts error:", err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
+}
