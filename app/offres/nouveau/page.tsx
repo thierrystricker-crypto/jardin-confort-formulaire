@@ -38,6 +38,7 @@ type QuoteLine = {
   qty: number;
   stock?: number | null | "sur_commande";
   lineDiscount?: number;
+  shopifyLocked?: boolean;
   // ── Lignes média uniquement ──
   mediaUrl?: string;
   mediaSize?: "small" | "medium" | "large";
@@ -548,6 +549,7 @@ const [savedSlug, setSavedSlug]           = useState("");
       qty: 1,
       stock: stockVal,
       lineDiscount: hasPromo ? Math.round((compareAt - price) * 100) / 100 : 0,
+      shopifyLocked: true,
     }]);
     highlightAdded(id);
     setFlashProductId(item.id);
@@ -1578,6 +1580,7 @@ const [savedSlug, setSavedSlug]           = useState("");
                 {lines.map((line, idx) => {
                   const isComment = line.type === "comment";
                   const isMedia = line.type === "media";
+                  const isLocked = line.shopifyLocked === true || line.id?.startsWith("shopify-");
                   const lineTotal = (isComment || isMedia) ? 0 : line.qty * line.unitPrice - (line.lineDiscount || 0);
 
                   // ── Ligne média : rendu dédié sur toute la largeur ──
@@ -1693,11 +1696,17 @@ const [savedSlug, setSavedSlug]           = useState("");
                             <input className="jc-qty-input no-spin" type="number" min="1" value={line.qty} onChange={(e) => updateLine(line.id, { qty: Math.max(1, parseInt(e.target.value || "1", 10)) })} onFocus={(e) => e.currentTarget.select()} />
                           </td>
                           <td style={{ paddingLeft: 12 }}>
-                            <input className="jc-cell-input jc-sku-input" value={line.sku} onChange={(e) => updateLine(line.id, { sku: e.target.value })} />
+                            <input
+                              className={`jc-cell-input jc-sku-input${isLocked ? " jc-locked-input" : ""}`}
+                              value={line.sku}
+                              onChange={(e) => updateLine(line.id, { sku: e.target.value })}
+                              readOnly={isLocked}
+                              title={isLocked ? "🔒 SKU Shopify verrouillé — utilisez « Dupliquer comme modèle » pour créer une variante" : undefined}
+                            />
                           </td>
                           <td>
                             <textarea
-                              className="jc-cell-input jc-title-input"
+                              className={`jc-cell-input jc-title-input${isLocked ? " jc-locked-input" : ""}`}
                               value={line.title}
                               onChange={(e) => {
                                 updateLine(line.id, { title: e.target.value });
@@ -1709,6 +1718,8 @@ const [savedSlug, setSavedSlug]           = useState("");
                                 e.target.style.height = e.target.scrollHeight + "px";
                               }}
                               rows={1}
+                              readOnly={isLocked}
+                              title={isLocked ? "🔒 Titre Shopify verrouillé — utilisez « Dupliquer comme modèle »" : undefined}
                             />
                           </td>
                           <td>
@@ -1749,15 +1760,26 @@ const [savedSlug, setSavedSlug]           = useState("");
                           </td>
                           {/* Colonne stock */}
                           <td className="td-stock">
-                            {line.stock === undefined || line.stock === null ? (
-                              <input className="jc-cell-input jc-stock-input no-spin" type="number" min="0" placeholder="—"
-                                onChange={(e) => updateLine(line.id, { stock: e.target.value === "" ? null : parseInt(e.target.value) })} />
-                            ) : line.stock === "sur_commande" ? (
-                              <span className="jc-stock-cmd">Sur commande</span>
+                            {isLocked ? (
+                              // Ligne Shopify : stock figé venant de l'API, affichage seul
+                              line.stock === undefined || line.stock === null ? (
+                                <span className="jc-stock-cmd" title="🔒 Stock Shopify introuvable">—</span>
+                              ) : line.stock === "sur_commande" ? (
+                                <span className="jc-stock-cmd">Sur commande</span>
+                              ) : (
+                                <span className={(line.stock as number) > 2 ? "jc-stock-ok" : (line.stock as number) > 0 ? "jc-stock-low" : "jc-stock-cmd"}>
+                                  {line.stock === 0 ? "Sur commande" : `${line.stock} pce${(line.stock as number) > 1 ? "s" : ""}`}
+                                </span>
+                              )
                             ) : (
-                              <span className={line.stock > 2 ? "jc-stock-ok" : line.stock > 0 ? "jc-stock-low" : "jc-stock-cmd"}>
-                                {line.stock === 0 ? "Sur commande" : `${line.stock} pce${line.stock > 1 ? "s" : ""}`}
-                              </span>
+                              // Ligne à la volée : stock toujours éditable (corrige le bug "one shot")
+                              <input
+                                className="jc-cell-input jc-stock-input no-spin"
+                                type="number" min="0" placeholder="—"
+                                value={line.stock === undefined || line.stock === null || line.stock === "sur_commande" ? "" : line.stock}
+                                onChange={(e) => updateLine(line.id, { stock: e.target.value === "" ? null : parseInt(e.target.value) })}
+                                onFocus={(e) => e.currentTarget.select()}
+                              />
                             )}
                           </td>
                         </>
@@ -1766,7 +1788,7 @@ const [savedSlug, setSavedSlug]           = useState("");
                       <td className="screenOnly">
                         <div className="jc-action-btns">
                           <button
-                            className="jc-dup-btn" title="Dupliquer"
+                            className="jc-dup-btn" title="Dupliquer à l'identique"
                             onClick={() => {
                               captureUndo();
                               const newId = `dup-${Date.now()}`;
@@ -1779,6 +1801,34 @@ const [savedSlug, setSavedSlug]           = useState("");
                               highlightAdded(newId);
                             }}
                           >⧉</button>
+                          {isLocked && (
+                            <button
+                              className="jc-template-btn"
+                              title="📋 Dupliquer comme modèle (crée un article à la volée — SKU et stock à saisir)"
+                              onClick={() => {
+                                captureUndo();
+                                const newId = `custom-${Date.now()}`;
+                                setLines((c) => {
+                                  const idx2 = c.findIndex((l) => l.id === line.id);
+                                  const clone2 = [...c];
+                                  const template: QuoteLine = {
+                                    id: newId,
+                                    type: "custom",
+                                    image: line.image,
+                                    sku: "",
+                                    title: line.title,
+                                    unitPrice: line.unitPrice,
+                                    qty: line.qty,
+                                    stock: null,
+                                    lineDiscount: line.lineDiscount,
+                                  };
+                                  clone2.splice(idx2 + 1, 0, template);
+                                  return clone2;
+                                });
+                                highlightAdded(newId);
+                              }}
+                            >📋</button>
+                          )}
                           <button className="jc-trash-btn" onClick={() => removeLine(line.id)}>🗑</button>
                         </div>
                       </td>
@@ -3039,6 +3089,38 @@ const [savedSlug, setSavedSlug]           = useState("");
           transition: all 0.15s;
         }
         .jc-dup-btn:hover { background: rgba(96,165,250,0.22); }
+
+        /* ── BOUTON DUPLIQUER COMME MODÈLE (lignes Shopify uniquement) ── */
+        .jc-template-btn {
+          width: 34px; height: 34px;
+          display: inline-flex; align-items: center; justify-content: center;
+          background: rgba(168,85,247,0.1);
+          color: #a855f7;
+          border: 1px solid rgba(168,85,247,0.25);
+          border-radius: var(--radius-sm);
+          font-size: 14px; cursor: pointer;
+          transition: all 0.15s;
+        }
+        .jc-template-btn:hover { background: rgba(168,85,247,0.22); }
+        .light-mode .jc-template-btn { background: rgba(168,85,247,0.08); color: #9333ea; border-color: rgba(168,85,247,0.25); }
+        .light-mode .jc-template-btn:hover { background: rgba(168,85,247,0.18); }
+
+        /* ── CHAMPS VERROUILLÉS (Shopify locked) ── */
+        .jc-locked-input {
+          background: rgba(168,85,247,0.05) !important;
+          border-color: rgba(168,85,247,0.2) !important;
+          color: var(--text-muted) !important;
+          cursor: not-allowed !important;
+        }
+        .jc-locked-input:focus {
+          border-color: rgba(168,85,247,0.4) !important;
+          box-shadow: 0 0 0 2px rgba(168,85,247,0.1) !important;
+        }
+        .light-mode .jc-locked-input {
+          background: rgba(168,85,247,0.06) !important;
+          border-color: rgba(168,85,247,0.25) !important;
+          color: #6b7280 !important;
+        }
 
         /* ── SKU ÉLARGI ── */
         .jc-sku-input { min-width: 100%; }

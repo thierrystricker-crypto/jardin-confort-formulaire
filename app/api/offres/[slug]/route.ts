@@ -142,7 +142,18 @@ async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: u
     return lines.map((line) => {
       if (line.type === "comment" || !line.sku) return line;
       const fresh = skuMap.get(line.sku as string);
-      if (!fresh) return line;
+      if (!fresh) {
+        // SKU introuvable côté Shopify (modif à la volée OU produit retiré du catalogue) :
+        // - Si la ligne était une ligne Shopify d'origine (locked ou id "shopify-*") → on
+        //   invalide le stock pour éviter d'afficher un snapshot obsolète au client.
+        // - Si c'est une ligne custom (sans lock), on garde le stock manuel saisi.
+        const lineWithLock = line as { shopifyLocked?: boolean; id?: string };
+        const wasShopify = lineWithLock.shopifyLocked === true || lineWithLock.id?.startsWith("shopify-");
+        if (wasShopify) {
+          return { ...line, stock: null, delaiLivraison: undefined };
+        }
+        return line;
+      }
       return {
         ...line,
         stock: fresh.stock < 1 ? "sur_commande" : fresh.stock,

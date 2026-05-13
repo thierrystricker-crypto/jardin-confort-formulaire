@@ -390,6 +390,22 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                       const sn = typeof line.stock === "number" ? line.stock : null;
                       const qty = line.qty || 0;
 
+                      // Détection ligne Shopify locked (flag explicite OU id "shopify-*" rétroactif)
+                      const lineLock = line as { shopifyLocked?: boolean; id?: string };
+                      const isLocked = lineLock.shopifyLocked === true || lineLock.id?.startsWith("shopify-");
+
+                      // CAS PRIORITAIRE : ligne Shopify dont le SKU est introuvable côté API
+                      // (modification après création OU produit retiré du catalogue Shopify).
+                      // → On affiche "Stock à vérifier" plutôt qu'un nombre fantôme obsolète.
+                      if (isLocked && sn === null && line.stock !== "sur_commande") {
+                        const baseStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, marginTop: 4 };
+                        return (
+                          <div style={{ ...baseStyle, color: "#ea580c" }}>
+                            ⚠ Stock à vérifier
+                          </div>
+                        );
+                      }
+
                       // 3 cas distincts pour un affichage métier précis :
                       // 1. Sur commande     : stock = "sur_commande" OU stock <= 0 → délai depuis tags
                       // 2. Stock partiel    : 0 < stock < qty commandée (il manque des pièces)
