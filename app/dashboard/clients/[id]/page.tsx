@@ -615,36 +615,39 @@ function copyAddress(type: "facturation" | "livraison") {
           {/* FICHE CLIENT */}
           <div className="space-y-6">
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold">Coordonnées</h2>
-                {!editing ? (
-                  <div className="flex gap-2">
+              <div className="mb-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-xl font-semibold">Coordonnées</h2>
+                  {editing && (
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button onClick={saveClient} disabled={saving}
+                        className="whitespace-nowrap rounded-xl bg-[#2B8AD1] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2478b8] disabled:opacity-50">
+                        {saving ? "…" : "💾 Enregistrer"}
+                      </button>
+                      <button onClick={() => { setEditing(false); setForm(client) }}
+                        className="whitespace-nowrap rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 hover:bg-[#40454b]">
+                        Annuler
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {!editing && (
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <button onClick={() => copyAddress("facturation")}
                       title="Copier l'adresse de facturation dans le presse-papier"
-                      className={`rounded-xl border px-3 py-2 text-sm transition ${addrCopied === "facturation" ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300" : "border-white/10 bg-[#34383d] text-zinc-100 hover:bg-[#40454b]"}`}>
+                      className={`whitespace-nowrap rounded-xl border px-3 py-1.5 text-xs transition ${addrCopied === "facturation" ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300" : "border-white/10 bg-[#34383d] text-zinc-100 hover:bg-[#40454b]"}`}>
                       {addrCopied === "facturation" ? "✓ Copiée" : "📋 Copier adresse"}
                     </button>
                     {client.livr_rue && (
                       <button onClick={() => copyAddress("livraison")}
                         title="Copier l'adresse de livraison dans le presse-papier"
-                        className={`rounded-xl border px-3 py-2 text-sm transition ${addrCopied === "livraison" ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300" : "border-white/10 bg-[#34383d] text-zinc-100 hover:bg-[#40454b]"}`}>
+                        className={`whitespace-nowrap rounded-xl border px-3 py-1.5 text-xs transition ${addrCopied === "livraison" ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300" : "border-white/10 bg-[#34383d] text-zinc-100 hover:bg-[#40454b]"}`}>
                         {addrCopied === "livraison" ? "✓ Copiée" : "📦 Copier livraison"}
                       </button>
                     )}
                     <button onClick={() => setEditing(true)}
-                      className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">
+                      className="whitespace-nowrap rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">
                       ✏️ Modifier
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <button onClick={saveClient} disabled={saving}
-                      className="rounded-xl bg-[#2B8AD1] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2478b8] disabled:opacity-50">
-                      {saving ? "…" : "💾 Enregistrer"}
-                    </button>
-                    <button onClick={() => { setEditing(false); setForm(client) }}
-                      className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 hover:bg-[#40454b]">
-                      Annuler
                     </button>
                   </div>
                 )}
