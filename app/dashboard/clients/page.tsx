@@ -46,6 +46,19 @@ function normalizeSwissPhone(raw: string) {
   return ["+" + t.slice(0, 2), t.slice(2, 4), t.slice(4, 7), t.slice(7, 9), t.slice(9, 11)].filter(Boolean).join(" ")
 }
 
+// Détecte si un client contient au moins 1 document qui matche la recherche
+function clientHasDocumentMatch(c: Client, query: string | undefined): boolean {
+  if (!query) return false
+  const q = query.toLowerCase().replace(/^#/, "").trim()
+  if (!q) return false
+  const all = [
+    ...(c.nums_offres || []),
+    ...(c.nums_commandes_internes || []),
+    ...(c.nums_shopify || []),
+    ...(c.nums_factures_winbiz || []),
+  ]
+  return all.some(d => d.num.toLowerCase().includes(q))
+}
 function nomClient(c: Client) {
   return [c.nom, c.prenom].filter(Boolean).join(" ") || c.societe || "—"
 }
@@ -962,8 +975,15 @@ export default function ClientsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {clients.map((c, idx) => {
+                  {[...clients].sort((a, b) => {
+                    const matchQ = activeSearch === "document" ? searchDoc : undefined
+                    const aM = clientHasDocumentMatch(a, matchQ) ? 1 : 0
+                    const bM = clientHasDocumentMatch(b, matchQ) ? 1 : 0
+                    return bM - aM
+                  }).map((c, idx) => {
   const src = sourceLabel(c.source)
+  const matchQuery = activeSearch === "document" ? searchDoc : undefined
+  const isMatch = clientHasDocumentMatch(c, matchQuery)
   return (
     <tr key={c.id}
       onClick={(e) => {
@@ -974,9 +994,21 @@ export default function ClientsPage() {
     window.location.href = `/dashboard/clients/${c.id}`
   }
 }}
-      className={`border-t border-white/5 text-zinc-200 transition hover:bg-white/10 cursor-pointer ${idx % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.04]"}`}>
+      className={`border-t text-zinc-200 transition cursor-pointer ${
+        isMatch
+          ? "border-violet-500/40 bg-violet-500/15 hover:bg-violet-500/25 ring-1 ring-inset ring-violet-400/40 relative"
+          : `border-white/5 hover:bg-white/10 ${idx % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.04]"}`
+      }`}
+      style={isMatch ? { boxShadow: "inset 4px 0 0 0 rgb(167 139 250)" } : undefined}>
                         <td className="px-4 py-3">
-                          <span className="font-mono text-xs font-semibold text-[#2B8AD1]">{c.numero_client}</span>
+                          <div className="flex items-center gap-2">
+                            {isMatch && (
+                              <span className="inline-flex items-center gap-0.5 rounded-md bg-violet-500/30 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-200 ring-1 ring-violet-400/50">
+                                🎯 match
+                              </span>
+                            )}
+                            <span className="font-mono text-xs font-semibold text-[#2B8AD1]">{c.numero_client}</span>
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <div className="font-medium text-zinc-100">{nomClient(c)}</div>
