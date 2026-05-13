@@ -496,10 +496,13 @@ export default function ClientsPage() {
     setTimeout(() => setClientSuggestions([]), 200)
   }
 
-  const fetchClients = useCallback(async (q: string) => {
+  const fetchClients = useCallback(async (q: string, mode: "client" | "document" = "client") => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/clients?q=${encodeURIComponent(q)}&limit=100`)
+      const url = mode === "document"
+        ? `/api/clients?q=${encodeURIComponent(q)}&limit=100&mode=document`
+        : `/api/clients?q=${encodeURIComponent(q)}&limit=100`
+      const res = await fetch(url)
       const json = await res.json()
       setClients(json.clients || [])
       if (json.total !== undefined) setTotalClients(json.total)
