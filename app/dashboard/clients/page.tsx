@@ -409,6 +409,8 @@ export default function ClientsPage() {
   const [totalClients, setTotalClients] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  const [searchDoc, setSearchDoc] = useState("")
+  const [activeSearch, setActiveSearch] = useState<"client" | "document">("client")
   const [showImport, setShowImport] = useState(false)
   const [showNew, setShowNew] = useState(false)
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -509,9 +511,15 @@ export default function ClientsPage() {
 
   useEffect(() => {
     if (searchRef.current) clearTimeout(searchRef.current)
-    searchRef.current = setTimeout(() => fetchClients(search), 300)
+    searchRef.current = setTimeout(() => {
+      if (activeSearch === "document" && searchDoc.trim()) {
+        fetchClients(searchDoc, "document")
+      } else {
+        fetchClients(search, "client")
+      }
+    }, 300)
     return () => { if (searchRef.current) clearTimeout(searchRef.current) }
-  }, [search, fetchClients])
+  }, [search, searchDoc, activeSearch, fetchClients])
 
   async function handleImport() {
     if (!csvText.trim()) return
@@ -560,9 +568,12 @@ export default function ClientsPage() {
             <div>
               <h1 className="text-2xl font-semibold">Fichier clients</h1>
               <p className="text-sm text-zinc-400">
-  {search.trim() ? (
+  {(search.trim() || searchDoc.trim()) ? (
     <>
       {clients.length} résultat{clients.length !== 1 ? "s" : ""}
+      {activeSearch === "document" && searchDoc.trim() && (
+        <span className="ml-2 text-xs text-violet-300">via document &laquo; {searchDoc} &raquo;</span>
+      )}
       {totalClients !== null && ` (sur ${totalClients.toLocaleString("fr-CH")} clients)`}
     </>
   ) : (
@@ -880,13 +891,47 @@ export default function ClientsPage() {
           </div>
         )}
 
-        {/* RECHERCHE */}
-        <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-4">
-          <input
-            type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="🔍 Rechercher par nom, prénom, société, email, NPA, ville, n° client…"
-            className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-4 py-3 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"
-          />
+        {/* RECHERCHE — 2 barres séparées */}
+        <div className="grid gap-3 md:grid-cols-2">
+          {/* Barre 1 : Recherche CLIENT */}
+          <div className={`rounded-2xl border bg-[#2a2d31] p-4 transition ${activeSearch === "client" ? "border-[#2B8AD1]/40" : "border-white/10"}`}>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wide text-zinc-400">👤 Rechercher un client</span>
+              {activeSearch === "client" && search.trim() && (
+                <span className="ml-auto rounded-full bg-[#2B8AD1]/15 px-2 py-0.5 text-[10px] font-semibold text-sky-300">actif</span>
+              )}
+            </div>
+            <input
+              type="text" value={search}
+              onChange={e => { setSearch(e.target.value); setActiveSearch("client"); if (e.target.value.trim()) setSearchDoc("") }}
+              onFocus={() => setActiveSearch("client")}
+              placeholder="Nom, prénom, société, email, NPA, ville, tél, n° client…"
+              className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-4 py-3 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"
+            />
+            <div className="mt-1.5 text-[11px] text-zinc-500">
+              Cherche dans la fiche client (nom, contact, adresse).
+            </div>
+          </div>
+
+          {/* Barre 2 : Recherche DOCUMENT */}
+          <div className={`rounded-2xl border bg-[#2a2d31] p-4 transition ${activeSearch === "document" ? "border-violet-500/40" : "border-white/10"}`}>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wide text-zinc-400">📄 Retrouver depuis un numéro</span>
+              {activeSearch === "document" && searchDoc.trim() && (
+                <span className="ml-auto rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-300">actif</span>
+              )}
+            </div>
+            <input
+              type="text" value={searchDoc}
+              onChange={e => { setSearchDoc(e.target.value); setActiveSearch("document"); if (e.target.value.trim()) setSearch("") }}
+              onFocus={() => setActiveSearch("document")}
+              placeholder="N° facture WinBiz, commande Shopify (#1234), DEV-2026-…, CMD-…"
+              className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-4 py-3 text-sm text-zinc-100 outline-none focus:border-violet-500"
+            />
+            <div className="mt-1.5 text-[11px] text-zinc-500">
+              Ignore les NPA. Cherche dans factures WinBiz, commandes Shopify, offres & commandes internes.
+            </div>
+          </div>
         </div>
 
         {/* LISTE */}

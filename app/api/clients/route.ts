@@ -415,6 +415,7 @@ export async function GET(request: NextRequest) {
   try {
     const q = request.nextUrl.searchParams.get("q")?.trim() || ""
     const limit = parseInt(request.nextUrl.searchParams.get("limit") || "50")
+    const mode = request.nextUrl.searchParams.get("mode") || "client" // "client" | "document"
 
     let query = supabaseAdmin
       .from("clients")
@@ -423,6 +424,21 @@ export async function GET(request: NextRequest) {
       .limit(limit)
 
     if (q) {
+      // Mode document : on cherche UNIQUEMENT dans les factures/commandes/offres
+      // Pas de fallback sur clients (évite collision NPA/facture)
+      if (mode === "document") {
+        const docResults = await searchByDocumentNumber(q, limit)
+        const { count } = await supabaseAdmin
+          .from("clients")
+          .select("*", { count: "exact", head: true })
+
+        if (docResults && docResults.length > 0) {
+          const enriched = await enrichWithCounts(docResults)
+          return NextResponse.json({ clients: enriched, total: count || 0, matchedBy: "document" })
+        }
+        return NextResponse.json({ clients: [], total: count || 0, matchedBy: "document" })
+      }
+
       const docResults = await searchByDocumentNumber(q, limit)
       if (docResults !== null) {
         if (docResults.length > 0) {
