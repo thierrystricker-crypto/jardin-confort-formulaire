@@ -387,6 +387,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
       paymentMode: offreData.paymentMode||"",
       deliveryMode: offreData.deliveryMode||"",
       remarks: offreData.remarks||"",
+      ambianceImages: offreData.ambianceImages||[],
     }
     if(avecClient) {
       Object.assign(prefill, {
@@ -400,7 +401,18 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         npa: offre.client_npa||"", ville: offre.client_ville||"",
       })
     }
-    localStorage.setItem("jc-offre-copy", JSON.stringify(prefill))
+    try {
+      localStorage.setItem("jc-offre-copy", JSON.stringify(prefill))
+    } catch {
+      // Quota dépassé (images base64 trop lourdes) — copier sans les images
+      try {
+        localStorage.setItem("jc-offre-copy", JSON.stringify({...prefill, ambianceImages: []}))
+        alert("Les images d'ambiance étaient trop lourdes pour être copiées. L'offre a été copiée sans elles.")
+      } catch {
+        alert("Erreur : impossible de copier l'offre (espace de stockage insuffisant).")
+        return
+      }
+    }
     window.open(`/offres/nouveau?from_copy=1`, "_blank")
   }
 

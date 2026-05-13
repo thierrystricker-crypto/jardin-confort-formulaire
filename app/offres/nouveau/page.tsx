@@ -779,6 +779,7 @@ const [savedSlug, setSavedSlug]           = useState("");
           if (p.paymentMode) setPaymentMode(p.paymentMode)
           if (p.deliveryMode) setDeliveryMode(p.deliveryMode as DeliveryMode)
           if (p.remarks) setRemarks(p.remarks)
+          if (p.ambianceImages && Array.isArray(p.ambianceImages)) setAmbianceImages(p.ambianceImages)
           if (p.accesLivraison) setAccesLivraison(p.accesLivraison)
         } catch { /* ignore */ }
       }

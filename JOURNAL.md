@@ -1719,3 +1719,364 @@ Ce pattern (Option 1 — prévention + filet) peut être réappliqué pour d'aut
 - N'importe quel champ qui doit refléter une source de vérité externe (Shopify, Make, WinBiz)
 
 ### 🚦 Commits référence
+
+
+
+markdown## Session du 13.05.2026 (suite) — Recherche par numéro de document, affichage compteurs, anti-autofill, page de garde client
+
+> Date : 2026-05-13
+> Statut : ✅ Déployé en production
+> Architecture : ajouts non destructifs sur pages clients (Option 1 strict — pas de migration SQL nécessaire, les tables `factures_winbiz` et `commandes_shopify` existaient déjà avec les bonnes colonnes)
+
+### 🎯 Objectifs de la session
+
+1. Pouvoir retrouver un client depuis un numéro de facture WinBiz, un numéro de commande Shopify, un DEV-XXXX ou CMD-XXXXX
+2. Afficher directement dans la liste clients les numéros de documents liés pour identification visuelle rapide
+3. Mettre en évidence les lignes qui matchent une recherche par numéro de document
+4. Fix UX : dropdown autocomplete `/dashboard/clients` (modal nouveau client) impossible à fermer
+5. Fix UX : Chrome propose l'autofill (adresse perso du commercial) sur la page d'édition de fiche client
+6. Ajouter un bouton "Page de garde adresse" pour imprimer une A4 avec adresse client sans passer par une commande
+7. Ajouter un bouton "Copier adresse" sur la fiche client (facturation + livraison séparées)
+
+### 📐 Décisions architecturales
+
+1. **2 barres de recherche séparées** sur `/dashboard/clients` plutôt qu'une barre unique :
+   - **Barre client** (bleue) : nom, prénom, société, email, NPA, ville, téléphone, n° client
+   - **Barre document** (violette) : n° facture WinBiz, n° commande Shopify (#1234), DEV-XXX, CMD-XXX
+   - **Raison** : éviter la collision `1800` (NPA Vevey vs n° facture 1800 vs commande Shopify #1800). Tous les NPA suisses étant des nombres à 4 chiffres, une recherche unique générait du bruit ingérable.
+
+2. **Paramètre `mode=document` côté API** pour bascule sans ambiguïté côté serveur. Si `mode === "document"` : on cherche UNIQUEMENT dans `factures_winbiz.numero_facture`, `commandes_shopify.shopify_order_name`/`shopify_order_number`, et `offres.numero_offre`/`numero_commande`. Pas de fallback sur la table `clients`.
+
+3. **Affichage des numéros de documents dans 2 colonnes du tableau** :
+   - 📄 **Offres / 🛒 Commandes** (internes Jardin-Confort) : badges ambre + emerald
+   - 📊 **WinBiz / 🛍️ Shopify** (externes) : badges violet + orange
+   - Max 3 numéros visibles par catégorie, bouton "+N" pour étendre, bouton "réduire" pour replier
+   - Le numéro qui matche la recherche est highlighté (ring coloré + bg renforcé)
+   - Tri front : les lignes avec match remontent en premier (filet de sécurité côté JS)
+   - **Toute la ligne** prend un fond violet pâle + bordure gauche violette épaisse + badge "🎯 MATCH" qui pulse à gauche du n° client
+
+4. **Composant `PrintAddressButton` réutilisable** (`components/PrintAddressButton.tsx`) :
+   - Variante `compact` pour la liste clients, normale pour la fiche
+   - Si pas d'adresse de livraison → ouvre directement la page facturation
+   - Si adresse de livraison existe → popup avec 2 choix (Facturation / Livraison)
+
+5. **Template `print/page-garde-client/[id]`** : copie design exacte de `/print/page-garde-colis/[slug]` mais charge un client par ID au lieu d'une offre par slug
+   - Query param `?addr=facturation|livraison`
+   - Toggle visible à l'écran (caché à l'impression) pour basculer Facturation/Livraison
+   - Pas de bloc "infos commande" en bas (puisqu'il n'y a pas de commande)
+   - Mention discrète "Adresse de facturation · Client CL-22094" en pied de page
+
+### ✅ Phase 1 — Recherche par numéro de document (API)
+
+**Fichier** : `app/api/clients/route.ts`
+
+Bonne surprise : la fonction `searchByDocumentNumber()` existait déjà dans le code (elle gérait `DEV-`, `CMD-`, et les numéros purs). Il ne manquait que la **branche `mode=document`** qui court-circuite la cascade existante.
+
+**Patch ajouté** au début de la fonction `GET`, avant la logique existante :
+
+```typescript
+const mode = request.nextUrl.searchParams.get("mode") || "client"
+
+if (mode === "document") {
+  const docResults = await searchByDocumentNumber(q, limit)
+  const { count } = await supabaseAdmin
+    .from("clients")
+    .select("*", { count: "exact", head: true })
+
+  if (docResults && docResults.length > 0) {
+    const enriched = await enrichWithCounts(docResults)
+    return NextResponse.json({ clients: enriched, total: count || 0, matchedBy: "document" })
+  }
+  return NextResponse.json({ clients: [], total: count || 0, matchedBy: "document" })
+}
+```
+
+### ✅ Phase 2 — Affichage numéros de documents dans la liste
+
+**Fichier** : `app/api/clients/route.ts` (extension `enrichWithCounts`)
+
+#### 2a — Type `ClientWithCounts` étendu
+
+Ajout de 4 tableaux `nums_*` (max 10 par catégorie) à côté des compteurs `nb_*` existants :
+
+```typescript
+type DocRef = { num: string; date?: string | null }
+
+type ClientWithCounts = Client & {
+  nb_offres: number
+  nb_commandes_internes: number
+  nb_commandes_shopify: number
+  nb_factures_winbiz: number
+  nums_offres: DocRef[]
+  nums_commandes_internes: DocRef[]
+  nums_shopify: DocRef[]
+  nums_factures_winbiz: DocRef[]
+}
+```
+
+#### 2b — Fonction `fetchClientIdCountsByIn` refactorisée
+
+Retourne maintenant `{ counts, nums }` au lieu d'un simple `counts`. Ajout d'`.order(dateField, { ascending: false })` pour garder les numéros les plus récents en premier.
+
+**Index Postgres optionnels** suggérés pour performance future :
+```sql
+CREATE INDEX IF NOT EXISTS factures_winbiz_client_date_idx ON factures_winbiz(client_id, date_facture DESC);
+CREATE INDEX IF NOT EXISTS commandes_shopify_client_date_idx ON commandes_shopify(client_id, created_at_shopify DESC);
+```
+(Non créés pour l'instant — à faire seulement si la liste devient lente sur ~18 911 clients)
+
+#### 2c — Type `OffreRow` et `tallyOffre` étendus
+
+Ajout des champs `numero_affiche`, `numero_offre`, `numero_commande`, `date_document` dans le SELECT et dans la map des offres :
+
+```typescript
+function tallyOffre(map, clientId, o) {
+  const entry = map.get(clientId) || { offres: 0, commandes: 0, numsOffres: [], numsCommandes: [] }
+  const isCmd = o.type_document === "Commande" || o.statut === "Acceptée" || o.statut === "Convertie"
+  const num = o.numero_affiche || o.numero_commande || o.numero_offre || ""
+  // ... stocke dans entry.numsOffres ou entry.numsCommandes
+}
+```
+
+3 occurrences du `.select("client_numero_client, client_email, ...")` mises à jour pour inclure les 4 nouveaux champs.
+
+### ✅ Phase 3 — UI 2 barres + highlight lignes match
+
+**Fichier** : `app/dashboard/clients/page.tsx`
+
+#### 3a — States ajoutés
+```typescript
+const [searchDoc, setSearchDoc] = useState("")
+const [activeSearch, setActiveSearch] = useState("client")
+```
+
+#### 3b — `fetchClients` accepte un paramètre `mode`
+```typescript
+const fetchClients = useCallback(async (q: string, mode: "client" | "document" = "client") => {
+  const url = mode === "document"
+    ? `/api/clients?q=${encodeURIComponent(q)}&limit=100&mode=document`
+    : `/api/clients?q=${encodeURIComponent(q)}&limit=100`
+  // ...
+}, [])
+```
+
+#### 3c — useEffect réagit aux 2 barres
+La barre active (`activeSearch`) détermine quel mode est utilisé. Quand on tape dans une barre, l'autre se vide automatiquement.
+
+#### 3d — Nouveaux composants
+- `DocNum` : badge unitaire avec highlight si match
+- `DocsCellInternes` : cellule Offres+Commandes avec tri match-en-premier et "voir +N"
+- `DocsCellExternes` : cellule WinBiz+Shopify, même logique
+- `clientHasDocumentMatch()` : helper pour détecter si une ligne contient un match (utilisé pour le tri front + le surlignage de toute la ligne)
+
+#### 3e — Mise en évidence des lignes match
+Quand `activeSearch === "document"` ET la ligne contient un document qui matche :
+- Fond `bg-violet-500/15` + ring violet
+- Bordure gauche violette épaisse (4px) via `boxShadow: "inset 4px 0 0 0 rgb(167 139 250)"`
+- Badge "🎯 MATCH" qui pulse à gauche du n° client
+- Lignes match triées en premier dans la liste
+
+### 🐛 Pièges rencontrés Phase 1-3
+
+#### Build cassé sur `activeSearch` indéfini
+Application des patches dans le mauvais ordre — les composants `DocsCellInternes/Externes` ont été ajoutés avant les states `searchDoc/activeSearch`. **Fix** : appliquer **dans l'ordre** : (1) états & types, (2) fonctions de fetch, (3) composants, (4) JSX qui les utilise.
+
+#### Signature `fetchClients` non mise à jour
+`fetchClients(searchDoc, "document")` appelé alors que la fonction n'acceptait qu'un argument. **Fix** : étendre la signature à `(q: string, mode: "client" | "document" = "client")` avant d'appeler avec 2 paramètres.
+
+#### Confusion PowerShell vs SQL Editor Supabase
+Une requête SQL exécutée par erreur dans PowerShell → `Le mot clé « from » n'est pas pris en charge`. Rappel : SQL → **Supabase Dashboard → SQL Editor**, jamais PowerShell.
+
+### ✅ Phase 4 — Fix UX dropdown autocomplete sur modal "Nouveau client"
+
+**Fichier** : `app/dashboard/clients/page.tsx`
+
+Le dropdown qui suggère les clients existants (sur les champs Nom, Email, Tél du modal "Nouveau client") n'avait **aucun moyen de fermeture fiable** :
+- Le `onBlur={closeClientDropdown}` avec `setTimeout(200)` était capricieux
+- Le bouton "Créer quand même" était la seule sortie évidente
+
+**Solution** (cohérente avec ce qui a été fait sur `/offres/nouveau` il y a quelques sessions) :
+
+1. **Touche Esc** au clavier → `useEffect` qui écoute `keydown` global quand des suggestions sont affichées
+2. **Clic extérieur** → `useEffect` qui écoute `mousedown` avec délai de 50ms pour ne pas intercepter le clic qui a ouvert le dropdown
+3. **Bouton ❌ rouge** en haut-droite du dropdown (`absolute -top-2 -right-2`)
+4. **Vidange auto du champ** → si le champ devient vide, `closeClientDropdown()` immédiat
+
+`closeClientDropdown()` simplifié à `setClientSuggestions([])` + `setClientSuggestIndex(-1)` (sans setTimeout).
+
+Ref `clientDropdownRef` ajoutée sur les 3 dropdowns (Nom, Tél, Email) pour détecter le clic extérieur.
+
+### ✅ Phase 5 — Fix anti-autofill sur édition fiche client
+
+**Fichier** : `app/dashboard/clients/[id]/page.tsx`
+
+Chrome (et tous les navigateurs modernes) propose en autofill l'adresse personnelle enregistrée du commercial sur les champs Rue/NPA/Ville/Email/Tél de l'édition de fiche client. Très gênant en pratique.
+
+**Astuce technique** (combinaison qui marche partout) :
+
+1. **Piège anti-autofill** au début du bloc d'édition :
+```jsx
+
+  
+  
+
+```
+Le navigateur remplit ces 2 champs cachés (qu'il considère prioritaires pour des identifiants login/password) au lieu des vrais champs adresse.
+
+2. **3 attributs sur chaque input** d'édition (21 inputs au total — facturation + livraison + notes) :
+```jsx
+autoComplete="new-password"
+name="f-XXX"  // nom imprévisible non standard
+data-form-type="other"
+```
+
+`autoComplete="new-password"` est l'astuce clé : c'est le seul mode où Chrome refuse systématiquement d'autofill (sinon il propose toujours malgré `autoComplete="off"` depuis 2020+).
+
+### 🐛 Pièges rencontrés Phase 5
+
+#### Patches déjà partiellement appliqués
+Le piège anti-autofill et le champ Nom avaient déjà reçu les attributs. Solution : patcher les 20 autres champs **un par un** avec cherche/remplace exact pour chacun, car chaque champ a des indentations différentes (2-spaces vs 4-spaces vs nested grids).
+
+#### Confusion sur le fichier
+Premier patch tenté sur `app/page.tsx` (homepage Next.js !) au lieu de `app/dashboard/clients/[id]/page.tsx`. Rappel : l'URL `/dashboard/clients/22094` correspond au pattern `app/dashboard/clients/[id]/page.tsx`.
+
+### ✅ Phase 6 — Bouton "Page de garde adresse" + nouveau template print
+
+**Fichiers créés** :
+
+#### 6a — `components/PrintAddressButton.tsx`
+
+Composant React réutilisable avec 2 variantes :
+- **Normal** (sur fiche client) : bouton violet large `📦 Page garde`
+- **Compact** (sur liste clients) : bouton violet petit
+
+Logique :
+- Si client a une `livr_rue` → popup avec 2 choix : 📍 Facturation / 📦 Livraison
+- Sinon → ouvre directement `?addr=facturation`
+- Overlay fixed pour fermer au clic extérieur
+
+#### 6b — `app/print/page-garde-client/[id]/page.tsx`
+
+Template print **copie quasi exacte** de `app/print/page-garde-colis/[slug]/page.tsx` avec ces différences :
+
+| Aspect | Original `/page-garde-colis/[slug]` | Nouveau `/page-garde-client/[id]` |
+|---|---|---|
+| Source data | `/api/offres/${slug}` (offre) | `/api/clients/${id}` (client) |
+| Sélection adresse | `data.livrDiff` (auto) | Query param `?addr=facturation\|livraison` |
+| Bloc bas | N° commande, date, expédition, commercial, accès | Mention discrète "Adresse X · Client CL-22094" |
+| Toggle écran | N/A | Boutons "📍 Facturation / 📦 Livraison" en haut-gauche (cachés à l'impression via `@media print`) |
+| Design | Logo Jardin-Confort vertical + adresse client format enveloppe + barre bleue | **Identique** |
+
+#### 6c — Intégrations
+
+**Liste clients** (`app/dashboard/clients/page.tsx`) :
+- Import du composant
+- `<PrintAddressButton client={c} compact />` dans la colonne Actions, avant le bouton "+ Offre"
+
+**Fiche client** (`app/dashboard/clients/[id]/page.tsx`) :
+- Import du composant
+- `<PrintAddressButton client={client} />` après "+ Nouvelle offre" dans la barre de navigation du header
+
+### ✅ Phase 7 — Bouton "Copier adresse" sur fiche client
+
+**Fichier** : `app/dashboard/clients/[id]/page.tsx`
+
+Demande utilisateur : pouvoir copier l'adresse dans le presse-papier en 1 clic pour la coller dans un email, un GPS, une étiquette, etc.
+
+**State ajouté** :
+```typescript
+const [addrCopied, setAddrCopied] = useState(null)
+```
+
+**Fonction `copyAddress()`** : construit un tableau de lignes à partir des champs, filtre les vides avec un type guard `(l): l is string`, joint avec `\n`, copie via `navigator.clipboard.writeText()`, met le feedback "✓ Copiée" 2 secondes.
+
+Format produit :
+Société (si présente)
+Nom Prénom
+Complément nom (si présent)
+Rue Numéro
+Complément d'adresse (rue2, si présent)
+NPA Ville
+
+**Boutons ajoutés dans le bloc Coordonnées** :
+- `📋 Copier adresse` (toujours visible)
+- `📦 Copier livraison` (visible seulement si `client.livr_rue` est renseigné)
+
+### 🐛 Piège ergonomique Phase 7
+
+**Premier essai** : 3 boutons sur la même ligne que le titre `Coordonnées` (Copier + Livraison + Modifier). Sur la colonne 400px, le texte "📋 Copier adresse" passait sur 2 lignes et chevauchait le titre.
+
+**Faux fix tenté** : `whitespace-nowrap` pour forcer sur 1 ligne. → Pire encore, les boutons larges débordaient la colonne.
+
+**Vrai fix appliqué** : sortir les boutons sur une **ligne séparée** sous le titre :
+
+```jsx
+<div className="mb-4">
+  <div className="flex items-center justify-between gap-3">
+    <h2>Coordonnées</h2>
+    {editing && (<boutons Enregistrer/Annuler à droite/>)}
+  </div>
+  {!editing && (
+    <div className="mt-3 flex flex-wrap gap-2">
+      <button>📋 Copier adresse</button>
+      {client.livr_rue && <button>📦 Copier livraison</button>}
+      <button>✏️ Modifier</button>
+    </div>
+  )}
+</div>
+```
+
+Le titre `Coordonnées` reste tranquille sur sa ligne, les 3 boutons s'alignent dessous avec assez de place pour tenir. Sur mobile, ils wrappent naturellement.
+
+Les boutons Enregistrer/Annuler restent à droite du titre pendant l'édition car ils sont courts.
+
+### 📋 Récap fichiers patchés cette session
+
+| # | Fichier | Type | Détails |
+|---|---|---|---|
+| 1 | `app/api/clients/route.ts` | Backend | Ajout `mode=document` + extension `enrichWithCounts` avec numéros de documents |
+| 2 | `app/dashboard/clients/page.tsx` | Frontend | 2 barres de recherche, composants `DocNum`/`DocsCellInternes`/`DocsCellExternes`, surlignage lignes match, fix dropdown autocomplete (Esc + clic ext + bouton ❌), intégration `PrintAddressButton` |
+| 3 | `app/dashboard/clients/[id]/page.tsx` | Frontend | Anti-autofill sur 21 inputs édition, intégration `PrintAddressButton`, boutons Copier adresse/Livraison |
+| 4 | `components/PrintAddressButton.tsx` | Nouveau | Composant réutilisable (compact + normal) |
+| 5 | `app/print/page-garde-client/[id]/page.tsx` | Nouveau | Template print A4 page de garde client sans commande |
+
+### 🎉 Statut
+
+| Phase | Statut |
+|---|---|
+| Phase 1 — Backend recherche document | ✅ |
+| Phase 2 — Affichage numéros documents | ✅ |
+| Phase 3 — UI 2 barres + highlight match | ✅ |
+| Phase 4 — Fix dropdown autocomplete | ✅ |
+| Phase 5 — Anti-autofill édition fiche | ✅ |
+| Phase 6 — Page de garde client | ✅ |
+| Phase 7 — Copier adresse | ✅ |
+
+### 🔧 Maintenance future
+
+#### Performance liste clients
+Sur 18 911 clients, l'enrichissement avec compteurs + numéros pour 100 clients affichés tient en < 2s (mesuré). Si ça ralentit :
+1. Créer les index suggérés (`factures_winbiz_client_date_idx` et `commandes_shopify_client_date_idx`)
+2. Ou retirer `.order(dateField, { ascending: false })` dans `fetchClientIdCountsByIn` (ordre arbitraire, mais c'est OK puisqu'on prend juste les 10 premiers)
+
+#### À ne pas oublier
+**Le piège anti-autofill (`<input name="username" />` + `<input name="password" />` cachés au début du bloc)** doit être placé **dans le bloc d'édition uniquement**, pas dans le bloc display. Sinon Chrome essaie de remplir des champs invisibles à chaque chargement de page.
+
+#### Pattern réutilisable
+Pour ajouter un nouveau type de document recherchable (ex : factures Shopify si on en stocke un jour) :
+1. Ajouter la table dans `fetchClientIdCountsByIn` (élargir le type union `table`)
+2. Ajouter une branche dans `searchByDocumentNumber` qui détecte le préfixe et match dans la nouvelle table
+3. Ajouter le tableau `nums_xxx` dans `ClientWithCounts` et dans l'assemblage final
+4. Ajouter le badge color dans `DocsCellExternes` (ou créer une 3ème cellule)
+
+### 🚦 Commits référence
+feat(clients): 2 barres recherche separees client vs document + mode API
+feat(clients): affichage numeros documents par categorie + highlight match recherche
+feat(clients): mise en evidence visible des lignes qui matchent recherche document
+fix(clients/new): dropdown suggestions fermable avec Esc, clic exterieur et bouton X
+fix(client/edit): autocomplete=new-password sur tous les champs (anti autofill Chrome)
+feat(clients): bouton page garde adresse + template print client sans commande
+feat(client): bouton copier adresse facturation et livraison sur fiche
+fix(client): boutons coordonnees sur ligne separee pour eviter chevauchement
+
+
