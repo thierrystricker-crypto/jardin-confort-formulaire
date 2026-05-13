@@ -1429,3 +1429,293 @@ Actuellement, l'aperçu utilise `MEDIA_SIZE_PX[line.size]` (valeurs logos unique
 ## 📌 Note : les images d'ambiance restent intactes
 
 Le mécanisme séparé `ambianceImages` / classes `.jc-ambiance-*` (images de fin d'offre, page 2 séparée) n'a **pas** été touché, comme demandé.
+
+
+---
+
+## Session du 13.05.2026 — Debug du compactage à l'impression `/print/all`
+
+### Symptôme
+Le template `/print/all/[slug]` (jeu complet 5 pages) s'imprimait compacté à ~74% à l'écran d'aperçu d'impression : les pages ne remplissaient pas la feuille A4, alors que les templates individuels (`/print/offre`, `/print/fiche-travail`, etc.) s'imprimaient correctement à pleine taille.
+
+### Cause racine identifiée (par test de dichotomie)
+Le **`min-height: 265mm`** sur `.fb-page-wrap` (fiche bleue, page 5) combiné aux marges `@page` faisait dépasser le contenu de la zone imprimable A4. Chrome déclenchait alors un **shrink-to-fit automatique** qui rescalait **tout le document** (les 5 pages) à ~74% pour faire rentrer la fiche bleue dans la feuille.
+
+**Méthode de diagnostic** : désactivation temporaire de chaque page via `{false && (...)}` (test par dichotomie). En désactivant la fiche bleue, les 4 autres pages s'imprimaient à pleine taille. → Coupable identifié.
+
+### Fausses pistes éliminées en cours de route
+1. **Erreur React #418 (hydratation)** : présente sur TOUS les templates print, donc non bloquante. À ignorer.
+2. **Largeur excessive `.fb-page-wrap`** : ajouts `width: 794px`/`width: 178mm` → faisaient EMPIRER les choses (forçaient un body à 673px = précisément la valeur de compactage).
+3. **Erreur d'hydratation #418** : tentatives de SSR off via `dynamic({ssr: false})` → aucun effet sur le compactage.
+4. **Adresse longue débordante** sur page de garde colis (MAISON DE GROUPE VICTORIA MIGNARD / LINDENMAIER) : ajout `word-break: break-word` sur `.pg-client-addr*` a résolu le débordement visuel mais PAS le compactage.
+
+### Solution finale appliquée
+1. **Suppression du `min-height: 265mm` problématique** sur `.fb-page-wrap` puis remise à `277mm` après ajustement des marges `@page`.
+2. **Réduction des marges `@page`** de `14mm 16mm 14mm 14mm` à `8mm 10mm 8mm 10mm` → toutes les pages gagnent de l'espace utile (zone imprimable passe de 180×269mm à 190×281mm).
+3. **Wrap forcé sur les adresses longues** : ajout `word-break: break-word; overflow-wrap: break-word; max-width: 100%` sur `.pg-client-addr`, `.pg-client-addr-line`, `.pg-client-addr-name` pour éviter le débordement quand un nom de société est très long.
+
+### Compromis accepté
+La fiche bleue dans `print/all` garde **8mm de blanc autour** de son fond bleu (vs `@page { margin: 0 }` dans le template standalone `/print/fiche-bleue/[slug]` qui touche les bords physiques du papier).
+Tentative de marges négatives `margin: -14mm -16mm -14mm -14mm` pour compenser → faisait déborder la fiche bleue sur 2 pages. **Abandonnée.**
+Pour avoir un fond bleu pleine page jusqu'aux bords physiques, utiliser uniquement le template standalone `/print/fiche-bleue/[slug]`.
+
+### Pièges à retenir pour le futur
+- **Chrome shrink-to-fit** : si un élément dépasse la zone imprimable A4 (largeur OU hauteur), Chrome rescale tout le document pour faire rentrer. Pas que la page fautive — **tout**.
+- **Test par dichotomie** : pour identifier un élément coupable parmi plusieurs sur une page d'impression complexe, désactiver via `{false && (...)}` et tester à l'impression. Méthode super efficace.
+- **Erreur React #418** : non corrélée au compactage. Présente sur tous les templates print mais bénigne.
+- **`@page` global** : impossible de définir des @page différentes par page dans un même document HTML. Les marges `@page` s'appliquent à toutes les pages du document.
+- **Diagnostic via console F12** : `document.body.offsetWidth` et `document.querySelector('.X').offsetWidth` avec "Emulate CSS media type = print" activé dans Rendering. Comparer entre template qui marche vs cassé.
+- **Largeur en `mm`** : préférer les unités physiques pour le print plutôt que les pixels. Mais attention, ne pas forcer une largeur plus petite que nécessaire (j'ai introduit moi-même un bug avec `width: 178mm` qui forçait le body à 673px).
+
+### Fichiers modifiés
+- `app/print/all/[slug]/page.tsx` : modifications principales (marges `@page`, `.fb-page-wrap` min-height, `.pg-client-addr*` word-break)
+
+### Commits référence
+- `fix(print-all): supprimer min-height fiche bleue qui forcait rescale Chrome`
+- `fix(print-all): forcer wrap multiligne adresse longue page de garde`
+- `feat(print-all): reduire marges @page de 14mm a 8mm pour gagner de l'espace`
+
+
+---
+
+## Session du 14.05.2026 — Verrouillage lignes Shopify + filet de sécurité « Stock à vérifier »
+
+> Date : 2026-05-14
+> Statut : ✅ Terminé et déployé en production
+> Architecture : Option 1 (prévention + filet de sécurité, sans changement de logique métier)
+
+### 🎯 Problème initial
+
+Quand un article Shopify importé via le picker était modifié à la volée (titre + SKU pour créer une « fausse variante »), le **niveau de stock du produit d'origine restait affiché** sur tous les documents dynamiques (offre, commande, fiche de travail, etc.) — alors que le SKU custom n'existait plus côté Shopify.
+
+**Pourquoi c'était dangereux** :
+- Le client voyait « ✓ En stock (5 pces) » sur une offre commerciale, alors que ce SKU n'existait nulle part
+- L'entrepôt voyait « 5 en stock » sur la fiche de travail → erreur de picking garantie
+- WinBiz et Make recevaient un payload incohérent (SKU custom + niveau stock fantôme)
+
+**Localisation exacte du bug** : `app/api/offres/[slug]/route.ts`, fonction `refreshStock`, ligne ~120 :
+
+```typescript
+return lines.map((line) => {
+  if (line.type === "comment" || !line.sku) return line;
+  const fresh = skuMap.get(line.sku as string);
+  if (!fresh) return line;  // ← BUG : garde silencieusement le stock snapshot obsolète
+  // ...
+});
+```
+
+Quand Shopify ne trouvait pas le SKU (parce qu'il avait été modifié), `fresh` était `undefined` → `return line` → la ligne gardait son `stock` initial figé au moment de l'import. Le commentaire vert « 🔄 Stock en temps réel » devenait donc partiellement mensonger.
+
+### 📐 Décisions architecturales
+
+1. **Prévention dans le formulaire** (workflow correct dès la création) :
+   - Nouveau flag `shopifyLocked?: boolean` sur le type `QuoteLine`
+   - SKU + titre des lignes Shopify : **readonly avec cadenas visuel** (fond violet pâle)
+   - **Prix reste éditable** (flexibilité commerciale pour ajuster une remise client)
+   - Stock affiché en lecture seule via `<span>` (jamais éditable côté Shopify)
+   - Qté et remise ligne (toggle %−) : éditables comme avant
+   - Bouton 📋 **« Dupliquer comme modèle »** visible uniquement sur lignes Shopify :
+     - Crée une ligne `type: "custom"` (sans lock)
+     - Garde titre, prix, image, qté, remise
+     - **Efface** SKU et stock (à saisir manuellement)
+
+2. **Filet de sécurité côté serveur** :
+   - Si `refreshStock` ne trouve pas le SKU côté Shopify ET la ligne était locked → `stock: null` au lieu de garder l'ancien
+   - Les lignes custom (sans lock) ne sont pas affectées (stock manuel conservé)
+
+3. **Filet de sécurité côté templates** :
+   - Quand `isLocked && stock === null` → badge orange `⚠ Stock à vérifier` (ou abrégé sur fiche bleue)
+   - Sur tous les templates qui affichent du stock
+
+4. **Fallback rétroactif** sans migration SQL :
+   - Détection via `line.id?.startsWith("shopify-")` en plus du flag explicite
+   - Les anciennes offres créées avant l'ajout du flag sont automatiquement protégées
+
+5. **Hors périmètre** (décision pragmatique) :
+   - Offres `Acceptée`/`Convertie` : stock figé par design (immutabilité offre signée ↔ commande liée)
+   - Commandes : stock figé J0 par design (audit, fiches de travail générées au moment de la commande)
+   - Pas de migration de données : la feature est transparente pour le passé
+
+### ✅ Phase 1 — Type & flag
+
+**Fichier** : `app/offres/nouveau/page.tsx`
+
+```typescript
+type QuoteLine = {
+  // ... champs existants
+  shopifyLocked?: boolean;  // ← NOUVEAU
+};
+```
+
+Dans `addShopifyItem()` :
+```typescript
+setLines((c) => [...c, {
+  // ... champs existants
+  shopifyLocked: true,  // ← Article Shopify : SKU+titre+stock verrouillés
+}]);
+```
+
+### ✅ Phase 2 — UI formulaire
+
+**Fichier** : `app/offres/nouveau/page.tsx`
+
+**Détection dans la boucle `.map()`** :
+```typescript
+const isLocked = line.shopifyLocked === true || line.id?.startsWith("shopify-");
+```
+
+**Champs readonly** :
+- SKU : `readOnly={isLocked}` + classe `jc-locked-input` + tooltip
+- Titre : `readOnly={isLocked}` + classe `jc-locked-input` + tooltip
+- Prix : **resté éditable** (changement de plan en cours de session — flexibilité commerciale)
+
+**Bouton 📋 « Dupliquer comme modèle »** (visible uniquement si `isLocked`) :
+```jsx
+{isLocked && (
+  <button className="jc-template-btn" onClick={() => {
+    const template: QuoteLine = {
+      id: `custom-${Date.now()}`,
+      type: "custom",
+      image: line.image,
+      sku: "",        // ← à saisir
+      title: line.title,
+      unitPrice: line.unitPrice,
+      qty: line.qty,
+      stock: null,    // ← à saisir
+      lineDiscount: line.lineDiscount,
+      // PAS de shopifyLocked → ligne libre
+    };
+    // ... insertion à idx + 1
+  }}>📋</button>
+)}
+```
+
+**Bonus** : bug « stock one-shot » corrigé sur les lignes custom
+- **Avant** : l'input stock devenait un `<span>` dès qu'on tapait une valeur → plus modifiable
+- **Après** : input persistant pour les lignes non-locked, `<span>` figé pour les lignes Shopify
+- Patch ciblé : la cellule `td-stock` est désormais conditionnelle sur `isLocked`
+
+**CSS ajouté** :
+- `.jc-template-btn` (bouton violet 📋)
+- `.jc-locked-input` (fond violet pâle, curseur not-allowed, readonly)
+
+### ✅ Phase 3 — Filet de sécurité côté API
+
+**Fichier** : `app/api/offres/[slug]/route.ts`, fonction `refreshStock`
+
+**Changement** : le `return line` silencieux qui gardait le stock obsolète devient une invalidation conditionnelle :
+
+```typescript
+if (!fresh) {
+  const lineWithLock = line as { shopifyLocked?: boolean; id?: string };
+  const wasShopify = lineWithLock.shopifyLocked === true || lineWithLock.id?.startsWith("shopify-");
+  if (wasShopify) {
+    return { ...line, stock: null, delaiLivraison: undefined };
+  }
+  return line;  // ligne custom : on garde le stock manuel
+}
+```
+
+**Important** : ce changement ne touche QUE la branche `refreshStock` (offres en cours). Les branches `isCommande` et `isOffreConvertie` (stock figé) restent inchangées par design.
+
+### ✅ Phase 4 — Templates d'affichage
+
+Le badge « Stock à vérifier » est ajouté **en cas prioritaire** dans la cascade de détection du stock, sans toucher au comportement existant. Pattern uniforme :
+
+```typescript
+const lineLock = line as { shopifyLocked?: boolean; id?: string };
+const isLocked = lineLock.shopifyLocked === true || lineLock.id?.startsWith("shopify-");
+
+if (isLocked && sn === null && line.stock !== "sur_commande") {
+  return <div style={{ color: "#ea580c", ... }}>⚠ Stock à vérifier</div>;
+}
+// ... cascade existante (isSC, isPartial, isOk)
+```
+
+### 📋 Récap fichiers patchés
+
+| # | Fichier | Type de patch | Détails |
+|---|---|---|---|
+| 1 | `app/offres/nouveau/page.tsx` | Type + UI + CSS | 7 patches : type, addShopifyItem, boucle .map(), SKU readonly, titre readonly, bouton 📋, CSS, bug one-shot stock custom |
+| 2 | `app/api/offres/[slug]/route.ts` | API logique | 1 patch : refreshStock invalide `stock: null` si SKU introuvable + ligne locked |
+| 3 | `app/offre/[slug]/page.tsx` | Page web client | 1 patch : cas prioritaire `isUnknown` en début de cascade ternaire |
+| 4 | `app/print/offre/[slug]/page.tsx` | Template print offre | 1 patch : cas prioritaire dans l'IIFE de calcul du badge stock |
+| 5 | `app/print/all/[slug]/page.tsx` | Template jeu complet | 3 patches sur 3 sous-templates : Page 1 (ft-), Page 2 (cc-), Page 5 (fb-) |
+| 6 | `app/print/fiche-travail/[slug]/page.tsx` | Template standalone | 1 patch : `<span>—</span>` → badge orange si locked |
+| 7 | `app/print/fiche-bleue/[slug]/page.tsx` | Template standalone | 1 patch : idem avec « vérif » abrégé (colonne 60px) |
+
+**Total : ~15 patches sur 7 fichiers**
+
+### 📊 Couverture finale
+
+| Endroit | Status | Comportement si SKU introuvable |
+|---|---|---|
+| Formulaire `/offres/nouveau` | ✅ | Prévention : impossible de modifier SKU |
+| API `/api/offres/[slug]` | ✅ | Renvoie `stock: null` pour lignes locked |
+| Page web client `/offre/[slug]` | ✅ | Badge orange `⚠ Stock à vérifier` |
+| Print `/print/offre/[slug]` | ✅ | Badge orange `⚠ Stock à vérifier` |
+| Print `/print/all/[slug]` Page 1 (Fiche travail) | ✅ | Badge orange `⚠ À vérifier` |
+| Print `/print/all/[slug]` Page 2 (Commande) | ✅ | Badge orange `⚠ Stock à vérifier` |
+| Print `/print/all/[slug]` Page 3 (Page garde colis) | N/A | Pas de stock affiché |
+| Print `/print/all/[slug]` Page 4 (Bulletin livraison) | N/A | Pas de stock affiché |
+| Print `/print/all/[slug]` Page 5 (Fiche bleue) | ✅ | Badge orange `⚠ vérif` abrégé |
+| Print `/print/fiche-travail/[slug]` standalone | ✅ | Badge orange `⚠ À vérifier` |
+| Print `/print/bulletin-livraison/[slug]` standalone | N/A | Pas de stock affiché |
+| Print `/print/page-garde-colis/[slug]` standalone | N/A | Pas de stock affiché |
+| Print `/print/fiche-bleue/[slug]` standalone | ✅ | Badge orange `⚠ vérif` abrégé |
+
+### 🐛 Pièges rencontrés
+
+#### Modification du plan en cours de session
+Initialement on avait verrouillé **aussi le prix** (option 1 stricte). En cours d'application, choix de **laisser le prix éditable** pour permettre les ajustements commerciaux ponctuels (remise client négociée). Le SKU reste la clé technique (liaison Shopify), le titre la cohérence de présentation, mais le prix est un paramètre commercial qui change souvent — le verrouiller obligerait à passer par « Dupliquer comme modèle » à chaque négo, trop lourd.
+
+#### Bug « one-shot » sur stock des lignes custom (préexistant)
+Cellule `td-stock` avait une condition `{line.stock === null ? <input/> : <span/>}`. Dès qu'on tapait une valeur, l'input devenait un span, plus modifiable. Corrigé dans le même commit en rendant l'input persistant pour les lignes non-locked.
+
+#### Anciennes offres avec SKU modifié et statut signé
+Le filet de sécurité ne couvre QUE les offres en cours (branche `refreshStock`). Les offres `Acceptée`/`Convertie` et les `Commande` gardent leur stock figé par design métier (immutabilité audit + cohérence offre signée ↔ commande liée). Décision pragmatique : on n'a pas patché ces branches, les très rares cas problématiques d'anciennes offres restent en l'état (« c'est l'histoire »).
+
+#### Templates `all` vs standalone
+Le fichier `print/all/[slug]` contient en réalité **5 sous-templates fusionnés** (préfixes `ft-`, `cc-`, `pg-`, `bl-`, `fb-`). On a patché chaque sous-template séparément, puis les fichiers standalone équivalents (`/print/fiche-travail/[slug]` et `/print/fiche-bleue/[slug]`). Cohérence visuelle garantie : même couleur orange `#ea580c` partout.
+
+#### Largeur de colonne fiche bleue
+Sur la fiche bleue (`.fb-td-stock-bleue { width: 60px }`), le texte « À vérifier » débordait. Utilisé « vérif » abrégé à la place. Si plus tard tu veux changer ce libellé, garde l'abréviation ou élargis la colonne d'abord.
+
+### 🔧 Maintenance future
+
+#### Pour ajouter un nouveau verrouillage de champ
+Suivre le même pattern : ajouter `readOnly={isLocked}` + classe `jc-locked-input` + tooltip explicatif. La détection `isLocked` est déjà disponible dans la boucle `.map()`.
+
+#### Pour étendre le filet « Stock à vérifier » à un nouveau template
+1. Copier le pattern de détection :
+```typescript
+   const lineLock = line as { shopifyLocked?: boolean; id?: string };
+   const isLocked = lineLock.shopifyLocked === true || lineLock.id?.startsWith("shopify-");
+```
+2. Ajouter le cas prioritaire **en début de cascade** :
+```typescript
+   if (isLocked && stockNull && line.stock !== "sur_commande") {
+     return <badge orange "⚠ Stock à vérifier">;
+   }
+```
+3. Garder le reste de la cascade intact
+
+#### Si on veut renforcer le typage (cosmétique)
+Pour éliminer les `(line as any).shopifyLocked` qui restent dans les templates standalone (`fiche-travail/[slug]`, `fiche-bleue/[slug]`) :
+- Patcher leur type `QuoteLine` local pour ajouter `shopifyLocked?: boolean`
+- Le code fonctionne déjà, c'est juste pour la propreté
+
+#### Si on veut couvrir les anciennes offres signées (NON recommandé)
+Cela demanderait de modifier les branches `isCommande` et `isOffreConvertie` dans `refreshStock`, ce qui casserait le principe d'immutabilité des offres signées. Plutôt : corriger manuellement en SQL les rares cas problématiques :
+```sql
+UPDATE offres SET data = jsonb_set(data, '{lines,N,stock}', 'null'::jsonb)
+WHERE slug = 'dev-2025-XXX' AND ...;
+```
+
+#### Pattern réutilisable pour d'autres champs verrouillables
+Ce pattern (Option 1 — prévention + filet) peut être réappliqué pour d'autres champs futurs :
+- `image` Shopify verrouillée
+- `mediaUrl` lignes média locked
+- N'importe quel champ qui doit refléter une source de vérité externe (Shopify, Make, WinBiz)
+
+### 🚦 Commits référence
