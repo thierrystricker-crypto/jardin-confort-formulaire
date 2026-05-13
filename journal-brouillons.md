@@ -130,7 +130,7 @@ create sequence drafts_numero_seq start 1;
 
 | # | Session | Risque | État | Date | Branche/commit |
 |---|---|---|---|---|---|
-| 1 | Préparation : backup Supabase + branche git + création table `drafts` | Faible | ☐ À faire | | |
+| 1 | Préparation : backup Supabase + branche git + création table `drafts` | Faible | ✅ Terminée | 2026-05-14 | 11b4c36 |
 | 2 | API `/api/drafts` (POST, GET, GET[slug], PUT[slug], DELETE[slug]) | Moyen | ☐ À faire | | |
 | 3 | Page `/drafts/nouveau` (clone adapté de `/offres/nouveau`) + redirection | Moyen | ☐ À faire | | |
 | 4 | Page `/dashboard/draft/[slug]` (vue brouillon + bouton "Modifier") | Moyen | ☐ À faire | | |
@@ -348,8 +348,24 @@ La table `drafts` peut rester en base (vide, sans impact).
 > À remplir au fur et à mesure : écarts au plan, décisions prises en cours de
 > route, problèmes rencontrés, fichiers modifiés.
 
-### Session 1
-_(à remplir après réalisation)_
+### Session 1 — Terminée le 2026-05-14
+
+**Réalisé :**
+- Branche `feature/brouillons` créée et poussée
+- Audit Supabase Storage effectué : 4 buckets identifiés (brand-logos, factures, pdfs, fiche-travail-pdf). Risques R1/R2/R3 identifiés et assumés (voir section "Audit Supabase Storage")
+- Architecture auth confirmée : `lib/supabase.ts` exporte `supabase` (anon) et `supabaseAdmin` (service_role). Les routes API utilisent `supabaseAdmin` pour bypass RLS
+- Table `drafts` créée avec structure alignée sur `offres` (bigint id, RLS off, toutes les colonnes pertinentes)
+- Trigger `updated_at` automatique testé et fonctionnel
+- SQL versionné dans `docs/sql/001-create-drafts.sql`
+
+**Écarts au plan initial :**
+- La table `drafts` initialement créée avec une structure minimale (UUID, RLS on, peu de colonnes) a été DROP et recréée avec la structure complète. Sans impact car aucune donnée.
+- RLS active sur `drafts` par défaut → désactivée pour cohérence avec `offres`.
+
+**Notes pour Session 2 :**
+- Pour la génération du numéro de brouillon, s'inspirer de `app/api/offres/save/route.ts` (ligne 74 : `numero_offre: numeroOffre`)
+- Le client à utiliser dans les routes API : `supabaseAdmin` depuis `lib/supabase.ts`
+- Patterns existants à étudier : `app/api/offres/[slug]/notes/route.ts`, `app/api/offres/[slug]/statut/route.ts` pour la structure des routes
 
 ### Session 2
 _(à remplir après réalisation)_
