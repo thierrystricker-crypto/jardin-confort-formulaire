@@ -7,3 +7,13 @@
 [33ma61ade7[m fix(dashboard): balise <a manquante sur lien mailto
 [33m2eb62d3[m ui(dashboard): accentue le vert des commandes pour mieux les distinguer
 [33m09106e3[m ui(dashboard): teinte verte pour vraies commandes, bleu pour offres
+[35mapp/api/brand-logos/upload/route.ts[m[36m:[m    const { error: uploadErr } = await [1;31msupabase.storage[m
+[35mapp/api/brand-logos/upload/route.ts[m[36m:[m    const { data: pub } = [1;31msupabase.storage[m.from(BUCKET).getPublicUrl(path);
+[35mapp/api/brand-logos/upload/route.ts[m[36m:[m    await [1;31msupabase.storage[m.from(BUCKET).remove([path]);
+[35mapp/api/offres/[slug]/fiche-travail-pdf/route.ts[m[36m:[m      console.error("[1;31mSupabase storage[m error:", uploadError)
+[35mapp/api/offres/[slug]/pdf/route.ts[m[36m:[m// et le stocke dans [1;31mSupabase Storage[m bucket "pdfs"
+[35mapp/api/offres/[slug]/pdf/route.ts[m[36m:[m    // 5. Déterminer le chemin dans [1;31mSupabase Storage[m
+[35mapp/api/offres/[slug]/pdf/route.ts[m[36m:[m    // 6. Upload dans [1;31mSupabase Storage[m bucket "pdfs"
+[35mapp/api/offres/[slug]/pdf/route.ts[m[36m:[m      console.error("[1;31mSupabase storage[m error:", uploadError)
+[35mapp/api/offres/[slug]/qr/route.ts[m[36m:[m// HTML → pdf.co → pdf4me (QR Swiss) → [1;31mSupabase Storage[m
+[35mlib/media-line-types.ts[m[36m:[m  // URL de l'image ([1;31mSupabase Storage[m public URL ou data URL temporaire)
