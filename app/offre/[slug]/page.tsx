@@ -941,6 +941,11 @@ useEffect(() => {
                     const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
                     const sn = typeof line.stock === "number" ? line.stock : null;
                     const qty = line.qty || 0;
+                    // Détection ligne Shopify locked (flag explicite OU id "shopify-*" rétroactif)
+                    const lineLock = line as { shopifyLocked?: boolean; id?: string };
+                    const isLocked = lineLock.shopifyLocked === true || lineLock.id?.startsWith("shopify-");
+                    // Cas prioritaire : SKU Shopify introuvable côté API → afficher "à vérifier"
+                    const isUnknown = isLocked && sn === null && line.stock !== "sur_commande";
                     // 3 cas distincts métier :
                     // - Sur commande : stock = "sur_commande" OU stock <= 0 → délai depuis tags
                     // - Stock partiel : 0 < stock < qty commandée
@@ -962,10 +967,11 @@ useEffect(() => {
                             <div style={{ fontSize: 13, color: C.green, marginTop: 2, fontWeight: 500 }}>Remise : − {fmt(line.lineDiscount || 0)}</div>
                           )}
                           <div style={{ marginTop: 4, fontSize: 13, fontWeight: 600 }}>
-                            {isSC ? <span style={{ color: C.orange }}>📦 {line.delaiLivraison || "Sur commande"}</span>
-                              : isPartial ? <span style={{ color: C.orange }}>🟠 Stock partiel ({sn} / {qty} pce{qty > 1 ? "s" : ""})</span>
-                                : isOk ? <span style={{ color: C.green }}>✓ En stock ({sn} pce{sn! > 1 ? "s" : ""})</span>
-                                  : null}
+                            {isUnknown ? <span style={{ color: C.orange }}>⚠ Stock à vérifier</span>
+                              : isSC ? <span style={{ color: C.orange }}>📦 {line.delaiLivraison || "Sur commande"}</span>
+                                : isPartial ? <span style={{ color: C.orange }}>🟠 Stock partiel ({sn} / {qty} pce{qty > 1 ? "s" : ""})</span>
+                                  : isOk ? <span style={{ color: C.green }}>✓ En stock ({sn} pce{sn! > 1 ? "s" : ""})</span>
+                                    : null}
                           </div>
                         </td>
                         <td style={{ padding: "12px 8px", textAlign: "center", verticalAlign: "middle", color: C.grey, fontSize: 15 }}>{line.qty}</td>
