@@ -792,9 +792,15 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 );
               }
               const isCustom = line.type === "custom";
+              // Détection ligne Shopify locked (flag explicite OU id "shopify-*" rétroactif)
+              const lineLockFT = line as { shopifyLocked?: boolean; id?: string };
+              const isLockedFT = lineLockFT.shopifyLocked === true || lineLockFT.id?.startsWith("shopify-");
               let stockDisplay: React.ReactNode;
               if (line.stock === undefined || line.stock === null) {
-                stockDisplay = <span className="ft-stock-na">—</span>;
+                // Si ligne Shopify locked → SKU introuvable côté API → badge clair pour l'entrepôt
+                stockDisplay = isLockedFT
+                  ? <span style={{ color: "#ea580c", fontWeight: 700, fontSize: 11 }}>⚠ À vérifier</span>
+                  : <span className="ft-stock-na">—</span>;
               } else if (line.stock === "sur_commande" || line.stock === 0) {
                 stockDisplay = <span className="ft-stock-cmd">Sur commande</span>;
               } else if (typeof line.stock === "number") {
@@ -1099,10 +1105,21 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     )}
                     {data.formType === "Commande" && (() => {
                       const sn = typeof line.stock === "number" ? line.stock : null;
+                      // Détection ligne Shopify locked (flag explicite OU id "shopify-*" rétroactif)
+                      const lineLock = line as { shopifyLocked?: boolean; id?: string };
+                      const isLocked = lineLock.shopifyLocked === true || lineLock.id?.startsWith("shopify-");
                       const isSC = line.stock === "sur_commande" || (sn !== null && sn < 1);
                       const isOk = sn !== null && sn > 2;
                       const isLow = sn !== null && sn > 0 && sn <= 2;
                       const baseStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, marginTop: 4 };
+                      // CAS PRIORITAIRE : ligne Shopify dont le SKU est introuvable côté API
+                      if (isLocked && sn === null && line.stock !== "sur_commande") {
+                        return (
+                          <div style={{ ...baseStyle, color: "#ea580c" }}>
+                            ⚠ Stock à vérifier
+                          </div>
+                        );
+                      }
                       if (isSC) return (
                         <div style={{ ...baseStyle, color: "#E67E22" }}>
                           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -1758,10 +1775,16 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                       );
                     }
                     const lineTotalFB = line.qty * line.unitPrice - (line.lineDiscount || 0);
+                    // Détection ligne Shopify locked (flag explicite OU id "shopify-*" rétroactif)
+                    const lineLockFB = line as { shopifyLocked?: boolean; id?: string };
+                    const isLockedFB = lineLockFB.shopifyLocked === true || lineLockFB.id?.startsWith("shopify-");
                     let stockElFB: React.ReactNode;
                     const snFB = typeof line.stock === "number" ? line.stock : null;
                     if (line.stock === undefined || line.stock === null) {
-                      stockElFB = <span className="fb-stock-na-bleue">—</span>;
+                      // Si ligne Shopify locked → SKU introuvable → badge orange
+                      stockElFB = isLockedFB
+                        ? <span style={{ color: "#ea580c", fontWeight: 700 }}>⚠ vérif</span>
+                        : <span className="fb-stock-na-bleue">—</span>;
                     } else if (line.stock === "sur_commande" || (snFB !== null && snFB < 1)) {
                       stockElFB = <span className="fb-stock-cmd-bleue">CMD</span>;
                     } else if (snFB !== null && snFB > 2) {
