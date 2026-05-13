@@ -28,6 +28,11 @@ type Client = {
   nb_commandes_internes?: number
   nb_commandes_shopify?: number
   nb_factures_winbiz?: number
+  // Numéros de documents (max 10 par catégorie)
+  nums_offres?: { num: string; date?: string | null }[]
+  nums_commandes_internes?: { num: string; date?: string | null }[]
+  nums_shopify?: { num: string; date?: string | null }[]
+  nums_factures_winbiz?: { num: string; date?: string | null }[]
 }
 
 function normalizeSwissPhone(raw: string) {
@@ -255,40 +260,145 @@ function ShopifySyncButton({ onDone }: { onDone: () => void }) {
     </>
   )
 }
-function DocBadges({ client }: { client: Client }) {
-  const offres = client.nb_offres || 0
-  const commandes = client.nb_commandes_internes || 0
-  const shopify = client.nb_commandes_shopify || 0
-  const factures = client.nb_factures_winbiz || 0
-  const hasAny = offres + commandes + shopify + factures > 0
+// Numéro de document avec mise en évidence si match
+function DocNum({ num, label, count, color, matchQuery }: {
+  num: string
+  label: string  // "DEV", "CMD", "WB", "SHOP"
+  count?: number
+  color: "amber"|"emerald"|"orange"|"violet"
+  matchQuery?: string
+}) {
+  const isMatch = matchQuery ? num.toLowerCase().includes(matchQuery.toLowerCase().replace(/^#/, "")) : false
+  const palettes = {
+    amber:   { base: "border-amber-500/30 bg-amber-500/10 text-amber-300",       match: "border-amber-400 bg-amber-500/30 text-amber-200 ring-2 ring-amber-400/40" },
+    emerald: { base: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300", match: "border-emerald-400 bg-emerald-500/30 text-emerald-200 ring-2 ring-emerald-400/40" },
+    orange:  { base: "border-orange-500/30 bg-orange-500/10 text-orange-300",    match: "border-orange-400 bg-orange-500/30 text-orange-200 ring-2 ring-orange-400/40" },
+    violet:  { base: "border-violet-500/30 bg-violet-500/10 text-violet-300",    match: "border-violet-400 bg-violet-500/30 text-violet-200 ring-2 ring-violet-400/40" },
+  }
+  const cls = isMatch ? palettes[color].match : palettes[color].base
+  return (
+    <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-mono ${cls}`}
+      title={isMatch ? `Match recherche ✓ ${num}` : num}>
+      <span className="opacity-60">{label}</span>{num}
+      {count !== undefined && count > 1 && <span className="text-[9px] opacity-60">×{count}</span>}
+    </span>
+  )
+}
 
-  if (!hasAny) return <span className="text-zinc-600">—</span>
+// Cellule "Offres / Commandes internes"
+function DocsCellInternes({ client, matchQuery }: { client: Client; matchQuery?: string }) {
+  const offres = client.nums_offres || []
+  const commandes = client.nums_commandes_internes || []
+  const total = offres.length + commandes.length
+  const nbOffres = client.nb_offres || 0
+  const nbCmd = client.nb_commandes_internes || 0
+  const [showAll, setShowAll] = React.useState(false)
+
+  if (total === 0) return <span className="text-zinc-600 text-xs">—</span>
+
+  // On priorise le doc qui match en premier
+  const sortByMatch = (a: {num:string}, b: {num:string}) => {
+    if (!matchQuery) return 0
+    const q = matchQuery.toLowerCase().replace(/^#/, "")
+    const aM = a.num.toLowerCase().includes(q) ? 1 : 0
+    const bM = b.num.toLowerCase().includes(q) ? 1 : 0
+    return bM - aM
+  }
+  const offresSorted = [...offres].sort(sortByMatch)
+  const cmdSorted = [...commandes].sort(sortByMatch)
+
+  const visibleOffres = showAll ? offresSorted : offresSorted.slice(0, 3)
+  const visibleCmd = showAll ? cmdSorted : cmdSorted.slice(0, 3)
+  const moreOffres = nbOffres - visibleOffres.length
+  const moreCmd = nbCmd - visibleCmd.length
+  const hasMore = !showAll && (moreOffres > 0 || moreCmd > 0)
 
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {offres > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-300"
-          title={`${offres} offre${offres > 1 ? "s" : ""} active${offres > 1 ? "s" : ""}`}>
-          📄 {offres}
-        </span>
+    <div className="flex flex-col gap-1">
+      {visibleCmd.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {visibleCmd.map((d, i) => (
+            <DocNum key={`cmd-${i}`} num={d.num} label="" color="emerald" matchQuery={matchQuery} />
+          ))}
+          {moreCmd > 0 && !showAll && (
+            <button onClick={(e) => { e.stopPropagation(); setShowAll(true) }}
+              className="text-[10px] text-emerald-400 hover:underline">+{moreCmd}</button>
+          )}
+        </div>
       )}
-      {commandes > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-300"
-          title={`${commandes} commande${commandes > 1 ? "s" : ""} interne${commandes > 1 ? "s" : ""} (CMD)`}>
-          🛒 {commandes}
-        </span>
+      {visibleOffres.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {visibleOffres.map((d, i) => (
+            <DocNum key={`off-${i}`} num={d.num} label="" color="amber" matchQuery={matchQuery} />
+          ))}
+          {moreOffres > 0 && !showAll && (
+            <button onClick={(e) => { e.stopPropagation(); setShowAll(true) }}
+              className="text-[10px] text-amber-400 hover:underline">+{moreOffres}</button>
+          )}
+        </div>
       )}
-      {shopify > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-xs font-semibold text-orange-300"
-          title={`${shopify} commande${shopify > 1 ? "s" : ""} Shopify`}>
-          🛍️ {shopify}
-        </span>
+      {showAll && hasMore === false && total > 3 && (
+        <button onClick={(e) => { e.stopPropagation(); setShowAll(false) }}
+          className="text-[10px] text-zinc-500 hover:underline self-start">réduire</button>
       )}
-      {factures > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-xs font-semibold text-violet-300"
-          title={`${factures} facture${factures > 1 ? "s" : ""} WinBiz`}>
-          📊 {factures}
-        </span>
+    </div>
+  )
+}
+
+// Cellule "Factures / Shopify externes"
+function DocsCellExternes({ client, matchQuery }: { client: Client; matchQuery?: string }) {
+  const factures = client.nums_factures_winbiz || []
+  const shopify = client.nums_shopify || []
+  const total = factures.length + shopify.length
+  const nbFact = client.nb_factures_winbiz || 0
+  const nbShop = client.nb_commandes_shopify || 0
+  const [showAll, setShowAll] = React.useState(false)
+
+  if (total === 0) return <span className="text-zinc-600 text-xs">—</span>
+
+  const sortByMatch = (a: {num:string}, b: {num:string}) => {
+    if (!matchQuery) return 0
+    const q = matchQuery.toLowerCase().replace(/^#/, "")
+    const aM = a.num.toLowerCase().includes(q) ? 1 : 0
+    const bM = b.num.toLowerCase().includes(q) ? 1 : 0
+    return bM - aM
+  }
+  const facturesSorted = [...factures].sort(sortByMatch)
+  const shopifySorted = [...shopify].sort(sortByMatch)
+
+  const visibleFact = showAll ? facturesSorted : facturesSorted.slice(0, 3)
+  const visibleShop = showAll ? shopifySorted : shopifySorted.slice(0, 3)
+  const moreFact = nbFact - visibleFact.length
+  const moreShop = nbShop - visibleShop.length
+  const hasMore = !showAll && (moreFact > 0 || moreShop > 0)
+
+  return (
+    <div className="flex flex-col gap-1">
+      {visibleFact.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {visibleFact.map((d, i) => (
+            <DocNum key={`f-${i}`} num={d.num} label="WB " color="violet" matchQuery={matchQuery} />
+          ))}
+          {moreFact > 0 && !showAll && (
+            <button onClick={(e) => { e.stopPropagation(); setShowAll(true) }}
+              className="text-[10px] text-violet-400 hover:underline">+{moreFact}</button>
+          )}
+        </div>
+      )}
+      {visibleShop.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {visibleShop.map((d, i) => (
+            <DocNum key={`s-${i}`} num={d.num} label="" color="orange" matchQuery={matchQuery} />
+          ))}
+          {moreShop > 0 && !showAll && (
+            <button onClick={(e) => { e.stopPropagation(); setShowAll(true) }}
+              className="text-[10px] text-orange-400 hover:underline">+{moreShop}</button>
+          )}
+        </div>
+      )}
+      {showAll && hasMore === false && total > 3 && (
+        <button onClick={(e) => { e.stopPropagation(); setShowAll(false) }}
+          className="text-[10px] text-zinc-500 hover:underline self-start">réduire</button>
       )}
     </div>
   )
@@ -797,7 +907,8 @@ export default function ClientsPage() {
                     <th className="px-4 py-3 font-medium">Téléphone</th>
                     <th className="px-4 py-3 font-medium">Ville</th>
                     <th className="px-4 py-3 font-medium">Source</th>
-                    <th className="px-4 py-3 font-medium">Documents</th>
+                    <th className="px-4 py-3 font-medium" title="Offres et commandes internes Jardin-Confort">📄 Offres / 🛒 Commandes</th>
+                    <th className="px-4 py-3 font-medium" title="Factures WinBiz et commandes Shopify">📊 WinBiz / 🛍️ Shopify</th>
                     <th className="px-4 py-3 font-medium">Créé le</th>
                     <th className="px-4 py-3 text-right font-medium">Actions</th>
                   </tr>
@@ -833,10 +944,13 @@ export default function ClientsPage() {
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${src.cls}`}>{src.label}</span>
                         </td>
-                        <td className="px-4 py-3">
-                          <DocBadges client={c} />
+                        <td className="px-4 py-3 align-top">
+                          <DocsCellInternes client={c} matchQuery={activeSearch === "document" ? searchDoc : undefined} />
                         </td>
-                        <td className="px-4 py-3 text-zinc-500 text-xs">{fmtDate(c.created_at)}</td>
+                        <td className="px-4 py-3 align-top">
+                          <DocsCellExternes client={c} matchQuery={activeSearch === "document" ? searchDoc : undefined} />
+                        </td>
+                        <td className="px-4 py-3 text-zinc-500 text-xs align-top">{fmtDate(c.created_at)}</td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
   <div className="flex justify-end gap-2">
     

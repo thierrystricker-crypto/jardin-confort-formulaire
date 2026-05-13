@@ -16,11 +16,18 @@ type Client = {
   [key: string]: unknown
 }
 
+type DocRef = { num: string; date?: string | null }
+
 type ClientWithCounts = Client & {
   nb_offres: number
   nb_commandes_internes: number
   nb_commandes_shopify: number
   nb_factures_winbiz: number
+  // Listes de numéros récents (max 10 par catégorie)
+  nums_offres: DocRef[]
+  nums_commandes_internes: DocRef[]
+  nums_shopify: DocRef[]
+  nums_factures_winbiz: DocRef[]
 }
 
 /**
@@ -41,16 +48,34 @@ type OffreRow = {
   client_npa?: string | null
   type_document: string | null
   statut: string | null
+  numero_affiche?: string | null
+  numero_offre?: string | null
+  numero_commande?: string | null
+  date_document?: string | null
 }
 
-function tallyOffre(map: Map<number, { offres: number; commandes: number }>, clientId: number, o: OffreRow) {
-  const counts = map.get(clientId) || { offres: 0, commandes: 0 }
-  if (o.type_document === "Commande" || o.statut === "Acceptée" || o.statut === "Convertie") {
-    counts.commandes++
+function tallyOffre(
+  map: Map<number, { offres: number; commandes: number; numsOffres: DocRef[]; numsCommandes: DocRef[] }>,
+  clientId: number,
+  o: OffreRow
+) {
+  const entry = map.get(clientId) || { offres: 0, commandes: 0, numsOffres: [], numsCommandes: [] }
+  const isCmd = o.type_document === "Commande" || o.statut === "Acceptée" || o.statut === "Convertie"
+  const num = o.numero_affiche || o.numero_commande || o.numero_offre || ""
+  const date = o.date_document || null
+
+  if (isCmd) {
+    entry.commandes++
+    if (num && entry.numsCommandes.length < 10) {
+      entry.numsCommandes.push({ num, date })
+    }
   } else {
-    counts.offres++
+    entry.offres++
+    if (num && entry.numsOffres.length < 10) {
+      entry.numsOffres.push({ num, date })
+    }
   }
-  map.set(clientId, counts)
+  map.set(clientId, entry)
 }
 
 /**
@@ -62,37 +87,51 @@ function tallyOffre(map: Map<number, { offres: number; commandes: number }>, cli
 async function fetchClientIdCountsByIn(
   table: "factures_winbiz" | "commandes_shopify",
   clientIds: number[]
-): Promise<Map<number, number>> {
-  const result = new Map<number, number>()
+): Promise<{ counts: Map<number, number>; nums: Map<number, DocRef[]> }> {
+  const counts = new Map<number, number>()
+  const nums = new Map<number, DocRef[]>()
   const batches = chunk(clientIds, 200)
 
-  // Lance toutes les requêtes en parallèle
+  const numField = table === "factures_winbiz" ? "numero_facture" : "shopify_order_name"
+  const dateField = table === "factures_winbiz" ? "date_facture" : "created_at_shopify"
+
   const responses = await Promise.all(
     batches.map(async (batch, idx) => {
       const { data, error } = await supabaseAdmin
         .from(table)
-        .select("client_id")
+        .select(`client_id, ${numField}, ${dateField}`)
         .in("client_id", batch)
+        .order(dateField, { ascending: false })
 
       if (error) {
-        // Log silencieux côté Vercel — visible dans les logs
         console.error(`[enrichWithCounts] Batch ${idx + 1}/${batches.length} on ${table} FAILED:`, error.message)
-        return { data: null, batchSize: batch.length }
+        return null
       }
-      return { data, batchSize: batch.length }
+      return data
     })
   )
 
-  for (const { data } of responses) {
+  for (const data of responses) {
     if (!data) continue
-    for (const row of data) {
-      const cid = (row as { client_id: number | null }).client_id
+    for (const row of data as Array<Record<string, unknown>>) {
+      const cid = row.client_id as number | null
       if (cid == null) continue
-      result.set(cid, (result.get(cid) || 0) + 1)
+      counts.set(cid, (counts.get(cid) || 0) + 1)
+
+      const num = (row[numField] as string | null) || ""
+      const date = (row[dateField] as string | null) || null
+      if (num) {
+        const list = nums.get(cid) || []
+        // On garde max 10 numéros par client (les plus récents grâce à l'order by)
+        if (list.length < 10) {
+          list.push({ num, date })
+          nums.set(cid, list)
+        }
+      }
     }
   }
 
-  return result
+  return { counts, nums }
 }
 
 /**
@@ -132,11 +171,14 @@ async function enrichWithCounts(clients: Client[]): Promise<ClientWithCounts[]> 
   }
 
   // ─── 1) Offres ─────────────────────────────────────────────────
-  const offresMap = new Map<number, { offres: number; commandes: number }>()
+  const offresMap = new Map<number, {
+    offres: number; commandes: number;
+    numsOffres: DocRef[]; numsCommandes: DocRef[]
+  }>()
   const seenOffreKeys = new Set<string>()
 
   function offreKey(o: OffreRow, clientId: number): string {
-    return `${clientId}::${o.client_numero_client || ""}::${(o.client_email || "").toLowerCase()}::${o.type_document}::${o.statut}`
+    return `${clientId}::${o.numero_affiche || ""}::${o.type_document}::${o.statut}`
   }
 
   // 1a — Match par numero_client (chunks de 200, parallèle)
@@ -146,7 +188,7 @@ async function enrichWithCounts(clients: Client[]): Promise<ClientWithCounts[]> 
       if (batch.length === 0) return
       const { data, error } = await supabaseAdmin
         .from("offres")
-        .select("client_numero_client, client_email, client_nom, client_npa, type_document, statut")
+        .select("client_numero_client, client_email, client_nom, client_npa, type_document, statut, numero_affiche, numero_offre, numero_commande, date_document")
         .in("client_numero_client", batch)
 
       if (error) {
@@ -235,20 +277,24 @@ async function enrichWithCounts(clients: Client[]): Promise<ClientWithCounts[]> 
   }
 
   // ─── 2 + 3) Factures WinBiz et Commandes Shopify en parallèle ──
-  const [facturesMap, shopifyMap] = await Promise.all([
+  const [facturesRes, shopifyRes] = await Promise.all([
     fetchClientIdCountsByIn("factures_winbiz", clientIds),
     fetchClientIdCountsByIn("commandes_shopify", clientIds),
   ])
 
   // ─── 4) Assemblage final ───────────────────────────────────────
   return clients.map(c => {
-    const offresCounts = offresMap.get(c.id) || { offres: 0, commandes: 0 }
+    const offresEntry = offresMap.get(c.id) || { offres: 0, commandes: 0, numsOffres: [], numsCommandes: [] }
     return {
       ...c,
-      nb_offres: offresCounts.offres,
-      nb_commandes_internes: offresCounts.commandes,
-      nb_commandes_shopify: shopifyMap.get(c.id) || 0,
-      nb_factures_winbiz: facturesMap.get(c.id) || 0,
+      nb_offres: offresEntry.offres,
+      nb_commandes_internes: offresEntry.commandes,
+      nb_commandes_shopify: shopifyRes.counts.get(c.id) || 0,
+      nb_factures_winbiz: facturesRes.counts.get(c.id) || 0,
+      nums_offres: offresEntry.numsOffres,
+      nums_commandes_internes: offresEntry.numsCommandes,
+      nums_shopify: shopifyRes.nums.get(c.id) || [],
+      nums_factures_winbiz: facturesRes.nums.get(c.id) || [],
     }
   })
 }
