@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { getShopifyPdfUrls } from "@/lib/shopify-pdf-urls";
+import PrintAddressButton from "@/components/PrintAddressButton";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -539,6 +540,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               className="inline-flex items-center rounded-xl border border-[#2B8AD1]/40 bg-[#2B8AD1]/15 px-4 py-2 text-sm text-sky-300 hover:bg-[#2B8AD1]/25">
               + Nouvelle offre
             </Link>
+            <PrintAddressButton client={client} />
           </div>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>

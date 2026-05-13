@@ -3,6 +3,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import PrintAddressButton from "@/components/PrintAddressButton";
 
 type Client = {
   id: number
@@ -1087,7 +1088,7 @@ export default function ClientsPage() {
                         <td className="px-4 py-3 text-zinc-500 text-xs align-top">{fmtDate(c.created_at)}</td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
   <div className="flex justify-end gap-2">
-    
+    <PrintAddressButton client={c} compact />
     <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
                               nom: c.nom, prenom: c.prenom||"", societe: c.societe||"",
                               email: c.email||"", telephone1: c.tel1||"",
