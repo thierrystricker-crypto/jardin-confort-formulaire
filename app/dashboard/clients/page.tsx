@@ -479,7 +479,9 @@ export default function ClientsPage() {
   // Recherche client live
   const [clientSuggestions, setClientSuggestions] = useState<Client[]>([])
   const [clientSearchField, setClientSearchField] = useState<"nom"|"email"|"tel"|null>(null)
+  const [clientSuggestIndex, setClientSuggestIndex] = useState(-1)
   const clientSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clientDropdownRef = useRef<HTMLDivElement | null>(null)
 
   async function searchClientSuggestions(q: string, field: "nom"|"email"|"tel") {
     if (q.length < 2) { setClientSuggestions([]); return }
@@ -506,8 +508,35 @@ export default function ClientsPage() {
   }
 
   function closeClientDropdown() {
-    setTimeout(() => setClientSuggestions([]), 200)
+    setClientSuggestions([])
+    setClientSuggestIndex(-1)
   }
+
+  // Esc ferme le dropdown
+  useEffect(() => {
+    if (clientSuggestions.length === 0) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") closeClientDropdown()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [clientSuggestions.length])
+
+  // Clic extérieur ferme le dropdown
+  useEffect(() => {
+    if (clientSuggestions.length === 0) return
+    function onClick(e: MouseEvent) {
+      const target = e.target as Node
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(target)) {
+        // Vérifier aussi qu'on n'a pas cliqué dans un input qui pourrait rouvrir le dropdown
+        const isInput = (target as HTMLElement).tagName === "INPUT"
+        if (!isInput) closeClientDropdown()
+      }
+    }
+    // Petit délai pour ne pas intercepter le clic qui a ouvert le dropdown
+    const t = setTimeout(() => window.addEventListener("mousedown", onClick), 50)
+    return () => { clearTimeout(t); window.removeEventListener("mousedown", onClick) }
+  }, [clientSuggestions.length])
 
   const fetchClients = useCallback(async (q: string, mode: "client" | "document" = "client") => {
     setLoading(true)
@@ -687,12 +716,20 @@ export default function ClientsPage() {
                   onChange={e => {
                     setNewClient(p => ({...p, nom: e.target.value}))
                     if (clientSearchRef.current) clearTimeout(clientSearchRef.current)
+                    if (!e.target.value.trim()) { closeClientDropdown(); return }
                     clientSearchRef.current = setTimeout(() => searchClientSuggestions(e.target.value, "nom"), 300)
                   }}
-                  onBlur={closeClientDropdown}
+                  onKeyDown={e => {
+                    if (e.key === "Escape") { closeClientDropdown(); (e.target as HTMLInputElement).blur() }
+                  }}
                   className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                 {clientSuggestions.length > 0 && clientSearchField === "nom" && (
-                  <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
+                  <div ref={clientDropdownRef} className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
+                    <button type="button" onClick={closeClientDropdown}
+                      className="absolute -top-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-xs font-bold text-white shadow hover:bg-rose-600"
+                      title="Fermer (Esc)">
+                      ✕
+                    </button>
                     {clientSuggestions.map(c => (
                       <div key={c.id} className="border-b border-white/5 last:border-0">
                         <div className="px-4 pt-2.5 pb-1">
@@ -750,12 +787,21 @@ export default function ClientsPage() {
                   onChange={e => {
                     setNewClient(p => ({...p, tel1: e.target.value}))
                     if (clientSearchRef.current) clearTimeout(clientSearchRef.current)
+                    if (!e.target.value.trim()) { closeClientDropdown(); return }
                     clientSearchRef.current = setTimeout(() => searchClientSuggestions(e.target.value, "tel"), 300)
                   }}
-                  onBlur={e => { setNewClient(p => ({...p, tel1: normalizeSwissPhone(e.target.value)})); closeClientDropdown(); }}
+                  onBlur={e => setNewClient(p => ({...p, tel1: normalizeSwissPhone(e.target.value)}))}
+                  onKeyDown={e => {
+                    if (e.key === "Escape") { closeClientDropdown(); (e.target as HTMLInputElement).blur() }
+                  }}
                   className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                 {clientSuggestions.length > 0 && clientSearchField === "tel" && (
-                  <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
+                  <div ref={clientDropdownRef} className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
+                    <button type="button" onClick={closeClientDropdown}
+                      className="absolute -top-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-xs font-bold text-white shadow hover:bg-rose-600"
+                      title="Fermer (Esc)">
+                      ✕
+                    </button>
                     {clientSuggestions.map(c => (
                       <div key={c.id} className="border-b border-white/5 last:border-0">
                         <div className="px-4 pt-2.5 pb-1">
@@ -797,12 +843,20 @@ export default function ClientsPage() {
                   onChange={e => {
                     setNewClient(p => ({...p, email: e.target.value}))
                     if (clientSearchRef.current) clearTimeout(clientSearchRef.current)
+                    if (!e.target.value.trim()) { closeClientDropdown(); return }
                     clientSearchRef.current = setTimeout(() => searchClientSuggestions(e.target.value, "email"), 300)
                   }}
-                  onBlur={closeClientDropdown}
+                  onKeyDown={e => {
+                    if (e.key === "Escape") { closeClientDropdown(); (e.target as HTMLInputElement).blur() }
+                  }}
                   className="rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                 {clientSuggestions.length > 0 && clientSearchField === "email" && (
-                  <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
+                  <div ref={clientDropdownRef} className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[#2B8AD1]/40 bg-[#2a2d31] shadow-xl">
+                    <button type="button" onClick={closeClientDropdown}
+                      className="absolute -top-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-xs font-bold text-white shadow hover:bg-rose-600"
+                      title="Fermer (Esc)">
+                      ✕
+                    </button>
                     {clientSuggestions.map(c => (
                       <div key={c.id} className="border-b border-white/5 last:border-0">
                         <div className="px-4 pt-2.5 pb-1">
