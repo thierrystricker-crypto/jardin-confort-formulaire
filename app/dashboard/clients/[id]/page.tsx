@@ -410,6 +410,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [saveKind, setSaveKind] = useState<"success" | "error">("success")
   const [form, setForm] = useState<Partial<Client>>({})
   const [emailCopied, setEmailCopied] = useState(false)
+  const [addrCopied, setAddrCopied] = useState<"facturation" | "livraison" | null>(null)
   const [factures, setFactures] = useState<Facture[]>([])
   const [showAddFacture, setShowAddFacture] = useState(false)
   const [newFacture, setNewFacture] = useState({ numero_facture: "", date_facture: "", montant: "" })
@@ -441,6 +442,33 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     }
     load()
   }, [params])
+function copyAddress(type: "facturation" | "livraison") {
+    if (!client) return
+    let lines: string[] = []
+    if (type === "facturation") {
+      lines = [
+        client.societe,
+        [client.nom, client.prenom].filter(Boolean).join(" "),
+        client.complement_nom,
+        [client.rue, client.numero_rue].filter(Boolean).join(" "),
+        client.rue2,
+        [client.npa, client.ville].filter(Boolean).join(" "),
+      ].filter((l): l is string => !!l && l.trim().length > 0)
+    } else {
+      lines = [
+        client.livr_societe,
+        [client.livr_nom, client.livr_prenom].filter(Boolean).join(" "),
+        client.livr_complement_nom,
+        client.livr_rue,
+        client.livr_rue2,
+        [client.livr_npa, client.livr_ville].filter(Boolean).join(" "),
+      ].filter((l): l is string => !!l && l.trim().length > 0)
+    }
+    const text = lines.join("\n")
+    navigator.clipboard.writeText(text)
+    setAddrCopied(type)
+    setTimeout(() => setAddrCopied(null), 2000)
+  }
 
   async function saveClient() {
     if (!client) return
@@ -590,10 +618,24 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-semibold">Coordonnées</h2>
                 {!editing ? (
-                  <button onClick={() => setEditing(true)}
-                    className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">
-                    ✏️ Modifier
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => copyAddress("facturation")}
+                      title="Copier l'adresse de facturation dans le presse-papier"
+                      className={`rounded-xl border px-3 py-2 text-sm transition ${addrCopied === "facturation" ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300" : "border-white/10 bg-[#34383d] text-zinc-100 hover:bg-[#40454b]"}`}>
+                      {addrCopied === "facturation" ? "✓ Copiée" : "📋 Copier adresse"}
+                    </button>
+                    {client.livr_rue && (
+                      <button onClick={() => copyAddress("livraison")}
+                        title="Copier l'adresse de livraison dans le presse-papier"
+                        className={`rounded-xl border px-3 py-2 text-sm transition ${addrCopied === "livraison" ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300" : "border-white/10 bg-[#34383d] text-zinc-100 hover:bg-[#40454b]"}`}>
+                        {addrCopied === "livraison" ? "✓ Copiée" : "📦 Copier livraison"}
+                      </button>
+                    )}
+                    <button onClick={() => setEditing(true)}
+                      className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">
+                      ✏️ Modifier
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex gap-2">
                     <button onClick={saveClient} disabled={saving}
