@@ -949,10 +949,17 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               // ─── Ligne ARTICLE (product OU custom à la volée) ───
               const isCustom = line.type === "custom";
 
+              // Détection ligne Shopify locked (flag explicite OU id "shopify-*" rétroactif)
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const isLockedFT = (line as any).shopifyLocked === true || line.id?.startsWith("shopify-");
+
               // Stock
               let stockDisplay: React.ReactNode;
               if (line.stock === undefined || line.stock === null) {
-                stockDisplay = <span className="stock-na">—</span>;
+                // Si ligne Shopify locked → SKU introuvable côté API → badge clair pour l'entrepôt
+                stockDisplay = isLockedFT
+                  ? <span style={{ color: "#ea580c", fontWeight: 700, fontSize: 11 }}>⚠ À vérifier</span>
+                  : <span className="stock-na">—</span>;
               } else if (line.stock === "sur_commande" || line.stock === 0) {
                 stockDisplay = <span className="stock-cmd">Sur commande</span>;
               } else if (typeof line.stock === "number") {

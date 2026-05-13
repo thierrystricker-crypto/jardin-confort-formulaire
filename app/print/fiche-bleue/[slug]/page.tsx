@@ -668,10 +668,16 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
                   }
 
                   const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
+                  // Détection ligne Shopify locked (flag explicite OU id "shopify-*" rétroactif)
+                  const lineLockFB = line as { shopifyLocked?: boolean; id?: string };
+                  const isLockedFB = lineLockFB.shopifyLocked === true || lineLockFB.id?.startsWith("shopify-");
                   let stockEl: React.ReactNode;
                   const sn = typeof line.stock === "number" ? line.stock : null;
                   if (line.stock === undefined || line.stock === null) {
-                    stockEl = <span className="fb-stock-na">—</span>;
+                    // Si ligne Shopify locked → SKU introuvable → badge orange
+                    stockEl = isLockedFB
+                      ? <span style={{ color: "#ea580c", fontWeight: 700 }}>⚠ vérif</span>
+                      : <span className="fb-stock-na">—</span>;
                   } else if (line.stock === "sur_commande" || (sn !== null && sn < 1)) {
                     stockEl = <span className="fb-stock-cmd">CMD</span>;
                   } else if (sn !== null && sn > 2) {
