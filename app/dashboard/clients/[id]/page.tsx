@@ -614,10 +614,16 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
               {editing ? (
                 <div className="space-y-3">
+                  {/* Piège anti-autofill navigateur : le browser remplit ces 2 champs cachés au lieu des vrais */}
+                  <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: "-9999px", height: 0, width: 0, overflow: "hidden" }}>
+                    <input type="text" name="username" tabIndex={-1} autoComplete="username" defaultValue="" />
+                    <input type="password" name="password" tabIndex={-1} autoComplete="current-password" defaultValue="" />
+                  </div>
                   {/* Société */}
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Société</label>
                     <input type="text" value={(form.societe as string) || ""}
+                      autoComplete="new-password" name="f-societe" data-form-type="other"
                       onChange={e => setForm(p => ({ ...p, societe: e.target.value }))}
                       className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                   </div>
@@ -627,12 +633,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div>
                       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Nom *</label>
                       <input type="text" value={(form.nom as string) || ""}
+                        autoComplete="new-password" name="f-nom" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, nom: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Prénom</label>
                       <input type="text" value={(form.prenom as string) || ""}
+                        autoComplete="new-password" name="f-prenom" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, prenom: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
@@ -642,6 +650,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Complément nom (optionnel)</label>
                     <input type="text" value={(form.complement_nom as string) || ""}
+                      autoComplete="new-password" name="f-cnom" data-form-type="other"
                       onChange={e => setForm(p => ({ ...p, complement_nom: e.target.value }))}
                       placeholder="conjoint, c/o, contact..."
                       className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
@@ -652,12 +661,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div>
                       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Rue</label>
                       <input type="text" value={(form.rue as string) || ""}
+                        autoComplete="new-password" name="f-rue" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, rue: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">N°</label>
                       <input type="text" value={(form.numero_rue as string) || ""}
+                        autoComplete="new-password" name="f-nrue" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, numero_rue: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
@@ -667,6 +678,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Complément d&apos;adresse</label>
                     <input type="text" value={(form.rue2 as string) || ""}
+                      autoComplete="new-password" name="f-rue2" data-form-type="other"
                       onChange={e => setForm(p => ({ ...p, rue2: e.target.value }))}
                       placeholder="Bâtiment, case postale, lieu-dit..."
                       className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
@@ -677,12 +689,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div>
                       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">NPA</label>
                       <input type="text" value={(form.npa as string) || ""}
+                        autoComplete="new-password" name="f-npa" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, npa: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Ville</label>
                       <input type="text" value={(form.ville as string) || ""}
+                        autoComplete="new-password" name="f-ville" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, ville: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
@@ -693,12 +707,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div>
                       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Téléphone 1</label>
                       <input type="text" value={(form.tel1 as string) || ""}
+                        autoComplete="new-password" name="f-tel1" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, tel1: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Téléphone 2</label>
                       <input type="text" value={(form.tel2 as string) || ""}
+                        autoComplete="new-password" name="f-tel2" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, tel2: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
@@ -707,6 +723,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Email</label>
                     <input type="email" value={(form.email as string) || ""}
+                      autoComplete="new-password" name="f-email" data-form-type="other"
                       onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
                       className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                   </div>
@@ -717,6 +734,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div>
                       <label className="mb-1 block text-xs text-zinc-500">Société</label>
                       <input type="text" value={(form.livr_societe as string) || ""}
+                        autoComplete="new-password" name="f-lsoc" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, livr_societe: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
@@ -726,12 +744,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                       <div>
                         <label className="mb-1 block text-xs text-zinc-500">Nom livraison</label>
                         <input type="text" value={(form.livr_nom as string) || ""}
+                          autoComplete="new-password" name="f-lnom" data-form-type="other"
                           onChange={e => setForm(p => ({ ...p, livr_nom: e.target.value }))}
                           className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                       </div>
                       <div>
                         <label className="mb-1 block text-xs text-zinc-500">Prénom</label>
                         <input type="text" value={(form.livr_prenom as string) || ""}
+                          autoComplete="new-password" name="f-lprenom" data-form-type="other"
                           onChange={e => setForm(p => ({ ...p, livr_prenom: e.target.value }))}
                           className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                       </div>
@@ -741,6 +761,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div>
                       <label className="mb-1 block text-xs text-zinc-500">Complément nom livraison (optionnel)</label>
                       <input type="text" value={(form.livr_complement_nom as string) || ""}
+                        autoComplete="new-password" name="f-lcnom" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, livr_complement_nom: e.target.value }))}
                         placeholder="conjoint, c/o, contact..."
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
@@ -750,6 +771,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div>
                       <label className="mb-1 block text-xs text-zinc-500">Rue (avec n°)</label>
                       <input type="text" value={(form.livr_rue as string) || ""}
+                        autoComplete="new-password" name="f-lrue" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, livr_rue: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
@@ -758,6 +780,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div>
                       <label className="mb-1 block text-xs text-zinc-500">Complément d&apos;adresse</label>
                       <input type="text" value={(form.livr_rue2 as string) || ""}
+                        autoComplete="new-password" name="f-lrue2" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, livr_rue2: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
@@ -767,12 +790,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                       <div>
                         <label className="mb-1 block text-xs text-zinc-500">NPA</label>
                         <input type="text" value={(form.livr_npa as string) || ""}
+                          autoComplete="new-password" name="f-lnpa" data-form-type="other"
                           onChange={e => setForm(p => ({ ...p, livr_npa: e.target.value }))}
                           className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                       </div>
                       <div>
                         <label className="mb-1 block text-xs text-zinc-500">Ville</label>
                         <input type="text" value={(form.livr_ville as string) || ""}
+                          autoComplete="new-password" name="f-lville" data-form-type="other"
                           onChange={e => setForm(p => ({ ...p, livr_ville: e.target.value }))}
                           className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                       </div>
@@ -782,6 +807,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div>
                       <label className="mb-1 block text-xs text-zinc-500">Tél.</label>
                       <input type="text" value={(form.livr_tel as string) || ""}
+                        autoComplete="new-password" name="f-ltel" data-form-type="other"
                         onChange={e => setForm(p => ({ ...p, livr_tel: e.target.value }))}
                         className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                     </div>
@@ -789,6 +815,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Notes</label>
                     <textarea value={(form.notes as string) || ""} rows={3}
+                      autoComplete="new-password" name="f-notes" data-form-type="other"
                       onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
                       className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#2B8AD1]"/>
                   </div>
