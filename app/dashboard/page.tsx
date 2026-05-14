@@ -585,14 +585,22 @@ export default function DashboardPage() {
         {/* ─── Section Brouillons (Session 6) ─── */}
         <div id="section-brouillons" className="space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <button type="button" onClick={()=>setDraftsCollapsed(c=>!c)}
-              className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200 transition hover:bg-amber-500/15">
-              <span>{draftsCollapsed?"▶":"▼"}</span>
-              <span>📝 Brouillons</span>
-              <span className="inline-flex items-center justify-center rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold">
-                {draftsActifs} {draftsActifs>1?"actifs":"actif"} / {draftsTotal} au total
-              </span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button type="button" onClick={()=>setDraftsCollapsed(c=>!c)}
+                className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200 transition hover:bg-amber-500/15">
+                <span>{draftsCollapsed?"▶":"▼"}</span>
+                <span>📝 Brouillons</span>
+                <span className="inline-flex items-center justify-center rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold">
+                  {draftsActifs} {draftsActifs>1?"actifs":"actif"} / {draftsTotal} au total
+                </span>
+              </button>
+              <button type="button" onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
+                title="Remonter en haut du dashboard"
+                className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-[#2a2d31] px-3 py-2 text-sm text-zinc-300 transition hover:bg-[#34383d]">
+                <span>⬆</span>
+                <span>Haut</span>
+              </button>
+            </div>
             {!draftsCollapsed && (
               <div className="flex items-center gap-4 flex-wrap">
                 <label className="inline-flex items-center gap-2 cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">
