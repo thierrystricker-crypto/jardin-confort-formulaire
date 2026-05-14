@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import TransformerModal from "./TransformerModal";
 
 type TypeDocument = "Offre" | "Commande";
 
@@ -112,6 +113,7 @@ export default function DashboardDraftDetailPage({
   const [error, setError] = useState("");
   const [duplicating, setDuplicating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showTransformModal, setShowTransformModal] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -397,17 +399,22 @@ export default function DashboardDraftDetailPage({
                     </Link>
                   )}
 
-                  <button
-                    disabled
-                    title={
-                      isTransformed
-                        ? "Ce brouillon a déjà été transformé. Pour générer une variante, dupliquez-le puis transformez la copie."
-                        : "Bientôt disponible (Session 5)"
-                    }
-                    className="inline-flex cursor-not-allowed items-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/40"
-                  >
-                    🔄 Transformer en offre
-                  </button>
+                  {isTransformed ? (
+                    <button
+                      disabled
+                      title="Ce brouillon a déjà été transformé. Pour générer une variante, dupliquez-le puis transformez la copie."
+                      className="inline-flex cursor-not-allowed items-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/40"
+                    >
+                      🔄 Transformer en offre
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowTransformModal(true)}
+                      className="inline-flex items-center rounded-xl border border-emerald-500/40 bg-emerald-500/20 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/30"
+                    >
+                      🔄 Transformer en offre
+                    </button>
+                  )}
 
                   <a
                     href={urlPrintStub}
@@ -688,6 +695,24 @@ export default function DashboardDraftDetailPage({
             </button>
           </div>
         </div>
+
+        {/* ═══ MODAL TRANSFORMATION (Session 5) ═══ */}
+        <TransformerModal
+          open={showTransformModal}
+          onClose={() => setShowTransformModal(false)}
+          draft={{
+            slug: draft.slug,
+            numero_affiche: draft.numero_affiche,
+            client_societe: draft.client_societe,
+            client_nom: draft.client_nom,
+            client_prenom: draft.client_prenom,
+            commercial: draft.commercial,
+            sous_total: Number(draft.sous_total) || 0,
+            tva_montant: Number(draft.tva_montant) || 0,
+            total_ttc: Number(draft.total_ttc) || 0,
+            nb_articles: draft.nb_articles,
+          }}
+        />
 
       </div>
     </main>
