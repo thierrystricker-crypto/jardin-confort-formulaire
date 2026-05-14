@@ -133,15 +133,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://jardin-confort-formulaire.vercel.app";
-
+    // URLs relatives — fonctionnent sur localhost, preview Vercel et prod
+    // sans dépendre de NEXT_PUBLIC_APP_URL.
     return NextResponse.json({
       success: true,
       id: result.id,
       slug: result.slug,
       numeroAffiche: result.numero_affiche,
-      dashboardUrl: `${baseUrl}/dashboard/draft/${result.slug}`,
-      editUrl: `${baseUrl}/drafts/${result.slug}/editer`,
+      dashboardUrl: `/dashboard/draft/${result.slug}`,
+      editUrl: `/drafts/${result.slug}/editer`,
     });
 
   } catch (err) {
