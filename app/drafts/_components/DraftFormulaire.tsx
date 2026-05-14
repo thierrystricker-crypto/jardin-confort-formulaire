@@ -796,21 +796,33 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
     }
   }
 
-  // ── Aperçu print — désactivé tant que le brouillon n'est pas persisté ──
+  // ── Aperçu print — Session 7 ──
   //
-  // Session 7 implémentera la vraie page /drafts/[slug]/print avec filigrane
-  // BROUILLON. Pour l'instant, on fait un save préalable + une stub temporaire
-  // qui réutilise /print/offre (le filigrane ne sera donc PAS présent).
-  // À reprendre en Session 7.
+  // Ouvre /print/draft/[slug] (filigrane "BROUILLON — DRA-XXX", sans bloc
+  // signature, sans lien validation). La page print charge ses données
+  // directement via GET /api/drafts/[slug], donc on doit avoir un slug
+  // persisté en base.
+  //
+  // Si le brouillon n'a jamais été sauvegardé, on fait un save préalable
+  // puis on relit le slug depuis l'URL (saveDraft remplace l'URL par
+  // /drafts/[slug]/editer après création) car la closure React ne voit
+  // pas immédiatement la nouvelle valeur de currentSlug après setState.
   async function openPrint() {
-    if (!currentSlug) {
-      // Pas encore persisté → on tente un save d'abord
+    let slug = currentSlug;
+    if (!slug) {
       const ok = await saveDraft({ silent: false });
       if (!ok) return;
+      const match = window.location.pathname.match(/\/drafts\/([^/]+)\/editer/);
+      slug = match?.[1] ?? null;
+      if (!slug) {
+        alert(
+          "Le brouillon a été sauvegardé mais le slug n'a pas pu être récupéré. " +
+          "Rechargez la page et réessayez."
+        );
+        return;
+      }
     }
-    const snap = { ...makeSnapshot(), ambianceImages };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
-    window.open("/print/offre", "_blank");
+    window.open(`/print/draft/${slug}`, "_blank");
   }
 
   function saveLocalSnapshot() {

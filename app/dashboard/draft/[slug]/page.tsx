@@ -256,7 +256,8 @@ export default function DashboardDraftDetailPage({
       ? "Commande"
       : "Offre";
   const isTransformed = draft.transformed_at !== null;
-  const urlPrintStub = `/print/offre/${draft.slug}`;
+  // Session 7 : page print dédiée aux brouillons avec filigrane "BROUILLON — DRA-XXX"
+  const urlPrint = `/print/draft/${draft.slug}`;
 
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
@@ -417,10 +418,10 @@ export default function DashboardDraftDetailPage({
                   )}
 
                   <a
-                    href={urlPrintStub}
+                    href={urlPrint}
                     target="_blank"
                     rel="noopener noreferrer"
-                    title="Aperçu (stub — sans filigrane BROUILLON en attendant la Session 7)"
+                    title="Ouvrir l'aperçu print du brouillon (avec filigrane BROUILLON)"
                     className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-200 transition hover:bg-[#40454b]"
                   >
                     👁 Aperçu
@@ -617,17 +618,9 @@ export default function DashboardDraftDetailPage({
           <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
               <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                  Aperçu
-                  <span
-                    className="text-xs font-normal text-amber-300/70 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-0.5"
-                    title="Le filigrane BROUILLON arrive en Session 7"
-                  >
-                    ⚠ Sans filigrane (Session 7)
-                  </span>
-                </h2>
+                <h2 className="text-xl font-semibold">Aperçu</h2>
                 <a
-                  href={urlPrintStub}
+                  href={urlPrint}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]"
@@ -635,18 +628,9 @@ export default function DashboardDraftDetailPage({
                   ⛶ Plein écran
                 </a>
               </div>
-              <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300/80">
-                ⚠ Aperçu incomplet — la page print actuelle charge depuis la
-                table <code className="text-amber-200">offres</code> et ne sait
-                pas encore lire un brouillon, d&apos;où la mention « Aucun
-                article ». Pour voir les lignes, cliquez sur ✏️ Modifier. Une
-                page print dédiée aux brouillons (avec filigrane et lecture
-                depuis la table <code className="text-amber-200">drafts</code>)
-                arrive en Session 7.
-              </div>
               <div className="overflow-hidden rounded-2xl border border-white/10 bg-white">
                 <iframe
-                  src={urlPrintStub}
+                  src={urlPrint}
                   title="Aperçu brouillon"
                   className="h-[900px] w-full border-0"
                 />
