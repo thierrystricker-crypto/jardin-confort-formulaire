@@ -78,6 +78,9 @@ Création → modifications libres → "Transformer en offre" → Offre figée
 | Aperçu brouillon | Page print dynamique (Shopify), **pas de PDF** |
 | Template brouillon | Devis actuel + filigrane BROUILLON, sans signature, sans lien validation |
 | Lien public de signature | **Bloqué** sur les brouillons (ne doit JAMAIS s'afficher) |
+| Architecture pages drafts | Composant partagé `_components/DraftFormulaire.tsx` réutilisé par `/drafts/nouveau` et `/drafts/[slug]/editer` |
+| Sauvegarde brouillon | Manuelle + auto-save 2 min (si nom+email+commercial remplis) |
+| URL d'édition | Route dynamique `/drafts/[slug]/editer` (pas de query param) |
 
 ---
 
@@ -132,7 +135,7 @@ create sequence drafts_numero_seq start 1;
 |---|---|---|---|---|---|
 | 1 | Préparation : backup Supabase + branche git + création table `drafts` | Faible | ✅ Terminée | 2026-05-14 | 11b4c36 |
 | 2 | API `/api/drafts` (POST, GET, GET[slug], PUT[slug], DELETE[slug]) | Moyen | ✅ Terminée | 2026-05-14 | 268b2fb |
-| 3 | Page `/drafts/nouveau` (clone adapté de `/offres/nouveau`) + redirection | Moyen | ☐ À faire | | |
+| 3 | Page `/drafts/nouveau` + `/drafts/[slug]/editer` + composant partagé | Moyen | ✅ Terminée | 2026-05-14 | e72e2bc |
 | 4 | Page `/dashboard/draft/[slug]` (vue brouillon + bouton "Modifier") | Moyen | ☐ À faire | | |
 | 5 | Modal "Transformer en offre" + route `/api/drafts/[slug]/transformer` | **Élevé** | ☐ À faire | | |
 | 6 | Onglet "Brouillons" sur dashboard + filtre archivés | Faible | ☐ À faire | | |
@@ -187,22 +190,22 @@ qu'une ligne se crée bien dans `drafts`.
 
 ---
 
-### Session 3 — Page `/drafts/nouveau`
+### Session 3 — Pages `/drafts/nouveau` + `/drafts/[slug]/editer`
 
-**Objectif :** permettre la création/édition d'un brouillon via formulaire.
+**Objectif :** permettre la création et l'édition d'un brouillon via formulaire.
 
-**Stratégie :** cloner `/offres/nouveau/page.tsx` en `/drafts/nouveau/page.tsx`,
-puis adapter :
-- `saveToSupabase` appelle `/api/drafts` au lieu de `/api/offres/...`
+**Stratégie :** cloner `/offres/nouveau/page.tsx` en composant partagé, puis
+adapter :
+- `saveToSupabase` → `saveDraft` qui appelle `/api/drafts` (POST) ou `/api/drafts/[slug]` (PUT)
 - Pas de bouton "Envoyer pour signature"
 - Bouton "Transformer en offre" (session 5)
-- L'URL devient `/drafts/[slug]` après création (pas `/dashboard/[slug]`)
+- Au premier save, redirection silencieuse vers `/drafts/[slug]/editer`
 
 **Mode édition :** la même page doit pouvoir charger un brouillon existant via
-query param ou route dynamique `/drafts/[slug]/editer`.
+route dynamique `/drafts/[slug]/editer`.
 
-**Décision à prendre en début de session :** route dynamique `/drafts/[slug]/editer`
-(plus propre) ou query param `/drafts/nouveau?id=...` (plus simple) ?
+**Décision prise en début de session :** route dynamique `/drafts/[slug]/editer`
++ refactor en composant partagé `_components/DraftFormulaire.tsx`.
 
 **Critère de succès :** créer un brouillon depuis zéro, le sauvegarder, le
 rouvrir, le modifier, le re-sauvegarder.
@@ -214,7 +217,7 @@ rouvrir, le modifier, le re-sauvegarder.
 **Objectif :** vue lecture-seule d'un brouillon, avec actions.
 
 **Différences avec `/dashboard/[slug]` actuel :**
-- Bouton "Modifier" (renvoie vers la page d'édition de session 3)
+- Bouton "Modifier" (renvoie vers `/drafts/[slug]/editer` — Session 3)
 - Bouton "Transformer en offre" (déclenche modal session 5)
 - Bouton "Aperçu" (page print avec filigrane BROUILLON)
 - **PAS** de bouton "Envoyer pour signature"
@@ -239,6 +242,8 @@ modification et retour.
   - [ ] J'ai vérifié les remarques et délais
   - [ ] Je confirme que cette transformation est définitive et que l'offre ne sera plus modifiable
 - Bouton "Transformer" désactivé tant que toutes cases ne sont pas cochées
+- Choix Offre vs Commande dans le modal (le brouillon a déjà un `formType` mais
+  on permet de le surcharger au dernier moment)
 
 **Route `POST /api/drafts/[slug]/transformer` :**
 1. Charger le brouillon
@@ -288,6 +293,10 @@ prop `isDraft: boolean` qui :
 **Fichiers à fournir au début de la session :**
 - Le composant d'aperçu actuel (probablement `app/offres/[slug]/print` ou similaire)
 - Le composant filigrane DRAFT actuel utilisé pour les aperçus offres non signées
+
+**Important pour Session 7 :** actuellement le bouton "👁 Aperçu" du formulaire
+brouillon pointe vers `/print/offre` (stub temporaire — pas de filigrane). À
+remplacer par `/drafts/[slug]/print` avec template dédié.
 
 **Critère de succès :** ouvrir `/drafts/DRA-001/print` affiche un PDF-like avec
 filigrane permanent, sans bloc signature.
@@ -438,8 +447,110 @@ La table `drafts` peut rester en base (vide, sans impact).
   ALTER SEQUENCE drafts_numero_seq RESTART WITH 1;
 ```
 
-### Session 3
-_(à remplir après réalisation)_
+### Session 3 — Terminée le 2026-05-14 (commit `e72e2bc`)
+
+**Réalisé :**
+- Architecture refactor propre : composant partagé `DraftFormulaire` + 2 pages fines
+  - `app/drafts/_components/DraftFormulaire.tsx` (~3750 lignes) : toute la logique
+    métier, accepte un prop optionnel `initialSlug`
+  - `app/drafts/nouveau/page.tsx` (14 lignes) : mode création, rend `<DraftFormulaire />`
+  - `app/drafts/[slug]/editer/page.tsx` (20 lignes) : mode édition, extrait le slug
+    de la route et le passe en prop
+- Sauvegarde brouillon :
+  - Bouton manuel "💾 Créer le brouillon" / "💾 Enregistrer" selon le mode
+  - Auto-save toutes les 2 minutes si `isDirty`, conditionné à
+    nom + email + commercial remplis (pas de brouillons vides en base)
+  - Pastille de statut (vert/orange/rouge) + texte "💾 Enregistré il y a Xs"
+  - Filet de sécurité `beforeunload` natif navigateur si modifs non sauvées
+- Mode édition :
+  - Au montage, fetch `GET /api/drafts/[slug]` et hydratation des ~50 champs
+  - 5 états de chargement gérés : `loading` / `ready` / `not_found` / `transformed` / `error`
+  - Bandeau dédié pour chaque cas d'erreur (rouge pour not_found, orange pour transformed
+    avec lien vers l'offre cible, etc.)
+  - Save manuel + auto-save désactivés tant que `initialLoadStatus !== "ready"`
+- Adaptations spécifiques brouillon :
+  - Titre dynamique : "Nouveau brouillon — Offre" / "Brouillon DRA-XXX — Commande"
+  - Sélecteur Offre/Commande conservé (un brouillon peut devenir une offre OU
+    directement une commande)
+  - Suppression de la bannière "URL publique" (n'a pas de sens pour un brouillon)
+  - Bouton "🔄 Nouveau brouillon" reset complet + navigation vers `/drafts/nouveau`
+  - `STORAGE_KEY` localStorage isolée (`jc-draft-v1-local`) pour ne pas écraser
+    le brouillon local des offres
+  - Création client en base **uniquement** au save manuel (éviter les clients
+    fantômes pour des brouillons abandonnés)
+  - `MediaLinePicker` réutilisé depuis `app/offres/nouveau/MediaLinePicker` —
+    pas de duplication
+- Tests validés en local (utilisateur) :
+  - Création d'un brouillon DRA-003 depuis zéro → bascule auto vers `/drafts/dra-003-xxxxx/editer`
+  - Édition immédiate après création + persistance après F5
+  - 404 propre sur slug inexistant avec bouton "+ Nouveau brouillon"
+  - Rechargement d'un brouillon existant avec hydratation complète des champs
+
+**Écarts au plan initial :**
+- Choix d'architecture : refactor en composant partagé **après** validation du clone,
+  pas avant. Approche "marcher avant de courir" qui a permis de valider le flow
+  bout en bout (création + persistance) avant de toucher à la structure.
+- L'option discutée "vue lecture-seule + bouton Modifier" a été reportée à la
+  Session 4 (`/dashboard/draft/[slug]`). La page `/drafts/[slug]/editer` est
+  directement éditable, conformément à la sémantique des URLs (`/drafts/*` pour
+  éditer, `/dashboard/*` pour consulter).
+- Le bouton "👁 Aperçu" pointe encore vers `/print/offre` en attendant la Session 7
+  (filigrane BROUILLON). Pour l'instant l'aperçu d'un brouillon est donc visuellement
+  identique à celui d'une offre — à corriger en Session 7.
+
+**Pièges techniques rencontrés (à retenir pour les sessions suivantes) :**
+- **PowerShell + crochets `[ ]`** : les crochets sont interprétés comme wildcards.
+  `Remove-Item -Recurse -Force app\drafts\[slug]\editer` échoue **silencieusement**.
+  Solution : `Remove-Item -Recurse -Force -LiteralPath "app\drafts\[slug]\editer"`
+  ou passer par l'explorateur Windows.
+- **Double présence du segment "drafts"** : il y a `app/api/drafts/` (routes API)
+  ET `app/drafts/` (pages). Risque de confusion lors du collage de fichiers.
+  Symptôme du bug : erreur build Vercel `Type error: File '/vercel/path0/app/api/drafts/[slug]/editer/page.tsx' is not a module`
+  (un `page.tsx` parasite avait été placé dans `app/api/...` au lieu de `app/...`).
+- **Next.js 16 + params async** : dans `app/drafts/[slug]/editer/page.tsx`, le prop
+  `params` doit être typé comme `Promise<{ slug: string }>` et awaité. Pattern à
+  réutiliser pour toutes les pages dynamiques server-side à venir.
+
+**Notes pour Session 4 :**
+- La page `/dashboard/draft/[slug]` (vue lecture-seule depuis le dashboard) devra :
+  - Faire le même `GET /api/drafts/[slug]` que `DraftFormulaire` en mode édition
+    (la logique d'hydratation peut être extraite si besoin, mais une simple lecture
+    des champs JSON suffit pour de l'affichage)
+  - Réutiliser la structure visuelle de `/dashboard/[slug]` (offre) mais sans
+    bouton "Envoyer pour signature", sans bouton "Convertir en commande", sans
+    lien public partageable
+  - Inclure un bouton "✏️ Modifier" qui renvoie vers `/drafts/[slug]/editer`
+  - Inclure un bouton "🔄 Transformer en offre" (modal Session 5)
+  - Inclure un bouton "👁 Aperçu" qui ouvre `/drafts/[slug]/print` (Session 7)
+  - Bandeau visuel "BROUILLON" en haut de page
+- Si un brouillon a `transformed_at !== null`, la vue dashboard doit afficher
+  un bandeau "Transformé en offre [LIEN]" et masquer toutes les actions
+  d'édition/transformation.
+
+**État de la base après Session 3 :**
+- Brouillons de test créés pendant les tests : DRA-003 et DRA-004 selon les
+  manipulations. Tous peuvent être supprimés via `DELETE /api/drafts/[slug]` ou
+  conservés comme données de test pour la Session 4.
+- Séquences `drafts_id_seq` et `drafts_numero_seq` ont avancé.
+- Pour repartir totalement propre avant Session 4 :
+```sql
+  DELETE FROM drafts;
+  ALTER SEQUENCE drafts_id_seq RESTART WITH 1;
+  ALTER SEQUENCE drafts_numero_seq RESTART WITH 1;
+```
+
+**Architecture des fichiers brouillons après Session 3 :**
+```
+app/
+├── api/drafts/
+│   ├── route.ts                       # POST (create) + GET (list)  ← Session 2
+│   └── [slug]/route.ts                # GET + PUT + DELETE          ← Session 2
+└── drafts/
+    ├── _components/
+    │   └── DraftFormulaire.tsx        # Composant partagé           ← Session 3
+    ├── nouveau/page.tsx               # Mode création               ← Session 3
+    └── [slug]/editer/page.tsx         # Mode édition                ← Session 3
+```
 
 ### Session 4
 _(à remplir après réalisation)_
