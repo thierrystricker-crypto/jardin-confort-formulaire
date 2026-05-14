@@ -61,6 +61,15 @@ function nomClient(o: OffreRecord) {
 function nomClientDraft(d: DraftRecord) {
   return [d.client_prenom, d.client_nom].filter(Boolean).join(" ") || "—"
 }
+function offreNumeroFromSlug(slug: string|null): string|null {
+  // Slug format : "dev-2026-050-cd94b" → "DEV-2026-050"
+  // ou           : "cmd-80539-xxxxx"   → "CMD-80539"
+  if (!slug) return null
+  const parts = slug.split("-")
+  if (parts.length < 2) return null
+  // On retire le dernier segment (le token aléatoire 5 chars) et on remet en UPPERCASE
+  return parts.slice(0, -1).join("-").toUpperCase()
+}
 function getDaysOpen(o: OffreRecord): number|null {
   if (!o.date_document) return null
   if (["Acceptée","Convertie","Abandonnée"].includes(o.statut)) return null
@@ -669,7 +678,7 @@ export default function DashboardPage() {
                               )}
                               {isTransformed && d.transformed_into_offre_slug && (
                                 <div className="text-xs text-emerald-400 mt-0.5">
-                                  → Transformé
+                                  → {offreNumeroFromSlug(d.transformed_into_offre_slug) || "Transformé"}
                                 </div>
                               )}
                             </td>
