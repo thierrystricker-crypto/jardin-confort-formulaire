@@ -1,8 +1,11 @@
 -- docs/sql/003-rpc-transformer-draft.sql
 -- Session 5 — Transformation atomique brouillon → offre
 -- Toujours en Offre (jamais directement en Commande)
--- Reproduit fidèlement la branche "Offre" de /api/offres/save (mêmes
--- colonnes, mêmes valeurs par défaut)
+-- Reproduit fidèlement la branche "Offre" de /api/offres/save
+--
+-- NOTE: la colonne offres.numero_affiche est une GENERATED column côté Postgres.
+-- On NE la liste PAS dans l'INSERT, elle est calculée automatiquement à partir
+-- de numero_offre / numero_commande. C'est le même comportement que save/route.ts.
 
 CREATE OR REPLACE FUNCTION transformer_draft(p_slug TEXT)
 RETURNS JSONB
@@ -46,11 +49,11 @@ BEGIN
     );
 
   -- 6. INSERT dans offres (recopie complète)
+  -- numero_affiche NON listée : c'est une GENERATED column, Postgres la calcule
   INSERT INTO offres (
     slug,
     type_document,
     numero_offre,
-    numero_affiche,
     reference,
     statut,
     date_document,
@@ -74,7 +77,6 @@ BEGIN
   VALUES (
     v_offre_slug,
     'Offre',
-    v_numero,
     v_numero,
     v_draft.reference,
     'En cours',
