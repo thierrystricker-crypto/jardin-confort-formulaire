@@ -1249,7 +1249,15 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
           <button className="jc-btn jc-btn-ghost" onClick={() => setWideMode((w) => !w)} title="Mode grand écran — recherche à droite">
             {wideMode ? "◧ Mode normal" : "⬛ Grand écran"}
           </button>
-          {showResetConfirm ? (
+          {/* ── Bouton "Nouveau brouillon" — comportement contextuel ──
+              Sur un brouillon transformé (lecture seule), pas besoin de
+              confirmation : il n'y a rien à perdre puisque toute modif est
+              déjà bloquée. Lien direct vers /drafts/nouveau.
+              Sur un brouillon actif (en cours d'édition), demande confirmation
+              car resetForm() abandonne les modifs courantes et navigue. */}
+          {initialLoadStatus === "transformed" ? (
+            <a href="/drafts/nouveau" className="jc-btn jc-btn-ghost">🔄 Nouveau brouillon</a>
+          ) : showResetConfirm ? (
             <>
               <span className="jc-warn-inline">Effacer tout ?</span>
               <button className="jc-btn jc-btn-danger" onClick={resetForm}>Confirmer</button>
@@ -1258,9 +1266,26 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
           ) : (
             <button className="jc-btn jc-btn-ghost" onClick={() => setShowResetConfirm(true)}>🔄 Nouveau brouillon</button>
           )}
-          <button className="jc-btn jc-btn-ghost" onClick={loadDraftLocal}>📂 Charger</button>
-          <button className="jc-btn jc-btn-ghost" onClick={saveLocalSnapshot}>💾 Local</button>
-          <button className="jc-btn jc-btn-ghost" disabled={!undoSnapshot} onClick={undoLastChange}>↩ Undo</button>
+          {/* Charger / Local / Undo : désactivés sur brouillon transformé.
+              Charger écraserait l'affichage avec un snapshot localStorage,
+              Local sauverait par-dessus, Undo n'a pas de sens en lecture seule. */}
+          <button
+            className="jc-btn jc-btn-ghost"
+            onClick={loadDraftLocal}
+            disabled={initialLoadStatus === "transformed"}
+            title={initialLoadStatus === "transformed" ? "Indisponible : brouillon transformé" : "Charger le brouillon local depuis le navigateur"}
+          >📂 Charger</button>
+          <button
+            className="jc-btn jc-btn-ghost"
+            onClick={saveLocalSnapshot}
+            disabled={initialLoadStatus === "transformed"}
+            title={initialLoadStatus === "transformed" ? "Indisponible : brouillon transformé" : "Sauvegarder localement dans le navigateur"}
+          >💾 Local</button>
+          <button
+            className="jc-btn jc-btn-ghost"
+            disabled={!undoSnapshot || initialLoadStatus === "transformed"}
+            onClick={undoLastChange}
+          >↩ Undo</button>
 
           {/* ── Pastille de statut auto-save ──
               vert  : saveStatus === "saved"   (dernier save OK, rien à sauver)
