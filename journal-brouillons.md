@@ -6,31 +6,47 @@
 
 ---
 
-## 🚀 Reprise rapide — Session 6 à démarrer
+## 🚀 Reprise rapide — Session 7 à démarrer
 
-**État au 2026-05-14 :** Sessions 1, 2, 3, 4, 5 terminées. La fonctionnalité
-complète "brouillon → offre" est opérationnelle bout-en-bout :
+**État au 2026-05-15 :** Sessions 1, 2, 3, 4, 5, 6 terminées. La fonctionnalité
+"brouillon → offre" est opérationnelle bout-en-bout ET intégrée au dashboard :
 - Création/édition de brouillons (`/drafts/nouveau`, `/drafts/[slug]/editer`)
 - Vue lecture-seule dashboard (`/dashboard/draft/[slug]`)
 - Duplication en nouveau brouillon (depuis tout brouillon, transformé ou non)
 - Transformation atomique brouillon → offre via modal (RPC SQL + route +
   composant `TransformerModal`)
-- Gestion 404/409 typée côté API et UI
+- **Section "Brouillons" sur le dashboard principal** avec 5ème KpiCard,
+  filtre commercial, masquer transformés, lien vers offre cible
 
-**Prochaine session : Session 6 — Onglet "Brouillons" sur le dashboard**
-Intégrer les brouillons dans la vue dashboard existante avec un onglet
-séparé, compteur de brouillons actifs, et filtre "Masquer brouillons
-transformés" (coché par défaut). L'API GET /api/drafts (Session 2) est
-déjà prête, il ne reste qu'à coder l'UI.
+**Prochaine session : Session 7 — Aperçu print filigrane BROUILLON**
+Créer une page print dédiée pour les brouillons : filigrane "BROUILLON" en
+diagonale, bloc signature masqué, pas de lien validation. Aujourd'hui le
+bouton "👁 Aperçu" pointe vers `/print/offre/[slug]` qui charge depuis la
+table `offres` et affiche "Aucun article" pour un brouillon.
 
-**Avant de démarrer la Session 6, avoir sous la main :**
-- `app/dashboard/page.tsx` (le dashboard actuel des offres — pour cloner la
-  structure et y greffer l'onglet "Brouillons")
-- Le présent journal pour les notes Session 6 (en bas du fichier, dans la
-  section "Session 5")
+**À faire en Session 7 :**
+1. Créer `app/drafts/[slug]/print/page.tsx` (server-side ou client-side
+   selon ce que fait `/print/offre/[slug]` actuel)
+2. Charger les données via `GET /api/drafts/[slug]` (Session 2)
+3. Adapter le composant d'aperçu pour masquer signature + lien validation
+   quand `isDraft={true}`
+4. Ajouter filigrane "BROUILLON" en diagonale (CSS pseudo-element ou SVG
+   superposé)
+5. Mettre à jour le bouton "👁 Aperçu" dans `/dashboard/draft/[slug]/page.tsx`
+   pour pointer vers la nouvelle route
 
-**Brouillons de test en base** : voir "État de la base après Session 5"
-dans les notes Session 5.
+**Avant de démarrer la Session 7, avoir sous la main :**
+- `app/print/offre/[slug]/page.tsx` (la page print actuelle des offres — à
+  étudier pour comprendre la structure)
+- Tous composants partagés utilisés par le print (template, bloc signature,
+  bloc client, bloc lignes, etc.)
+- Le composant filigrane DRAFT actuel si tu en utilises déjà un pour les
+  aperçus offres non signées
+- Le présent journal pour les notes Session 7
+
+**Risque Moyen** — manipulation de composants print partagés avec les offres
+en prod. Bien découpler côté brouillon (prop `isDraft`) pour ne pas
+introduire de régression sur les aperçus offres existants.
 
 ---
 
@@ -80,7 +96,7 @@ contient des doublons quasi-identiques et les statistiques sont faussées.
 - **Aperçu** filigrané "BROUILLON" (page print Shopify dynamique, jamais de PDF généré)
 - **Template** = devis actuel sans bloc signature + sans lien de validation
 - **Pas de lien public partageable**
-- Listé dans un onglet séparé "Brouillons" sur le dashboard (caché par défaut)
+- Listé dans une section dédiée "Brouillons" en bas du dashboard
 
 ### Offre (`offres`)
 - Créée uniquement par action "Transformer en offre" depuis un brouillon
@@ -143,8 +159,11 @@ conservation indéfinie.
 
 **Traçabilité bidirectionnelle :**
 - Depuis DRA-005 : `transformed_into_offre_slug` pointe vers DEV-2026-047
-- Depuis DEV-2026-047 : `data.fromDraftSlug` pointe vers DRA-005 (à ajouter Session 5)
-- Depuis DRA-007 : `data.copiedFromOffreSlug` pointe vers DEV-2026-047 (à ajouter Session 8)
+  (affiché `→ DEV-2026-047` dans la section brouillons du dashboard)
+- Depuis DEV-2026-047 : `data.fromDraftSlug` pointe vers DRA-005 (en place
+  depuis Session 5)
+- Depuis DRA-007 : `data.copiedFromOffreSlug` pointe vers DEV-2026-047 (à
+  ajouter Session 8)
 
 **Cas d'usage "3 variantes rouge/vert/noir" — workflow complet :**
 
@@ -183,7 +202,7 @@ Les deux workflows coexistent — le commercial choisit selon le contexte.
 | Après transformation | **Conservé indéfiniment** (pas de purge auto à 30j) — un brouillon transformé reste consultable et duplicable |
 | Filtre dashboard | "Masquer brouillons transformés" (filtre d'affichage, pas de purge) |
 | Numérotation | `DRA-XXX` |
-| Dashboard | Onglet "Brouillons" caché par défaut |
+| Dashboard | Section "Brouillons" en bas du tableau offres (collapsible, ouverte par défaut) — voir Session 6 |
 | Confirmation transformation | Modal avec récap + cases à cocher |
 | Mode de transformation | **Scénario A direct serveur** : POST `/api/drafts/[slug]/transformer` → crée l'offre + archive le brouillon → redirection auto vers `/dashboard/[offre-slug]`. Pas de retour par le formulaire `/offres/nouveau`. |
 | Transformation multiple du même brouillon | **Non** — un brouillon = 1 transformation max. Pour générer plusieurs variantes : dupliquer d'abord, transformer ensuite la copie. |
@@ -254,10 +273,9 @@ create sequence drafts_numero_seq start 1;
 | 1 | Préparation : backup Supabase + branche git + création table `drafts` | Faible | ✅ Terminée | 2026-05-14 | 11b4c36 |
 | 2 | API `/api/drafts` (POST, GET, GET[slug], PUT[slug], DELETE[slug]) | Moyen | ✅ Terminée | 2026-05-14 | 268b2fb |
 | 3 | Page `/drafts/nouveau` + `/drafts/[slug]/editer` + composant partagé | Moyen | ✅ Terminée | 2026-05-14 | e72e2bc + clôture |
-| 4 | Page `/dashboard/draft/[slug]` (vue brouillon + bouton "Modifier") | Moyen | ✅ Terminée | 2026-05-14 | J4VKQq9yD
-|
+| 4 | Page `/dashboard/draft/[slug]` (vue brouillon + bouton "Modifier") | Moyen | ✅ Terminée | 2026-05-14 | J4VKQq9yD |
 | 5 | Modal "Transformer en offre" + route `/api/drafts/[slug]/transformer` | ~~Élevé~~ Moyen* | ✅ Terminée | 2026-05-14 | c831bdf |
-| 6 | Onglet "Brouillons" sur dashboard + filtre archivés | Faible | ☐ À faire | | |
+| 6 | Section "Brouillons" sur dashboard + filtre archivés | Faible | ✅ Terminée | 2026-05-15 | (push après commit) |
 | 7 | Aperçu print : filigrane BROUILLON, sans signature, sans lien validation | Moyen | ☐ À faire | | |
 | 8 | Boutons "Copier en brouillon" + "Copier en offre" depuis dashboard offre | Faible | ☐ À faire | | |
 | 9 | Tests end-to-end + merge `feature/brouillons` → `main` + déploiement prod | **Élevé** | ☐ À faire | | |
@@ -363,49 +381,6 @@ pour les offres) mais sans les actions non pertinentes pour un brouillon
 - Si `transformed_at !== null` : bandeau supplémentaire orange "Transformé en
   offre [DEV-2026-XXX →]" avec lien vers `/dashboard/[offre-slug]`
 
-**Chargement des données :**
-Réutiliser `GET /api/drafts/[slug]` (Session 2). La page est server-side ou
-client-side selon la structure existante de `/dashboard/[slug]` côté offres —
-on s'aligne sur ce qui est déjà en place pour rester cohérent. Idéalement
-server-side (Next 16 App Router) pour le SEO et le first paint.
-
-**Gestion d'erreur :**
-- 404 si slug introuvable → page d'erreur avec lien "+ Nouveau brouillon"
-- 500 → message d'erreur générique avec bouton "🔄 Réessayer"
-
-**Bouton "📋 Dupliquer" — implémentation client :**
-```ts
-async function dupliquerBrouillon() {
-  // 1. Le brouillon courant est déjà en mémoire (props.draft)
-  //    Pas besoin de re-fetch via GET.
-  const data = { ...draft.data };
-  // Option future : data.copiedFromDraftSlug = slug;  (traçabilité)
-
-  // 2. POST pour créer un nouveau brouillon
-  const res = await fetch("/api/drafts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ data })
-  });
-  if (!res.ok) { /* afficher erreur */ return; }
-  const { editUrl } = await res.json();
-
-  // 3. Rediriger vers le nouveau brouillon en mode édition
-  router.push(editUrl);
-}
-```
-
-**Décision UX à prendre en début de session :**
-- Position des boutons "Modifier" / "Dupliquer" : groupe d'actions à droite
-  comme sur `/dashboard/[slug]` côté offres, ou groupe en haut ?
-- Modal de confirmation pour "🗑 Supprimer" : modal dédiée ou inline
-  (style "Confirmer ?" / "Annuler" comme dans le formulaire) ?
-
-**Fichiers à fournir au début de la session :**
-- `app/dashboard/[slug]/page.tsx` (la page dashboard offre actuelle, à cloner
-  pour la structure visuelle)
-- `app/api/drafts/[slug]/route.ts` (déjà fait Session 2, pour rappel)
-
 **Critère de succès :** afficher un brouillon en lecture seule, lancer
 modification et retour, dupliquer (avec ou sans transformation préalable),
 gérer correctement l'affichage des brouillons transformés.
@@ -419,12 +394,8 @@ serveur** (acté en fin de Session 3). Pas de retour par `/offres/nouveau`.
 
 **Modal de confirmation :**
 - Récap : client, montant total, nombre de lignes, commercial
-- Choix Offre ou Commande (récupéré depuis `data.formType` mais surchargeable
-  au dernier moment dans la modal)
 - Cases à cocher obligatoires :
-  - [ ] J'ai vérifié les coordonnées client
-  - [ ] J'ai vérifié les prix et quantités
-  - [ ] J'ai vérifié les remarques et délais
+  - [ ] J'ai vérifié toutes les informations (client, prix, quantités, remarques)
   - [ ] Je confirme que cette transformation est définitive et que l'offre
         ne sera plus modifiable
 - Bouton "Transformer" désactivé tant que toutes cases ne sont pas cochées
@@ -432,24 +403,17 @@ serveur** (acté en fin de Session 3). Pas de retour par `/offres/nouveau`.
 **Route `POST /api/drafts/[slug]/transformer` :**
 1. Charger le brouillon
 2. **Refuser (409)** si `transformed_at !== null` : un brouillon ne peut être
-   transformé qu'une seule fois. Pour générer une variante, le commercial doit
-   d'abord dupliquer le brouillon (Session 4).
-3. Générer numéro d'offre via la séquence existante (à identifier en début de
-   session — probablement `next_dev_numero` ou équivalent côté `/api/offres/save`)
+   transformé qu'une seule fois.
+3. Générer numéro d'offre via la séquence existante `next_dev_numero`
 4. INSERT dans `offres` avec toutes les données du brouillon
    - Ajouter `data.fromDraftSlug = <slug du brouillon>` pour traçabilité inverse
 5. UPDATE du brouillon : `transformed_at = now()`, `transformed_into_offre_slug = ...`,
    `archived = true`
-   - **NB :** `archived = true` mais le brouillon reste en base indéfiniment
-     (consultable et duplicable). Pas de purge automatique.
 6. Retourner `{ offreSlug }` pour redirection
-7. Wrap dans une transaction Supabase (ou rollback manuel si échec)
+7. Wrap dans une transaction Supabase atomique (RPC SQL)
 
 **Redirection :** après succès, rediriger vers `/dashboard/[offreSlug]` (la
 nouvelle offre).
-
-**⚠️ Risque :** une transformation partielle (brouillon archivé mais offre non
-créée) corromprait l'état. Il **faut** une transaction ou un rollback explicite.
 
 **Critère de succès :** transformer un brouillon, vérifier qu'une offre est
 créée avec le bon numéro, que le brouillon est marqué `archived=true` mais
@@ -458,21 +422,23 @@ que l'utilisateur arrive sur la page de la nouvelle offre.
 
 ---
 
-### Session 6 — Onglet "Brouillons" dashboard
+### Session 6 — Section "Brouillons" sur dashboard
 
 **Objectif :** intégrer les brouillons dans le dashboard sans gêner.
 
 **Modifications dashboard :**
-- Nouvel onglet "Brouillons" caché par défaut (par exemple toggle/checkbox "Afficher les brouillons" ou onglet séparé selon l'UI actuelle)
-- Compteur de brouillons actifs (non archivés)
+- 5ème KpiCard "📝 Brouillons" en haut (grille passée en 5 colonnes sur xl)
+- Section "Brouillons" collapsible **en bas** du tableau offres (le pipeline
+  commercial reste prioritaire en haut)
+- Compteur de brouillons "X actifs / Y au total"
 - Filtre "Masquer les brouillons transformés" (coché par défaut → cache ceux
-  avec `archived=true`). **Important :** ce filtre est purement visuel
-  (affichage), pas un mécanisme de purge — les brouillons transformés restent
-  en base indéfiniment et restent duplicables même quand masqués (le commercial
-  doit décocher le filtre pour les retrouver).
+  avec `archived=true`)
+- Filtre commercial existant s'applique aussi aux brouillons (cohérence avec
+  l'expérience offres)
+- Bouton "⬆ Haut" pour remonter au sommet du dashboard
 - Tri par `updated_at DESC` (les plus récemment modifiés en haut)
 
-**Critère de succès :** l'onglet apparaît, liste les brouillons, le filtre
+**Critère de succès :** la section apparaît, liste les brouillons, le filtre
 fonctionne, les brouillons transformés sont retrouvables en décochant le filtre.
 
 ---
@@ -489,12 +455,14 @@ prop `isDraft: boolean` qui :
 - Affiche éventuellement un bandeau "Document non contractuel"
 
 **Fichiers à fournir au début de la session :**
-- Le composant d'aperçu actuel (probablement `app/offres/[slug]/print` ou similaire)
+- Le composant d'aperçu actuel (probablement `app/print/offre/[slug]/page.tsx` ou similaire)
+- Tous composants partagés utilisés par le print (template, bloc signature, bloc client, bloc lignes)
 - Le composant filigrane DRAFT actuel utilisé pour les aperçus offres non signées
 
 **Important pour Session 7 :** actuellement le bouton "👁 Aperçu" du formulaire
-brouillon pointe vers `/print/offre` (stub temporaire — pas de filigrane). À
-remplacer par `/drafts/[slug]/print` avec template dédié.
+brouillon et de la page `/dashboard/draft/[slug]` pointent vers `/print/offre/[slug]`
+(stub temporaire — pas de filigrane et "Aucun article" affiché car la page charge
+depuis la table `offres`). À remplacer par `/drafts/[slug]/print` avec template dédié.
 
 **Critère de succès :** ouvrir `/drafts/DRA-001/print` affiche un PDF-like avec
 filigrane permanent, sans bloc signature.
@@ -527,10 +495,6 @@ permettre **deux types de copies** côte à côte :
   côté serveur
 - Le bouton "Copier en nouveau brouillon" appelle `POST /api/drafts`
 
-**Variante alternative pour ouverture dans nouvel onglet :** chaque bouton ouvre
-une route serveur qui crée + redirige (`/drafts/copier-depuis/[offreSlug]` ou
-`/offres/copier-depuis/[offreSlug]`). Permet le clic milieu / `Open in new tab`.
-
 **Critère de succès :** depuis une offre existante, les deux boutons sont
 visibles. Le bouton "brouillon" crée un DRA-XXX éditable. Le bouton "offre"
 crée directement une DEV-2026-XXX. Les `ambianceImages` sont correctement
@@ -554,14 +518,15 @@ copiées dans les deux cas (régression du bug pré-chantier).
 - [ ] Transformation refusée si cases non cochées
 - [ ] Vérification : offre créée avec bon numéro, brouillon archivé
 - [ ] Filtre "Masquer brouillons transformés" fonctionne
-- [ ] Onglet "Brouillons" caché par défaut
+- [ ] Section "Brouillons" collapsible fonctionne
 - [ ] Les 50 offres existantes sont toujours accessibles et fonctionnelles
 
 **Déploiement :**
-1. Merge `feature/brouillons` → `main` via PR
-2. Vercel déploie automatiquement
-3. Vérification post-déploiement sur la prod (création d'un brouillon test)
-4. Optionnel : suppression du brouillon test
+1. **Régénérer la `SUPABASE_SERVICE_ROLE_KEY`** (cf. section sécurité ci-dessous)
+2. Merge `feature/brouillons` → `main` via PR
+3. Vercel déploie automatiquement
+4. Vérification post-déploiement sur la prod (création d'un brouillon test)
+5. Optionnel : suppression du brouillon test
 
 **Rollback prévu :** si problème majeur, `git revert` du merge et redéploiement.
 La table `drafts` peut rester en base (vide, sans impact).
@@ -603,30 +568,21 @@ La table `drafts` peut rester en base (vide, sans impact).
   - `DELETE /api/drafts/[slug]` (hard delete avec garde transformation 409) — commit `268b2fb`
 - RPC SQL `next_dra_numero()` créée dans Supabase pour générer `DRA-001`, `DRA-002`, etc.
   Versionnée dans `docs/sql/002-rpc-next-dra-numero.sql`. Utilise `nextval('drafts_numero_seq')`
-  (choix de la séquence plutôt que `COUNT(*)` comme `next_dev_numero`, pour rester stable
-  après purge automatique des brouillons archivés)
 - Tous les endpoints testés en local : création vide, création pré-remplie, listing avec
   3 modes de filtre archived (false/true/all), filtre commercial, lecture détaillée,
   modification, suppression, cas d'erreur 404 et 409
 
 **Écarts au plan initial :**
 - `.env.local` était **incomplet** au début de la session : il manquait `NEXT_PUBLIC_SUPABASE_URL`
-  et `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Probablement jamais synchronisé avec les vars Vercel
-  (qui contient ces valeurs côté prod, sinon offres ne marcherait pas). Ajoutées en local
-  pour pouvoir tester via `npm run dev`.
+  et `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Ajoutées en local.
 - `lib/supabase.ts` lisait `SUPABASE_SECRET_KEY` mais `.env.local` (et Vercel) utilisent
   `SUPABASE_SERVICE_ROLE_KEY` (nom standard Supabase). Ajout d'un fallback rétrocompatible :
   `process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY`.
 - `computeTotals(data)` plante si `data.lines` ou `data.enabledServices` sont `undefined`.
-  Le POST et le PUT court-circuitent l'appel quand `data.lines` est vide ou absent :
-  totaux à 0 par défaut. Le code de `lib/jc-print-types.ts` n'a pas été touché (utilisé
-  aussi par offres en prod).
+  Le POST et le PUT court-circuitent l'appel quand `data.lines` est vide ou absent.
 - Slug brouillon adopte le **même pattern que les offres** : `dra-001-x7k2m` (lowercase
-  + token aléatoire 5 chars). Le journal initial évoquait `DRA-001` simple, mais le risque
-  d'énumération d'URLs (même sans lien public) justifiait le token, par cohérence avec
-  les offres.
+  + token aléatoire 5 chars).
 - `numero_affiche` en UPPERCASE (`DRA-001`) distinct du slug en lowercase (`dra-001-...`).
-  Décision : le slug est l'identifiant URL, `numero_affiche` est ce qui est montré à l'UI.
 
 **Sécurité à traiter avant déploiement prod (Session 9) :**
 - ⚠️ La `SUPABASE_SERVICE_ROLE_KEY` complète a été collée dans un chat de débogage
@@ -636,31 +592,23 @@ La table `drafts` peut rester en base (vide, sans impact).
   3. Mettre à jour `.env.local` en local
   4. Redéploiement automatique Vercel après update env vars
 
-**Notes pour Session 3 :**
-- Les 5 routes API sont prêtes pour être consommées par la page `/drafts/nouveau` qu'on va
-  cloner depuis `/offres/nouveau`. Le formulaire devra appeler :
-  - `POST /api/drafts` pour la création (avec body `{ data: {...} }`)
-  - `PUT /api/drafts/[slug]` pour les sauvegardes ultérieures (auto-save éventuel)
-  - `GET /api/drafts/[slug]` pour le chargement initial en mode édition
-- L'URL d'édition d'un brouillon est `/drafts/[slug]/editer` (cf. `editUrl` renvoyé par
-  le POST). À implémenter en Session 3 ou 4 selon le découpage.
-- Le retour du POST contient `dashboardUrl` qui pointe vers `/dashboard/draft/[slug]`
-  (Session 4). Pour l'instant cette URL n'existe pas encore.
-- Le tri du listing `GET /api/drafts` est par `updated_at DESC`. À chaque PUT, le trigger
-  SQL met à jour `updated_at` automatiquement, donc le brouillon récemment modifié
-  remonte naturellement en haut du dashboard (Session 6).
-
-**État de la base après Session 2 :**
-- 1 brouillon DRA-002 (Dupont/Jean/Thierry/TEST-001) reste en base après les tests.
-  Peut être supprimé via `DELETE /api/drafts/dra-002-mzu6w` ou conservé pour tester
-  Session 3.
-- Séquences `drafts_id_seq` et `drafts_numero_seq` sont à 2 (prochain brouillon = `DRA-003`,
-  `id=3`).
-- Pour repartir totalement propre avant Session 3 :
-```sql
-  DELETE FROM drafts;
-  ALTER SEQUENCE drafts_id_seq RESTART WITH 1;
-  ALTER SEQUENCE drafts_numero_seq RESTART WITH 1;
+**Format de réponse `GET /api/drafts` :**
+```json
+{
+  "drafts": [
+    {
+      "id": 2, "slug": "dra-002-mzu6w", "numero_draft": 2,
+      "numero_affiche": "DRA-002", "reference": "...",
+      "client_societe": null, "client_nom": "Dupont", "client_prenom": "Jean",
+      "client_email": "...", "commercial": "Thierry",
+      "total_ttc": 0, "nb_articles": 0,
+      "created_at": "...", "updated_at": "...",
+      "transformed_at": null, "transformed_into_offre_slug": null,
+      "archived": false
+    }
+  ],
+  "count": 1
+}
 ```
 
 ### Session 3 — Terminée le 2026-05-14 (commit refactor `e72e2bc` + commit clôture)
@@ -669,170 +617,184 @@ La table `drafts` peut rester en base (vide, sans impact).
 - Architecture refactor propre : composant partagé `DraftFormulaire` + 2 pages fines
   - `app/drafts/_components/DraftFormulaire.tsx` (~3750 lignes) : toute la logique
     métier, accepte un prop optionnel `initialSlug`
-  - `app/drafts/nouveau/page.tsx` (14 lignes) : mode création, rend `<DraftFormulaire />`
-  - `app/drafts/[slug]/editer/page.tsx` (20 lignes) : mode édition, extrait le slug
-    de la route et le passe en prop
-- Sauvegarde brouillon :
-  - Bouton manuel "💾 Créer le brouillon" / "💾 Enregistrer" selon le mode
-  - Auto-save toutes les 2 minutes si `isDirty`, conditionné à
-    nom + email + commercial remplis (pas de brouillons vides en base)
-  - Pastille de statut (vert/orange/rouge) + texte "💾 Enregistré il y a Xs"
-  - Filet de sécurité `beforeunload` natif navigateur si modifs non sauvées
-- Mode édition :
-  - Au montage, fetch `GET /api/drafts/[slug]` et hydratation des ~50 champs
-  - 5 états de chargement gérés : `loading` / `ready` / `not_found` / `transformed` / `error`
-  - Bandeau dédié pour chaque cas d'erreur (rouge pour not_found, orange pour transformed
-    avec lien vers l'offre cible, etc.)
-  - Save manuel + auto-save désactivés tant que `initialLoadStatus !== "ready"`
-- Adaptations spécifiques brouillon :
-  - Titre dynamique : "Nouveau brouillon — Offre" / "Brouillon DRA-XXX — Commande"
-  - Sélecteur Offre/Commande conservé (un brouillon peut devenir une offre OU
-    directement une commande)
-  - Suppression de la bannière "URL publique" (n'a pas de sens pour un brouillon)
-  - Bouton "🔄 Nouveau brouillon" reset complet + navigation vers `/drafts/nouveau`
-  - `STORAGE_KEY` localStorage isolée (`jc-draft-v1-local`) pour ne pas écraser
-    le brouillon local des offres
-  - Création client en base **uniquement** au save manuel (éviter les clients
-    fantômes pour des brouillons abandonnés)
-  - `MediaLinePicker` réutilisé depuis `app/offres/nouveau/MediaLinePicker` —
-    pas de duplication
-- Tests validés en local (utilisateur) :
-  - Création d'un brouillon DRA-003 depuis zéro → bascule auto vers `/drafts/dra-003-xxxxx/editer`
-  - Édition immédiate après création + persistance après F5
-  - 404 propre sur slug inexistant avec bouton "+ Nouveau brouillon"
-  - Rechargement d'un brouillon existant avec hydratation complète des champs
-- **Micro-fix de clôture (post-décisions modèle métier)** : adaptation du topbar
-  pour les brouillons transformés. Le bouton "🔄 Nouveau brouillon" devient un
-  lien direct vers `/drafts/nouveau` sans confirmation quand on consulte un
-  brouillon transformé (rien à perdre, puisque l'édition est de toute façon
-  bloquée). Les boutons "📂 Charger", "💾 Local" et "↩ Undo" sont désactivés
-  dans ce mode (pas de sens en lecture seule, et "Charger" pourrait écraser
-  l'affichage avec un snapshot localStorage potentiellement obsolète).
-
-**Écarts au plan initial :**
-- Choix d'architecture : refactor en composant partagé **après** validation du clone,
-  pas avant. Approche "marcher avant de courir" qui a permis de valider le flow
-  bout en bout (création + persistance) avant de toucher à la structure.
-- L'option discutée "vue lecture-seule + bouton Modifier" a été reportée à la
-  Session 4 (`/dashboard/draft/[slug]`). La page `/drafts/[slug]/editer` est
-  directement éditable, conformément à la sémantique des URLs (`/drafts/*` pour
-  éditer, `/dashboard/*` pour consulter).
-- Le bouton "👁 Aperçu" pointe encore vers `/print/offre` en attendant la Session 7
-  (filigrane BROUILLON). Pour l'instant l'aperçu d'un brouillon est donc visuellement
-  identique à celui d'une offre — à corriger en Session 7.
-
-**Pièges techniques rencontrés (à retenir pour les sessions suivantes) :**
-- **PowerShell + crochets `[ ]`** : les crochets sont interprétés comme wildcards.
-  `Remove-Item -Recurse -Force app\drafts\[slug]\editer` échoue **silencieusement**.
-  Solution : `Remove-Item -Recurse -Force -LiteralPath "app\drafts\[slug]\editer"`
-  ou passer par l'explorateur Windows.
-- **Double présence du segment "drafts"** : il y a `app/api/drafts/` (routes API)
-  ET `app/drafts/` (pages). Risque de confusion lors du collage de fichiers.
-  Symptôme du bug : erreur build Vercel `Type error: File '/vercel/path0/app/api/drafts/[slug]/editer/page.tsx' is not a module`
-  (un `page.tsx` parasite avait été placé dans `app/api/...` au lieu de `app/...`).
-- **Next.js 16 + params async** : dans `app/drafts/[slug]/editer/page.tsx`, le prop
-  `params` doit être typé comme `Promise<{ slug: string }>` et awaité. Pattern à
-  réutiliser pour toutes les pages dynamiques server-side à venir.
+  - `app/drafts/nouveau/page.tsx` (14 lignes) : mode création
+  - `app/drafts/[slug]/editer/page.tsx` (20 lignes) : mode édition
+- Sauvegarde brouillon : manuelle + auto-save 2 min si nom+email+commercial remplis
+- Mode édition : fetch GET au montage, 5 états gérés (loading/ready/not_found/transformed/error)
+- Adaptations spécifiques brouillon : pas de bannière URL publique, STORAGE_KEY localStorage
+  isolée (`jc-draft-v1-local`), création client en base uniquement au save manuel
+- Tests validés en local : création DRA-003, édition immédiate, persistance F5, 404 propre
 
 **Décisions de modèle métier actées en fin de Session 3 :**
+1. Mode de transformation = Scénario A direct serveur (pas de retour par `/offres/nouveau`)
+2. Conservation indéfinie des brouillons transformés (pas de purge à 30j)
+3. Un brouillon = 1 transformation max
+4. Bouton "📋 Dupliquer en nouveau brouillon" disponible même sur brouillons transformés
+5. Deux boutons de copie depuis offre (Session 8) : nouveau brouillon OU nouvelle offre
+6. Concept "is_template" abandonné
 
-À la fin de la session, après discussion sur les cas d'usage réels (variantes
-de couleur, modèles réutilisables, copies depuis offres signées), plusieurs
-décisions importantes ont été prises pour clarifier le modèle métier complet
-avant d'attaquer les sessions 4-5-6-8. Voir aussi le tableau "Décisions
-validées" et le schéma "Flux entre brouillons et offres" en haut du journal.
+**Pièges techniques rencontrés :**
+- PowerShell + crochets `[ ]` : `Remove-Item -Recurse -Force app\drafts\[slug]\editer` échoue
+  silencieusement. Solution : `-LiteralPath "app\drafts\[slug]\editer"`.
+- Double présence du segment "drafts" : `app/api/drafts/` ET `app/drafts/`. Risque de confusion.
+- Next.js 16 + params async : `params` typé `Promise<{ slug: string }>` et awaité.
 
-1. **Mode de transformation = Scénario A direct serveur.** Le clic "Transformer
-   en offre" appelle `POST /api/drafts/[slug]/transformer` qui fait tout en
-   atomique : INSERT dans offres, UPDATE du brouillon, génération PDF + URL
-   publique. Redirection finale vers `/dashboard/[offre-slug]`. **Pas de
-   passage par `/offres/nouveau` pré-rempli** — ça viderait la modal de
-   vérification de son sens et créerait une fenêtre de modification
-   post-engagement.
+### Session 4 — Terminée le 2026-05-14
 
-2. **Conservation indéfinie des brouillons transformés.** Décision changée
-   par rapport au journal initial : **pas de purge automatique à 30 jours**.
-   Un brouillon transformé reste consultable et duplicable indéfiniment via
-   `/dashboard/draft/[slug]`. Le filtre dashboard "Masquer transformés" devient
-   un filtre visuel d'affichage, pas un mécanisme de purge.
+**Réalisé :**
+- Page `/dashboard/draft/[slug]/page.tsx` créée (~700 lignes)
+- Architecture alignée sur `/dashboard/[slug]` côté offres : "use client", params async,
+  fetch dans useEffect, layout en grille avec sticky preview à droite
+- Bandeau pleine largeur "📝 BROUILLON" en haut, avec dates créé/modifié
+- Bandeau orange "🔒 Brouillon transformé en offre" conditionnel avec lien vers l'offre cible
+- Sections lecture-seule : Client, Brouillon (méta), Livraison, Montants, Remarques, Notes
+- Boutons d'action : Modifier / Transformer (désactivé Session 4) / Aperçu / Dupliquer / Supprimer
 
-3. **Un brouillon = 1 transformation max.** Pour générer plusieurs variantes
-   à partir d'une même base (ex : cuisine rouge / verte / noire), le
-   commercial doit **dupliquer le brouillon d'abord**, puis transformer la
-   copie. La route `POST /api/drafts/[slug]/transformer` renverra 409 si
-   `transformed_at !== null`. Garantit l'intégrité du modèle "offre = état
-   figé à un instant T précis et engageant".
+**Bug fix transverse réalisé pendant la session :**
+- `app/print/layout.tsx` redéclarait `<html>`, `<head>`, `<body>` alors que le root layout
+  les fournit déjà → double `<html>` imbriqué et 7 erreurs d'hydration React 19. Corrigé.
 
-4. **Bouton "📋 Dupliquer en nouveau brouillon"** disponible depuis tout
-   brouillon (Session 4) — y compris les brouillons déjà transformés. Permet
-   de générer des variantes à partir d'un brouillon source qui sert de modèle
-   racine. Source intacte, copie indépendante.
+### Session 5 — Terminée le 2026-05-14
 
-5. **Deux boutons de copie depuis une offre (Session 8) :**
-   - "📄 Copier en nouvelle offre" (existant, conservé) : pour les variantes
-     rapides sans réflexion
-   - "📋 Copier en nouveau brouillon" (nouveau) : pour les variantes qui
-     demandent du travail de modification avant engagement
+**Décisions actées en début de session :**
+1. **Transformation toujours en Offre, jamais directement en Commande** (modal simplifiée,
+   risque divisé : pas besoin de reproduire la logique PDF/stock critique de `save/route.ts`)
+2. `client_numero_client` laissé à NULL (comportement actuel des offres en prod)
+3. Mécanisme de création de fiche client `clients` non reproduit (à investiguer hors chantier)
+4. Modal simplifiée à 2 cases à cocher (au lieu de 4 prévues)
+5. Affichage "Type cible" supprimé dans la page brouillon
 
-6. **Concept "is_template" abandonné.** L'idée d'un flag explicite pour
-   différencier brouillons-modèles et brouillons-actifs avait été évoquée
-   mais devient inutile dès lors qu'on conserve indéfiniment les brouillons :
-   **tout brouillon est implicitement réutilisable.** Le commercial organise
-   par titre/référence comme il l'entend.
+**Architecture implémentée (Approche C validée) :**
+- **RPC SQL atomique** `transformer_draft(p_slug TEXT) RETURNS JSONB`
+  - `SELECT ... FOR UPDATE` sur le draft → pas de race condition
+  - Refuse 404 si `DRAFT_NOT_FOUND` (P0001), 409 si déjà transformé (P0002)
+  - Versionné dans `docs/sql/003-rpc-transformer-draft.sql`
+- **Route JS** `POST /api/drafts/[slug]/transformer` avec gestion typée des erreurs
+- **Composant modal** `TransformerModal.tsx` : 3 vues (idle/already_transformed/error),
+  2 checkboxes obligatoires, fermeture Escape/overlay, redirection silencieuse au succès
+- **Page brouillon** : bouton "🔄 Transformer en offre" activé, conversion `Number()` pour
+  les colonnes `numeric` (Supabase renvoie en string)
 
-**Notes pour Session 4 :**
-- La page `/dashboard/draft/[slug]` (vue lecture-seule depuis le dashboard) devra :
-  - Faire le même `GET /api/drafts/[slug]` que `DraftFormulaire` en mode édition
-    (la logique d'hydratation peut être extraite si besoin, mais une simple lecture
-    des champs JSON suffit pour de l'affichage)
-  - Réutiliser la structure visuelle de `/dashboard/[slug]` (offre) mais sans
-    bouton "Envoyer pour signature", sans bouton "Convertir en commande", sans
-    lien public partageable
-  - Inclure un bouton "✏️ Modifier" qui renvoie vers `/drafts/[slug]/editer`
-  - Inclure un bouton "📋 Dupliquer en nouveau brouillon" (disponible même sur
-    brouillons transformés — voir décision 4 ci-dessus)
-  - Inclure un bouton "🔄 Transformer en offre" (modal Session 5) — désactivé
-    si déjà transformé
-  - Inclure un bouton "👁 Aperçu" qui ouvre `/drafts/[slug]/print` (Session 7)
-  - Bandeau visuel "BROUILLON" en haut de page
-- Si un brouillon a `transformed_at !== null`, la vue dashboard doit afficher
-  un bandeau "Transformé en offre [LIEN]" et désactiver le bouton de
-  transformation, mais **garder actif** le bouton de duplication (c'est le
-  cas d'usage central des variantes).
+**Tests validés bout-en-bout :**
+- ✅ DRA-003 → DEV-2026-050 via UI
+- ✅ DRA-007 → DEV-2026-049 via CLI
+- ✅ Test 409 deux onglets : vue "🔒 Brouillon déjà transformé" avec bouton "Voir l'offre existante"
 
-**État de la base après Session 3 :**
-- Brouillons de test créés pendant les tests : DRA-003 et DRA-004 selon les
-  manipulations. Tous peuvent être supprimés via `DELETE /api/drafts/[slug]` ou
-  conservés comme données de test pour la Session 4.
-- Séquences `drafts_id_seq` et `drafts_numero_seq` ont avancé.
-- Pour repartir totalement propre avant Session 4 :
-```sql
-  DELETE FROM drafts;
-  ALTER SEQUENCE drafts_id_seq RESTART WITH 1;
-  ALTER SEQUENCE drafts_numero_seq RESTART WITH 1;
-```
+**Pièges techniques retenus :**
+- `offres.numero_affiche` est une GENERATED column → ne PAS lister dans l'INSERT
+- Bug pré-existant : URLs absolues avec fallback prod dans `POST /api/drafts` (corrigé `1fbbda3`)
+- PowerShell 5.1 et `$_.ErrorDetails.Message` vide sur HTTP 4xx → passer par StreamReader
 
-**Architecture des fichiers brouillons après Session 3 :**
+**Risques résiduels documentés (non bloquants) :**
+- `client_numero_client` reste NULL (alignement avec comportement actuel)
+- Création de fiche client `clients` non reproduite (à investiguer hors chantier)
+- Affichage "Type cible" cosmétique à nettoyer dans `app/dashboard/draft/[slug]/page.tsx`
+- `save/route.ts` utilise encore URLs absolues avec fallback prod (à harmoniser)
+
+### Session 6 — Terminée le 2026-05-15
+
+**Réalisé :**
+- 5ème KpiCard "📝 Brouillons" ajoutée (passage grille `xl:grid-cols-4` → `xl:grid-cols-5`)
+  avec compteur "X actifs / Y au total" et scroll smooth vers la section au clic
+- Type `DraftRecord` aligné sur la réponse de `GET /api/drafts` (Session 2)
+- Helper `nomClientDraft(d)` + helper `offreNumeroFromSlug(slug)` pour extraire le numéro
+  d'offre lisible depuis le slug (ex: `dev-2026-050-cd94b` → `DEV-2026-050`)
+- Section brouillons collapsible **en bas** du tableau offres (volontairement en bas pour
+  ne pas masquer le pipeline commercial principal — choix utilisateur explicite)
+- Header section avec bouton repli ▶/▼ + compteur ambre + bouton "⬆ Haut" pour remonter
+  au sommet du dashboard (smooth scroll)
+- Quand section ouverte : checkbox "Masquer brouillons transformés" (cochée par défaut,
+  persistée localStorage) + bouton "+ Nouveau brouillon" + bouton 🔄 actualiser
+- Tableau brouillons stylé ambre/orange (couleur tertiaire, distincte du bleu offres et
+  vert commandes), bordure gauche `border-l-amber-400/60` pour les actifs,
+  `border-l-zinc-600/50` pour les transformés (grisés)
+- Colonnes brouillons : Réf · Client · Conseiller · Montant · Statut · Modifié le · Actions
+- Badge statut : "📝 Brouillon" (ambre) ou "🔒 Transformé" (gris)
+- **Affichage du numéro d'offre cible** sur les brouillons transformés (`→ DEV-2026-XXX`)
+  — cohérent avec le pattern existant des offres converties (`← DEV-2026-XXX` sur les commandes)
+- Actions contextuelles :
+  - Brouillon actif → boutons Voir + ✏️ Modifier
+  - Brouillon transformé → boutons Voir + → Offre (lien vers `/dashboard/[offre-slug]`)
+- Persistance localStorage :
+  - `dashboard-hide-transformed-drafts` (checkbox masquer)
+  - `dashboard-drafts-collapsed` (état repli)
+- Le filtre commercial global du dashboard s'applique aussi aux brouillons
+- Fetch `GET /api/drafts?archived=all` au mount (récupère tout, filtrage côté client)
+
+**Écarts au plan initial :**
+- Le journal Session 6 prévoyait initialement un **onglet/tabs "Brouillons" séparé**.
+  Après inspection du dashboard, décision prise d'aller sur **deux tableaux empilés**
+  (offres en haut, brouillons en bas) plutôt qu'un système d'onglets ou un
+  `quickFilter="brouillons"` qui aurait fait disparaître le tableau offres.
+  Raison métier : le dashboard est avant tout un outil de **suivi commercial du
+  pipeline offres**, les brouillons sont des "todos commerciaux" secondaires.
+- Position : brouillons **en bas** (et non en haut comme initialement suggéré par
+  Claude), choix utilisateur explicite — le commercial doit pouvoir surveiller les
+  offres en cours en priorité.
+- Section ouverte par défaut (pas auto-collapse si N=0) car la persistance localStorage
+  gère déjà la préférence de l'utilisateur.
+- Ajout d'un **bouton "⬆ Haut"** non prévu initialement, demandé en cours de session
+  pour faciliter le retour en haut du dashboard après consultation des brouillons.
+- Ajout de l'**affichage du numéro d'offre cible** sur les brouillons transformés
+  (`→ DEV-2026-XXX`), demandé pour cohérence avec le pattern existant des offres
+  converties.
+
+**Modifications fichier :**
+- `app/dashboard/page.tsx` : ~180 lignes ajoutées, 0 supprimée (modification purement
+  additive, zéro risque pour la partie offres existante)
+
+**Tests validés en local :**
+- ✅ 5 KpiCards alignées sur xl, "📝 Brouillons" en 5ème position
+- ✅ Compteur "2 actifs / 6 au total" correct (visible sur screenshot prod local)
+- ✅ Clic KpiCard scroll smooth vers la section
+- ✅ Bouton "⬆ Haut" remonte au sommet
+- ✅ Checkbox "Masquer brouillons transformés" cache/affiche les transformés
+- ✅ Section repliable, état persisté entre rafraîchissements
+- ✅ Filtre commercial s'applique aux brouillons
+- ✅ Lignes transformées grisées avec lien `→ DEV-2026-XXX` cliquable vers l'offre cible
+- ✅ Lignes actives avec bouton ✏️ Modifier qui mène à `/drafts/[slug]/editer`
+- ✅ Clic ligne entière ouvre `/dashboard/draft/[slug]`
+
+**Notes pour Session 7 (aperçu print filigrane BROUILLON) :**
+- Toujours pas de page `/drafts/[slug]/print` dédiée. Le bouton "👁 Aperçu" sur
+  `/dashboard/draft/[slug]` pointe encore vers `/print/offre/[slug]` qui charge depuis
+  la table `offres` et affiche "Aucun article" pour un brouillon.
+- À faire en Session 7 :
+  1. Créer `app/drafts/[slug]/print/page.tsx` (server-side, charge depuis
+     `/api/drafts/[slug]` et passe les données au composant d'aperçu existant avec
+     une prop `isDraft={true}`)
+  2. Adapter le composant d'aperçu pour masquer signature + lien validation quand `isDraft`
+  3. Ajouter filigrane "BROUILLON" en diagonale via CSS pseudo-element ou SVG superposé
+  4. Mettre à jour le bouton "👁 Aperçu" dans `/dashboard/draft/[slug]/page.tsx` pour
+     pointer vers la nouvelle route
+- Risque Moyen (manipulation de composants print partagés avec offres en prod).
+- Bien découpler côté brouillon (prop `isDraft`) pour ne pas introduire de régression
+  sur les aperçus offres existants.
+
+**Architecture des fichiers brouillons après Session 6 :**
 ```
 app/
 ├── api/drafts/
-│   ├── route.ts                       # POST (create) + GET (list)  ← Session 2
-│   └── [slug]/route.ts                # GET + PUT + DELETE          ← Session 2
-└── drafts/
-    ├── _components/
-    │   └── DraftFormulaire.tsx        # Composant partagé           ← Session 3
-    ├── nouveau/page.tsx               # Mode création               ← Session 3
-    └── [slug]/editer/page.tsx         # Mode édition                ← Session 3
+│   ├── route.ts                            # POST + GET                 ← Session 2
+│   ├── [slug]/route.ts                     # GET + PUT + DELETE         ← Session 2
+│   └── [slug]/transformer/route.ts         # POST transformation        ← Session 5
+├── drafts/
+│   ├── _components/
+│   │   └── DraftFormulaire.tsx             # Composant partagé          ← Session 3
+│   ├── nouveau/page.tsx                    # Mode création              ← Session 3
+│   └── [slug]/editer/page.tsx              # Mode édition               ← Session 3
+├── dashboard/
+│   ├── page.tsx                            # + section brouillons       ← Session 6
+│   └── draft/
+│       └── [slug]/
+│           ├── page.tsx                    # Vue + bouton transformer   ← Sessions 4+5
+│           └── TransformerModal.tsx        # Modal de confirmation      ← Session 5
 ```
 
-### Session 4
-_(à remplir après réalisation)_
-
-### Session 5
-_(à remplir après réalisation)_
-
-### Session 6
-_(à remplir après réalisation)_
+docs/sql/
+├── 001-create-drafts.sql                   # Table drafts                ← Session 1
+├── 002-rpc-next-dra-numero.sql             # RPC séquence DRA            ← Session 2
+└── 003-rpc-transformer-draft.sql           # RPC transformation atomique ← Session 5
 
 ### Session 7
 _(à remplir après réalisation)_
@@ -915,324 +877,3 @@ risques en chantier(s) séparé(s) plus tard.
 
 ✅ **Aucun.** La table `drafts` stockera les `ambianceImages` en base64 dans
 JSONB (même approche que `offres.data`), donc 100% couvert par les backups DB.
-
----
-
-## 📂 État actuel du code (avant chantier)
-
-**Bug corrigé récemment (avant ce chantier) :** copie des `ambianceImages` lors
-de "Copier offre complète" / "Nouvelle offre même client" — fonctionnait via
-`localStorage` mais oubliait les images. Corrigé en ajoutant `ambianceImages`
-au prefill et en wrappant `localStorage.setItem` dans un try/catch avec
-fallback pour gérer le quota.
-
-**À noter :** ce mécanisme `localStorage` deviendra obsolète à la session 8
-(remplacé par la création serveur d'un brouillon).
-
-
-
-### Session 4 — Terminée le 2026-05-14
-
-**Réalisé :**
-- Page `/dashboard/draft/[slug]/page.tsx` créée (~700 lignes)
-- Architecture alignée sur `/dashboard/[slug]` côté offres : "use client",
-  params async, fetch dans useEffect, layout en grille avec sticky preview
-  à droite
-- Bandeau pleine largeur "📝 BROUILLON" en haut, avec dates créé/modifié
-- Bandeau orange "🔒 Brouillon transformé en offre" conditionnel
-  (transformed_at !== null) avec lien vers l'offre cible
-- Sections lecture-seule : Client, Brouillon (méta), Livraison
-  (si livr_diff=true), Montants, Remarques client, Notes internes
-- Boutons d'action :
-  - ✏️ Modifier → /drafts/[slug]/editer (désactivé si transformé)
-  - 🔄 Transformer en offre → désactivé en Session 4 (modal Session 5)
-  - 👁 Aperçu → stub vers /print/offre/[slug]
-  - 📋 Dupliquer en nouveau brouillon → POST /api/drafts + redirection
-  - 🗑 Supprimer → confirm() + DELETE (désactivé si transformé)
-- Gestion d'erreurs propre : 404 stylisé avec bouton "Nouveau brouillon",
-  500 avec bouton "Réessayer"
-
-**Bug fix transverse réalisé pendant la session :**
-- `app/print/layout.tsx` redéclarait `<html>`, `<head>`, `<body>` alors que
-  le root layout les fournit déjà. Résultat : double `<html>` imbriqué et
-  7 erreurs d'hydration React 19 sur chaque ouverture de page print. Corrigé
-  en supprimant les balises redondantes et en gardant le `<style>` qui est
-  hissé automatiquement par React 19 dans le `<head>`. Bénéficie aussi à
-  toutes les pages /print/offre/*.
-
-**Écarts au plan initial :**
-- Alignement total sur le layout de `/dashboard/[slug]` (validé en début de
-  session). Tous les éléments choisis "Comme dans /dashboard/[slug] actuel"
-  pour minimiser les décisions et garder la cohérence visuelle.
-- L'iframe d'aperçu pointe vers `/print/offre/[slug]` (stub), mais cette
-  page charge depuis la table `offres` et ne sait pas lire un brouillon →
-  affiche "Aucun article" même quand le brouillon contient des lignes. Un
-  bandeau d'avertissement explicite l'origine du problème. Sera corrigé en
-  Session 7 (création de `/drafts/[slug]/print` dédié).
-
-**Tests validés en local :**
-- Page brouillon affiche correctement DRA-003 (Test Session 3, 2 articles,
-  CHF 345.00, TVA 25.85, conseiller Thierry Stricker, etc.)
-- Bouton ✏️ Modifier redirige vers /drafts/dra-003-4jezs/editer avec
-  formulaire pré-rempli
-- 7 warnings d'hydration disparus après correction du layout print
-- Aperçu print s'affiche (vide en contenu mais le rendu visuel est correct)
-
-**Notes pour Session 5 :**
-- Le bouton "🔄 Transformer en offre" est en place mais désactivé
-  (`disabled` + tooltip "Bientôt disponible (Session 5)"). Pour l'activer,
-  il faudra :
-  1. Créer la route `POST /api/drafts/[slug]/transformer`
-  2. Créer une modal de confirmation avec 4 cases à cocher obligatoires
-  3. Retirer l'attribut `disabled` du bouton et lui attacher l'handler
-- Le bouton 📋 Dupliquer reste actif sur les brouillons transformés
-  (décision 4 du modèle métier acté Session 3 — cas d'usage variantes).
-- Le bouton 🗑 Supprimer reste désactivé sur les brouillons transformés
-  (décision 2 du modèle métier — conservation indéfinie).
-- La route DELETE existante (Session 2) renvoie 409 si transformé, donc
-  double protection client + serveur.
-
-**Architecture des fichiers brouillons après Session 4 :**
-\`\`\`
-app/
-├── api/drafts/
-│   ├── route.ts                       # POST + GET                    ← Session 2
-│   └── [slug]/route.ts                # GET + PUT + DELETE            ← Session 2
-├── drafts/
-│   ├── _components/
-│   │   └── DraftFormulaire.tsx        # Composant partagé             ← Session 3
-│   ├── nouveau/page.tsx               # Mode création                 ← Session 3
-│   └── [slug]/editer/page.tsx         # Mode édition                  ← Session 3
-└── dashboard/draft/
-    └── [slug]/page.tsx                # Vue lecture-seule + actions   ← Session 4
-\`\`\`
-
-### Session 5 — Terminée le 2026-05-14
-
-**Décisions actées en début de session (modifient le plan initial) :**
-
-1. **Transformation toujours en Offre, jamais directement en Commande.**
-   Décision changée par rapport au plan Session 5 initial qui prévoyait un
-   sélecteur Offre/Commande dans la modal. Raisons :
-   - Sémantique métier renforcée : un brouillon devient une offre (document
-     contractuel), le passage offre → commande reste géré par le flux
-     existant `/api/offres/save` côté commande (décrémentation stock,
-     génération PDF figé, fiche travail initiale dans le bon ordre).
-   - Risque divisé : pas besoin de reproduire les 60 lignes de logique
-     PDF/stock critiques de `save/route.ts`. La Session 5 retombe à
-     "Risque Moyen" au lieu de "Risque Élevé".
-   - Si le commercial veut une commande directe, il passe par
-     `/offres/nouveau?formType=Commande` (flux existant inchangé).
-
-2. **`client_numero_client` laissé à NULL.**
-   La table `offres` a une colonne `client_numero_client` (TEXT, nullable)
-   qui n'existe pas dans `drafts`. Diagnostic : sur les 5 dernières offres
-   en prod, toutes ont `client_numero_client = NULL`. La colonne existe
-   mais n'est pas alimentée par le flux actuel `/api/offres/save`. Donc
-   une offre créée par transformation aura le même comportement que toutes
-   les offres actuelles. Aucune action requise côté RPC ou route.
-
-3. **Mécanisme de création de fiche client côté `clients` non reproduit
-   dans Session 5.** D'après les retours utilisateur, le formulaire offre
-   crée une fiche client (table `clients`) à l'enregistrement si le client
-   n'existe pas encore. Ce mécanisme n'a pas été identifié dans le code
-   inspecté (probablement dans le composant formulaire JS, pas dans
-   `/api/offres/save`). Une offre créée par transformation depuis
-   brouillon **ne déclenchera pas** la création automatique de fiche
-   client.
-
-   **À ajuster dans un chantier ultérieur** (Session 9 finale ou chantier
-   séparé) :
-     - Identifier le code de création/upsert client (Ctrl+Shift+F sur
-       `from("clients")` dans VS Code)
-     - Reproduire ce mécanisme dans `/api/drafts/[slug]/transformer`
-       comme side effect post-RPC, ou centraliser via un trigger Postgres
-     - Optionnellement : alimenter `client_numero_client` côté offres
-       pour permettre les statistiques par client
-
-4. **Modal simplifiée à 2 cases à cocher** (au lieu de 4 prévues dans le
-   plan initial) :
-   - [ ] J'ai vérifié toutes les informations (client, prix, quantités, remarques)
-   - [ ] Je confirme que cette transformation est définitive et que l'offre
-         ne sera plus modifiable
-
-5. **Affichage "Type cible" supprimé** dans la page
-   `/dashboard/draft/[slug]`. Comme la transformation est toujours en
-   offre, afficher "Type cible : Commande" devenait trompeur. Le champ
-   `formType` peut rester dans le data JSONB du brouillon (rétrocompatible
-   avec le formulaire Session 3) mais n'a plus d'effet à la transformation.
-
-   ⚠️ **À nettoyer plus tard** : actuellement le fichier
-   `app/dashboard/draft/[slug]/page.tsx` affiche encore "Type cible : ..."
-   à deux endroits (carte "Brouillon" du topbar + section "Brouillon" en
-   grille principale). Modification cosmétique reportée pour ne pas alourdir
-   le diff Session 5. À retirer en marge d'une prochaine session.
-
-**Architecture implémentée (Approche C validée) :**
-
-- **RPC SQL atomique** `transformer_draft(p_slug TEXT) RETURNS JSONB` :
-  - `SELECT ... FOR UPDATE` sur le draft → pas de race condition concurrente
-  - Refuse 404 si `DRAFT_NOT_FOUND` (ERRCODE P0001)
-  - Refuse 409 si déjà transformé (ERRCODE P0002, message inclut le slug
-    de l'offre existante)
-  - Génération numéro DEV via `next_dev_numero(annee)` (existant)
-  - INSERT dans `offres` avec recopie complète + enrichissement du `data`
-    JSONB (`fromDraftSlug`, `formType: 'Offre'`, `offerNumber`)
-  - UPDATE du draft (`transformed_at`, `transformed_into_offre_slug`,
-    `archived = true`)
-  - Versionné dans `docs/sql/003-rpc-transformer-draft.sql`
-
-- **Route JS** `POST /api/drafts/[slug]/transformer` :
-  - Appel RPC, gestion typée des erreurs (P0001 → 404, P0002 → 409 avec
-    extraction du slug existant via regex)
-  - Fire-and-forget du PDF offre via `fetch ${baseUrl}/api/offres/${slug}/pdf`
-    (équivalent comportement `save/route.ts` côté offre)
-  - Réponse `{ success, offreSlug, offreNumero, dashboardUrl }`
-    en chemin relatif
-
-- **Composant modal** `TransformerModal.tsx` :
-  - 3 vues pilotées par state union typé : idle/submitting,
-    already_transformed (409), error (autres)
-  - 2 checkboxes obligatoires pour activer le bouton "Transformer"
-  - Reset automatique à la (ré)ouverture
-  - Fermeture par Escape ou clic overlay (sauf pendant submission)
-  - Sur succès : `router.push(dashboardUrl)` → redirection silencieuse
-  - Sur 409 : bouton "Voir l'offre existante" qui pointe sur
-    `existingOffreSlug` retourné par l'API
-
-- **Page brouillon** `app/dashboard/draft/[slug]/page.tsx` :
-  - Bouton "🔄 Transformer en offre" activé pour les brouillons non
-    transformés, désactivé pour les transformés
-  - Modal câblée en fin de JSX avec passage des données brouillon
-  - Conversion `Number(draft.sous_total) || 0` car Supabase renvoie les
-    colonnes `numeric` comme string
-
-**Tests validés bout-en-bout :**
-
-- ✅ Test SQL RPC (DRA-007 → DEV-2026-049) avec garde-fous 404/409
-- ✅ Test CLI route API (DRA-007 → DEV-2026-049) :
-  - 200 sur succès, body `{success, offreSlug, offreNumero, dashboardUrl}`
-  - 409 sur re-tentative, body `{error: ALREADY_TRANSFORMED, existingOffreSlug}`
-  - 404 sur slug inexistant, body `{error: DRAFT_NOT_FOUND}`
-- ✅ Test UI bout-en-bout (DRA-003 → DEV-2026-050) : modal, checkboxes,
-  redirection silencieuse vers `/dashboard/dev-2026-050-cd94b`
-- ✅ Test 409 deux onglets (DRA-004 → DEV-2026-051) : pendant que la
-  modal était ouverte sur l'onglet A, transformation parallèle via CLI,
-  re-clic Transformer dans l'onglet A → switch vers vue "🔒 Brouillon
-  déjà transformé" avec bouton "Voir l'offre existante"
-- ✅ Vérification UI brouillon transformé (bandeau orange, lien vers
-  l'offre, boutons grisés Modifier/Transformer/Supprimer, bouton
-  Dupliquer actif)
-
-**Pièges techniques rencontrés (à retenir) :**
-
-- **`offres.numero_affiche` est une GENERATED column.** Découvert au
-  premier test SQL de la RPC. La colonne est calculée automatiquement
-  par Postgres à partir de `numero_offre` / `numero_commande` (formule
-  `CASE WHEN type_document = 'Commande' AND numero_commande IS NOT NULL
-  THEN numero_commande WHEN version IS NOT NULL THEN numero_offre ||
-  '-' || version ELSE numero_offre END`). Toute tentative d'INSERT avec
-  une valeur explicite échoue avec `ERROR 428C9: cannot insert a
-  non-DEFAULT value into column`.
-  → Conséquence : ne PAS lister `numero_affiche` dans l'INSERT. Elle est
-  calculée correctement à partir de `numero_offre`.
-
-- **Bug pré-existant : URLs absolues avec fallback prod dans
-  `POST /api/drafts`.** Le retour de l'API construisait `editUrl` et
-  `dashboardUrl` en absolu avec un fallback
-  `https://jardin-confort-formulaire.vercel.app` quand
-  `NEXT_PUBLIC_APP_URL` n'était pas défini en local. Résultat : le
-  bouton "📋 Dupliquer" redirigeait vers la prod 404 (`feature/brouillons`
-  pas déployée).
-  → Fix appliqué (commit `1fbbda3`) : URLs renvoyées en chemin relatif
-  (`/drafts/[slug]/editer`). Robuste sur localhost, preview Vercel, prod.
-  → Note : `app/api/offres/save/route.ts` utilise encore le même pattern
-  absolu pour ses URLs de retour. Le `NEXT_PUBLIC_APP_URL=http://localhost:3000`
-  dans `.env.local` couvre les deux cas en local. À nettoyer dans un
-  chantier ultérieur si on veut 100% de cohérence.
-
-- **PowerShell 5.1 et `$_.ErrorDetails.Message` vide sur HTTP 4xx.**
-  Pour récupérer le body JSON d'une réponse 409/404 en CLI, il faut
-  passer par `System.IO.StreamReader` avec `BaseStream.Position = 0`.
-  Sinon le stream est déjà consommé par PowerShell et le body est vide.
-
-**Observations Session 5 (pas des bugs) :**
-
-- La page `/dashboard/[offre-slug]` affiche un polling continu sur
-  l'API offre via l'iframe `/print/offre/[slug]`. Comportement
-  intentionnel cf. décision métier "stock dynamique pour les offres,
-  figé seulement à la commande". Pas d'action requise.
-
-- Logs Next.js parfois `GET /dashboard/draft/%3Cslug%3E` et
-  `GET /api/drafts/%3Cslug%3E` = `<slug>` encodé URL. Probablement un
-  lien littéral non interpolé dans une page de doc ou un placeholder
-  oublié. À retrouver via Ctrl+Shift+F sur `<slug>` dans VS Code, hors
-  scope chantier brouillons.
-
-**Commits Session 5 (sur `feature/brouillons`) :**
-
-**Commits Session 5 (sur `feature/brouillons`) :**
-
-\`\`\`
-edac5b6  feat(drafts): SQL RPC transformer_draft (initial)
-a742344  fix(drafts): remove generated column numero_affiche
-1fbbda3  fix(drafts): return relative URLs in POST /api/drafts
-e8c74e6  docs(drafts): journal Session 5 (en cours)
-7661aec  feat(drafts): route POST /api/drafts/[slug]/transformer (step 2)
-61d22b2  feat(drafts): TransformerModal component (step 3)
-c831bdf  feat(drafts): activate Transformer button + wire TransformerModal (step 4)
-\`\`\`
-
-**État de la base après Session 5 :**
-
-- `dra-003-4jezs` (Test Session 3) → transformé en `dev-2026-050-cd94b`, archivé
-- `dra-004-1yf0w` (Stricker) → transformé en `dev-2026-051-XXXXX`, archivé
-- `dra-005-2df88` (Stricker) → transformé en `dev-2026-048-26454`, archivé
-- `dra-007-3oyf6` (Stricker, copie de DRA-005) → transformé en `dev-2026-049-f9dd5`, archivé
-- `dra-002-mzu6w` (Dupont, vide) → non transformé, conservable comme test
-
-Pour repartir totalement propre avant Session 6 :
-\`\`\`sql
-DELETE FROM drafts;
-DELETE FROM offres WHERE slug LIKE 'dev-2026-04%' OR slug LIKE 'dev-2026-05%';
-ALTER SEQUENCE drafts_id_seq RESTART WITH 1;
-ALTER SEQUENCE drafts_numero_seq RESTART WITH 1;
--- ⚠️ NE PAS reset la séquence de DEV (next_dev_numero compte les offres
--- existantes par année, donc se réajuste automatiquement après DELETE).
-\`\`\`
-
-**Notes pour Session 6 (onglet Brouillons dashboard) :**
-
-- L'API `GET /api/drafts` existante (Session 2) renvoie déjà les
-  brouillons avec filtres `archived` et `commercial` — la Session 6
-  n'aura qu'à consommer cette API.
-- Tri par `updated_at DESC` déjà en place côté API.
-- Filtre par défaut `archived=false` à coder côté UI (le filtre "Masquer
-  brouillons transformés" coché par défaut).
-- Compteur de brouillons actifs à intégrer dans l'onglet.
-- Penser à ne PAS purger les brouillons transformés (conservation
-  indéfinie validée Session 3).
-
-**Architecture des fichiers brouillons après Session 5 :**
-
-\`\`\`
-app/
-├── api/drafts/
-│   ├── route.ts                            # POST + GET                 ← Session 2
-│   ├── [slug]/route.ts                     # GET + PUT + DELETE         ← Session 2
-│   └── [slug]/transformer/route.ts         # POST transformation        ← Session 5
-├── drafts/
-│   ├── _components/
-│   │   └── DraftFormulaire.tsx             # Composant partagé          ← Session 3
-│   ├── nouveau/page.tsx                    # Mode création              ← Session 3
-│   └── [slug]/editer/page.tsx              # Mode édition               ← Session 3
-└── dashboard/draft/
-    └── [slug]/
-        ├── page.tsx                        # Vue + bouton transformer   ← Sessions 4+5
-        └── TransformerModal.tsx            # Modal de confirmation      ← Session 5
-\`\`\`
-
-docs/sql/
-├── 001-create-drafts.sql                   # Table drafts                ← Session 1
-├── 002-rpc-next-dra-numero.sql             # RPC séquence DRA            ← Session 2
-└── 003-rpc-transformer-draft.sql           # RPC transformation atomique ← Session 5
