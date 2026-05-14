@@ -57,9 +57,85 @@ contient des doublons quasi-identiques et les statistiques sont faussées.
 ```
 Création → modifications libres → "Transformer en offre" → Offre figée
                                                           ↓
-                                              Brouillon archivé 30j
-                                              puis purgé automatiquement
+                                              Brouillon archivé MAIS conservé
+                                              indéfiniment (consultable +
+                                              duplicable pour variantes)
 ```
+
+### Schéma complet des flux entre brouillons et offres
+
+Ce schéma a été défini en fin de Session 3 pour clarifier tous les cas d'usage.
+Il consolide les décisions actées sur la duplication, la transformation et la
+conservation indéfinie.
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│   CRÉATION VIERGE                                                   │
+│                                                                     │
+│   /drafts/nouveau ──────────────────▶ DRA-005                       │
+│                                                                     │
+└────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│   DEPUIS UN BROUILLON                                               │
+│                                                                     │
+│   DRA-005 ──── Modifier ──────────▶ DRA-005 (modifié)               │
+│       │                                                             │
+│       ├── 📋 Dupliquer en brouillon ─▶ DRA-006 (copie indép)        │
+│       │                                                             │
+│       └── 🔄 Transformer en offre ─▶ DEV-2026-047 (figée)           │
+│                                       (DRA-005 archivé mais         │
+│                                        toujours consultable +       │
+│                                        duplicable)                  │
+│                                                                     │
+└────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│   DEPUIS UNE OFFRE                                                  │
+│                                                                     │
+│   DEV-2026-047 ──── Modifier ──────▶ ❌ Impossible (immuable)       │
+│        │                                                            │
+│        ├── 📋 Copier en brouillon ──▶ DRA-007 (éditable)           │
+│        │                                                            │
+│        └── 📄 Copier en offre ──────▶ DEV-2026-048 (figée direct)  │
+│                                                                     │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Traçabilité bidirectionnelle :**
+- Depuis DRA-005 : `transformed_into_offre_slug` pointe vers DEV-2026-047
+- Depuis DEV-2026-047 : `data.fromDraftSlug` pointe vers DRA-005 (à ajouter Session 5)
+- Depuis DRA-007 : `data.copiedFromOffreSlug` pointe vers DEV-2026-047 (à ajouter Session 8)
+
+**Cas d'usage "3 variantes rouge/vert/noir" — workflow complet :**
+
+```
+1. Créer DRA-005 → remplir version rouge complète
+2. Dupliquer DRA-005 → DRA-006 → transformer → DEV-2026-047 (rouge)
+3. Dupliquer DRA-005 → DRA-007 → modifier rouge→vert → transformer → DEV-2026-048 (vert)
+4. Dupliquer DRA-005 → DRA-008 → modifier rouge→noir → transformer → DEV-2026-049 (noir)
+
+Résultat :
+- DRA-005 reste comme "modèle racine rouge" jamais transformé directement
+- DRA-006, DRA-007, DRA-008 conservés comme historique de chaque variante
+- 3 offres distinctes, chacune avec son brouillon source
+- Tout reste consultable indéfiniment
+```
+
+**Alternative depuis l'offre (Session 8) :**
+
+```
+1. DEV-2026-047 (rouge) déjà créée
+2. Depuis le dashboard de DEV-2026-047 : "📋 Copier en nouveau brouillon" → DRA-009
+3. Modifier rouge→vert dans DRA-009 → transformer → DEV-2026-050 (vert)
+4. Re-cliquer "Copier en nouveau brouillon" depuis DEV-2026-047 → DRA-010
+5. Modifier rouge→noir dans DRA-010 → transformer → DEV-2026-051 (noir)
+```
+
+Les deux workflows coexistent — le commercial choisit selon le contexte.
 
 ---
 
@@ -68,12 +144,18 @@ Création → modifications libres → "Transformer en offre" → Offre figée
 | Décision | Choix retenu |
 |---|---|
 | Stockage | Nouvelle table `drafts` |
-| Après transformation | Archivé 30j, puis purge auto |
-| Filtre dashboard | "Masquer brouillons transformés" |
+| Après transformation | **Conservé indéfiniment** (pas de purge auto à 30j) — un brouillon transformé reste consultable et duplicable |
+| Filtre dashboard | "Masquer brouillons transformés" (filtre d'affichage, pas de purge) |
 | Numérotation | `DRA-XXX` |
 | Dashboard | Onglet "Brouillons" caché par défaut |
 | Confirmation transformation | Modal avec récap + cases à cocher |
-| Copie depuis offre signée | Crée un brouillon |
+| Mode de transformation | **Scénario A direct serveur** : POST `/api/drafts/[slug]/transformer` → crée l'offre + archive le brouillon → redirection auto vers `/dashboard/[offre-slug]`. Pas de retour par le formulaire `/offres/nouveau`. |
+| Transformation multiple du même brouillon | **Non** — un brouillon = 1 transformation max. Pour générer plusieurs variantes : dupliquer d'abord, transformer ensuite la copie. |
+| Bouton "📋 Dupliquer en nouveau brouillon" | Disponible depuis tout brouillon (transformé ou pas) — la source reste intacte |
+| Bouton "📋 Copier offre → nouveau brouillon" | Ajouté en Session 8, à côté de l'existant "Copier en nouvelle offre" |
+| Bouton "📄 Copier offre → nouvelle offre" | Conservé tel quel (comportement actuel) |
+| Flag `is_template` | **Abandonné** — devenu inutile avec la conservation indéfinie des brouillons transformés |
+| Copie depuis offre signée | Crée un brouillon (Session 8) OU une offre directe (existant) — au choix du commercial |
 | Migration offres existantes | **Aucune** — les ~50 offres actuelles restent valides |
 | Aperçu brouillon | Page print dynamique (Shopify), **pas de PDF** |
 | Template brouillon | Devis actuel + filigrane BROUILLON, sans signature, sans lien validation |
@@ -140,7 +222,7 @@ create sequence drafts_numero_seq start 1;
 | 5 | Modal "Transformer en offre" + route `/api/drafts/[slug]/transformer` | **Élevé** | ☐ À faire | | |
 | 6 | Onglet "Brouillons" sur dashboard + filtre archivés | Faible | ☐ À faire | | |
 | 7 | Aperçu print : filigrane BROUILLON, sans signature, sans lien validation | Moyen | ☐ À faire | | |
-| 8 | Refonte "Copier offre complète" → crée un brouillon | Faible | ☐ À faire | | |
+| 8 | Boutons "Copier en brouillon" + "Copier en offre" depuis dashboard offre | Faible | ☐ À faire | | |
 | 9 | Tests end-to-end + merge `feature/brouillons` → `main` + déploiement prod | **Élevé** | ☐ À faire | | |
 
 ---
@@ -217,50 +299,71 @@ rouvrir, le modifier, le re-sauvegarder.
 **Objectif :** vue lecture-seule d'un brouillon, avec actions.
 
 **Différences avec `/dashboard/[slug]` actuel :**
-- Bouton "Modifier" (renvoie vers `/drafts/[slug]/editer` — Session 3)
-- Bouton "Transformer en offre" (déclenche modal session 5)
-- Bouton "Aperçu" (page print avec filigrane BROUILLON)
+- Bouton "✏️ Modifier" (renvoie vers `/drafts/[slug]/editer` — Session 3)
+- Bouton "📋 Dupliquer en nouveau brouillon" : appelle `POST /api/drafts` avec
+  le `data` du brouillon courant. Source intacte, copie indépendante créée,
+  redirection vers `/drafts/[nouveau-slug]/editer`. Disponible **même** sur les
+  brouillons déjà transformés (pour générer des variantes).
+- Bouton "🔄 Transformer en offre" (déclenche modal Session 5) — désactivé si
+  le brouillon est déjà transformé (`transformed_at !== null`)
+- Bouton "👁 Aperçu" (page print avec filigrane BROUILLON — Session 7)
+- Bouton "🗑 Supprimer" : possible uniquement si non transformé (route existante
+  côté API depuis la Session 2 ; le serveur renvoie 409 si transformé)
 - **PAS** de bouton "Envoyer pour signature"
 - **PAS** de bouton "Convertir en commande"
 - **PAS** de lien public partageable
 - Bandeau visuel "BROUILLON" en haut de page
+- Si `transformed_at !== null` : bandeau supplémentaire orange "Transformé en
+  offre [DEV-2026-XXX →]" avec lien vers `/dashboard/[offre-slug]`
 
 **Critère de succès :** afficher un brouillon en lecture seule, lancer
-modification et retour.
+modification et retour, dupliquer (avec ou sans transformation préalable).
 
 ---
 
 ### Session 5 — Transformation brouillon → offre (CRITIQUE)
 
-**Objectif :** convertir un brouillon en offre définitive.
+**Objectif :** convertir un brouillon en offre définitive — **scénario A direct
+serveur** (acté en fin de Session 3). Pas de retour par `/offres/nouveau`.
 
 **Modal de confirmation :**
 - Récap : client, montant total, nombre de lignes, commercial
+- Choix Offre ou Commande (récupéré depuis `data.formType` mais surchargeable
+  au dernier moment dans la modal)
 - Cases à cocher obligatoires :
   - [ ] J'ai vérifié les coordonnées client
   - [ ] J'ai vérifié les prix et quantités
   - [ ] J'ai vérifié les remarques et délais
-  - [ ] Je confirme que cette transformation est définitive et que l'offre ne sera plus modifiable
+  - [ ] Je confirme que cette transformation est définitive et que l'offre
+        ne sera plus modifiable
 - Bouton "Transformer" désactivé tant que toutes cases ne sont pas cochées
-- Choix Offre vs Commande dans le modal (le brouillon a déjà un `formType` mais
-  on permet de le surcharger au dernier moment)
 
 **Route `POST /api/drafts/[slug]/transformer` :**
 1. Charger le brouillon
-2. Générer numéro d'offre via la séquence existante (à identifier en début de session)
-3. INSERT dans `offres` avec toutes les données du brouillon
-4. UPDATE du brouillon : `transformed_at = now()`, `transformed_into_offre_slug = ...`, `archived = true`
-5. Retourner `{ offreSlug }` pour redirection
-6. Wrap dans une transaction Supabase (ou rollback manuel si échec)
+2. **Refuser (409)** si `transformed_at !== null` : un brouillon ne peut être
+   transformé qu'une seule fois. Pour générer une variante, le commercial doit
+   d'abord dupliquer le brouillon (Session 4).
+3. Générer numéro d'offre via la séquence existante (à identifier en début de
+   session — probablement `next_dev_numero` ou équivalent côté `/api/offres/save`)
+4. INSERT dans `offres` avec toutes les données du brouillon
+   - Ajouter `data.fromDraftSlug = <slug du brouillon>` pour traçabilité inverse
+5. UPDATE du brouillon : `transformed_at = now()`, `transformed_into_offre_slug = ...`,
+   `archived = true`
+   - **NB :** `archived = true` mais le brouillon reste en base indéfiniment
+     (consultable et duplicable). Pas de purge automatique.
+6. Retourner `{ offreSlug }` pour redirection
+7. Wrap dans une transaction Supabase (ou rollback manuel si échec)
 
-**Redirection :** après succès, rediriger vers `/dashboard/[offreSlug]` (la nouvelle offre).
+**Redirection :** après succès, rediriger vers `/dashboard/[offreSlug]` (la
+nouvelle offre).
 
 **⚠️ Risque :** une transformation partielle (brouillon archivé mais offre non
 créée) corromprait l'état. Il **faut** une transaction ou un rollback explicite.
 
 **Critère de succès :** transformer un brouillon, vérifier qu'une offre est
-créée avec le bon numéro, que le brouillon est marqué `archived=true`, et que
-l'utilisateur arrive sur la page de la nouvelle offre.
+créée avec le bon numéro, que le brouillon est marqué `archived=true` mais
+toujours consultable, que `transformed_into_offre_slug` pointe correctement, et
+que l'utilisateur arrive sur la page de la nouvelle offre.
 
 ---
 
@@ -271,11 +374,15 @@ l'utilisateur arrive sur la page de la nouvelle offre.
 **Modifications dashboard :**
 - Nouvel onglet "Brouillons" caché par défaut (par exemple toggle/checkbox "Afficher les brouillons" ou onglet séparé selon l'UI actuelle)
 - Compteur de brouillons actifs (non archivés)
-- Filtre "Masquer les brouillons transformés" (coché par défaut → cache ceux avec `archived=true`)
+- Filtre "Masquer les brouillons transformés" (coché par défaut → cache ceux
+  avec `archived=true`). **Important :** ce filtre est purement visuel
+  (affichage), pas un mécanisme de purge — les brouillons transformés restent
+  en base indéfiniment et restent duplicables même quand masqués (le commercial
+  doit décocher le filtre pour les retrouver).
 - Tri par `updated_at DESC` (les plus récemment modifiés en haut)
 
 **Critère de succès :** l'onglet apparaît, liste les brouillons, le filtre
-fonctionne.
+fonctionne, les brouillons transformés sont retrouvables en décochant le filtre.
 
 ---
 
@@ -303,22 +410,40 @@ filigrane permanent, sans bloc signature.
 
 ---
 
-### Session 8 — Copie offre signée → brouillon
+### Session 8 — Boutons de copie depuis une offre
 
-**Objectif :** adapter les boutons "Copier offre complète" et "Nouvelle offre
-même client" pour créer un brouillon au lieu d'une offre.
+**Objectif :** depuis le dashboard d'une offre (`/dashboard/[offre-slug]`),
+permettre **deux types de copies** côte à côte :
 
-**Modification de `copierOffre()` dans `/dashboard/[slug]/page.tsx` :**
-- Appel à `POST /api/drafts` avec le payload (au lieu de `localStorage` + redirect)
-- Redirection vers `/drafts/[nouveauSlug]/editer` après création
-- Suppression du mécanisme `localStorage` + `?from_copy=1` (devenu obsolète)
+1. **"📄 Copier en nouvelle offre"** (existant, conservé tel quel) :
+   - Crée directement une nouvelle offre figée
+   - Workflow rapide pour les variantes simples sans réflexion
+   - Comportement actuel inchangé (mais à dépoussiérer du mécanisme localStorage
+     hérité — voir plus bas)
 
-**Variante alternative pour ouverture dans nouvel onglet :** le bouton ouvre
-`/drafts/copier-depuis/[offreSlug]` qui crée le brouillon côté serveur puis
-redirige. Permet l'`Open in new tab`.
+2. **"📋 Copier en nouveau brouillon"** (nouveau) :
+   - Appel `POST /api/drafts` avec le payload de l'offre source
+   - Ajouter `data.copiedFromOffreSlug = <slug de l'offre source>` pour
+     traçabilité
+   - Redirection vers `/drafts/[nouveau-slug]/editer` après création
+   - Permet au commercial de modifier tranquillement avant de transformer en
+     offre, parfait pour les variantes qui demandent de la réflexion
 
-**Critère de succès :** depuis une offre existante, cliquer "Copier offre
-complète" crée un brouillon DRA-XXX éditable.
+**Refonte du bouton existant :**
+- Supprimer le mécanisme `localStorage` + `?from_copy=1` pour les deux flux
+  (devenu obsolète maintenant qu'on a des routes API)
+- Le bouton "Copier en nouvelle offre" appelle directement `POST /api/offres/save`
+  côté serveur
+- Le bouton "Copier en nouveau brouillon" appelle `POST /api/drafts`
+
+**Variante alternative pour ouverture dans nouvel onglet :** chaque bouton ouvre
+une route serveur qui crée + redirige (`/drafts/copier-depuis/[offreSlug]` ou
+`/offres/copier-depuis/[offreSlug]`). Permet le clic milieu / `Open in new tab`.
+
+**Critère de succès :** depuis une offre existante, les deux boutons sont
+visibles. Le bouton "brouillon" crée un DRA-XXX éditable. Le bouton "offre"
+crée directement une DEV-2026-XXX. Les `ambianceImages` sont correctement
+copiées dans les deux cas (régression du bug pré-chantier).
 
 ---
 
@@ -511,6 +636,52 @@ La table `drafts` peut rester en base (vide, sans impact).
   `params` doit être typé comme `Promise<{ slug: string }>` et awaité. Pattern à
   réutiliser pour toutes les pages dynamiques server-side à venir.
 
+**Décisions de modèle métier actées en fin de Session 3 :**
+
+À la fin de la session, après discussion sur les cas d'usage réels (variantes
+de couleur, modèles réutilisables, copies depuis offres signées), plusieurs
+décisions importantes ont été prises pour clarifier le modèle métier complet
+avant d'attaquer les sessions 4-5-6-8. Voir aussi le tableau "Décisions
+validées" et le schéma "Flux entre brouillons et offres" en haut du journal.
+
+1. **Mode de transformation = Scénario A direct serveur.** Le clic "Transformer
+   en offre" appelle `POST /api/drafts/[slug]/transformer` qui fait tout en
+   atomique : INSERT dans offres, UPDATE du brouillon, génération PDF + URL
+   publique. Redirection finale vers `/dashboard/[offre-slug]`. **Pas de
+   passage par `/offres/nouveau` pré-rempli** — ça viderait la modal de
+   vérification de son sens et créerait une fenêtre de modification
+   post-engagement.
+
+2. **Conservation indéfinie des brouillons transformés.** Décision changée
+   par rapport au journal initial : **pas de purge automatique à 30 jours**.
+   Un brouillon transformé reste consultable et duplicable indéfiniment via
+   `/dashboard/draft/[slug]`. Le filtre dashboard "Masquer transformés" devient
+   un filtre visuel d'affichage, pas un mécanisme de purge.
+
+3. **Un brouillon = 1 transformation max.** Pour générer plusieurs variantes
+   à partir d'une même base (ex : cuisine rouge / verte / noire), le
+   commercial doit **dupliquer le brouillon d'abord**, puis transformer la
+   copie. La route `POST /api/drafts/[slug]/transformer` renverra 409 si
+   `transformed_at !== null`. Garantit l'intégrité du modèle "offre = état
+   figé à un instant T précis et engageant".
+
+4. **Bouton "📋 Dupliquer en nouveau brouillon"** disponible depuis tout
+   brouillon (Session 4) — y compris les brouillons déjà transformés. Permet
+   de générer des variantes à partir d'un brouillon source qui sert de modèle
+   racine. Source intacte, copie indépendante.
+
+5. **Deux boutons de copie depuis une offre (Session 8) :**
+   - "📄 Copier en nouvelle offre" (existant, conservé) : pour les variantes
+     rapides sans réflexion
+   - "📋 Copier en nouveau brouillon" (nouveau) : pour les variantes qui
+     demandent du travail de modification avant engagement
+
+6. **Concept "is_template" abandonné.** L'idée d'un flag explicite pour
+   différencier brouillons-modèles et brouillons-actifs avait été évoquée
+   mais devient inutile dès lors qu'on conserve indéfiniment les brouillons :
+   **tout brouillon est implicitement réutilisable.** Le commercial organise
+   par titre/référence comme il l'entend.
+
 **Notes pour Session 4 :**
 - La page `/dashboard/draft/[slug]` (vue lecture-seule depuis le dashboard) devra :
   - Faire le même `GET /api/drafts/[slug]` que `DraftFormulaire` en mode édition
@@ -520,12 +691,16 @@ La table `drafts` peut rester en base (vide, sans impact).
     bouton "Envoyer pour signature", sans bouton "Convertir en commande", sans
     lien public partageable
   - Inclure un bouton "✏️ Modifier" qui renvoie vers `/drafts/[slug]/editer`
-  - Inclure un bouton "🔄 Transformer en offre" (modal Session 5)
+  - Inclure un bouton "📋 Dupliquer en nouveau brouillon" (disponible même sur
+    brouillons transformés — voir décision 4 ci-dessus)
+  - Inclure un bouton "🔄 Transformer en offre" (modal Session 5) — désactivé
+    si déjà transformé
   - Inclure un bouton "👁 Aperçu" qui ouvre `/drafts/[slug]/print` (Session 7)
   - Bandeau visuel "BROUILLON" en haut de page
 - Si un brouillon a `transformed_at !== null`, la vue dashboard doit afficher
-  un bandeau "Transformé en offre [LIEN]" et masquer toutes les actions
-  d'édition/transformation.
+  un bandeau "Transformé en offre [LIEN]" et désactiver le bouton de
+  transformation, mais **garder actif** le bouton de duplication (c'est le
+  cas d'usage central des variantes).
 
 **État de la base après Session 3 :**
 - Brouillons de test créés pendant les tests : DRA-003 et DRA-004 selon les
