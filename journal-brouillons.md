@@ -131,7 +131,7 @@ create sequence drafts_numero_seq start 1;
 | # | Session | Risque | État | Date | Branche/commit |
 |---|---|---|---|---|---|
 | 1 | Préparation : backup Supabase + branche git + création table `drafts` | Faible | ✅ Terminée | 2026-05-14 | 11b4c36 |
-| 2 | API `/api/drafts` (POST, GET, GET[slug], PUT[slug], DELETE[slug]) | Moyen | ☐ À faire | | |
+| 2 | API `/api/drafts` (POST, GET, GET[slug], PUT[slug], DELETE[slug]) | Moyen | ✅ Terminée | 2026-05-14 | 268b2fb |
 | 3 | Page `/drafts/nouveau` (clone adapté de `/offres/nouveau`) + redirection | Moyen | ☐ À faire | | |
 | 4 | Page `/dashboard/draft/[slug]` (vue brouillon + bouton "Modifier") | Moyen | ☐ À faire | | |
 | 5 | Modal "Transformer en offre" + route `/api/drafts/[slug]/transformer` | **Élevé** | ☐ À faire | | |
@@ -367,8 +367,76 @@ La table `drafts` peut rester en base (vide, sans impact).
 - Le client à utiliser dans les routes API : `supabaseAdmin` depuis `lib/supabase.ts`
 - Patterns existants à étudier : `app/api/offres/[slug]/notes/route.ts`, `app/api/offres/[slug]/statut/route.ts` pour la structure des routes
 
-### Session 2
-_(à remplir après réalisation)_
+### Session 2 — Terminée le 2026-05-14
+
+**Réalisé :**
+- 5 routes API CRUD créées dans `app/api/drafts/` :
+  - `POST /api/drafts` (création) — commit `f3bf118`
+  - `GET /api/drafts` (liste avec filtres archived/commercial) — commit `eeefb3b`
+  - `GET /api/drafts/[slug]` (détail complet avec data JSONB) — commit `521946c`
+  - `PUT /api/drafts/[slug]` (update avec garde transformation 409) — commit `8555d6c`
+  - `DELETE /api/drafts/[slug]` (hard delete avec garde transformation 409) — commit `268b2fb`
+- RPC SQL `next_dra_numero()` créée dans Supabase pour générer `DRA-001`, `DRA-002`, etc.
+  Versionnée dans `docs/sql/002-rpc-next-dra-numero.sql`. Utilise `nextval('drafts_numero_seq')`
+  (choix de la séquence plutôt que `COUNT(*)` comme `next_dev_numero`, pour rester stable
+  après purge automatique des brouillons archivés)
+- Tous les endpoints testés en local : création vide, création pré-remplie, listing avec
+  3 modes de filtre archived (false/true/all), filtre commercial, lecture détaillée,
+  modification, suppression, cas d'erreur 404 et 409
+
+**Écarts au plan initial :**
+- `.env.local` était **incomplet** au début de la session : il manquait `NEXT_PUBLIC_SUPABASE_URL`
+  et `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Probablement jamais synchronisé avec les vars Vercel
+  (qui contient ces valeurs côté prod, sinon offres ne marcherait pas). Ajoutées en local
+  pour pouvoir tester via `npm run dev`.
+- `lib/supabase.ts` lisait `SUPABASE_SECRET_KEY` mais `.env.local` (et Vercel) utilisent
+  `SUPABASE_SERVICE_ROLE_KEY` (nom standard Supabase). Ajout d'un fallback rétrocompatible :
+  `process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY`.
+- `computeTotals(data)` plante si `data.lines` ou `data.enabledServices` sont `undefined`.
+  Le POST et le PUT court-circuitent l'appel quand `data.lines` est vide ou absent :
+  totaux à 0 par défaut. Le code de `lib/jc-print-types.ts` n'a pas été touché (utilisé
+  aussi par offres en prod).
+- Slug brouillon adopte le **même pattern que les offres** : `dra-001-x7k2m` (lowercase
+  + token aléatoire 5 chars). Le journal initial évoquait `DRA-001` simple, mais le risque
+  d'énumération d'URLs (même sans lien public) justifiait le token, par cohérence avec
+  les offres.
+- `numero_affiche` en UPPERCASE (`DRA-001`) distinct du slug en lowercase (`dra-001-...`).
+  Décision : le slug est l'identifiant URL, `numero_affiche` est ce qui est montré à l'UI.
+
+**Sécurité à traiter avant déploiement prod (Session 9) :**
+- ⚠️ La `SUPABASE_SERVICE_ROLE_KEY` complète a été collée dans un chat de débogage
+  pendant cette session. **À révoquer + régénérer** avant la Session 9 :
+  1. Supabase Dashboard → Settings → API → Reset service_role secret
+  2. Mettre à jour la variable dans Vercel (Settings → Environment Variables)
+  3. Mettre à jour `.env.local` en local
+  4. Redéploiement automatique Vercel après update env vars
+
+**Notes pour Session 3 :**
+- Les 5 routes API sont prêtes pour être consommées par la page `/drafts/nouveau` qu'on va
+  cloner depuis `/offres/nouveau`. Le formulaire devra appeler :
+  - `POST /api/drafts` pour la création (avec body `{ data: {...} }`)
+  - `PUT /api/drafts/[slug]` pour les sauvegardes ultérieures (auto-save éventuel)
+  - `GET /api/drafts/[slug]` pour le chargement initial en mode édition
+- L'URL d'édition d'un brouillon est `/drafts/[slug]/editer` (cf. `editUrl` renvoyé par
+  le POST). À implémenter en Session 3 ou 4 selon le découpage.
+- Le retour du POST contient `dashboardUrl` qui pointe vers `/dashboard/draft/[slug]`
+  (Session 4). Pour l'instant cette URL n'existe pas encore.
+- Le tri du listing `GET /api/drafts` est par `updated_at DESC`. À chaque PUT, le trigger
+  SQL met à jour `updated_at` automatiquement, donc le brouillon récemment modifié
+  remonte naturellement en haut du dashboard (Session 6).
+
+**État de la base après Session 2 :**
+- 1 brouillon DRA-002 (Dupont/Jean/Thierry/TEST-001) reste en base après les tests.
+  Peut être supprimé via `DELETE /api/drafts/dra-002-mzu6w` ou conservé pour tester
+  Session 3.
+- Séquences `drafts_id_seq` et `drafts_numero_seq` sont à 2 (prochain brouillon = `DRA-003`,
+  `id=3`).
+- Pour repartir totalement propre avant Session 3 :
+```sql
+  DELETE FROM drafts;
+  ALTER SEQUENCE drafts_id_seq RESTART WITH 1;
+  ALTER SEQUENCE drafts_numero_seq RESTART WITH 1;
+```
 
 ### Session 3
 _(à remplir après réalisation)_
