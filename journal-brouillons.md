@@ -6,24 +6,31 @@
 
 ---
 
-## 🚀 Reprise rapide — Session 4 à démarrer
+## 🚀 Reprise rapide — Session 6 à démarrer
 
-**État au 2026-05-14 :** Sessions 1, 2, 3 terminées. Le formulaire de brouillon
-est opérationnel en création (`/drafts/nouveau`) et en édition
-(`/drafts/[slug]/editer`). Les 5 routes API CRUD sont en place.
+**État au 2026-05-14 :** Sessions 1, 2, 3, 4, 5 terminées. La fonctionnalité
+complète "brouillon → offre" est opérationnelle bout-en-bout :
+- Création/édition de brouillons (`/drafts/nouveau`, `/drafts/[slug]/editer`)
+- Vue lecture-seule dashboard (`/dashboard/draft/[slug]`)
+- Duplication en nouveau brouillon (depuis tout brouillon, transformé ou non)
+- Transformation atomique brouillon → offre via modal (RPC SQL + route +
+  composant `TransformerModal`)
+- Gestion 404/409 typée côté API et UI
 
-**Prochaine session : Session 4 — Page `/dashboard/draft/[slug]`**
-Créer la vue lecture-seule d'un brouillon depuis le dashboard, avec les boutons
-"✏️ Modifier", "📋 Dupliquer", "🔄 Transformer", "👁 Aperçu", "🗑 Supprimer".
-Voir le détail dans la section "Détail de chaque session" plus bas.
+**Prochaine session : Session 6 — Onglet "Brouillons" sur le dashboard**
+Intégrer les brouillons dans la vue dashboard existante avec un onglet
+séparé, compteur de brouillons actifs, et filtre "Masquer brouillons
+transformés" (coché par défaut). L'API GET /api/drafts (Session 2) est
+déjà prête, il ne reste qu'à coder l'UI.
 
-**Avant de démarrer la Session 4, avoir sous la main :**
-- `app/dashboard/[slug]/page.tsx` (la page dashboard offre actuelle — référence
-  pour la structure visuelle à cloner)
-- Le présent journal pour vérifier que toutes les décisions métier sont actées
+**Avant de démarrer la Session 6, avoir sous la main :**
+- `app/dashboard/page.tsx` (le dashboard actuel des offres — pour cloner la
+  structure et y greffer l'onglet "Brouillons")
+- Le présent journal pour les notes Session 6 (en bas du fichier, dans la
+  section "Session 5")
 
-**Brouillons de test en base** (peuvent être supprimés ou conservés) : DRA-003,
-DRA-004 et éventuellement d'autres créés pendant les tests.
+**Brouillons de test en base** : voir "État de la base après Session 5"
+dans les notes Session 5.
 
 ---
 
@@ -249,7 +256,7 @@ create sequence drafts_numero_seq start 1;
 | 3 | Page `/drafts/nouveau` + `/drafts/[slug]/editer` + composant partagé | Moyen | ✅ Terminée | 2026-05-14 | e72e2bc + clôture |
 | 4 | Page `/dashboard/draft/[slug]` (vue brouillon + bouton "Modifier") | Moyen | ✅ Terminée | 2026-05-14 | J4VKQq9yD
 |
-| 5 | Modal "Transformer en offre" + route `/api/drafts/[slug]/transformer` | **Élevé** | ☐ À faire | | |
+| 5 | Modal "Transformer en offre" + route `/api/drafts/[slug]/transformer` | ~~Élevé~~ Moyen* | ✅ Terminée | 2026-05-14 | c831bdf |
 | 6 | Onglet "Brouillons" sur dashboard + filtre archivés | Faible | ☐ À faire | | |
 | 7 | Aperçu print : filigrane BROUILLON, sans signature, sans lien validation | Moyen | ☐ À faire | | |
 | 8 | Boutons "Copier en brouillon" + "Copier en offre" depuis dashboard offre | Faible | ☐ À faire | | |
@@ -1000,8 +1007,7 @@ app/
     └── [slug]/page.tsx                # Vue lecture-seule + actions   ← Session 4
 \`\`\`
 
-
-### Session 5 — En cours
+### Session 5 — Terminée le 2026-05-14
 
 **Décisions actées en début de session (modifient le plan initial) :**
 
@@ -1020,52 +1026,213 @@ app/
 
 2. **`client_numero_client` laissé à NULL.**
    La table `offres` a une colonne `client_numero_client` (TEXT, nullable)
-   qui n'existe pas dans `drafts`. Dans `/api/offres/save`, ce champ semble
-   être rempli par une logique de lookup/création client via la table
-   `clients` — non reproduite dans la RPC `transformer_draft` pour rester
-   dans le scope minimal de la Session 5.
-   **À ajuster plus tard** : faire le lookup/création client côté JS dans
-   la route `/api/drafts/[slug]/transformer` après l'appel RPC, ou via un
-   trigger Postgres sur INSERT dans `offres`. Pas bloquant pour la mise en
-   service, mais à corriger avant de considérer le chantier brouillons
-   complet (ex. en fin de Session 9 ou dans un chantier ultérieur dédié au
-   raccrochage client).
+   qui n'existe pas dans `drafts`. Diagnostic : sur les 5 dernières offres
+   en prod, toutes ont `client_numero_client = NULL`. La colonne existe
+   mais n'est pas alimentée par le flux actuel `/api/offres/save`. Donc
+   une offre créée par transformation aura le même comportement que toutes
+   les offres actuelles. Aucune action requise côté RPC ou route.
 
-3. **Modal simplifiée à 2 cases à cocher** (au lieu de 4 prévues dans le
+3. **Mécanisme de création de fiche client côté `clients` non reproduit
+   dans Session 5.** D'après les retours utilisateur, le formulaire offre
+   crée une fiche client (table `clients`) à l'enregistrement si le client
+   n'existe pas encore. Ce mécanisme n'a pas été identifié dans le code
+   inspecté (probablement dans le composant formulaire JS, pas dans
+   `/api/offres/save`). Une offre créée par transformation depuis
+   brouillon **ne déclenchera pas** la création automatique de fiche
+   client.
+
+   **À ajuster dans un chantier ultérieur** (Session 9 finale ou chantier
+   séparé) :
+     - Identifier le code de création/upsert client (Ctrl+Shift+F sur
+       `from("clients")` dans VS Code)
+     - Reproduire ce mécanisme dans `/api/drafts/[slug]/transformer`
+       comme side effect post-RPC, ou centraliser via un trigger Postgres
+     - Optionnellement : alimenter `client_numero_client` côté offres
+       pour permettre les statistiques par client
+
+4. **Modal simplifiée à 2 cases à cocher** (au lieu de 4 prévues dans le
    plan initial) :
    - [ ] J'ai vérifié toutes les informations (client, prix, quantités, remarques)
    - [ ] Je confirme que cette transformation est définitive et que l'offre
          ne sera plus modifiable
-   Compromis entre frottement intentionnel (matérialise la vérification +
-   l'engagement) et simplicité d'usage. Une seule case = trop léger ;
-   quatre cases = friction excessive vu qu'on ne demande plus de choisir
-   le `formType`.
 
-4. **Affichage "Type cible" supprimé** dans la page
+5. **Affichage "Type cible" supprimé** dans la page
    `/dashboard/draft/[slug]`. Comme la transformation est toujours en
    offre, afficher "Type cible : Commande" devenait trompeur. Le champ
    `formType` peut rester dans le data JSONB du brouillon (rétrocompatible
    avec le formulaire Session 3) mais n'a plus d'effet à la transformation.
 
-**Étape 1 — RPC SQL `transformer_draft` :** ✅ Terminée
+   ⚠️ **À nettoyer plus tard** : actuellement le fichier
+   `app/dashboard/draft/[slug]/page.tsx` affiche encore "Type cible : ..."
+   à deux endroits (carte "Brouillon" du topbar + section "Brouillon" en
+   grille principale). Modification cosmétique reportée pour ne pas alourdir
+   le diff Session 5. À retirer en marge d'une prochaine session.
 
-- RPC créée dans Supabase, versionnée dans `docs/sql/003-rpc-transformer-draft.sql`
-- Atomicité garantie par transaction Postgres + `FOR UPDATE` sur le brouillon
-- Erreurs typées : `DRAFT_NOT_FOUND` (P0001), `ALREADY_TRANSFORMED:<slug>` (P0002)
-- Reproduit fidèlement la branche "Offre" de `/api/offres/save` (mêmes
-  colonnes, mêmes valeurs par défaut)
-- Test SQL manuel sur brouillon jetable : OK (à confirmer)
-- Commit : <hash à compléter>
+**Architecture implémentée (Approche C validée) :**
 
+- **RPC SQL atomique** `transformer_draft(p_slug TEXT) RETURNS JSONB` :
+  - `SELECT ... FOR UPDATE` sur le draft → pas de race condition concurrente
+  - Refuse 404 si `DRAFT_NOT_FOUND` (ERRCODE P0001)
+  - Refuse 409 si déjà transformé (ERRCODE P0002, message inclut le slug
+    de l'offre existante)
+  - Génération numéro DEV via `next_dev_numero(annee)` (existant)
+  - INSERT dans `offres` avec recopie complète + enrichissement du `data`
+    JSONB (`fromDraftSlug`, `formType: 'Offre'`, `offerNumber`)
+  - UPDATE du draft (`transformed_at`, `transformed_into_offre_slug`,
+    `archived = true`)
+  - Versionné dans `docs/sql/003-rpc-transformer-draft.sql`
 
+- **Route JS** `POST /api/drafts/[slug]/transformer` :
+  - Appel RPC, gestion typée des erreurs (P0001 → 404, P0002 → 409 avec
+    extraction du slug existant via regex)
+  - Fire-and-forget du PDF offre via `fetch ${baseUrl}/api/offres/${slug}/pdf`
+    (équivalent comportement `save/route.ts` côté offre)
+  - Réponse `{ success, offreSlug, offreNumero, dashboardUrl }`
+    en chemin relatif
 
-**Piège : la colonne `offres.numero_affiche` est une GENERATED column.**
-Découvert pendant le premier test SQL de la RPC transformer_draft. La
-colonne `numero_affiche` est calculée automatiquement par Postgres à
-partir de `numero_offre` / `numero_commande` (GENERATED ALWAYS AS ...).
-Toute tentative d'INSERT avec une valeur explicite échoue avec
-`ERROR 428C9: cannot insert a non-DEFAULT value into column`.
-C'est pour ça que `save/route.ts` ne la remplit jamais : la colonne se
-calcule toute seule.
-→ Conséquence pour la RPC `transformer_draft` : ne PAS lister
-`numero_affiche` dans l'INSERT. Elle sera calculée correctement.
+- **Composant modal** `TransformerModal.tsx` :
+  - 3 vues pilotées par state union typé : idle/submitting,
+    already_transformed (409), error (autres)
+  - 2 checkboxes obligatoires pour activer le bouton "Transformer"
+  - Reset automatique à la (ré)ouverture
+  - Fermeture par Escape ou clic overlay (sauf pendant submission)
+  - Sur succès : `router.push(dashboardUrl)` → redirection silencieuse
+  - Sur 409 : bouton "Voir l'offre existante" qui pointe sur
+    `existingOffreSlug` retourné par l'API
+
+- **Page brouillon** `app/dashboard/draft/[slug]/page.tsx` :
+  - Bouton "🔄 Transformer en offre" activé pour les brouillons non
+    transformés, désactivé pour les transformés
+  - Modal câblée en fin de JSX avec passage des données brouillon
+  - Conversion `Number(draft.sous_total) || 0` car Supabase renvoie les
+    colonnes `numeric` comme string
+
+**Tests validés bout-en-bout :**
+
+- ✅ Test SQL RPC (DRA-007 → DEV-2026-049) avec garde-fous 404/409
+- ✅ Test CLI route API (DRA-007 → DEV-2026-049) :
+  - 200 sur succès, body `{success, offreSlug, offreNumero, dashboardUrl}`
+  - 409 sur re-tentative, body `{error: ALREADY_TRANSFORMED, existingOffreSlug}`
+  - 404 sur slug inexistant, body `{error: DRAFT_NOT_FOUND}`
+- ✅ Test UI bout-en-bout (DRA-003 → DEV-2026-050) : modal, checkboxes,
+  redirection silencieuse vers `/dashboard/dev-2026-050-cd94b`
+- ✅ Test 409 deux onglets (DRA-004 → DEV-2026-051) : pendant que la
+  modal était ouverte sur l'onglet A, transformation parallèle via CLI,
+  re-clic Transformer dans l'onglet A → switch vers vue "🔒 Brouillon
+  déjà transformé" avec bouton "Voir l'offre existante"
+- ✅ Vérification UI brouillon transformé (bandeau orange, lien vers
+  l'offre, boutons grisés Modifier/Transformer/Supprimer, bouton
+  Dupliquer actif)
+
+**Pièges techniques rencontrés (à retenir) :**
+
+- **`offres.numero_affiche` est une GENERATED column.** Découvert au
+  premier test SQL de la RPC. La colonne est calculée automatiquement
+  par Postgres à partir de `numero_offre` / `numero_commande` (formule
+  `CASE WHEN type_document = 'Commande' AND numero_commande IS NOT NULL
+  THEN numero_commande WHEN version IS NOT NULL THEN numero_offre ||
+  '-' || version ELSE numero_offre END`). Toute tentative d'INSERT avec
+  une valeur explicite échoue avec `ERROR 428C9: cannot insert a
+  non-DEFAULT value into column`.
+  → Conséquence : ne PAS lister `numero_affiche` dans l'INSERT. Elle est
+  calculée correctement à partir de `numero_offre`.
+
+- **Bug pré-existant : URLs absolues avec fallback prod dans
+  `POST /api/drafts`.** Le retour de l'API construisait `editUrl` et
+  `dashboardUrl` en absolu avec un fallback
+  `https://jardin-confort-formulaire.vercel.app` quand
+  `NEXT_PUBLIC_APP_URL` n'était pas défini en local. Résultat : le
+  bouton "📋 Dupliquer" redirigeait vers la prod 404 (`feature/brouillons`
+  pas déployée).
+  → Fix appliqué (commit `1fbbda3`) : URLs renvoyées en chemin relatif
+  (`/drafts/[slug]/editer`). Robuste sur localhost, preview Vercel, prod.
+  → Note : `app/api/offres/save/route.ts` utilise encore le même pattern
+  absolu pour ses URLs de retour. Le `NEXT_PUBLIC_APP_URL=http://localhost:3000`
+  dans `.env.local` couvre les deux cas en local. À nettoyer dans un
+  chantier ultérieur si on veut 100% de cohérence.
+
+- **PowerShell 5.1 et `$_.ErrorDetails.Message` vide sur HTTP 4xx.**
+  Pour récupérer le body JSON d'une réponse 409/404 en CLI, il faut
+  passer par `System.IO.StreamReader` avec `BaseStream.Position = 0`.
+  Sinon le stream est déjà consommé par PowerShell et le body est vide.
+
+**Observations Session 5 (pas des bugs) :**
+
+- La page `/dashboard/[offre-slug]` affiche un polling continu sur
+  l'API offre via l'iframe `/print/offre/[slug]`. Comportement
+  intentionnel cf. décision métier "stock dynamique pour les offres,
+  figé seulement à la commande". Pas d'action requise.
+
+- Logs Next.js parfois `GET /dashboard/draft/%3Cslug%3E` et
+  `GET /api/drafts/%3Cslug%3E` = `<slug>` encodé URL. Probablement un
+  lien littéral non interpolé dans une page de doc ou un placeholder
+  oublié. À retrouver via Ctrl+Shift+F sur `<slug>` dans VS Code, hors
+  scope chantier brouillons.
+
+**Commits Session 5 (sur `feature/brouillons`) :**
+
+**Commits Session 5 (sur `feature/brouillons`) :**
+
+\`\`\`
+edac5b6  feat(drafts): SQL RPC transformer_draft (initial)
+a742344  fix(drafts): remove generated column numero_affiche
+1fbbda3  fix(drafts): return relative URLs in POST /api/drafts
+e8c74e6  docs(drafts): journal Session 5 (en cours)
+7661aec  feat(drafts): route POST /api/drafts/[slug]/transformer (step 2)
+61d22b2  feat(drafts): TransformerModal component (step 3)
+c831bdf  feat(drafts): activate Transformer button + wire TransformerModal (step 4)
+\`\`\`
+
+**État de la base après Session 5 :**
+
+- `dra-003-4jezs` (Test Session 3) → transformé en `dev-2026-050-cd94b`, archivé
+- `dra-004-1yf0w` (Stricker) → transformé en `dev-2026-051-XXXXX`, archivé
+- `dra-005-2df88` (Stricker) → transformé en `dev-2026-048-26454`, archivé
+- `dra-007-3oyf6` (Stricker, copie de DRA-005) → transformé en `dev-2026-049-f9dd5`, archivé
+- `dra-002-mzu6w` (Dupont, vide) → non transformé, conservable comme test
+
+Pour repartir totalement propre avant Session 6 :
+\`\`\`sql
+DELETE FROM drafts;
+DELETE FROM offres WHERE slug LIKE 'dev-2026-04%' OR slug LIKE 'dev-2026-05%';
+ALTER SEQUENCE drafts_id_seq RESTART WITH 1;
+ALTER SEQUENCE drafts_numero_seq RESTART WITH 1;
+-- ⚠️ NE PAS reset la séquence de DEV (next_dev_numero compte les offres
+-- existantes par année, donc se réajuste automatiquement après DELETE).
+\`\`\`
+
+**Notes pour Session 6 (onglet Brouillons dashboard) :**
+
+- L'API `GET /api/drafts` existante (Session 2) renvoie déjà les
+  brouillons avec filtres `archived` et `commercial` — la Session 6
+  n'aura qu'à consommer cette API.
+- Tri par `updated_at DESC` déjà en place côté API.
+- Filtre par défaut `archived=false` à coder côté UI (le filtre "Masquer
+  brouillons transformés" coché par défaut).
+- Compteur de brouillons actifs à intégrer dans l'onglet.
+- Penser à ne PAS purger les brouillons transformés (conservation
+  indéfinie validée Session 3).
+
+**Architecture des fichiers brouillons après Session 5 :**
+
+\`\`\`
+app/
+├── api/drafts/
+│   ├── route.ts                            # POST + GET                 ← Session 2
+│   ├── [slug]/route.ts                     # GET + PUT + DELETE         ← Session 2
+│   └── [slug]/transformer/route.ts         # POST transformation        ← Session 5
+├── drafts/
+│   ├── _components/
+│   │   └── DraftFormulaire.tsx             # Composant partagé          ← Session 3
+│   ├── nouveau/page.tsx                    # Mode création              ← Session 3
+│   └── [slug]/editer/page.tsx              # Mode édition               ← Session 3
+└── dashboard/draft/
+    └── [slug]/
+        ├── page.tsx                        # Vue + bouton transformer   ← Sessions 4+5
+        └── TransformerModal.tsx            # Modal de confirmation      ← Session 5
+\`\`\`
+
+docs/sql/
+├── 001-create-drafts.sql                   # Table drafts                ← Session 1
+├── 002-rpc-next-dra-numero.sql             # RPC séquence DRA            ← Session 2
+└── 003-rpc-transformer-draft.sql           # RPC transformation atomique ← Session 5
