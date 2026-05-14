@@ -247,7 +247,8 @@ create sequence drafts_numero_seq start 1;
 | 1 | Préparation : backup Supabase + branche git + création table `drafts` | Faible | ✅ Terminée | 2026-05-14 | 11b4c36 |
 | 2 | API `/api/drafts` (POST, GET, GET[slug], PUT[slug], DELETE[slug]) | Moyen | ✅ Terminée | 2026-05-14 | 268b2fb |
 | 3 | Page `/drafts/nouveau` + `/drafts/[slug]/editer` + composant partagé | Moyen | ✅ Terminée | 2026-05-14 | e72e2bc + clôture |
-| 4 | Page `/dashboard/draft/[slug]` (vue brouillon + bouton "Modifier") | Moyen | ☐ À faire | | |
+| 4 | Page `/dashboard/draft/[slug]` (vue brouillon + bouton "Modifier") | Moyen | ✅ Terminée | 2026-05-14 | J4VKQq9yD
+|
 | 5 | Modal "Transformer en offre" + route `/api/drafts/[slug]/transformer` | **Élevé** | ☐ À faire | | |
 | 6 | Onglet "Brouillons" sur dashboard + filtre archivés | Faible | ☐ À faire | | |
 | 7 | Aperçu print : filigrane BROUILLON, sans signature, sans lien validation | Moyen | ☐ À faire | | |
@@ -920,3 +921,151 @@ fallback pour gérer le quota.
 
 **À noter :** ce mécanisme `localStorage` deviendra obsolète à la session 8
 (remplacé par la création serveur d'un brouillon).
+
+
+
+### Session 4 — Terminée le 2026-05-14
+
+**Réalisé :**
+- Page `/dashboard/draft/[slug]/page.tsx` créée (~700 lignes)
+- Architecture alignée sur `/dashboard/[slug]` côté offres : "use client",
+  params async, fetch dans useEffect, layout en grille avec sticky preview
+  à droite
+- Bandeau pleine largeur "📝 BROUILLON" en haut, avec dates créé/modifié
+- Bandeau orange "🔒 Brouillon transformé en offre" conditionnel
+  (transformed_at !== null) avec lien vers l'offre cible
+- Sections lecture-seule : Client, Brouillon (méta), Livraison
+  (si livr_diff=true), Montants, Remarques client, Notes internes
+- Boutons d'action :
+  - ✏️ Modifier → /drafts/[slug]/editer (désactivé si transformé)
+  - 🔄 Transformer en offre → désactivé en Session 4 (modal Session 5)
+  - 👁 Aperçu → stub vers /print/offre/[slug]
+  - 📋 Dupliquer en nouveau brouillon → POST /api/drafts + redirection
+  - 🗑 Supprimer → confirm() + DELETE (désactivé si transformé)
+- Gestion d'erreurs propre : 404 stylisé avec bouton "Nouveau brouillon",
+  500 avec bouton "Réessayer"
+
+**Bug fix transverse réalisé pendant la session :**
+- `app/print/layout.tsx` redéclarait `<html>`, `<head>`, `<body>` alors que
+  le root layout les fournit déjà. Résultat : double `<html>` imbriqué et
+  7 erreurs d'hydration React 19 sur chaque ouverture de page print. Corrigé
+  en supprimant les balises redondantes et en gardant le `<style>` qui est
+  hissé automatiquement par React 19 dans le `<head>`. Bénéficie aussi à
+  toutes les pages /print/offre/*.
+
+**Écarts au plan initial :**
+- Alignement total sur le layout de `/dashboard/[slug]` (validé en début de
+  session). Tous les éléments choisis "Comme dans /dashboard/[slug] actuel"
+  pour minimiser les décisions et garder la cohérence visuelle.
+- L'iframe d'aperçu pointe vers `/print/offre/[slug]` (stub), mais cette
+  page charge depuis la table `offres` et ne sait pas lire un brouillon →
+  affiche "Aucun article" même quand le brouillon contient des lignes. Un
+  bandeau d'avertissement explicite l'origine du problème. Sera corrigé en
+  Session 7 (création de `/drafts/[slug]/print` dédié).
+
+**Tests validés en local :**
+- Page brouillon affiche correctement DRA-003 (Test Session 3, 2 articles,
+  CHF 345.00, TVA 25.85, conseiller Thierry Stricker, etc.)
+- Bouton ✏️ Modifier redirige vers /drafts/dra-003-4jezs/editer avec
+  formulaire pré-rempli
+- 7 warnings d'hydration disparus après correction du layout print
+- Aperçu print s'affiche (vide en contenu mais le rendu visuel est correct)
+
+**Notes pour Session 5 :**
+- Le bouton "🔄 Transformer en offre" est en place mais désactivé
+  (`disabled` + tooltip "Bientôt disponible (Session 5)"). Pour l'activer,
+  il faudra :
+  1. Créer la route `POST /api/drafts/[slug]/transformer`
+  2. Créer une modal de confirmation avec 4 cases à cocher obligatoires
+  3. Retirer l'attribut `disabled` du bouton et lui attacher l'handler
+- Le bouton 📋 Dupliquer reste actif sur les brouillons transformés
+  (décision 4 du modèle métier acté Session 3 — cas d'usage variantes).
+- Le bouton 🗑 Supprimer reste désactivé sur les brouillons transformés
+  (décision 2 du modèle métier — conservation indéfinie).
+- La route DELETE existante (Session 2) renvoie 409 si transformé, donc
+  double protection client + serveur.
+
+**Architecture des fichiers brouillons après Session 4 :**
+\`\`\`
+app/
+├── api/drafts/
+│   ├── route.ts                       # POST + GET                    ← Session 2
+│   └── [slug]/route.ts                # GET + PUT + DELETE            ← Session 2
+├── drafts/
+│   ├── _components/
+│   │   └── DraftFormulaire.tsx        # Composant partagé             ← Session 3
+│   ├── nouveau/page.tsx               # Mode création                 ← Session 3
+│   └── [slug]/editer/page.tsx         # Mode édition                  ← Session 3
+└── dashboard/draft/
+    └── [slug]/page.tsx                # Vue lecture-seule + actions   ← Session 4
+\`\`\`
+
+
+### Session 5 — En cours
+
+**Décisions actées en début de session (modifient le plan initial) :**
+
+1. **Transformation toujours en Offre, jamais directement en Commande.**
+   Décision changée par rapport au plan Session 5 initial qui prévoyait un
+   sélecteur Offre/Commande dans la modal. Raisons :
+   - Sémantique métier renforcée : un brouillon devient une offre (document
+     contractuel), le passage offre → commande reste géré par le flux
+     existant `/api/offres/save` côté commande (décrémentation stock,
+     génération PDF figé, fiche travail initiale dans le bon ordre).
+   - Risque divisé : pas besoin de reproduire les 60 lignes de logique
+     PDF/stock critiques de `save/route.ts`. La Session 5 retombe à
+     "Risque Moyen" au lieu de "Risque Élevé".
+   - Si le commercial veut une commande directe, il passe par
+     `/offres/nouveau?formType=Commande` (flux existant inchangé).
+
+2. **`client_numero_client` laissé à NULL.**
+   La table `offres` a une colonne `client_numero_client` (TEXT, nullable)
+   qui n'existe pas dans `drafts`. Dans `/api/offres/save`, ce champ semble
+   être rempli par une logique de lookup/création client via la table
+   `clients` — non reproduite dans la RPC `transformer_draft` pour rester
+   dans le scope minimal de la Session 5.
+   **À ajuster plus tard** : faire le lookup/création client côté JS dans
+   la route `/api/drafts/[slug]/transformer` après l'appel RPC, ou via un
+   trigger Postgres sur INSERT dans `offres`. Pas bloquant pour la mise en
+   service, mais à corriger avant de considérer le chantier brouillons
+   complet (ex. en fin de Session 9 ou dans un chantier ultérieur dédié au
+   raccrochage client).
+
+3. **Modal simplifiée à 2 cases à cocher** (au lieu de 4 prévues dans le
+   plan initial) :
+   - [ ] J'ai vérifié toutes les informations (client, prix, quantités, remarques)
+   - [ ] Je confirme que cette transformation est définitive et que l'offre
+         ne sera plus modifiable
+   Compromis entre frottement intentionnel (matérialise la vérification +
+   l'engagement) et simplicité d'usage. Une seule case = trop léger ;
+   quatre cases = friction excessive vu qu'on ne demande plus de choisir
+   le `formType`.
+
+4. **Affichage "Type cible" supprimé** dans la page
+   `/dashboard/draft/[slug]`. Comme la transformation est toujours en
+   offre, afficher "Type cible : Commande" devenait trompeur. Le champ
+   `formType` peut rester dans le data JSONB du brouillon (rétrocompatible
+   avec le formulaire Session 3) mais n'a plus d'effet à la transformation.
+
+**Étape 1 — RPC SQL `transformer_draft` :** ✅ Terminée
+
+- RPC créée dans Supabase, versionnée dans `docs/sql/003-rpc-transformer-draft.sql`
+- Atomicité garantie par transaction Postgres + `FOR UPDATE` sur le brouillon
+- Erreurs typées : `DRAFT_NOT_FOUND` (P0001), `ALREADY_TRANSFORMED:<slug>` (P0002)
+- Reproduit fidèlement la branche "Offre" de `/api/offres/save` (mêmes
+  colonnes, mêmes valeurs par défaut)
+- Test SQL manuel sur brouillon jetable : OK (à confirmer)
+- Commit : <hash à compléter>
+
+
+
+**Piège : la colonne `offres.numero_affiche` est une GENERATED column.**
+Découvert pendant le premier test SQL de la RPC transformer_draft. La
+colonne `numero_affiche` est calculée automatiquement par Postgres à
+partir de `numero_offre` / `numero_commande` (GENERATED ALWAYS AS ...).
+Toute tentative d'INSERT avec une valeur explicite échoue avec
+`ERROR 428C9: cannot insert a non-DEFAULT value into column`.
+C'est pour ça que `save/route.ts` ne la remplit jamais : la colonne se
+calcule toute seule.
+→ Conséquence pour la RPC `transformer_draft` : ne PAS lister
+`numero_affiche` dans l'INSERT. Elle sera calculée correctement.
