@@ -6,6 +6,27 @@
 
 ---
 
+## 🚀 Reprise rapide — Session 4 à démarrer
+
+**État au 2026-05-14 :** Sessions 1, 2, 3 terminées. Le formulaire de brouillon
+est opérationnel en création (`/drafts/nouveau`) et en édition
+(`/drafts/[slug]/editer`). Les 5 routes API CRUD sont en place.
+
+**Prochaine session : Session 4 — Page `/dashboard/draft/[slug]`**
+Créer la vue lecture-seule d'un brouillon depuis le dashboard, avec les boutons
+"✏️ Modifier", "📋 Dupliquer", "🔄 Transformer", "👁 Aperçu", "🗑 Supprimer".
+Voir le détail dans la section "Détail de chaque session" plus bas.
+
+**Avant de démarrer la Session 4, avoir sous la main :**
+- `app/dashboard/[slug]/page.tsx` (la page dashboard offre actuelle — référence
+  pour la structure visuelle à cloner)
+- Le présent journal pour vérifier que toutes les décisions métier sont actées
+
+**Brouillons de test en base** (peuvent être supprimés ou conservés) : DRA-003,
+DRA-004 et éventuellement d'autres créés pendant les tests.
+
+---
+
 ## 🎯 Contexte du projet
 
 **Projet :** `jardin-confort-formulaire`
@@ -20,6 +41,14 @@ git add .
 git commit -m "<message>"
 git push
 ```
+
+**Pour tester en local :**
+```powershell
+cd C:\Users\ezefi\jardin-confort-formulaire
+npm run dev
+# → http://localhost:3000
+```
+Si "Another next dev server is already running" : `Get-Process node | Stop-Process -Force` puis relancer.
 
 ---
 
@@ -217,7 +246,7 @@ create sequence drafts_numero_seq start 1;
 |---|---|---|---|---|---|
 | 1 | Préparation : backup Supabase + branche git + création table `drafts` | Faible | ✅ Terminée | 2026-05-14 | 11b4c36 |
 | 2 | API `/api/drafts` (POST, GET, GET[slug], PUT[slug], DELETE[slug]) | Moyen | ✅ Terminée | 2026-05-14 | 268b2fb |
-| 3 | Page `/drafts/nouveau` + `/drafts/[slug]/editer` + composant partagé | Moyen | ✅ Terminée | 2026-05-14 | e72e2bc |
+| 3 | Page `/drafts/nouveau` + `/drafts/[slug]/editer` + composant partagé | Moyen | ✅ Terminée | 2026-05-14 | e72e2bc + clôture |
 | 4 | Page `/dashboard/draft/[slug]` (vue brouillon + bouton "Modifier") | Moyen | ☐ À faire | | |
 | 5 | Modal "Transformer en offre" + route `/api/drafts/[slug]/transformer` | **Élevé** | ☐ À faire | | |
 | 6 | Onglet "Brouillons" sur dashboard + filtre archivés | Faible | ☐ À faire | | |
@@ -298,17 +327,27 @@ rouvrir, le modifier, le re-sauvegarder.
 
 **Objectif :** vue lecture-seule d'un brouillon, avec actions.
 
+**Architecture cible :**
+```
+app/dashboard/draft/[slug]/page.tsx     # Nouvelle page de cette session
+```
+La route s'inspire structurellement de `app/dashboard/[slug]/page.tsx` (existante
+pour les offres) mais sans les actions non pertinentes pour un brouillon
+(signature, conversion commande, lien public).
+
 **Différences avec `/dashboard/[slug]` actuel :**
 - Bouton "✏️ Modifier" (renvoie vers `/drafts/[slug]/editer` — Session 3)
 - Bouton "📋 Dupliquer en nouveau brouillon" : appelle `POST /api/drafts` avec
   le `data` du brouillon courant. Source intacte, copie indépendante créée,
   redirection vers `/drafts/[nouveau-slug]/editer`. Disponible **même** sur les
-  brouillons déjà transformés (pour générer des variantes).
+  brouillons déjà transformés (pour générer des variantes — cas d'usage central).
 - Bouton "🔄 Transformer en offre" (déclenche modal Session 5) — désactivé si
   le brouillon est déjà transformé (`transformed_at !== null`)
 - Bouton "👁 Aperçu" (page print avec filigrane BROUILLON — Session 7)
 - Bouton "🗑 Supprimer" : possible uniquement si non transformé (route existante
-  côté API depuis la Session 2 ; le serveur renvoie 409 si transformé)
+  côté API depuis la Session 2 ; le serveur renvoie 409 si transformé). À garder
+  derrière une confirmation (modal ou inline) pour éviter les suppressions
+  accidentelles.
 - **PAS** de bouton "Envoyer pour signature"
 - **PAS** de bouton "Convertir en commande"
 - **PAS** de lien public partageable
@@ -316,8 +355,52 @@ rouvrir, le modifier, le re-sauvegarder.
 - Si `transformed_at !== null` : bandeau supplémentaire orange "Transformé en
   offre [DEV-2026-XXX →]" avec lien vers `/dashboard/[offre-slug]`
 
+**Chargement des données :**
+Réutiliser `GET /api/drafts/[slug]` (Session 2). La page est server-side ou
+client-side selon la structure existante de `/dashboard/[slug]` côté offres —
+on s'aligne sur ce qui est déjà en place pour rester cohérent. Idéalement
+server-side (Next 16 App Router) pour le SEO et le first paint.
+
+**Gestion d'erreur :**
+- 404 si slug introuvable → page d'erreur avec lien "+ Nouveau brouillon"
+- 500 → message d'erreur générique avec bouton "🔄 Réessayer"
+
+**Bouton "📋 Dupliquer" — implémentation client :**
+```ts
+async function dupliquerBrouillon() {
+  // 1. Le brouillon courant est déjà en mémoire (props.draft)
+  //    Pas besoin de re-fetch via GET.
+  const data = { ...draft.data };
+  // Option future : data.copiedFromDraftSlug = slug;  (traçabilité)
+
+  // 2. POST pour créer un nouveau brouillon
+  const res = await fetch("/api/drafts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ data })
+  });
+  if (!res.ok) { /* afficher erreur */ return; }
+  const { editUrl } = await res.json();
+
+  // 3. Rediriger vers le nouveau brouillon en mode édition
+  router.push(editUrl);
+}
+```
+
+**Décision UX à prendre en début de session :**
+- Position des boutons "Modifier" / "Dupliquer" : groupe d'actions à droite
+  comme sur `/dashboard/[slug]` côté offres, ou groupe en haut ?
+- Modal de confirmation pour "🗑 Supprimer" : modal dédiée ou inline
+  (style "Confirmer ?" / "Annuler" comme dans le formulaire) ?
+
+**Fichiers à fournir au début de la session :**
+- `app/dashboard/[slug]/page.tsx` (la page dashboard offre actuelle, à cloner
+  pour la structure visuelle)
+- `app/api/drafts/[slug]/route.ts` (déjà fait Session 2, pour rappel)
+
 **Critère de succès :** afficher un brouillon en lecture seule, lancer
-modification et retour, dupliquer (avec ou sans transformation préalable).
+modification et retour, dupliquer (avec ou sans transformation préalable),
+gérer correctement l'affichage des brouillons transformés.
 
 ---
 
@@ -572,7 +655,7 @@ La table `drafts` peut rester en base (vide, sans impact).
   ALTER SEQUENCE drafts_numero_seq RESTART WITH 1;
 ```
 
-### Session 3 — Terminée le 2026-05-14 (commit `e72e2bc`)
+### Session 3 — Terminée le 2026-05-14 (commit refactor `e72e2bc` + commit clôture)
 
 **Réalisé :**
 - Architecture refactor propre : composant partagé `DraftFormulaire` + 2 pages fines
@@ -610,6 +693,13 @@ La table `drafts` peut rester en base (vide, sans impact).
   - Édition immédiate après création + persistance après F5
   - 404 propre sur slug inexistant avec bouton "+ Nouveau brouillon"
   - Rechargement d'un brouillon existant avec hydratation complète des champs
+- **Micro-fix de clôture (post-décisions modèle métier)** : adaptation du topbar
+  pour les brouillons transformés. Le bouton "🔄 Nouveau brouillon" devient un
+  lien direct vers `/drafts/nouveau` sans confirmation quand on consulte un
+  brouillon transformé (rien à perdre, puisque l'édition est de toute façon
+  bloquée). Les boutons "📂 Charger", "💾 Local" et "↩ Undo" sont désactivés
+  dans ce mode (pas de sens en lecture seule, et "Charger" pourrait écraser
+  l'affichage avec un snapshot localStorage potentiellement obsolète).
 
 **Écarts au plan initial :**
 - Choix d'architecture : refactor en composant partagé **après** validation du clone,
