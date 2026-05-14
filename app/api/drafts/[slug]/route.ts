@@ -210,3 +210,79 @@ export async function PUT(
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
+// ─────────────────────────────────────────────────────────────
+// DELETE /api/drafts/[slug] — supprimer un brouillon
+// ─────────────────────────────────────────────────────────────
+// Hard delete : la ligne disparaît physiquement de la base.
+// 404 si slug introuvable.
+// 409 si brouillon déjà transformé en offre (suppression interdite).
+//
+// Note : les brouillons transformés sont archivés (archived=true) puis
+// purgés automatiquement après 30 jours via un mécanisme séparé
+// (cf. Session 5/9). On ne les supprime jamais manuellement.
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const { slug } = await params;
+
+    // ─── Vérifier que le brouillon existe et n'est pas transformé ───
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from("drafts")
+      .select("id, slug, numero_affiche, transformed_at")
+      .eq("slug", slug)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error("DELETE draft fetch error:", fetchError);
+      return NextResponse.json(
+        { error: "Erreur base de données : " + fetchError.message },
+        { status: 500 }
+      );
+    }
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Brouillon introuvable" },
+        { status: 404 }
+      );
+    }
+
+    if (existing.transformed_at) {
+      return NextResponse.json(
+        {
+          error: "Ce brouillon a déjà été transformé en offre. Suppression impossible. " +
+                 "Il sera purgé automatiquement 30 jours après la transformation."
+        },
+        { status: 409 }
+      );
+    }
+
+    // ─── Hard delete ───
+    const { error } = await supabaseAdmin
+      .from("drafts")
+      .delete()
+      .eq("slug", slug);
+
+    if (error) {
+      console.error("Delete draft error:", error);
+      return NextResponse.json(
+        { error: "Erreur base de données : " + error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      deleted: {
+        slug: existing.slug,
+        numero_affiche: existing.numero_affiche,
+      },
+    });
+  } catch (err) {
+    console.error("Delete draft error:", err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
+}
