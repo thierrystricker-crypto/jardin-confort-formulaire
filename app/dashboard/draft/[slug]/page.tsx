@@ -629,9 +629,13 @@ export default function DashboardDraftDetailPage({
                 </a>
               </div>
               <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300/80">
-                Aperçu temporaire identique à celui d&apos;une offre. Le
-                filigrane « BROUILLON » et la suppression du bloc signature
-                arrivent en Session 7.
+                ⚠ Aperçu incomplet — la page print actuelle charge depuis la
+                table <code className="text-amber-200">offres</code> et ne sait
+                pas encore lire un brouillon, d&apos;où la mention « Aucun
+                article ». Pour voir les lignes, cliquez sur ✏️ Modifier. Une
+                page print dédiée aux brouillons (avec filigrane et lecture
+                depuis la table <code className="text-amber-200">drafts</code>)
+                arrive en Session 7.
               </div>
               <div className="overflow-hidden rounded-2xl border border-white/10 bg-white">
                 <iframe
