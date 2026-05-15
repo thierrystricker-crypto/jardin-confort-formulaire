@@ -588,15 +588,14 @@ export default function DashboardDraftDetailPage({
               </div>
               <div className="mt-4 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/10 px-6 py-4">
                 <span className="text-lg font-semibold text-zinc-100">
-                  TOTAL TTC (estimé)
+                  TOTAL TTC
                 </span>
                 <span className="text-2xl font-bold text-white">
                   {fmtMoney(draft.total_ttc)}
                 </span>
               </div>
               <p className="mt-2 text-xs text-zinc-500">
-                Les totaux d&apos;un brouillon sont indicatifs. Le calcul
-                définitif aura lieu à la transformation en offre.
+                Brouillon non engageant. Transformez en offre pour figer ces montants.
               </p>
             </section>
 
@@ -704,6 +703,10 @@ export default function DashboardDraftDetailPage({
             sous_total: Number(draft.sous_total) || 0,
             tva_montant: Number(draft.tva_montant) || 0,
             total_ttc: Number(draft.total_ttc) || 0,
+            remise_chf: Number(draft.remise_chf) || 0,
+            services_total: Number(draft.services_total) || 0,
+            arrondi: Number(draft.arrondi) || 0,
+            discountPercent: (draft.data as { discountPercent?: string })?.discountPercent,
             nb_articles: draft.nb_articles,
           }}
         />

@@ -31,6 +31,10 @@ type TransformerModalProps = {
     sous_total: number;
     tva_montant: number;
     total_ttc: number;
+    remise_chf: number;
+    services_total: number;
+    arrondi: number;
+    discountPercent?: string;
     nb_articles: number;
   };
 };
@@ -291,6 +295,29 @@ export default function TransformerModal({
                   <span>Sous-total HT</span>
                   <span>{fmtMoney(draft.sous_total)}</span>
                 </div>
+                {draft.remise_chf > 0 && (
+                  <div className="flex justify-between text-zinc-400">
+                    <span>
+                      Remise
+                      {draft.discountPercent && Number(draft.discountPercent) > 0
+                        ? ` (${draft.discountPercent}%)`
+                        : ""}
+                    </span>
+                    <span className="text-emerald-400">− {fmtMoney(draft.remise_chf)}</span>
+                  </div>
+                )}
+                {draft.services_total > 0 && (
+                  <div className="flex justify-between text-zinc-400">
+                    <span>Services inclus</span>
+                    <span>+ {fmtMoney(draft.services_total)}</span>
+                  </div>
+                )}
+                {draft.arrondi !== 0 && (
+                  <div className="flex justify-between text-zinc-400">
+                    <span>Arrondi</span>
+                    <span>{fmtMoney(draft.arrondi)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-zinc-400">
                   <span>TVA 8.1%</span>
                   <span>{fmtMoney(draft.tva_montant)}</span>
