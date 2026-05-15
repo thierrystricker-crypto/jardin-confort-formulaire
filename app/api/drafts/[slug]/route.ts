@@ -74,7 +74,7 @@ export async function PUT(
     // ─── Vérifier que le brouillon existe et n'est pas transformé ───
     const { data: existing, error: fetchError } = await supabaseAdmin
       .from("drafts")
-      .select("id, transformed_at")
+      .select("id, transformed_at, data")
       .eq("slug", slug)
       .maybeSingle();
 
@@ -101,6 +101,24 @@ export async function PUT(
         },
         { status: 409 }
       );
+    }
+
+    // ─── Préserver les clés de traçabilité Session 8 ───
+    // Le formulaire ne mappe pas ces clés sur des inputs (elles n'ont pas
+    // de champ React state correspondant), donc elles disparaissent à la
+    // sérialisation côté client. On les re-merge depuis la base si elles
+    // existaient pour préserver la provenance du brouillon.
+    const tracingKeys = [
+      "copiedFromOffreSlug",
+      "copiedFromOffreNumero",
+      "copiedFromDraftSlug",
+      "copiedFromDraftNumero",
+    ];
+    const existingData = (existing.data as Record<string, unknown>) || {};
+    for (const key of tracingKeys) {
+      if (existingData[key] !== undefined && data[key] === undefined) {
+        data[key] = existingData[key];
+      }
     }
 
     // ─── Calcul des totaux (même logique que POST) ───
