@@ -162,7 +162,7 @@ export default function DashboardDraftDetailPage({
         alert("Erreur duplication : " + (json.error || res.status));
         return;
       }
-      router.push(json.editUrl);
+      window.open(json.editUrl, "_blank");
     } catch (e) {
       alert("Erreur réseau : " + (e as Error).message);
     } finally {
