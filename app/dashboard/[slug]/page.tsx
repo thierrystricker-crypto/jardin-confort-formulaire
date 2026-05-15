@@ -373,47 +373,82 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     finally { setRelancing(false) }
   }
 
-  function copierOffre(avecClient: boolean) {
+// Copie l'offre courante en nouveau brouillon (Session 8 — Option A).
+  //
+  // Workflow :
+  //   1. Construit un payload `data` au format DraftSnapshot attendu par POST /api/drafts
+  //   2. POST direct → le brouillon est créé en base avec son numéro DRA-XXX
+  //   3. Redirection vers /drafts/[slug]/editer (nouvel onglet) en mode édition
+  //
+  // Avantages vs ancien mécanisme localStorage + ?from_copy=1 :
+  //   - Comportement uniforme avec la duplication brouillon→brouillon
+  //   - Numéro DRA-XXX attribué immédiatement (commercial sait où il en est)
+  //   - Pas de bug "ambianceImages trop lourdes pour localStorage"
+  //   - Traçabilité copiedFromOffreSlug persistée directement en base
+  //
+  // Trace : data.copiedFromOffreSlug + data.copiedFromOffreNumero permettent
+  // de retrouver l'offre source après création.
+  async function copierEnBrouillon(avecClient: boolean) {
     if(!offre) return
     const offreData = offre.data as Record<string,unknown>
-    const prefill: Record<string,unknown> = {
-      commercial: offre.commercial||"",
-      lines: offreData.lines||[],
-      discount: offreData.discount||"0",
-      discountPercent: offreData.discountPercent||"0",
-      enabledServices: offreData.enabledServices||{},
-      servicePrices: offreData.servicePrices||{},
-      leadTime: offreData.leadTime||"",
-      paymentMode: offreData.paymentMode||"",
-      deliveryMode: offreData.deliveryMode||"",
-      remarks: offreData.remarks||"",
-      ambianceImages: offreData.ambianceImages||[],
+
+    // Construction du snapshot au format DraftSnapshot
+    // (cf. app/drafts/_components/DraftFormulaire.tsx > type DraftSnapshot)
+    const data: Record<string,unknown> = {
+      // Métadonnées document
+      formType: "Offre",
+      commercial: offre.commercial || "",
+      paymentMode: offreData.paymentMode || "",
+      deliveryMode: offreData.deliveryMode || "",
+      leadTime: offreData.leadTime || "",
+
+      // Lignes + remises + services
+      lines: offreData.lines || [],
+      discount: offreData.discount || "0",
+      discountPercent: offreData.discountPercent || "0",
+      enabledServices: offreData.enabledServices || {},
+      servicePrices: offreData.servicePrices || {},
+
+      // Notes
+      remarks: offreData.remarks || "",
+      ambianceImages: offreData.ambianceImages || [],
+
+      // ─── Traçabilité de la source (Session 8) ───
+      copiedFromOffreSlug: offre.slug,
+      copiedFromOffreNumero: offre.numero_affiche,
     }
+
     if(avecClient) {
-      Object.assign(prefill, {
-        nom: offre.client_nom||"", prenom: offre.client_prenom||"",
-        societe: offre.client_societe||"",
+      Object.assign(data, {
+        nom: offre.client_nom || "",
+        prenom: offre.client_prenom || "",
+        societe: offre.client_societe || "",
         complement_nom: (offreData.complement_nom as string) || "",
         livr_complement_nom: (offreData.livr_complement_nom as string) || "",
-        email: offre.client_email||"",
-        telephone1: offre.client_tel1||"", rue: offre.client_rue||"",
+        email: offre.client_email || "",
+        telephone1: offre.client_tel1 || "",
+        rue: offre.client_rue || "",
         numero: (offreData.numero as string) || "",
-        npa: offre.client_npa||"", ville: offre.client_ville||"",
+        npa: offre.client_npa || "",
+        ville: offre.client_ville || "",
       })
     }
+
     try {
-      localStorage.setItem("jc-offre-copy", JSON.stringify(prefill))
-    } catch {
-      // Quota dépassé (images base64 trop lourdes) — copier sans les images
-      try {
-        localStorage.setItem("jc-offre-copy", JSON.stringify({...prefill, ambianceImages: []}))
-        alert("Les images d'ambiance étaient trop lourdes pour être copiées. L'offre a été copiée sans elles.")
-      } catch {
-        alert("Erreur : impossible de copier l'offre (espace de stockage insuffisant).")
+      const res = await fetch("/api/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.editUrl) {
+        alert("Erreur création brouillon : " + (json.error || res.status))
         return
       }
+      window.open(json.editUrl, "_blank")
+    } catch (e) {
+      alert("Erreur réseau : " + (e as Error).message)
     }
-    window.open(`/offres/nouveau?from_copy=1`, "_blank")
   }
 
   async function saveNotes() {
@@ -1295,9 +1330,9 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
         <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-4">
           <div className="flex flex-wrap gap-3">
             <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">← Retour au dashboard</Link>
-            <Link href="/offres/nouveau" target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">+ Nouvelle offre</Link>
+            <Link href="/drafts/nouveau" target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">+ Nouveau brouillon</Link>
             {offre && (
-              <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
+              <Link href={`/drafts/nouveau?prefill=${encodeURIComponent(JSON.stringify({
                 nom: offre.client_nom||"", prenom: offre.client_prenom||"",
                 societe: offre.client_societe||"",
                 complement_nom: ((offre.data as Record<string,unknown>)?.complement_nom as string) || "",
@@ -1308,19 +1343,19 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                 commercial: offre.commercial||"",
               }))}`} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center rounded-xl border border-[#2B8AD1]/40 bg-[#2B8AD1]/15 px-4 py-2 text-sm text-sky-300 hover:bg-[#2B8AD1]/25">
-                👤 Nouvelle offre même client
+                👤 Brouillon même client
               </Link>
             )}
             {offre&&(
-              <button onClick={()=>copierOffre(true)}
+              <button onClick={()=>copierEnBrouillon(true)}
                 className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-500/20">
-                📋 Copier offre complète
+                📋 Copier {isTypeOffre ? "offre" : "commande"} complète en brouillon
               </button>
             )}
             {offre&&(
-              <button onClick={()=>copierOffre(false)}
+              <button onClick={()=>copierEnBrouillon(false)}
                 className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-300 hover:bg-[#40454b]">
-                📋 Copie offre sans client
+                📋 Copie {isTypeOffre ? "offre" : "commande"} en brouillon sans client
               </button>
             )}
           </div>

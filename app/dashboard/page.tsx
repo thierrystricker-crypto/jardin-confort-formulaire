@@ -7,6 +7,29 @@ import Link from "next/link";
 
 type OffreStatut = "En cours"|"Envoyée"|"Convertie"|"Acceptée"|"Abandonnée"|"Refusée"
 type TypeDocument = "Offre"|"Commande"
+
+// ─── Brouillons (Session 6) ───
+type DraftRecord = {
+  id: number
+  slug: string
+  numero_draft: number
+  numero_affiche: string
+  reference: string|null
+  client_societe: string|null
+  client_nom: string|null
+  client_prenom: string|null
+  client_email: string|null
+  commercial: string|null
+  total_ttc: number
+  nb_articles: number
+  created_at: string
+  updated_at: string|null
+  transformed_at: string|null
+  transformed_into_offre_slug: string|null
+  archived: boolean
+}
+// ──────────────────────────────
+
 type OffreRecord = {
   id: number; slug: string; type_document: TypeDocument
   numero_offre: string|null; numero_commande: string|null; offre_origine: string|null
@@ -34,6 +57,18 @@ function fmtMoney(v: number|null|undefined) {
 }
 function nomClient(o: OffreRecord) {
   return [o.client_prenom, o.client_nom].filter(Boolean).join(" ") || "—"
+}
+function nomClientDraft(d: DraftRecord) {
+  return [d.client_prenom, d.client_nom].filter(Boolean).join(" ") || "—"
+}
+function offreNumeroFromSlug(slug: string|null): string|null {
+  // Slug format : "dev-2026-050-cd94b" → "DEV-2026-050"
+  // ou           : "cmd-80539-xxxxx"   → "CMD-80539"
+  if (!slug) return null
+  const parts = slug.split("-")
+  if (parts.length < 2) return null
+  // On retire le dernier segment (le token aléatoire 5 chars) et on remet en UPPERCASE
+  return parts.slice(0, -1).join("-").toUpperCase()
 }
 function getDaysOpen(o: OffreRecord): number|null {
   if (!o.date_document) return null
@@ -188,13 +223,24 @@ export default function DashboardPage() {
   const [sortKey,setSortKey]=useState<SortKey>("date")
   const [sortDir,setSortDir]=useState<SortDir>("desc")
 
+  // ─── Brouillons (Session 6) ───
+  const [drafts,setDrafts]=useState<DraftRecord[]>([])
+  const [hideTransformedDrafts,setHideTransformedDrafts]=useState(true)
+  const [draftsCollapsed,setDraftsCollapsed]=useState(false)
+  // ──────────────────────────────
+
   function loadOffres() {
     setLoading(true)
     fetch("/api/dashboard/offres")
       .then(r=>r.json()).then(d=>setOffres(Array.isArray(d)?d:[]))
       .catch(()=>setOffres([])).finally(()=>setLoading(false))
   }
-  useEffect(()=>{loadOffres()},[])
+  function loadDrafts() {
+    fetch("/api/drafts?archived=all")
+      .then(r=>r.json()).then(d=>setDrafts(Array.isArray(d?.drafts)?d.drafts:[]))
+      .catch(()=>setDrafts([]))
+  }
+  useEffect(()=>{loadOffres();loadDrafts()},[])
 
   // Charger les préférences "masquer" depuis localStorage
   useEffect(()=>{
@@ -212,6 +258,41 @@ export default function DashboardPage() {
   useEffect(()=>{
     localStorage.setItem("dashboard-hide-converted", String(hideConverted))
   },[hideConverted])
+
+  // ─── Brouillons (Session 6) : prefs localStorage + auto-collapse ───
+  useEffect(()=>{
+    const savedHide = localStorage.getItem("dashboard-hide-transformed-drafts")
+    if (savedHide !== null) setHideTransformedDrafts(savedHide === "true")
+    const savedCollapsed = localStorage.getItem("dashboard-drafts-collapsed")
+    if (savedCollapsed !== null) setDraftsCollapsed(savedCollapsed === "true")
+  },[])
+
+  useEffect(()=>{
+    localStorage.setItem("dashboard-hide-transformed-drafts", String(hideTransformedDrafts))
+  },[hideTransformedDrafts])
+
+  useEffect(()=>{
+    localStorage.setItem("dashboard-drafts-collapsed", String(draftsCollapsed))
+  },[draftsCollapsed])
+
+  // Filtrage des brouillons (commercial global + filtre transformés)
+  const filteredDrafts = useMemo(()=>{
+    let list = drafts
+    if (commercial !== "all") list = list.filter(d => d.commercial === commercial)
+    if (hideTransformedDrafts) list = list.filter(d => !d.archived)
+    return list  // déjà trié updated_at DESC côté API
+  },[drafts,commercial,hideTransformedDrafts])
+
+  const draftsActifs = useMemo(()=>{
+    const scope = commercial==="all" ? drafts : drafts.filter(d=>d.commercial===commercial)
+    return scope.filter(d => !d.archived).length
+  },[drafts,commercial])
+
+  const draftsTotal = useMemo(()=>{
+    const scope = commercial==="all" ? drafts : drafts.filter(d=>d.commercial===commercial)
+    return scope.length
+  },[drafts,commercial])
+  // ──────────────────────────────────────────────────────────────────
 
   function handleSort(k:SortKey) {
     if(k===sortKey){setSortDir(d=>d==="asc"?"desc":"asc");return}
@@ -387,7 +468,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <KpiCard title="Offres actives" value={statsFiltered.totalOffres} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(statsFiltered.caOffres)} potentiel`}
             onClick={()=>setQuickFilter(quickFilter==="offres"?"all":"offres")} active={quickFilter==="offres"}/>
           <KpiCard title="Commandes" value={statsFiltered.totalCommandes} sub={`${offres.length} dossiers total`} extra={`${fmtMoney(statsFiltered.caCommandes)} confirmé`}
@@ -396,6 +477,8 @@ export default function DashboardPage() {
             onClick={()=>setQuickFilter(quickFilter==="relance"?"all":"relance")} active={quickFilter==="relance"}/>
           <KpiCard title="Abandonnées" value={statsFiltered.totalAbandonnes} sub={`${offres.length} dossiers total`}
             onClick={()=>setQuickFilter(quickFilter==="abandonnes"?"all":"abandonnes")} active={quickFilter==="abandonnes"}/>
+          <KpiCard title="📝 Brouillons" value={draftsActifs} sub={`${draftsTotal} au total`} extra={draftsActifs>0?"À finaliser":"✓ Rien en attente"}
+            onClick={()=>{ setDraftsCollapsed(false); document.getElementById("section-brouillons")?.scrollIntoView({behavior:"smooth"}); }} active={false}/>
         </div>
 
         
@@ -507,6 +590,138 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* ─── Section Brouillons (Session 6) ─── */}
+        <div id="section-brouillons" className="space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button type="button" onClick={()=>setDraftsCollapsed(c=>!c)}
+                className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200 transition hover:bg-amber-500/15">
+                <span>{draftsCollapsed?"▶":"▼"}</span>
+                <span>📝 Brouillons</span>
+                <span className="inline-flex items-center justify-center rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold">
+                  {draftsActifs} {draftsActifs>1?"actifs":"actif"} / {draftsTotal} au total
+                </span>
+              </button>
+              <button type="button" onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
+                title="Remonter en haut du dashboard"
+                className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-[#2a2d31] px-3 py-2 text-sm text-zinc-300 transition hover:bg-[#34383d]">
+                <span>⬆</span>
+                <span>Haut</span>
+              </button>
+            </div>
+            {!draftsCollapsed && (
+              <div className="flex items-center gap-4 flex-wrap">
+                <label className="inline-flex items-center gap-2 cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">
+                  <input type="checkbox" checked={hideTransformedDrafts}
+                    onChange={e=>setHideTransformedDrafts(e.target.checked)}
+                    className="rounded border-white/20"/>
+                  <span>Masquer brouillons transformés</span>
+                  {hideTransformedDrafts && (
+                    <span className="text-xs text-zinc-500">
+                      ({drafts.filter(d=>d.archived&&(commercial==="all"||d.commercial===commercial)).length} masqués)
+                    </span>
+                  )}
+                </label>
+                <Link href="/drafts/nouveau" target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200 transition hover:bg-amber-500/15">
+                  + Nouveau brouillon
+                </Link>
+                <button onClick={loadDrafts}
+                  className="inline-flex items-center rounded-xl border border-white/10 bg-[#2a2d31] px-3 py-2 text-xs text-zinc-300 transition hover:bg-[#34383d]">
+                  🔄
+                </button>
+              </div>
+            )}
+          </div>
+
+          {!draftsCollapsed && (
+            <>
+              <div className="text-sm text-zinc-400">{filteredDrafts.length} brouillon(s) affiché(s)</div>
+              <div className="overflow-hidden rounded-2xl border border-amber-500/20 bg-[#2a2d31]">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-collapse text-sm">
+                    <thead className="bg-amber-500/5 text-left text-zinc-400">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Réf.</th>
+                        <th className="px-4 py-3 font-medium">Client</th>
+                        <th className="px-4 py-3 font-medium">Conseiller</th>
+                        <th className="px-4 py-3 font-medium">Montant</th>
+                        <th className="px-4 py-3 font-medium">Statut</th>
+                        <th className="px-4 py-3 font-medium">Modifié le</th>
+                        <th className="px-4 py-3 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredDrafts.length===0 ? (
+                        <tr><td colSpan={7} className="px-4 py-10 text-center text-zinc-500">
+                          {drafts.length===0 ? "Aucun brouillon créé." : "Aucun brouillon ne correspond aux filtres."}
+                        </td></tr>
+                      ) : filteredDrafts.map((d,idx)=>{
+                        const isTransformed = d.archived
+                        const rowBg = isTransformed
+                          ? (idx%2===0 ? "bg-zinc-700/10" : "bg-zinc-700/20")
+                          : (idx%2===0 ? "bg-amber-500/[0.04]" : "bg-amber-500/[0.08]")
+                        const leftBorder = isTransformed
+                          ? "border-l-4 border-l-zinc-600/50"
+                          : "border-l-4 border-l-amber-400/60"
+                        const textOpacity = isTransformed ? "text-zinc-400" : "text-zinc-200"
+                        return (
+                          <tr key={d.id} onClick={()=>window.location.href=`/dashboard/draft/${d.slug}`}
+                            className={`${rowBg} ${leftBorder} ${textOpacity} cursor-pointer border-t border-white/5 transition hover:bg-white/10`}>
+                            <td className="px-4 py-4">
+                              <div className={`font-semibold ${isTransformed?"text-zinc-400":"text-amber-200"}`}>{d.numero_affiche}</div>
+                              {d.reference && (
+                                <div className="text-xs text-amber-300 mt-0.5 italic" title="Référence client">
+                                  📌 {d.reference}
+                                </div>
+                              )}
+                              {isTransformed && d.transformed_into_offre_slug && (
+                                <div className="text-xs text-emerald-400 mt-0.5">
+                                  → {offreNumeroFromSlug(d.transformed_into_offre_slug) || "Transformé"}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-4">
+                              <div>{nomClientDraft(d)}</div>
+                              {d.client_societe && <div className="text-xs text-zinc-500">{d.client_societe}</div>}
+                              {d.client_email && <div className="text-xs text-zinc-500">{d.client_email}</div>}
+                            </td>
+                            <td className="px-4 py-4">{d.commercial||"—"}</td>
+                            <td className="px-4 py-4 font-medium">{fmtMoney(d.total_ttc)}</td>
+                            <td className="px-4 py-4">
+                              {isTransformed ? (
+                                <span className="inline-flex items-center rounded-full bg-zinc-600/30 px-3 py-1 text-xs font-medium text-zinc-300">🔒 Transformé</span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300">📝 Brouillon</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-4 text-zinc-400">{fmtDate(d.updated_at)}</td>
+                            <td className="px-4 py-4">
+                              <div className="flex justify-end gap-2" onClick={e=>e.stopPropagation()}>
+                                <Link href={`/dashboard/draft/${d.slug}`}
+                                  className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-[#40454b]">Voir</Link>
+                                {!isTransformed && (
+                                  <Link href={`/drafts/${d.slug}/editer`}
+                                    className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200 transition hover:bg-amber-500/20">✏️ Modifier</Link>
+                                )}
+                                {isTransformed && d.transformed_into_offre_slug && (
+                                  <Link href={`/dashboard/${d.transformed_into_offre_slug}`}
+                                    className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200 transition hover:bg-emerald-500/20">→ Offre</Link>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        {/* ─── Fin section Brouillons ─── */}
 
       </div>
     </main>
