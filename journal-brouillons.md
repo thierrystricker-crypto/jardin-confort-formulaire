@@ -6,59 +6,57 @@
 
 ---
 
-## 🚀 Reprise rapide — Phase C+D de Session 9 à démarrer
+## 🚀 Reprise rapide — Phase D de Session 9 à démarrer
 
-**État au 2026-05-15 (fin de Phase B de Session 9) :** Sessions 1 à 8 terminées.
-Tests E2E de Session 9 **16/16 validés** sur la branche `feature/brouillons`.
-4 fixes UX trouvés en cours de tests et déjà commités/pushés. **Il ne reste que
-Phase C (sécurité) + Phase D (merge + déploiement prod).**
+**État au 2026-05-15 (fin de Phase C de Session 9) :** Sessions 1 à 8 terminées.
+Phase B (tests E2E) : 16/16 validés. **Phase C (sécurité) : terminée.** La clé
+`SUPABASE_SERVICE_ROLE_KEY` legacy `eyJ...` a été migrée vers la nouvelle API
+key Supabase `sb_secret_...`, et les clés JWT legacy ont été désactivées via
+"Disable JWT-based API keys". La fuite de la Session 2 est définitivement
+neutralisée.
 
-**Branche `feature/brouillons` — dernier commit : `3cb1db6`**
+**Branche `feature/brouillons` — dernier commit : `3cb1db6`** (inchangé depuis Phase B)
 
-### Commits Session 9 effectués (Phase B — tests E2E)
+### Ce qui a été fait en Phase C (2026-05-15)
 
-| Commit | Description |
-|---|---|
-| `d4520d0` | docs: clôture Session 8 dans le journal (pré-Session 9) |
-| `9e15263` | fix(drafts): duplication brouillon ouvre dans nouvel onglet (cohérence Session 8) |
-| `604ff42` | fix(drafts): préserver clés traçabilité copiedFrom* lors du PUT (régression Session 8) |
-| `9e40fd2` | fix(drafts): retirer mention (indicatif) du total dans aperçu brouillon |
-| `3cb1db6` | fix(drafts): afficher détail des totaux (remise, services, arrondi) sur récap modal et page brouillon |
+1. ✅ Identification : projet utilisait encore les clés Supabase JWT legacy (`eyJ...`)
+2. ✅ Migration vers les nouvelles API keys Supabase :
+   - `SUPABASE_SERVICE_ROLE_KEY` : `eyJ...` → `sb_secret_...`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` : `eyJ...` → `sb_publishable_...`
+3. ✅ Mise à jour Vercel (3 envs : Production, Preview, Development)
+4. ✅ Mise à jour `.env.local`
+5. ✅ Prod redéployée et confirmée fonctionnelle sur nouvelles clés
+6. ✅ Local confirmé fonctionnel sur nouvelles clés
+7. ✅ **"Disable JWT-based API keys" cliqué côté Supabase** → clés legacy mortes
+8. ✅ Smoke test post-désactivation : prod + local OK
 
-### Ce qui a été démontré bout-en-bout en Phase B
+### Effet de bord découvert pendant Phase C
 
-- ✅ CRUD brouillon complet (création, modification, suppression, garde-fou 409 sur transformés)
-- ✅ Les 4 boutons de copie depuis offre/commande créent bien des brouillons via POST direct
-- ✅ Duplication brouillon (actif ET transformé — cas variantes) fonctionnelle
-- ✅ Traçabilité bidirectionnelle complète sur 3 niveaux (offre source → brouillon, brouillon → offre cible, brouillon → brouillon parent)
-- ✅ Aperçu print brouillon avec filigrane, sans signature, sans QR
-- ✅ Lien public bloqué pour les slugs brouillon (sécurité)
-- ✅ Transformation atomique brouillon → offre (testée avec DRA-019 → DEV-2026-058)
-- ✅ Garde-fou modal : bouton désactivé tant que cases non cochées
-- ✅ Filtre "Masquer transformés" + état persistant localStorage
-- ✅ 73 offres existantes accessibles et fonctionnelles (dont DEV-2026-011 avec 7 images d'ambiance lourdes)
+**R1 promue de "Urgente" à "Critique"** : il existe **~50 scripts Node.js**
+à la racine de `C:\Users\ezefi\` (familles `import-factures-*.js`,
+`fix-factures-*.js`, `match-factures-*.js`, `verifier-clients-*.js`,
+`creer-*.js`, `reassigner-*.js`, `audit-*.js`, `diagnostic-*.js`) qui
+contiennent la clé legacy `eyJ...` **hardcodée**. Tous sont désormais
+**cassés** (401 Supabase) depuis la désactivation. **Décision** : laissés
+de côté volontairement (scope creep évité en pleine Phase C). Quand un
+script sera nécessaire, à refactor proprement à ce moment-là avec lecture
+depuis un `.env` (pas de re-hardcoding de la nouvelle clé `sb_secret_...`,
+sinon on reproduit la dette).
 
-### Pour démarrer Phase C, avoir sous la main :
+### Pour démarrer Phase D dans le nouveau chat
 
-- Le présent journal (le coller en début de chat)
-- Accès Supabase Dashboard pour régénération de la `SUPABASE_SERVICE_ROLE_KEY`
-- Accès Vercel pour mise à jour des env vars
-- Le fichier `.env.local` à mettre à jour côté local
+- Coller le présent journal mis à jour
+- Avoir accès au dashboard GitHub du repo
+- Avoir accès Vercel pour suivre le build du Preview Deployment
 - L'URL de la prod : `https://offres.jardin-confort.ch/dashboard`
+- Ne pas oublier : la prod tourne déjà sur la nouvelle clé `sb_secret_...`, donc le merge `feature/brouillons` → `main` n'impacte **que le code**, pas les secrets.
 
-**Risque ÉLEVÉ** — Phase C touche aux secrets prod, Phase D merge vers `main` et déclenche déploiement prod. Rollback prévu via `git revert` (la table `drafts` peut rester en base sans impact).
+**Risque MOYEN** — Phase D merge vers `main` et déclenche déploiement prod.
+Rollback prévu via `git revert` (la table `drafts` peut rester en base sans impact).
 
 ---
 
-## 🎯 Phase C + D à exécuter dans le nouveau chat
-
-### Phase C — Sécurité et préparation déploiement (~20 min)
-
-1. **Régénérer la `SUPABASE_SERVICE_ROLE_KEY`** dans Supabase Dashboard (Settings → API → Reset). Cette clé a fuité dans un chat de debug pendant la Session 2, donc régénération **non-négociable** avant déploiement.
-2. **Mettre à jour la clé dans Vercel** (Settings → Environment Variables) sur les 3 environnements (Production, Preview, Development). Pas de redéploiement encore.
-3. **Mettre à jour la clé dans `.env.local`** côté local + vérifier que `npm run dev` repart sans erreur 401 Supabase.
-4. **Vérifier que la prod actuelle tourne toujours** sur `https://offres.jardin-confort.ch/dashboard` (la nouvelle clé doit être active sur Vercel sans avoir cassé l'app actuelle qui utilise toujours `main`).
-5. **Préparer le message de PR** pour le merge `feature/brouillons` → `main`.
+## 🎯 Phase D à exécuter dans le nouveau chat
 
 ### Phase D — Merge et déploiement (~15 min + smoke test)
 
@@ -139,6 +137,23 @@ Si "Another next dev server is already running" : `Get-Process node | Stop-Proce
 
 **Bonne pratique** : utiliser `Out-File -LiteralPath "..."` au lieu de `>` pour les redirections.
 
+### Piège 6 — UI Supabase changeante : pas de "Reset" individuel sur clés JWT legacy
+
+**Découvert en Session 9 Phase C.** L'UI Supabase 2026 a supprimé le bouton
+"Reset" individuel sur les clés legacy `service_role` et `anon` (le bouton
+dont parlent encore beaucoup de tutos / réponses Stack Overflow). Les deux
+seules options disponibles aujourd'hui pour régénérer une clé legacy fuitée
+sont :
+- **Rotate JWT secret** (Settings → JWT Keys) : invalide simultanément `anon`
+  ET `service_role`. Il faut alors **redéployer en mettant à jour les deux**.
+- **Migrer vers les nouvelles API keys** `sb_publishable_...` / `sb_secret_...`
+  (Settings → API Keys → onglet "Publishable and secret API keys") puis
+  cliquer "Disable JWT-based API keys" dans l'onglet legacy. C'est la voie
+  recommandée par Supabase aujourd'hui.
+
+Les nouvelles clés sont auto-créées par Supabase sur les projets existants
+et coexistent avec les legacy jusqu'à désactivation explicite.
+
 ---
 
 ## 🐛 Problème métier (rappel)
@@ -215,6 +230,7 @@ DRA-019 archivé avec :
 | URL d'édition | Route dynamique `/drafts/[slug]/editer` |
 | Filigrane | SVG inline data-URI, ambre `#f59e0b`, opacité 0.11, rotation -30° |
 | Auto-print | **Aucun** nulle part |
+| Clés Supabase | **Nouvelles API keys** `sb_publishable_...` / `sb_secret_...` (depuis Session 9 Phase C). Plus les anciennes JWT `eyJ...` legacy. |
 
 ---
 
@@ -282,7 +298,52 @@ Pour les détails complets des Sessions 1 à 8, voir versions précédentes du j
 - DRA-017, DRA-019 (transformé en DEV-2026-058), DRA-022, DRA-023 conservés
 - DEV-2026-058 créé (transformation de DRA-019, client "Test Fix Tracabilite", montant 6441.80 CHF)
 
-### Session 9 — Phase C + D
+### Session 9 — Phase C (sécurité) — Terminée le 2026-05-15
+
+**Objectif** : régénérer la `SUPABASE_SERVICE_ROLE_KEY` fuitée en Session 2.
+
+**Situation initiale découverte** : projet utilisait encore les clés Supabase
+**JWT legacy** (`eyJ...`). L'UI Supabase 2026 a supprimé le bouton "Reset"
+individuel sur ces clés. Deux nouvelles options sont proposées par Supabase :
+les "Publishable / Secret API keys" (nouveau système non-JWT, recommandé) et
+la rotation du JWT secret (invalide tout en bloc).
+
+**Stratégie retenue** : migration vers les nouvelles API keys
+(`sb_publishable_...` et `sb_secret_...`) en coexistence avec les legacy,
+puis désactivation des legacy une fois la migration validée.
+
+**Pourquoi cette stratégie** :
+- Coexistence pendant la migration → zéro downtime
+- Validation prod + local avant le clic irréversible
+- Alignement avec la direction du produit Supabase
+- Pas de nouveau format de variable côté code (mêmes noms d'env vars, juste les valeurs changent)
+
+**Étapes effectuées dans l'ordre** :
+1. Identification des clés actuellement utilisées (`eyJ...` legacy en local et en prod)
+2. Récupération des nouvelles clés `sb_secret_...` et `sb_publishable_...` (déjà auto-créées par Supabase)
+3. Mise à jour Vercel : `SUPABASE_SERVICE_ROLE_KEY` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` sur les 3 envs (Production, Preview, Development)
+4. Redéploiement Vercel main → smoke test prod OK
+5. Mise à jour `.env.local` + smoke test local OK
+6. **"Disable JWT-based API keys"** cliqué dans l'onglet legacy de Supabase
+7. Smoke test final post-désactivation : prod + local OK
+
+**Effet de bord majeur découvert** : ~50 scripts ad-hoc à la racine de
+`C:\Users\ezefi\` contiennent la clé legacy `eyJ...` hardcodée (familles
+`import-factures-*`, `fix-factures-*`, `match-factures-*`,
+`verifier-clients-*`, `creer-*`, `reassigner-*`, `audit-*`, `diagnostic-*`).
+**Décision lucide** : ne pas étendre le scope de Phase C. Ces scripts cassent
+au profit de la rotation effective (401 Supabase). À traiter dans un commit
+dédié plus tard quand un script sera réellement nécessaire — avec lecture
+d'un `.env`, **pas de re-hardcoding** de la nouvelle clé.
+
+**Aucun commit git** créé pendant Phase C (rotation = env vars + Supabase
+console, pas de modification du code source).
+
+**Nouvelle dette** :
+- D9 (ajoutée) : créer un `.env.example` versionné dans le repo pour
+  documenter les noms des env vars requises
+
+### Session 9 — Phase D
 _(à exécuter dans un nouveau chat — voir section "Reprise rapide" en haut)_
 
 ---
@@ -302,7 +363,8 @@ _(à exécuter dans un nouveau chat — voir section "Reprise rapide" en haut)_
 | D6 | Code mort `?from_copy=1` + `localStorage["jc-offre-copy"]` dans `DraftFormulaire.tsx` (useEffect ~ligne 1145) et `app/offres/nouveau/page.tsx` | Session 8 | Basse | Ouvert |
 | D7 | Affichage du pourcentage de remise manquant sur aperçu print offre et page brouillon (seul le montant CHF est affiché) — fix appliqué uniquement sur modal de transformation Session 9 | Session 9 | Moyenne | Ouvert |
 | D8 | Fichier parasite `ezefijardin-confort-formulaire` tracké depuis commit `310d262` (chemin Windows mal échappé historique). Inerte. À supprimer dans un commit dédié `chore: cleanup historical garbage` | Pré-chantier (découvert Session 9) | Basse | Ouvert |
-| R1 | Script d'import factures non versionné (local PC uniquement) | Audit Storage | Urgente | Ouvert |
+| D9 | Créer un `.env.example` versionné dans le repo pour documenter les noms des env vars Supabase requises (`SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`) | Session 9 Phase C | Basse | Ouvert |
+| R1 | Script d'import factures non versionné (~50 scripts à `C:\Users\ezefi\` avec clé legacy `eyJ...` hardcodée — **tous cassés depuis désactivation Phase C**). À refactor avec lecture `.env` au moment de réutilisation | Audit Storage + Session 9 Phase C | **Critique** | Ouvert |
 | R2 | Google Drive perso sans backup tiers (10 ans de factures) | Audit Storage | Importante | Ouvert |
 | R3 | Bucket `brand-logos` non régénérable | Audit Storage | Basse | Ouvert |
 
@@ -325,7 +387,7 @@ _(à exécuter dans un nouveau chat — voir section "Reprise rapide" en haut)_
 
 ### Plan de mitigation (À FAIRE APRÈS DÉPLOIEMENT PROD)
 
-- [ ] **R1** : déplacer le script d'import dans le repo, commit sur `main`
+- [ ] **R1** : déplacer le(s) script(s) d'import dans le repo (refactor `.env`), commit sur `main`
 - [ ] **R2** : Google Takeout one-shot sur "Factures Winbiz"
 - [ ] **R3** : backup manuel des logos via dashboard Supabase
 
@@ -335,10 +397,11 @@ _(à exécuter dans un nouveau chat — voir section "Reprise rapide" en haut)_
 
 ---
 
-## 🆘 En cas de problème en cours de Phase C/D
+## 🆘 En cas de problème en cours de Phase D
 
 1. **Le chat plante :** ouvrir un nouveau chat, coller ce journal, indiquer la phase en cours et la dernière étape complétée.
 2. **Un commit casse l'app :** `git revert HEAD` puis push.
 3. **Migration SQL douteuse :** la table `drafts` peut être droppée sans impact (`drop table drafts cascade;`) tant qu'on n'a pas de brouillons transformés en prod.
 4. **Déploiement prod casse :** `git revert <merge-commit>` + push → Vercel redéploie automatiquement l'état antérieur. La nouvelle table `drafts` peut rester vide en base.
-5. **Clé Supabase régénérée mais Vercel pas synchro :** la prod actuelle peut tomber. Vérifier IMMÉDIATEMENT après régénération que la nouvelle clé est sur les 3 envs Vercel et que la prod répond.
+5. **Erreur 401 Supabase quelque part :** la rotation Phase C a tué les clés legacy `eyJ...`. Vérifier que la prod et le local utilisent bien les nouvelles `sb_secret_...` / `sb_publishable_...` (Vercel Env Vars + `.env.local`). Si nécessaire récupérer les nouvelles clés via Supabase Dashboard → Settings → API Keys → onglet "Publishable and secret API keys".
+6. **Un des ~50 scripts à `C:\Users\ezefi\` doit être relancé** : il renverra 401 Supabase (clé legacy désactivée Phase C). Le refactorer alors avec lecture depuis un `.env` (créer `C:\Users\ezefi\.env` avec la nouvelle `SUPABASE_SERVICE_ROLE_KEY=sb_secret_...`, et faire que le script lise `process.env.SUPABASE_SERVICE_ROLE_KEY` via un `require("dotenv").config()`). Ne **pas** re-hardcoder la nouvelle clé.
