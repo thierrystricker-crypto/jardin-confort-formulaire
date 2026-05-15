@@ -405,3 +405,11 @@ _(à exécuter dans un nouveau chat — voir section "Reprise rapide" en haut)_
 4. **Déploiement prod casse :** `git revert <merge-commit>` + push → Vercel redéploie automatiquement l'état antérieur. La nouvelle table `drafts` peut rester vide en base.
 5. **Erreur 401 Supabase quelque part :** la rotation Phase C a tué les clés legacy `eyJ...`. Vérifier que la prod et le local utilisent bien les nouvelles `sb_secret_...` / `sb_publishable_...` (Vercel Env Vars + `.env.local`). Si nécessaire récupérer les nouvelles clés via Supabase Dashboard → Settings → API Keys → onglet "Publishable and secret API keys".
 6. **Un des ~50 scripts à `C:\Users\ezefi\` doit être relancé** : il renverra 401 Supabase (clé legacy désactivée Phase C). Le refactorer alors avec lecture depuis un `.env` (créer `C:\Users\ezefi\.env` avec la nouvelle `SUPABASE_SERVICE_ROLE_KEY=sb_secret_...`, et faire que le script lise `process.env.SUPABASE_SERVICE_ROLE_KEY` via un `require("dotenv").config()`). Ne **pas** re-hardcoder la nouvelle clé.
+
+
+chemin pour comitter le fichier:
+
+cd C:\Users\ezefi\jardin-confort-formulaire
+git add journal-brouillons.md
+git commit -m "docs(journal): cloture Phase C de Session 9 (rotation Supabase key)"
+git push
