@@ -6,47 +6,36 @@
 
 ---
 
-## 🚀 Reprise rapide — Session 7 à démarrer
+## 🚀 Reprise rapide — Session 8 à démarrer
 
-**État au 2026-05-15 :** Sessions 1, 2, 3, 4, 5, 6 terminées. La fonctionnalité
-"brouillon → offre" est opérationnelle bout-en-bout ET intégrée au dashboard :
+**État au 2026-05-15 :** Sessions 1, 2, 3, 4, 5, 6, 7 terminées. La fonctionnalité
+"brouillon → offre" est complète bout-en-bout, intégrée au dashboard, et le
+brouillon a maintenant son propre aperçu print avec filigrane :
 - Création/édition de brouillons (`/drafts/nouveau`, `/drafts/[slug]/editer`)
 - Vue lecture-seule dashboard (`/dashboard/draft/[slug]`)
 - Duplication en nouveau brouillon (depuis tout brouillon, transformé ou non)
-- Transformation atomique brouillon → offre via modal (RPC SQL + route +
-  composant `TransformerModal`)
-- **Section "Brouillons" sur le dashboard principal** avec 5ème KpiCard,
-  filtre commercial, masquer transformés, lien vers offre cible
+- Transformation atomique brouillon → offre via modal
+- Section "Brouillons" sur le dashboard principal
+- **Aperçu print brouillon dédié** : page `/print/draft/[slug]` avec filigrane
+  "BROUILLON — DRA-XXX" en diagonale, sans bloc signature, sans lien validation,
+  sans QR code. Bandeau écran-only "Document non contractuel" masqué à l'impression.
 
-**Prochaine session : Session 7 — Aperçu print filigrane BROUILLON**
-Créer une page print dédiée pour les brouillons : filigrane "BROUILLON" en
-diagonale, bloc signature masqué, pas de lien validation. Aujourd'hui le
-bouton "👁 Aperçu" pointe vers `/print/offre/[slug]` qui charge depuis la
-table `offres` et affiche "Aucun article" pour un brouillon.
+**Prochaine session : Session 8 — Boutons de copie depuis une offre**
+Depuis le dashboard d'une offre (`/dashboard/[offre-slug]`), ajouter deux
+boutons côte à côte :
+1. "📋 Copier en nouveau brouillon" (nouveau) → crée un DRA-XXX éditable
+2. "📄 Copier en nouvelle offre" (existant, à dépoussiérer du localStorage hérité)
 
-**À faire en Session 7 :**
-1. Créer `app/drafts/[slug]/print/page.tsx` (server-side ou client-side
-   selon ce que fait `/print/offre/[slug]` actuel)
-2. Charger les données via `GET /api/drafts/[slug]` (Session 2)
-3. Adapter le composant d'aperçu pour masquer signature + lien validation
-   quand `isDraft={true}`
-4. Ajouter filigrane "BROUILLON" en diagonale (CSS pseudo-element ou SVG
-   superposé)
-5. Mettre à jour le bouton "👁 Aperçu" dans `/dashboard/draft/[slug]/page.tsx`
-   pour pointer vers la nouvelle route
+**Avant de démarrer Session 8, avoir sous la main :**
+- `app/dashboard/[slug]/page.tsx` (page dashboard offre, où sont les boutons actuels)
+- Le code actuel du bouton "Copier en nouvelle offre" (probablement via
+  localStorage + `?from_copy=1`)
+- L'API `POST /api/drafts` (Session 2, déjà en place)
+- L'API `POST /api/offres/save` (à étudier pour comprendre le payload offre)
+- Le présent journal pour les notes Session 8
 
-**Avant de démarrer la Session 7, avoir sous la main :**
-- `app/print/offre/[slug]/page.tsx` (la page print actuelle des offres — à
-  étudier pour comprendre la structure)
-- Tous composants partagés utilisés par le print (template, bloc signature,
-  bloc client, bloc lignes, etc.)
-- Le composant filigrane DRAFT actuel si tu en utilises déjà un pour les
-  aperçus offres non signées
-- Le présent journal pour les notes Session 7
-
-**Risque Moyen** — manipulation de composants print partagés avec les offres
-en prod. Bien découpler côté brouillon (prop `isDraft`) pour ne pas
-introduire de régression sur les aperçus offres existants.
+**Risque Faible** — ajout additif d'un bouton + nouvelle route fetch, sans
+toucher au code critique de transformation/save offre.
 
 ---
 
@@ -72,6 +61,38 @@ npm run dev
 # → http://localhost:3000
 ```
 Si "Another next dev server is already running" : `Get-Process node | Stop-Process -Force` puis relancer.
+
+---
+
+## ⚠️ Piège PowerShell transverse — Les crochets `[ ]` dans les chemins
+
+**Tous les Cmdlets PowerShell** qui acceptent un paramètre `-Path` interprètent
+les crochets `[ ]` comme un **wildcard de classe de caractères**. Sans
+`-LiteralPath`, le chemin `app\drafts\[slug]\page.tsx` est lu comme
+"n'importe quel caractère parmi s, l, u, g", ce qui retourne silencieusement
+zéro résultat (ou `False` pour `Test-Path`) au lieu d'une erreur explicite.
+
+**Cmdlets concernés :** `Test-Path`, `Get-Content`, `Select-String`, `Copy-Item`,
+`Remove-Item`, `Move-Item`, `Get-ChildItem`, `New-Item` (pour les chemins existants), etc.
+
+**Toujours utiliser `-LiteralPath`** dans le chantier brouillons :
+
+```powershell
+# ❌ Faux-négatifs silencieux (le fichier existe pourtant !)
+Test-Path "app\dashboard\draft\[slug]\page.tsx"           # → False
+Select-String -Path "app\drafts\[slug]\editer\..." -Pattern "..."  # → vide
+
+# ✅ Correct
+Test-Path -LiteralPath "app\dashboard\draft\[slug]\page.tsx"      # → True
+Get-Content -LiteralPath "app\dashboard\draft\[slug]\page.tsx" | Select-String -Pattern "..."
+
+# ✅ Pour les noms simples sans crochets, pas de souci
+Select-String -Path "app\drafts\_components\DraftFormulaire.tsx" -Pattern "..."
+```
+
+**Coût en cas d'oubli :** environ 30 minutes de faux diagnostic en Session 7
+parce qu'on cherchait à comprendre pourquoi les modifications "n'étaient pas
+prises" alors qu'elles l'étaient.
 
 ---
 
@@ -218,6 +239,9 @@ Les deux workflows coexistent — le commercial choisit selon le contexte.
 | Architecture pages drafts | Composant partagé `_components/DraftFormulaire.tsx` réutilisé par `/drafts/nouveau` et `/drafts/[slug]/editer` |
 | Sauvegarde brouillon | Manuelle + auto-save 2 min (si nom+email+commercial remplis) |
 | URL d'édition | Route dynamique `/drafts/[slug]/editer` (pas de query param) |
+| Architecture aperçu brouillon | **Page autonome dupliquée** `/print/draft/[slug]/page.tsx` (pas de prop `isDraft` sur la page offre) — Session 7 |
+| Filigrane | SVG inline en data-URI, `background-image: repeat` ambre #f59e0b opacité 0.11, double ligne "BROUILLON — DRA-XXX" + "Document non contractuel" — Session 7 |
+| Auto-print | **Aucun nulle part** (brouillon ET offre) — Session 7 |
 
 ---
 
@@ -276,7 +300,7 @@ create sequence drafts_numero_seq start 1;
 | 4 | Page `/dashboard/draft/[slug]` (vue brouillon + bouton "Modifier") | Moyen | ✅ Terminée | 2026-05-14 | J4VKQq9yD |
 | 5 | Modal "Transformer en offre" + route `/api/drafts/[slug]/transformer` | ~~Élevé~~ Moyen* | ✅ Terminée | 2026-05-14 | c831bdf |
 | 6 | Section "Brouillons" sur dashboard + filtre archivés | Faible | ✅ Terminée | 2026-05-15 | (push après commit) |
-| 7 | Aperçu print : filigrane BROUILLON, sans signature, sans lien validation | Moyen | ☐ À faire | | |
+| 7 | Aperçu print : filigrane BROUILLON, sans signature, sans lien validation | Moyen | ✅ Terminée | 2026-05-15 | (push après commit) |
 | 8 | Boutons "Copier en brouillon" + "Copier en offre" depuis dashboard offre | Faible | ☐ À faire | | |
 | 9 | Tests end-to-end + merge `feature/brouillons` → `main` + déploiement prod | **Élevé** | ☐ À faire | | |
 
@@ -447,25 +471,16 @@ fonctionne, les brouillons transformés sont retrouvables en décochant le filtr
 
 **Objectif :** une vue d'aperçu pour brouillons, distincte de celle des offres.
 
-**Approche :** réutiliser le composant d'aperçu existant en lui passant une
-prop `isDraft: boolean` qui :
-- Ajoute le filigrane "BROUILLON" en diagonale sur chaque page
-- Masque le bloc signature
-- Masque le lien de validation
-- Affiche éventuellement un bandeau "Document non contractuel"
+**Approche retenue :** page autonome dupliquée (pas de prop `isDraft` injectée
+dans la page offre), pour ne pas alourdir le code chaud diffusé aux clients et
+permettre une évolution indépendante du template brouillon.
 
-**Fichiers à fournir au début de la session :**
-- Le composant d'aperçu actuel (probablement `app/print/offre/[slug]/page.tsx` ou similaire)
-- Tous composants partagés utilisés par le print (template, bloc signature, bloc client, bloc lignes)
-- Le composant filigrane DRAFT actuel utilisé pour les aperçus offres non signées
+**Filigrane :** SVG inline en data-URI, répété via `background-image: repeat`.
+Couleur ambre `#f59e0b`, opacité 0.11, rotation -30°, double ligne
+"BROUILLON — DRA-XXX" + "Document non contractuel".
 
-**Important pour Session 7 :** actuellement le bouton "👁 Aperçu" du formulaire
-brouillon et de la page `/dashboard/draft/[slug]` pointent vers `/print/offre/[slug]`
-(stub temporaire — pas de filigrane et "Aucun article" affiché car la page charge
-depuis la table `offres`). À remplacer par `/drafts/[slug]/print` avec template dédié.
-
-**Critère de succès :** ouvrir `/drafts/DRA-001/print` affiche un PDF-like avec
-filigrane permanent, sans bloc signature.
+**Critère de succès :** ouvrir `/print/draft/DRA-001-XXXX` affiche un PDF-like
+avec filigrane permanent, sans bloc signature.
 
 ---
 
@@ -636,6 +651,8 @@ La table `drafts` peut rester en base (vide, sans impact).
 **Pièges techniques rencontrés :**
 - PowerShell + crochets `[ ]` : `Remove-Item -Recurse -Force app\drafts\[slug]\editer` échoue
   silencieusement. Solution : `-LiteralPath "app\drafts\[slug]\editer"`.
+  **Note Session 7 :** ce piège s'étend à **toutes** les Cmdlets avec `-Path` (Test-Path,
+  Get-Content, Select-String, etc.). Voir section "Piège PowerShell transverse" en haut.
 - Double présence du segment "drafts" : `app/api/drafts/` ET `app/drafts/`. Risque de confusion.
 - Next.js 16 + params async : `params` typé `Promise<{ slug: string }>` et awaité.
 
@@ -755,23 +772,117 @@ La table `drafts` peut rester en base (vide, sans impact).
 - ✅ Lignes actives avec bouton ✏️ Modifier qui mène à `/drafts/[slug]/editer`
 - ✅ Clic ligne entière ouvre `/dashboard/draft/[slug]`
 
-**Notes pour Session 7 (aperçu print filigrane BROUILLON) :**
-- Toujours pas de page `/drafts/[slug]/print` dédiée. Le bouton "👁 Aperçu" sur
-  `/dashboard/draft/[slug]` pointe encore vers `/print/offre/[slug]` qui charge depuis
-  la table `offres` et affiche "Aucun article" pour un brouillon.
-- À faire en Session 7 :
-  1. Créer `app/drafts/[slug]/print/page.tsx` (server-side, charge depuis
-     `/api/drafts/[slug]` et passe les données au composant d'aperçu existant avec
-     une prop `isDraft={true}`)
-  2. Adapter le composant d'aperçu pour masquer signature + lien validation quand `isDraft`
-  3. Ajouter filigrane "BROUILLON" en diagonale via CSS pseudo-element ou SVG superposé
-  4. Mettre à jour le bouton "👁 Aperçu" dans `/dashboard/draft/[slug]/page.tsx` pour
-     pointer vers la nouvelle route
-- Risque Moyen (manipulation de composants print partagés avec offres en prod).
-- Bien découpler côté brouillon (prop `isDraft`) pour ne pas introduire de régression
-  sur les aperçus offres existants.
+### Session 7 — Terminée le 2026-05-15
 
-**Architecture des fichiers brouillons après Session 6 :**
+**Décisions actées en début de session :**
+1. **Architecture autonome** : page brouillon dupliquée depuis page offre, pas
+   de prop `isDraft` injectée dans le composant existant. Raison : éviter
+   d'alourdir le code chaud de l'aperçu offre (utilisé par tous les clients en
+   prod) et permettre une évolution indépendante du template brouillon.
+2. **Filigrane** : SVG inline en data-URI, répété via `background-image: repeat`
+   sur `.doc-wrap`. Couleur ambre #f59e0b, opacité 0.11, rotation -30°, double
+   ligne "BROUILLON — DRA-XXX" + "Document non contractuel". Robuste impression
+   multi-pages grâce au `print-color-adjust: exact` déjà présent dans le CSS.
+3. **Pas d'auto-print** nulle part (cohérent avec l'objectif de décourager
+   l'impression d'un document non finalisé). Bouton "🖨 Imprimer quand même"
+   visible à l'écran.
+4. **Bandeau écran-only ambre** en haut "Aperçu d'un brouillon — Document non
+   contractuel · Ne pas imprimer pour diffusion" + bouton "← Retour au
+   brouillon" pointant vers `/dashboard/draft/[slug]`. Masqué à l'impression
+   via `@media print`.
+
+**Architecture implémentée :**
+- **Nouvelle page** `app/print/draft/[slug]/page.tsx` (~670 lignes)
+  - Copie de `/print/offre/[slug]/page.tsx` puis adaptation
+  - Fetch via `/api/drafts/[slug]` (route Session 2), parsing `json.draft.data`
+  - Helper `buildWatermarkDataUri(numero)` qui génère le SVG filigrane avec
+    `encodeURIComponent` (sécurise les caractères spéciaux du numéro)
+  - Type de doc affiché : forcé à "Brouillon", libellé "N° de brouillon"
+  - Mention "TOTAL TTC (indicatif)" au lieu de "TOTAL TTC"
+  - Footer thanks remplacé par "📝 Document préliminaire — cette version est un
+    brouillon non contractuel" (couleur ambre)
+  - Footer terms réécrit pour brouillon ("L'offre définitive fera seule foi")
+- **Suppressions par rapport à la page offre :**
+  - Bloc signature (`doc-sign-block` "Bon pour accord")
+  - Bloc lien validation + QR code (cartouche bleu)
+  - Banner vert "Stock en temps réel"
+  - Badge stock par ligne (5 cas : à vérifier / sur commande / partiel /
+    complet / pas de stock dispo) — ~70 lignes JSX supprimées
+  - `useSearchParams` et paramètre `nostock` (inutile pour un brouillon)
+- **Dashboard draft** (`app/dashboard/draft/[slug]/page.tsx`) :
+  - `urlPrintStub` → `urlPrint = /print/draft/${draft.slug}`
+  - Retrait du badge "⚠ Sans filigrane (Session 7)"
+  - Retrait du bandeau jaune "⚠ Aperçu incomplet"
+  - Mise à jour title du bouton "👁 Aperçu"
+- **Formulaire draft** (`app/drafts/_components/DraftFormulaire.tsx`) :
+  - Fonction `openPrint()` refondue (lignes 797-813 anciennement, 797-825 maintenant)
+  - Suppression du mécanisme `localStorage` (devenu inutile maintenant que la
+    page print charge depuis la base via `/api/drafts/[slug]`)
+  - `/print/offre` (cassé, sans slug !) → `/print/draft/${slug}` (fonctionnel)
+  - Récupération du slug post-save via parsing `window.location.pathname`
+    (closure React ne voyait pas la nouvelle valeur de `currentSlug` après
+    `setCurrentSlug`)
+
+**Tests validés en local :**
+- ✅ Aperçu depuis `/dashboard/draft/[slug]` (bouton "👁 Aperçu" + iframe à droite)
+- ✅ Aperçu depuis `/drafts/[slug]/editer` (bouton dans le formulaire)
+- ✅ Aperçu depuis brouillon vierge non persisté → save préalable déclenché
+- ✅ Filigrane visible répété en diagonale sur toutes les pages à l'impression
+- ✅ Bandeau écran et bouton imprimer correctement masqués à l'impression
+- ✅ Articles affichés (plus de "Aucun article" — bug stub corrigé)
+- ✅ Mention "Document préliminaire" en bas de page
+- ✅ Brouillon transformé : aperçu accessible (lecture seule, fonctionne)
+
+**Pièges techniques retenus :**
+- **Closure React et `currentSlug` après `setCurrentSlug`** : la fonction
+  `openPrint()` capture la valeur de `currentSlug` au render, donc même après
+  un `await saveDraft()` qui met à jour le state, la closure voit toujours
+  l'ancienne valeur. Solution adoptée : parser l'URL post-save (fallback simple,
+  pas de refactor de la signature `saveDraft` qui retournait `Promise<boolean>`).
+- **Filigrane SVG en data-URI** : `encodeURIComponent` est obligatoire pour les
+  caractères `<>&"'` et le numéro injecté est `replace(/[<>&"']/g, "")` en
+  garde-fou supplémentaire (XSS prevention sur un input qui vient de la base).
+- **`print-color-adjust: exact`** (hérité de `body`) est essentiel pour que le
+  filigrane sorte à l'imprimante (Chrome supprime les backgrounds par défaut).
+- **Piège PowerShell étendu** : le bug des crochets `[ ]` qu'on avait noté en
+  Session 3 pour `Remove-Item` s'applique à **toutes les Cmdlets** qui acceptent
+  un paramètre `-Path` (Test-Path, Get-Content, Select-String, Copy-Item, etc.).
+  Sans `-LiteralPath`, PowerShell interprète `[slug]` comme un wildcard de
+  classe de caractères ("n'importe quel caractère parmi s, l, u, g"), ce qui
+  retourne silencieusement zéro résultat (ou `False` pour Test-Path) au lieu
+  d'une erreur explicite. Cause de ~30 min de faux diagnostic en Session 7
+  parce qu'on cherchait à comprendre pourquoi les modifications "n'étaient pas
+  prises" alors qu'elles l'étaient. Voir section "Piège PowerShell transverse"
+  en haut de ce journal.
+
+**Modifications fichier :**
+- `app/print/draft/[slug]/page.tsx` : nouveau (~670 lignes)
+- `app/dashboard/draft/[slug]/page.tsx` : ~20 lignes modifiées (3 zones)
+- `app/drafts/_components/DraftFormulaire.tsx` : ~17 lignes modifiées (fonction
+  `openPrint` + commentaires)
+
+**Bug pré-existant noté (HORS périmètre Session 7) :**
+- Pendant la création/modification d'une **offre** (pas brouillon), l'aperçu
+  print ne montre PAS les badges stock des articles. Ce bug existait déjà
+  avant la Session 7. Hypothèse : le composant aperçu lit uniquement depuis
+  l'API qui n'est pas appelée tant que pas sauvegardé. Le `data.lines[].stock`
+  n'est probablement pas hydraté côté front pendant la saisie.
+- **À traiter dans un chantier séparé "bugs aperçu offre"** une fois le chantier
+  brouillons clos. Ne concerne pas les brouillons (qui n'affichent volontairement
+  pas le stock — voir décision Session 7).
+
+**Notes pour Session 8 (boutons de copie depuis une offre) :**
+- Depuis le dashboard d'une offre, ajouter "📋 Copier en nouveau brouillon" à
+  côté de "📄 Copier en nouvelle offre" (existant)
+- Le bouton "brouillon" appelle `POST /api/drafts` avec le payload de l'offre
+  + ajouter `data.copiedFromOffreSlug = <slug offre>` pour traçabilité
+- Le bouton "offre" existant utilise probablement encore le mécanisme
+  `localStorage` + `?from_copy=1` hérité — bon moment pour le refactorer en
+  appel direct `POST /api/offres/save`
+- Régression à éviter : les `ambianceImages` doivent être copiées dans les deux
+  cas (bug pré-chantier connu)
+
+**Architecture des fichiers brouillons après Session 7 :**
 ```
 app/
 ├── api/drafts/
@@ -780,14 +891,17 @@ app/
 │   └── [slug]/transformer/route.ts         # POST transformation        ← Session 5
 ├── drafts/
 │   ├── _components/
-│   │   └── DraftFormulaire.tsx             # Composant partagé          ← Session 3
+│   │   └── DraftFormulaire.tsx             # Composant partagé + bouton aperçu ← Sessions 3, 7
 │   ├── nouveau/page.tsx                    # Mode création              ← Session 3
 │   └── [slug]/editer/page.tsx              # Mode édition               ← Session 3
+├── print/
+│   ├── offre/[slug]/page.tsx               # Aperçu OFFRE (inchangé)    ← prod
+│   └── draft/[slug]/page.tsx               # Aperçu BROUILLON           ← Session 7 ★
 ├── dashboard/
 │   ├── page.tsx                            # + section brouillons       ← Session 6
 │   └── draft/
 │       └── [slug]/
-│           ├── page.tsx                    # Vue + bouton transformer   ← Sessions 4+5
+│           ├── page.tsx                    # Vue + bouton aperçu        ← Sessions 4, 5, 7
 │           └── TransformerModal.tsx        # Modal de confirmation      ← Session 5
 ```
 
@@ -795,9 +909,6 @@ docs/sql/
 ├── 001-create-drafts.sql                   # Table drafts                ← Session 1
 ├── 002-rpc-next-dra-numero.sql             # RPC séquence DRA            ← Session 2
 └── 003-rpc-transformer-draft.sql           # RPC transformation atomique ← Session 5
-
-### Session 7
-_(à remplir après réalisation)_
 
 ### Session 8
 _(à remplir après réalisation)_
@@ -820,6 +931,24 @@ _(à remplir après réalisation)_
 4. **Conflits sur `main` :** la branche `feature/brouillons` reste isolée
    jusqu'à la session 9. Tant qu'on n'a pas mergé, on peut tout abandonner sans
    risque pour la prod.
+
+---
+
+## 🐛 Dette technique identifiée pendant le chantier (HORS périmètre)
+
+À traiter **après** la fin du chantier brouillons (post-Session 9). Aucun n'est
+bloquant pour la livraison de la feature brouillons elle-même.
+
+| # | Sujet | Origine | Priorité |
+|---|---|---|---|
+| D1 | `client_numero_client` reste NULL sur les offres créées par transformation | Session 5 (alignement avec comportement actuel) | Basse |
+| D2 | Mécanisme de création de fiche `clients` non reproduit côté transformation | Session 5 | Moyenne |
+| D3 | Affichage "Type cible" cosmétique à nettoyer dans `app/dashboard/draft/[slug]/page.tsx` | Session 5 | Basse |
+| D4 | `save/route.ts` utilise des URLs absolues avec fallback prod (à harmoniser avec relatif) | Session 5 | Moyenne |
+| D5 | **Aperçu offre pendant création/modification n'affiche pas les badges stock** (data.lines.stock pas hydraté côté front avant save) | Session 7 (bug pré-chantier confirmé) | Moyenne |
+| R1 | Script d'import factures non versionné (local PC uniquement) | Audit Storage avant chantier | Urgente |
+| R2 | Google Drive perso sans backup tiers (10 ans de factures) | Audit Storage avant chantier | Importante |
+| R3 | Bucket `brand-logos` non régénérable | Audit Storage avant chantier | Basse |
 
 ---
 
