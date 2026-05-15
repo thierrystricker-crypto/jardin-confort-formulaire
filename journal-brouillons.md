@@ -47,6 +47,85 @@ hors journal. À traiter dans des sessions dédiées.**
 
 ---
 
+## 🔧 Post-S9 — Fix stock lignes à la volée (PR #2, 2026-05-16)
+
+**Bug en prod découvert après merge S9** : sur l'offre `dev-2026-055-uczkq`
+(et toute offre/brouillon copié depuis elle), TOUTES les lignes affichaient
+"⚠ Stock à vérifier" sur la page client, même les lignes Shopify locked.
+
+### Cause racine
+
+Dans `app/api/offres/[slug]/route.ts`, fonction `refreshStock()`, le filtre
+des SKUs incluait toutes les lignes avec un SKU non-vide — **y compris les
+lignes "à la volée" (custom)**. Une seule ligne custom avec un SKU contenant
+des espaces (ex : `350 01 221 504`) générait une query GraphQL invalide
+côté Shopify (`sku:350 01 221 504` interprété comme `sku:350` + termes
+parasites) → réponse vide ou erreur → toutes les lignes Shopify locked
+tombaient sur le filet "⚠ Stock à vérifier" de la Session 14/05.
+
+Bug pré-existant indépendant du chantier brouillons, mais révélé par la
+combinaison "copie d'offre → brouillon → transformation → offre" qui a
+multiplié les cas où des lignes custom à syntaxe libre se mélangeaient
+avec des lignes Shopify dans le même `data.lines`.
+
+### Bug futur identifié au passage
+
+Dans `app/api/stock-movements/process/route.ts`, le même problème existe
+côté **écriture** : à la conversion offre → commande, le mécanisme tente
+de décrémenter Shopify pour les lignes à la volée → Shopify ne trouve pas
+le SKU → mouvement `failed` + notification parasite. **Volontairement NON
+traité dans cette PR** car il a une dimension produit (le user veut garder
+la visibilité métier "quelles lignes sont synchronisées vs non"). Réservé
+à une PR séparée avec un statut dédié `skipped_not_shopify` (Option C).
+
+### Architecture livrée
+
+3 commits sur la branche `fix/stock-shopify-lignes-volee`, mergés via PR #2
+(merge commit **`6aeb5ca`**) :
+
+1. **`14ae17e`** — Helper `isShopifyLine()` dans `lib/jc-print-types.ts`
+   Source unique de vérité pour distinguer "ligne Shopify catalogue" (locked
+   + sku) vs "ligne à la volée" (custom, comment, media). Fallback rétroactif
+   via `id.startsWith("shopify-")` pour les offres pré-Session 14/05.
+
+2. **`428b8fe`** — Filtrage `refreshStock` avec `isShopifyLine`
+   `app/api/offres/[slug]/route.ts` ne consulte plus Shopify pour les lignes
+   à la volée. Leur stock manuel (ou `null`) est conservé tel quel.
+
+3. **`c8f5524`** — Échappement SKUs dans query GraphQL
+   Ceinture-bretelles : les SKUs sont entourés de guillemets dans la query.
+   Couvre le cas futur où un fournisseur Shopify introduirait un SKU à
+   espaces côté catalogue.
+
+### Validation
+
+- ✅ Preview Vercel testée sur `dev-2026-055-uczkq` → stocks affichés
+  correctement (au lieu de "Stock à vérifier" partout)
+- ✅ Merge sur main effectué, déploiement prod auto-Vercel OK
+- ✅ Smoke test prod sur même URL → stocks affichés en prod
+
+### Pièges techniques retenus
+
+- **Pager `git log`** : sous PowerShell, `git log` lance le pager `less` qui
+  bloque le terminal sur `(END)`. Sortie : appuyer sur `q`. Pour éviter :
+  utiliser `git --no-pager log`.
+- **`git diff` pager** : même piège, même remède (`git --no-pager diff`).
+- **Scripts PowerShell avec `exit 1`** : un `exit 1` dans un script lancé
+  via copier-coller dans le terminal VS Code **ferme tout le terminal**.
+  Préférer la modification manuelle via Ctrl+F / Ctrl+V dans VS Code pour
+  les modifs ciblées de quelques lignes.
+- **Format de prompt Claude pour les modifs ciblées** : `cherche: ...
+  remplace par: ...` (par blocs courts copiables) plutôt que des scripts
+  PowerShell longs qui peuvent crasher le terminal.
+
+### Pour la suite
+
+PR #3 prévue : statut `skipped_not_shopify` dans `stock_movements` pour
+traiter le bug futur de la conversion sans perdre la visibilité métier.
+Voir dette technique D10 ci-dessous.
+
+---
+
 ## 🎯 Contexte du projet
 
 **Projet :** `jardin-confort-formulaire`
@@ -358,6 +437,8 @@ disponible localement et sur l'origin pendant ~1-2 semaines par précaution.
 | D7 | Affichage du pourcentage de remise manquant sur aperçu print offre et page brouillon (seul le montant CHF est affiché) — fix appliqué uniquement sur modal de transformation Session 9 | Session 9 | Moyenne | Ouvert |
 | D8 | Fichier parasite `ezefijardin-confort-formulaire` tracké depuis commit `310d262` (chemin Windows mal échappé historique). Inerte. À supprimer dans un commit dédié `chore: cleanup historical garbage` | Pré-chantier (découvert Session 9) | Basse | Ouvert |
 | D9 | Créer un `.env.example` versionné dans le repo pour documenter les noms des env vars Supabase requises (`SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`) | Session 9 Phase C | Basse | Ouvert |
+| D5b | Aperçu offre en création/modification n'affiche pas badges stock | Session 7 | — | ✅ **Résolu post-S9 PR #2** (filtrage `refreshStock` sur lignes Shopify uniquement) |
+| D10 | Décrémentation Shopify à la conversion (`stock-movements/process`) inclut les lignes à la volée → mouvements `failed` parasites + notification "Sortie stock partielle" injustifiée. À traiter avec statut dédié `skipped_not_shopify` (Option C) pour préserver visibilité métier | Post-S9 PR #2 | Moyenne | Ouvert |
 | R1 | Script d'import factures non versionné (~50 scripts à `C:\Users\ezefi\` avec clé legacy `eyJ...` hardcodée — **tous cassés depuis désactivation Phase C**). À refactor avec lecture `.env` au moment de réutilisation | Audit Storage + Session 9 Phase C | **Critique** | Ouvert |
 | R2 | Google Drive perso sans backup tiers (10 ans de factures) | Audit Storage | Importante | Ouvert |
 | R3 | Bucket `brand-logos` non régénérable | Audit Storage | Basse | Ouvert |
