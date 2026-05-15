@@ -591,7 +591,7 @@ export default function PrintDraftSlug({ params }: { params: Promise<{ slug: str
                   </>
                 )}
                 <tr className="pt-total">
-                  <td className="pt-total-label">TOTAL {isPrivateTTC ? "TTC" : "HT + TVA"} (indicatif)</td>
+                  <td className="pt-total-label">TOTAL {isPrivateTTC ? "TTC" : "HT + TVA"}</td>
                   <td className="pt-total-value">{formatMoney(finalTotal)}</td>
                 </tr>
               </tbody>
