@@ -172,3 +172,33 @@ export function computeTotals(data: PrintData) {
     finalTotal,
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper : distinguer les lignes Shopify (catalogue) des lignes à la volée
+// ─────────────────────────────────────────────────────────────────────────────
+// Une ligne est considérée comme une ligne Shopify quand elle reflète un
+// produit du catalogue Jardin-Confort.ch dont le stock/prix sont gérés par
+// Shopify. Concrètement :
+//   - flag explicite shopifyLocked === true (lignes créées via le picker
+//     Shopify depuis Session 14/05/2026)
+//   - fallback rétroactif via id préfixé "shopify-" (lignes créées avant
+//     l'ajout du flag, garanties Shopify d'origine)
+//
+// Toute autre ligne (custom à la volée, comment, media, logo) est par
+// définition hors-Shopify et NE DOIT PAS être envoyée à l'API Shopify :
+//   - en lecture  : refresh stock côté offre (refreshStock)
+//   - en écriture : décrémentation stock à la conversion en commande
+//                   (stock-movements/process)
+//
+// Cet helper est la source unique de vérité pour cette distinction.
+// ─────────────────────────────────────────────────────────────────────────────
+export function isShopifyLine(line: {
+  type?: string;
+  sku?: string;
+  shopifyLocked?: boolean;
+  id?: string;
+}): boolean {
+  if (line.type === "comment" || line.type === "media") return false;
+  if (!line.sku || line.sku.trim().length === 0) return false;
+  return line.shopifyLocked === true || (typeof line.id === "string" && line.id.startsWith("shopify-"));
+}
