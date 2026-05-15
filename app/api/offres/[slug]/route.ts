@@ -59,7 +59,11 @@ async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: u
   if (!adminToken) return lines; // Pas de token → stock inchangé
 
   try {
-    const query = skus.map((s) => `sku:${s}`).join(" OR ");
+    // Échappement : SKUs entre guillemets pour gérer ceux qui contiennent des espaces
+    // ou d'autres caractères spéciaux (rare mais possible côté fournisseur).
+    // Sans ça, `sku:123 456 789` serait interprété par Shopify comme `sku:123` suivi
+    // de termes parasites → query invalide ou résultat erroné.
+    const query = skus.map((s) => `sku:"${s.replace(/"/g, '\\"')}"`).join(" OR ");
     const gql = `
       query($query: String!) {
         productVariants(first: 50, query: $query) {
