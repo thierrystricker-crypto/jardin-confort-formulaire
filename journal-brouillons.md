@@ -6,36 +6,38 @@
 
 ---
 
-## 🚀 Reprise rapide — Session 8 à démarrer
+## 🚀 Reprise rapide — Session 9 à démarrer
 
-**État au 2026-05-15 :** Sessions 1, 2, 3, 4, 5, 6, 7 terminées. La fonctionnalité
-"brouillon → offre" est complète bout-en-bout, intégrée au dashboard, et le
-brouillon a maintenant son propre aperçu print avec filigrane :
+**État au 2026-05-15 :** Sessions 1, 2, 3, 4, 5, 6, 7, 8 terminées. La
+fonctionnalité brouillons est **complète bout-en-bout**. Il ne reste que les
+tests E2E et le déploiement prod (Session 9).
+
+**Récap fonctionnel :**
 - Création/édition de brouillons (`/drafts/nouveau`, `/drafts/[slug]/editer`)
 - Vue lecture-seule dashboard (`/dashboard/draft/[slug]`)
-- Duplication en nouveau brouillon (depuis tout brouillon, transformé ou non)
+- Duplication brouillon → brouillon (depuis tout brouillon, transformé ou non)
 - Transformation atomique brouillon → offre via modal
 - Section "Brouillons" sur le dashboard principal
-- **Aperçu print brouillon dédié** : page `/print/draft/[slug]` avec filigrane
-  "BROUILLON — DRA-XXX" en diagonale, sans bloc signature, sans lien validation,
-  sans QR code. Bandeau écran-only "Document non contractuel" masqué à l'impression.
+- Aperçu print brouillon dédié avec filigrane "BROUILLON — DRA-XXX"
+- **Session 8** : tous les boutons "Nouvelle offre" / "Copier offre" du
+  dashboard offre+commande sont devenus des boutons "Nouveau brouillon" /
+  "Copier en brouillon". Plus aucun bouton dans l'app ne crée directement une
+  offre — toute création passe par un brouillon, l'offre n'existe que via
+  transformation.
+- Traçabilité bidirectionnelle : `data.fromDraftSlug` (offre → brouillon
+  source), `transformed_into_offre_slug` (brouillon → offre cible),
+  `data.copiedFromOffreSlug` + `data.copiedFromDraftSlug` (lignée de copies).
 
-**Prochaine session : Session 8 — Boutons de copie depuis une offre**
-Depuis le dashboard d'une offre (`/dashboard/[offre-slug]`), ajouter deux
-boutons côte à côte :
-1. "📋 Copier en nouveau brouillon" (nouveau) → crée un DRA-XXX éditable
-2. "📄 Copier en nouvelle offre" (existant, à dépoussiérer du localStorage hérité)
+**Prochaine session : Session 9 — Tests E2E + déploiement prod**
 
-**Avant de démarrer Session 8, avoir sous la main :**
-- `app/dashboard/[slug]/page.tsx` (page dashboard offre, où sont les boutons actuels)
-- Le code actuel du bouton "Copier en nouvelle offre" (probablement via
-  localStorage + `?from_copy=1`)
-- L'API `POST /api/drafts` (Session 2, déjà en place)
-- L'API `POST /api/offres/save` (à étudier pour comprendre le payload offre)
-- Le présent journal pour les notes Session 8
+**Avant de démarrer Session 9, avoir sous la main :**
+- Le présent journal pour la checklist des tests E2E (section Session 9)
+- Accès Supabase Dashboard pour la régénération de la `SUPABASE_SERVICE_ROLE_KEY`
+- Accès Vercel pour mise à jour des env vars
+- Le présent journal pour les notes Session 9
 
-**Risque Faible** — ajout additif d'un bouton + nouvelle route fetch, sans
-toucher au code critique de transformation/save offre.
+**Risque ÉLEVÉ** — merge vers `main` + déploiement prod. Rollback prévu via
+`git revert` (la table `drafts` peut rester vide en base sans impact).
 
 ---
 
@@ -50,7 +52,7 @@ toucher au code critique de transformation/save offre.
 ```powershell
 cd C:\Users\ezefi\jardin-confort-formulaire
 git add .
-git commit -m "<message>"
+git commit -m ""
 git push
 ```
 
@@ -111,7 +113,7 @@ contient des doublons quasi-identiques et les statistiques sont faussées.
 ## 📋 Modèle métier cible
 
 ### Brouillon (`drafts`)
-- Créé via "Nouveau" ou copie d'une offre/brouillon existant
+- Créé via "Nouveau" ou copie d'une offre/commande/brouillon existant
 - **Modifiable indéfiniment** par le commercial
 - Numérotation `DRA-001`, `DRA-002`...
 - **Aperçu** filigrané "BROUILLON" (page print Shopify dynamique, jamais de PDF généré)
@@ -127,21 +129,17 @@ contient des doublons quasi-identiques et les statistiques sont faussées.
 - Aperçu/PDF sans filigrane
 
 ### Cycle de vie d'un brouillon
-```
 Création → modifications libres → "Transformer en offre" → Offre figée
-                                                          ↓
-                                              Brouillon archivé MAIS conservé
-                                              indéfiniment (consultable +
-                                              duplicable pour variantes)
-```
+↓
+Brouillon archivé MAIS conservé
+indéfiniment (consultable +
+duplicable pour variantes)
 
 ### Schéma complet des flux entre brouillons et offres
 
-Ce schéma a été défini en fin de Session 3 pour clarifier tous les cas d'usage.
-Il consolide les décisions actées sur la duplication, la transformation et la
-conservation indéfinie.
-
-```
+Ce schéma a été défini en fin de Session 3 puis enrichi en Session 8 (toutes
+les copies passent désormais par le brouillon, aucune offre n'est plus créée
+directement par copie).
 ┌────────────────────────────────────────────────────────────────────┐
 │                                                                     │
 │   CRÉATION VIERGE                                                   │
@@ -149,7 +147,6 @@ conservation indéfinie.
 │   /drafts/nouveau ──────────────────▶ DRA-005                       │
 │                                                                     │
 └────────────────────────────────────────────────────────────────────┘
-
 ┌────────────────────────────────────────────────────────────────────┐
 │                                                                     │
 │   DEPUIS UN BROUILLON                                               │
@@ -164,52 +161,57 @@ conservation indéfinie.
 │                                        duplicable)                  │
 │                                                                     │
 └────────────────────────────────────────────────────────────────────┘
-
 ┌────────────────────────────────────────────────────────────────────┐
 │                                                                     │
-│   DEPUIS UNE OFFRE                                                  │
+│   DEPUIS UNE OFFRE ou UNE COMMANDE (Session 8)                      │
 │                                                                     │
-│   DEV-2026-047 ──── Modifier ──────▶ ❌ Impossible (immuable)       │
+│   DEV-2026-047 ──── Modifier ────────▶ ❌ Impossible (immuable)     │
 │        │                                                            │
-│        ├── 📋 Copier en brouillon ──▶ DRA-007 (éditable)           │
-│        │                                                            │
-│        └── 📄 Copier en offre ──────▶ DEV-2026-048 (figée direct)  │
+│        ├── + Nouveau brouillon ──────▶ DRA-007 vierge              │
+│        ├── 👤 Brouillon même client ─▶ DRA-008 (client pré-rempli) │
+│        ├── 📋 Copier offre complète                                │
+│        │   en brouillon ─────────────▶ DRA-009 (tout copié)        │
+│        └── 📋 Copie offre en                                       │
+│            brouillon sans client ────▶ DRA-010 (articles seulement)│
+│                                                                     │
+│   (Libellés identiques côté commande, "offre" → "commande")        │
 │                                                                     │
 └────────────────────────────────────────────────────────────────────┘
-```
 
 **Traçabilité bidirectionnelle :**
 - Depuis DRA-005 : `transformed_into_offre_slug` pointe vers DEV-2026-047
   (affiché `→ DEV-2026-047` dans la section brouillons du dashboard)
-- Depuis DEV-2026-047 : `data.fromDraftSlug` pointe vers DRA-005 (en place
-  depuis Session 5)
-- Depuis DRA-007 : `data.copiedFromOffreSlug` pointe vers DEV-2026-047 (à
-  ajouter Session 8)
+- Depuis DEV-2026-047 : `data.fromDraftSlug` pointe vers DRA-005 (Session 5)
+- Depuis DRA-009 issu d'une copie d'offre : `data.copiedFromOffreSlug` +
+  `data.copiedFromOffreNumero` (Session 8)
+- Depuis DRA-006 issu d'une duplication brouillon : `data.copiedFromDraftSlug`
+  + `data.copiedFromDraftNumero` (Session 8)
+- Chaîne préservée : si DRA-006 est dupliqué en DRA-011, DRA-011 contient
+  **les deux** infos (offre racine ET brouillon parent direct).
 
 **Cas d'usage "3 variantes rouge/vert/noir" — workflow complet :**
 
-```
-1. Créer DRA-005 → remplir version rouge complète
-2. Dupliquer DRA-005 → DRA-006 → transformer → DEV-2026-047 (rouge)
-3. Dupliquer DRA-005 → DRA-007 → modifier rouge→vert → transformer → DEV-2026-048 (vert)
-4. Dupliquer DRA-005 → DRA-008 → modifier rouge→noir → transformer → DEV-2026-049 (noir)
+Créer DRA-005 → remplir version rouge complète
+Dupliquer DRA-005 → DRA-006 → transformer → DEV-2026-047 (rouge)
+Dupliquer DRA-005 → DRA-007 → modifier rouge→vert → transformer → DEV-2026-048 (vert)
+Dupliquer DRA-005 → DRA-008 → modifier rouge→noir → transformer → DEV-2026-049 (noir)
 
 Résultat :
-- DRA-005 reste comme "modèle racine rouge" jamais transformé directement
-- DRA-006, DRA-007, DRA-008 conservés comme historique de chaque variante
-- 3 offres distinctes, chacune avec son brouillon source
-- Tout reste consultable indéfiniment
-```
+
+DRA-005 reste comme "modèle racine rouge" jamais transformé directement
+DRA-006, DRA-007, DRA-008 conservés comme historique de chaque variante
+3 offres distinctes, chacune avec son brouillon source
+Tout reste consultable indéfiniment
+
 
 **Alternative depuis l'offre (Session 8) :**
 
-```
-1. DEV-2026-047 (rouge) déjà créée
-2. Depuis le dashboard de DEV-2026-047 : "📋 Copier en nouveau brouillon" → DRA-009
-3. Modifier rouge→vert dans DRA-009 → transformer → DEV-2026-050 (vert)
-4. Re-cliquer "Copier en nouveau brouillon" depuis DEV-2026-047 → DRA-010
-5. Modifier rouge→noir dans DRA-010 → transformer → DEV-2026-051 (noir)
-```
+DEV-2026-047 (rouge) déjà créée
+Depuis le dashboard de DEV-2026-047 : "📋 Copier offre complète en brouillon" → DRA-009
+Modifier rouge→vert dans DRA-009 → transformer → DEV-2026-050 (vert)
+Re-cliquer "📋 Copier offre complète en brouillon" depuis DEV-2026-047 → DRA-010
+Modifier rouge→noir dans DRA-010 → transformer → DEV-2026-051 (noir)
+
 
 Les deux workflows coexistent — le commercial choisit selon le contexte.
 
@@ -228,10 +230,9 @@ Les deux workflows coexistent — le commercial choisit selon le contexte.
 | Mode de transformation | **Scénario A direct serveur** : POST `/api/drafts/[slug]/transformer` → crée l'offre + archive le brouillon → redirection auto vers `/dashboard/[offre-slug]`. Pas de retour par le formulaire `/offres/nouveau`. |
 | Transformation multiple du même brouillon | **Non** — un brouillon = 1 transformation max. Pour générer plusieurs variantes : dupliquer d'abord, transformer ensuite la copie. |
 | Bouton "📋 Dupliquer en nouveau brouillon" | Disponible depuis tout brouillon (transformé ou pas) — la source reste intacte |
-| Bouton "📋 Copier offre → nouveau brouillon" | Ajouté en Session 8, à côté de l'existant "Copier en nouvelle offre" |
-| Bouton "📄 Copier offre → nouvelle offre" | Conservé tel quel (comportement actuel) |
+| Boutons de copie depuis offre/commande | **Tous deviennent des brouillons** (Session 8). Plus aucun bouton de l'app ne crée directement une offre. |
+| Mécanisme de copie depuis offre/commande | **POST direct `/api/drafts`** (Session 8 — Option A). Le brouillon est créé en base immédiatement avec son numéro DRA-XXX. Plus de `localStorage` + `?from_copy=1`. |
 | Flag `is_template` | **Abandonné** — devenu inutile avec la conservation indéfinie des brouillons transformés |
-| Copie depuis offre signée | Crée un brouillon (Session 8) OU une offre directe (existant) — au choix du commercial |
 | Migration offres existantes | **Aucune** — les ~50 offres actuelles restent valides |
 | Aperçu brouillon | Page print dynamique (Shopify), **pas de PDF** |
 | Template brouillon | Devis actuel + filigrane BROUILLON, sans signature, sans lien validation |
@@ -242,6 +243,7 @@ Les deux workflows coexistent — le commercial choisit selon le contexte.
 | Architecture aperçu brouillon | **Page autonome dupliquée** `/print/draft/[slug]/page.tsx` (pas de prop `isDraft` sur la page offre) — Session 7 |
 | Filigrane | SVG inline en data-URI, `background-image: repeat` ambre #f59e0b opacité 0.11, double ligne "BROUILLON — DRA-XXX" + "Document non contractuel" — Session 7 |
 | Auto-print | **Aucun nulle part** (brouillon ET offre) — Session 7 |
+| Ouverture des brouillons créés par copie | **Nouvel onglet** (`window.open(..., "_blank")`) — Session 8. L'offre source reste accessible. |
 
 ---
 
@@ -301,8 +303,11 @@ create sequence drafts_numero_seq start 1;
 | 5 | Modal "Transformer en offre" + route `/api/drafts/[slug]/transformer` | ~~Élevé~~ Moyen* | ✅ Terminée | 2026-05-14 | c831bdf |
 | 6 | Section "Brouillons" sur dashboard + filtre archivés | Faible | ✅ Terminée | 2026-05-15 | (push après commit) |
 | 7 | Aperçu print : filigrane BROUILLON, sans signature, sans lien validation | Moyen | ✅ Terminée | 2026-05-15 | (push après commit) |
-| 8 | Boutons "Copier en brouillon" + "Copier en offre" depuis dashboard offre | Faible | ☐ À faire | | |
+| 8 | Boutons "Copier en brouillon" depuis offre/commande/brouillon + traçabilité | Faible→Moyen* | ✅ Terminée | 2026-05-15 | 5b5956b |
 | 9 | Tests end-to-end + merge `feature/brouillons` → `main` + déploiement prod | **Élevé** | ☐ À faire | | |
+
+*Session 8 : risque révisé à la hausse en cours de session après détection d'une
+incohérence UX entre les flux de copie (Option B initiale → Option A finale).
 
 ---
 
@@ -378,9 +383,7 @@ rouvrir, le modifier, le re-sauvegarder.
 **Objectif :** vue lecture-seule d'un brouillon, avec actions.
 
 **Architecture cible :**
-```
 app/dashboard/draft/[slug]/page.tsx     # Nouvelle page de cette session
-```
 La route s'inspire structurellement de `app/dashboard/[slug]/page.tsx` (existante
 pour les offres) mais sans les actions non pertinentes pour un brouillon
 (signature, conversion commande, lien public).
@@ -484,36 +487,40 @@ avec filigrane permanent, sans bloc signature.
 
 ---
 
-### Session 8 — Boutons de copie depuis une offre
+### Session 8 — Boutons de copie depuis une offre/commande/brouillon
 
-**Objectif :** depuis le dashboard d'une offre (`/dashboard/[offre-slug]`),
-permettre **deux types de copies** côte à côte :
+**Objectif :** refondre tous les boutons de copie de l'application pour qu'ils
+créent désormais des **brouillons** et non plus directement des offres. Aligné
+sur la philosophie brouillon-first : l'offre n'existe que via transformation.
 
-1. **"📄 Copier en nouvelle offre"** (existant, conservé tel quel) :
-   - Crée directement une nouvelle offre figée
-   - Workflow rapide pour les variantes simples sans réflexion
-   - Comportement actuel inchangé (mais à dépoussiérer du mécanisme localStorage
-     hérité — voir plus bas)
+**4 boutons à modifier sur le dashboard offre+commande
+(`app/dashboard/[slug]/page.tsx`) :**
 
-2. **"📋 Copier en nouveau brouillon"** (nouveau) :
-   - Appel `POST /api/drafts` avec le payload de l'offre source
-   - Ajouter `data.copiedFromOffreSlug = <slug de l'offre source>` pour
-     traçabilité
-   - Redirection vers `/drafts/[nouveau-slug]/editer` après création
-   - Permet au commercial de modifier tranquillement avant de transformer en
-     offre, parfait pour les variantes qui demandent de la réflexion
+1. `+ Nouvelle offre` → **`+ Nouveau brouillon`** (→ `/drafts/nouveau`)
+2. `👤 Nouvelle offre même client` → **`👤 Brouillon même client`**
+   (→ `/drafts/nouveau?prefill=...`)
+3. `📋 Copier offre complète` → **`📋 Copier {offre|commande} complète en brouillon`**
+   (libellé dynamique via `isTypeOffre`)
+4. `📋 Copie offre sans client` → **`📋 Copie {offre|commande} en brouillon sans client`**
+   (libellé dynamique)
 
-**Refonte du bouton existant :**
-- Supprimer le mécanisme `localStorage` + `?from_copy=1` pour les deux flux
-  (devenu obsolète maintenant qu'on a des routes API)
-- Le bouton "Copier en nouvelle offre" appelle directement `POST /api/offres/save`
-  côté serveur
-- Le bouton "Copier en nouveau brouillon" appelle `POST /api/drafts`
+**Mécanisme de copie pour les boutons 3/4 :** POST direct `/api/drafts` avec
+payload au format `DraftSnapshot`. Le brouillon est créé en base immédiatement
+avec son numéro DRA-XXX, redirection nouvelle onglet vers `/drafts/[slug]/editer`.
 
-**Critère de succès :** depuis une offre existante, les deux boutons sont
-visibles. Le bouton "brouillon" crée un DRA-XXX éditable. Le bouton "offre"
-crée directement une DEV-2026-XXX. Les `ambianceImages` sont correctement
-copiées dans les deux cas (régression du bug pré-chantier).
+**Bouton "📋 Dupliquer en nouveau brouillon" côté page brouillon
+(`app/dashboard/draft/[slug]/page.tsx`) :** enrichi avec
+`data.copiedFromDraftSlug` + `data.copiedFromDraftNumero`.
+
+**Traçabilité dans `data` JSONB :**
+- `copiedFromOffreSlug` + `copiedFromOffreNumero` : copie depuis offre/commande
+- `copiedFromDraftSlug` + `copiedFromDraftNumero` : duplication brouillon
+- Chaîne préservée : un brouillon copié depuis un brouillon issu d'une offre
+  conserve les deux infos.
+
+**Critère de succès :** depuis une offre, commande ou brouillon, tous les
+boutons de copie créent un brouillon DRA-XXX immédiatement persisté en base,
+avec traçabilité de la source.
 
 ---
 
@@ -522,19 +529,27 @@ copiées dans les deux cas (régression du bug pré-chantier).
 **Objectif :** valider l'ensemble et déployer.
 
 **Tests end-to-end manuels (checklist) :**
-- [ ] Création d'un brouillon depuis zéro
-- [ ] Modification d'un brouillon
+- [ ] Création d'un brouillon depuis zéro (`/drafts/nouveau`)
+- [ ] Modification d'un brouillon existant (`/drafts/[slug]/editer`)
 - [ ] Suppression d'un brouillon non transformé
-- [ ] Copie d'une offre existante → brouillon
-- [ ] Copie d'un brouillon existant → brouillon
-- [ ] Aperçu print d'un brouillon (filigrane, pas de signature)
+- [ ] Tentative de suppression d'un brouillon transformé → 409 attendu
+- [ ] Copie d'une offre existante → brouillon (avec client + complet)
+- [ ] Copie d'une offre existante → brouillon (sans client)
+- [ ] Copie d'une commande existante → brouillon (libellés "commande" corrects)
+- [ ] Duplication d'un brouillon existant → brouillon
+- [ ] Duplication d'un brouillon **transformé** → brouillon (cas d'usage variantes)
+- [ ] Vérification Supabase Studio : `data.copiedFromOffreSlug` /
+      `copiedFromDraftSlug` correctement persistés
+- [ ] Aperçu print d'un brouillon (filigrane, pas de signature, pas de QR)
 - [ ] Tentative d'accès au lien public d'un brouillon → bloqué
 - [ ] Transformation brouillon → offre (toutes cases cochées)
 - [ ] Transformation refusée si cases non cochées
 - [ ] Vérification : offre créée avec bon numéro, brouillon archivé
 - [ ] Filtre "Masquer brouillons transformés" fonctionne
-- [ ] Section "Brouillons" collapsible fonctionne
-- [ ] Les 50 offres existantes sont toujours accessibles et fonctionnelles
+- [ ] Section "Brouillons" collapsible fonctionne (état persisté)
+- [ ] Régression `ambianceImages` : copie d'une offre avec images lourdes →
+      images bien présentes dans le brouillon créé
+- [ ] Les ~50 offres existantes sont toujours accessibles et fonctionnelles
 
 **Déploiement :**
 1. **Régénérer la `SUPABASE_SERVICE_ROLE_KEY`** (cf. section sécurité ci-dessous)
@@ -646,6 +661,8 @@ La table `drafts` peut rester en base (vide, sans impact).
 3. Un brouillon = 1 transformation max
 4. Bouton "📋 Dupliquer en nouveau brouillon" disponible même sur brouillons transformés
 5. Deux boutons de copie depuis offre (Session 8) : nouveau brouillon OU nouvelle offre
+   *(décision révisée en Session 8 : un seul bouton "vers brouillon", plus aucune copie
+   directe vers offre — voir Session 8)*
 6. Concept "is_template" abandonné
 
 **Pièges techniques rencontrés :**
@@ -883,7 +900,6 @@ La table `drafts` peut rester en base (vide, sans impact).
   cas (bug pré-chantier connu)
 
 **Architecture des fichiers brouillons après Session 7 :**
-```
 app/
 ├── api/drafts/
 │   ├── route.ts                            # POST + GET                 ← Session 2
@@ -903,15 +919,121 @@ app/
 │       └── [slug]/
 │           ├── page.tsx                    # Vue + bouton aperçu        ← Sessions 4, 5, 7
 │           └── TransformerModal.tsx        # Modal de confirmation      ← Session 5
-```
 
 docs/sql/
 ├── 001-create-drafts.sql                   # Table drafts                ← Session 1
 ├── 002-rpc-next-dra-numero.sql             # RPC séquence DRA            ← Session 2
 └── 003-rpc-transformer-draft.sql           # RPC transformation atomique ← Session 5
 
-### Session 8
-_(à remplir après réalisation)_
+### Session 8 — Terminée le 2026-05-15 (commit `5b5956b`)
+
+**Réalisé :**
+
+Refonte des 4 boutons en bas du dashboard offre+commande
+(`app/dashboard/[slug]/page.tsx`) pour qu'ils créent désormais des brouillons,
+jamais directement des offres :
+- `+ Nouvelle offre` → **`+ Nouveau brouillon`** (→ `/drafts/nouveau`)
+- `👤 Nouvelle offre même client` → **`👤 Brouillon même client`**
+  (→ `/drafts/nouveau?prefill=...`, query param déjà supporté par
+  `DraftFormulaire` depuis Session 3)
+- `📋 Copier offre complète` → **`📋 Copier {offre|commande} complète en brouillon`**
+  (libellé dynamique via `isTypeOffre`)
+- `📋 Copie offre sans client` → **`📋 Copie {offre|commande} en brouillon sans client`**
+  (libellé dynamique)
+
+Refactor `copierOffre` → `copierEnBrouillon` :
+- Fonction async avec `POST` direct `/api/drafts` (au lieu de
+  `localStorage["jc-offre-copy"]` + redirection vers `?from_copy=1`)
+- Payload construit au format `DraftSnapshot` (camelCase pour les champs
+  métier, conforme à ce qu'attend la route POST côté serveur)
+- Redirection nouvelle onglet vers `/drafts/[slug]/editer` au succès
+
+Ajout de traçabilité de la source dans `data` JSONB du brouillon créé :
+- Depuis offre/commande : `data.copiedFromOffreSlug` + `data.copiedFromOffreNumero`
+- Depuis brouillon (modif dans `dupliquerBrouillon` de
+  `app/dashboard/draft/[slug]/page.tsx`) : `data.copiedFromDraftSlug` +
+  `data.copiedFromDraftNumero`
+- Préservation automatique de `copiedFromOffreSlug` quand un brouillon issu
+  d'une offre est dupliqué (le `...draft.data` préserve les champs hérités) →
+  chaîne de provenance maintenue
+
+**Décision pivot en cours de session — Option B → Option A :**
+
+Démarrage initial sur **Option B** (réutilisation du mécanisme localStorage +
+`?from_copy=1` déjà présent dans `DraftFormulaire` depuis Session 3), choisi
+pour son risque minimal. Premier test → bouton fonctionnait mais révélait une
+**incohérence UX gênante** :
+
+| Source de la copie | URL résultante | Brouillon créé en base ? | Numéro DRA visible ? |
+|---|---|---|---|
+| Offre → brouillon (Option B) | `/drafts/nouveau?from_copy=1` | ❌ Non | ❌ Non |
+| Commande → brouillon (Option B) | `/drafts/nouveau?from_copy=1` | ❌ Non | ❌ Non |
+| Brouillon → brouillon (Session 4, déjà Option A) | `/drafts/[slug]/editer` | ✅ Oui | ✅ Oui |
+
+Décision : **passer à Option A** (POST direct `/api/drafts` depuis le
+dashboard offre) pour aligner les trois flux sur le même comportement.
+
+**Bénéfices collatéraux de la bascule Option A :**
+- Comportement uniforme : "Copier en brouillon" = brouillon créé en base
+  immédiatement avec son DRA-XXX, peu importe la source
+- Résolution définitive du bug `ambianceImages` trop lourdes pour localStorage
+  (entrée D5 de la dette technique — **désormais close**)
+- Plus de dépendance au mécanisme `?from_copy=1` côté dashboard offre
+
+**Pièges techniques retenus :**
+- **Format de payload `POST /api/drafts`** : `body.data` doit être au format
+  `DraftSnapshot` (camelCase pour les champs métier, snake_case pour quelques
+  champs hérités comme `complement_nom`). Le serveur extrait ensuite vers les
+  colonnes plates (`client_nom`, `client_email`, etc.) et stocke tout `data`
+  en JSONB.
+- Le mapping critique : `offre.client_nom` → `data.nom` (PAS `data.client_nom`).
+  Même chose pour `client_prenom` → `prenom`, `client_email` → `email`,
+  `client_tel1` → `telephone1`, etc.
+- La réponse `POST /api/drafts` expose `json.editUrl`
+  (`/drafts/[slug]/editer`) prêt à utiliser, pas besoin de reconstruire l'URL
+  à partir du slug.
+- `async function` obligatoire pour pouvoir `await fetch` — le mot-clé est
+  facile à oublier en remplaçant une fonction synchrone existante.
+
+**Modifications fichier :**
+- `app/dashboard/[slug]/page.tsx` : ~70 lignes modifiées (4 boutons refondus
+  + fonction `copierEnBrouillon` réécrite en async POST direct)
+- `app/dashboard/draft/[slug]/page.tsx` : ~5 lignes ajoutées (étendre `data`
+  avec `copiedFromDraftSlug` + `copiedFromDraftNumero` dans
+  `dupliquerBrouillon`)
+
+**Tests validés en local :**
+- ✅ Depuis offre DEV-XXX : "Copier offre complète en brouillon" → DRA-014
+  créée immédiatement, bouton "💾 Enregistrer" visible, pastille verte
+- ✅ Depuis offre : "Copie offre en brouillon sans client" → brouillon avec
+  articles uniquement, champs client vides
+- ✅ Depuis commande : libellés "commande" corrects, POST fonctionnel
+- ✅ Depuis brouillon : duplication enrichie avec `copiedFromDraftSlug`
+- ✅ Bouton "+ Nouveau brouillon" → `/drafts/nouveau` (formulaire vide)
+- ✅ Bouton "👤 Brouillon même client" → `/drafts/nouveau?prefill=...` avec
+  champs client pré-remplis
+
+**Code mort identifié (à nettoyer dans un futur chantier post-brouillons) :**
+- Le mécanisme `?from_copy=1` + lecture `localStorage["jc-offre-copy"]` dans
+  `app/drafts/_components/DraftFormulaire.tsx` (useEffect ligne ~1145) n'est
+  **plus appelé par aucun bouton** après cette session. Code dormant
+  inoffensif mais à supprimer pour clarté.
+- Le même mécanisme côté `app/offres/nouveau/page.tsx` (si présent) devient
+  également obsolète puisque plus aucun bouton ne mène vers
+  `/offres/nouveau?from_copy=1`.
+- Ajouté à la dette technique : voir D6 ci-dessous.
+
+**Notes pour Session 9 (tests E2E + déploiement prod) :**
+- Ajouter au plan de tests : vérifier que copier offre → brouillon préserve
+  bien les `ambianceImages` même lourdes (régression D5 résolue, à confirmer
+  en prod après déploiement)
+- Vérifier visuellement dans Supabase Studio que `data.copiedFromOffreSlug`
+  est bien persisté sur les nouveaux brouillons créés depuis une offre
+- Confirmer que la suppression du mécanisme localStorage côté dashboard offre
+  n'a pas cassé d'éventuelle compatibilité avec d'anciens onglets restés
+  ouverts pendant le déploiement (low risk : aucun bouton ne mène plus à
+  `?from_copy=1`, mais le useEffect côté `DraftFormulaire` est toujours là
+  donc le comportement reste fonctionnel pour les onglets pré-déploiement)
 
 ### Session 9
 _(à remplir après réalisation)_
@@ -939,16 +1061,18 @@ _(à remplir après réalisation)_
 À traiter **après** la fin du chantier brouillons (post-Session 9). Aucun n'est
 bloquant pour la livraison de la feature brouillons elle-même.
 
-| # | Sujet | Origine | Priorité |
-|---|---|---|---|
-| D1 | `client_numero_client` reste NULL sur les offres créées par transformation | Session 5 (alignement avec comportement actuel) | Basse |
-| D2 | Mécanisme de création de fiche `clients` non reproduit côté transformation | Session 5 | Moyenne |
-| D3 | Affichage "Type cible" cosmétique à nettoyer dans `app/dashboard/draft/[slug]/page.tsx` | Session 5 | Basse |
-| D4 | `save/route.ts` utilise des URLs absolues avec fallback prod (à harmoniser avec relatif) | Session 5 | Moyenne |
-| D5 | **Aperçu offre pendant création/modification n'affiche pas les badges stock** (data.lines.stock pas hydraté côté front avant save) | Session 7 (bug pré-chantier confirmé) | Moyenne |
-| R1 | Script d'import factures non versionné (local PC uniquement) | Audit Storage avant chantier | Urgente |
-| R2 | Google Drive perso sans backup tiers (10 ans de factures) | Audit Storage avant chantier | Importante |
-| R3 | Bucket `brand-logos` non régénérable | Audit Storage avant chantier | Basse |
+| # | Sujet | Origine | Priorité | Statut |
+|---|---|---|---|---|
+| D1 | `client_numero_client` reste NULL sur les offres créées par transformation | Session 5 (alignement avec comportement actuel) | Basse | Ouvert |
+| D2 | Mécanisme de création de fiche `clients` non reproduit côté transformation | Session 5 | Moyenne | Ouvert |
+| D3 | Affichage "Type cible" cosmétique à nettoyer dans `app/dashboard/draft/[slug]/page.tsx` | Session 5 | Basse | Ouvert |
+| D4 | `save/route.ts` utilise des URLs absolues avec fallback prod (à harmoniser avec relatif) | Session 5 | Moyenne | Ouvert |
+| D5a | Bug `ambianceImages` trop lourdes pour localStorage lors d'une copie d'offre | Pré-chantier confirmé Session 7 | — | ✅ **Résolu Session 8** (passage à POST direct) |
+| D5b | Aperçu offre pendant création/modification n'affiche pas les badges stock (`data.lines.stock` pas hydraté côté front avant save) | Session 7 (bug pré-chantier confirmé) | Moyenne | Ouvert |
+| D6 | Code mort `?from_copy=1` + `localStorage["jc-offre-copy"]` dans `DraftFormulaire.tsx` (useEffect ~ligne 1145) et probablement `app/offres/nouveau/page.tsx` — plus appelé par aucun bouton après Session 8 | Session 8 (bascule Option B → A) | Basse | Ouvert |
+| R1 | Script d'import factures non versionné (local PC uniquement) | Audit Storage avant chantier | Urgente | Ouvert |
+| R2 | Google Drive perso sans backup tiers (10 ans de factures) | Audit Storage avant chantier | Importante | Ouvert |
+| R3 | Bucket `brand-logos` non régénérable | Audit Storage avant chantier | Basse | Ouvert |
 
 ---
 
@@ -969,12 +1093,9 @@ Storage (buckets). Seules les références (URLs) dans la DB sont sauvegardées.
 | _(`fiche-travail-pdf`)_ | `app/api/offres/[slug]/fiche-travail-pdf/route.ts` | ✅ Probablement oui |
 
 ### Architecture archives factures Winbiz
-
-```
 Google Drive (compte perso) → Script local idempotent → Supabase Storage (3000+ factures)
-                                                              ↓
-                                                       URLs en DB (table clients)
-```
+↓
+URLs en DB (table clients)
 
 **Source de vérité :** Google Drive. Supabase est une couche de présentation
 reconstructible via le script.
@@ -1006,3 +1127,8 @@ risques en chantier(s) séparé(s) plus tard.
 
 ✅ **Aucun.** La table `drafts` stockera les `ambianceImages` en base64 dans
 JSONB (même approche que `offres.data`), donc 100% couvert par les backups DB.
+🛠 Pour appliquer
+powershellcd C:\Users\ezefi\jardin-confort-formulaire
+# Sauvegarde de précaution
+Copy-Item -LiteralPath journal-brouillons.md -Destination "journal-brouillons.md.bak-session7"
+# Puis remplacer le contenu de journal-brouillons.md par le bloc complet ci-dessus
