@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabase } from "@/lib/supabase";
+import { isShopifyLine } from "@/lib/jc-print-types";
 
 const SHOP             = process.env.SHOPIFY_STORE_DOMAIN;
 const STOREFRONT_TOKEN = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN;
@@ -43,8 +44,13 @@ async function getAdminToken(): Promise<string | null> {
 async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: unknown }>) {
   if (!lines || lines.length === 0) return lines;
 
+  // Ne consulter Shopify QUE pour les lignes Shopify (cf. helper isShopifyLine).
+  // Les lignes "à la volée" (custom) sont par définition hors-Shopify : leur
+  // stock est saisi manuellement ou laissé null, et ne doit pas être rafraîchi.
+  // Bénéfice supplémentaire : évite qu'un SKU custom à syntaxe bizarre
+  // (ex: avec espaces) ne casse la query GraphQL et invalide TOUTES les lignes.
   const skus = lines
-    .filter((l) => l.type !== "comment" && l.sku)
+    .filter(isShopifyLine)
     .map((l) => l.sku as string);
 
   if (skus.length === 0) return lines;
