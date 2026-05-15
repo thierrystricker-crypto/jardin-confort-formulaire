@@ -141,7 +141,17 @@ export default function DashboardDraftDetailPage({
     if (!draft || duplicating) return;
     setDuplicating(true);
     try {
-      const data = { ...(draft.data || {}) };
+      // Traçabilité Session 8 : on injecte le slug + numéro du brouillon source
+      // dans data.copiedFromDraftSlug / copiedFromDraftNumero. Le brouillon
+      // source reste intact (la copie est indépendante).
+      // Si le brouillon source était lui-même issu d'une offre copiée, on
+      // PRÉSERVE copiedFromOffreSlug — c'est l'info d'origine ultime, la plus
+      // utile pour retrouver la racine de la chaîne de copies.
+      const data = {
+        ...(draft.data || {}),
+        copiedFromDraftSlug: draft.slug,
+        copiedFromDraftNumero: draft.numero_affiche,
+      };
       const res = await fetch("/api/drafts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
