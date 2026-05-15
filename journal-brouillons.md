@@ -6,72 +6,44 @@
 
 ---
 
-## 🚀 Reprise rapide — Phase D de Session 9 à démarrer
+## 🎉 Chantier brouillons — TERMINÉ le 2026-05-15
 
-**État au 2026-05-15 (fin de Phase C de Session 9) :** Sessions 1 à 8 terminées.
-Phase B (tests E2E) : 16/16 validés. **Phase C (sécurité) : terminée.** La clé
-`SUPABASE_SERVICE_ROLE_KEY` legacy `eyJ...` a été migrée vers la nouvelle API
-key Supabase `sb_secret_...`, et les clés JWT legacy ont été désactivées via
-"Disable JWT-based API keys". La fuite de la Session 2 est définitivement
-neutralisée.
+**Sessions 1 à 9 toutes validées.** Le système de brouillons est en production
+sur `https://offres.jardin-confort.ch/dashboard` depuis le merge commit
+**`bdc9840`** sur `main`.
 
-**Branche `feature/brouillons` — dernier commit : `3cb1db6`** (inchangé depuis Phase B)
+### Récap des 9 sessions
+- **S1** (14/05) — Table `drafts` + branche `feature/brouillons`
+- **S2** (14/05) — 5 routes API CRUD + RPC `next_dra_numero()`
+- **S3** (14/05) — Pages `/drafts/nouveau` + `/drafts/[slug]/editer`
+- **S4** (14/05) — Page `/dashboard/draft/[slug]` lecture-seule
+- **S5** (14/05) — Transformation atomique via RPC SQL + modal
+- **S6** (15/05) — Section "Brouillons" sur dashboard + 5ème KpiCard
+- **S7** (15/05) — Aperçu print avec filigrane "BROUILLON"
+- **S8** (15/05) — Refonte des 4 boutons de copie + traçabilité Option A
+- **S9** (15/05) — Tests E2E + rotation clés Supabase + merge prod
 
-### Ce qui a été fait en Phase C (2026-05-15)
+### Branches
+- `main` à `bdc9840` (merge commit, prod en ligne)
+- `feature/brouillons` à `5666649` — **gardée localement quelques jours
+  par précaution**. À supprimer après une période de stabilité confirmée
+  (~1-2 semaines) :
+  ```powershell
+  cd C:\Users\ezefi\jardin-confort-formulaire
+  git branch -d feature/brouillons        # locale
+  git push origin --delete feature/brouillons   # distante (ou via UI GitHub)
+  ```
 
-1. ✅ Identification : projet utilisait encore les clés Supabase JWT legacy (`eyJ...`)
-2. ✅ Migration vers les nouvelles API keys Supabase :
-   - `SUPABASE_SERVICE_ROLE_KEY` : `eyJ...` → `sb_secret_...`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` : `eyJ...` → `sb_publishable_...`
-3. ✅ Mise à jour Vercel (3 envs : Production, Preview, Development)
-4. ✅ Mise à jour `.env.local`
-5. ✅ Prod redéployée et confirmée fonctionnelle sur nouvelles clés
-6. ✅ Local confirmé fonctionnel sur nouvelles clés
-7. ✅ **"Disable JWT-based API keys" cliqué côté Supabase** → clés legacy mortes
-8. ✅ Smoke test post-désactivation : prod + local OK
+### Smoke test prod effectué le 2026-05-15
+- Création brouillon DRA-XXX "TEST PROD" ✅
+- Aperçu print avec filigrane ✅
+- Transformation modal + cases à cocher ✅
+- Brouillon archivé + lien `→ DEV-2026-XXX` cliquable ✅
+- Filtre "Masquer transformés" fonctionnel ✅
+- 73 offres existantes intactes ✅
 
-### Effet de bord découvert pendant Phase C
-
-**R1 promue de "Urgente" à "Critique"** : il existe **~50 scripts Node.js**
-à la racine de `C:\Users\ezefi\` (familles `import-factures-*.js`,
-`fix-factures-*.js`, `match-factures-*.js`, `verifier-clients-*.js`,
-`creer-*.js`, `reassigner-*.js`, `audit-*.js`, `diagnostic-*.js`) qui
-contiennent la clé legacy `eyJ...` **hardcodée**. Tous sont désormais
-**cassés** (401 Supabase) depuis la désactivation. **Décision** : laissés
-de côté volontairement (scope creep évité en pleine Phase C). Quand un
-script sera nécessaire, à refactor proprement à ce moment-là avec lecture
-depuis un `.env` (pas de re-hardcoding de la nouvelle clé `sb_secret_...`,
-sinon on reproduit la dette).
-
-### Pour démarrer Phase D dans le nouveau chat
-
-- Coller le présent journal mis à jour
-- Avoir accès au dashboard GitHub du repo
-- Avoir accès Vercel pour suivre le build du Preview Deployment
-- L'URL de la prod : `https://offres.jardin-confort.ch/dashboard`
-- Ne pas oublier : la prod tourne déjà sur la nouvelle clé `sb_secret_...`, donc le merge `feature/brouillons` → `main` n'impacte **que le code**, pas les secrets.
-
-**Risque MOYEN** — Phase D merge vers `main` et déclenche déploiement prod.
-Rollback prévu via `git revert` (la table `drafts` peut rester en base sans impact).
-
----
-
-## 🎯 Phase D à exécuter dans le nouveau chat
-
-### Phase D — Merge et déploiement (~15 min + smoke test)
-
-1. **Créer la PR** `feature/brouillons` → `main` sur GitHub.
-2. **Vérifier le Preview Deployment Vercel** qui se build automatiquement sur la PR. Faire un dernier test rapide sur l'URL preview (créer 1 brouillon, le transformer).
-3. **Merger la PR** (merge commit recommandé pour garder l'historique des 9 sessions visible).
-4. **Vercel auto-deploy `main`** → suivre les logs de build.
-5. **Smoke test prod** sur `https://offres.jardin-confort.ch/dashboard` :
-   - Créer un brouillon DRA-XXX "TEST PROD" + l'imprimer
-   - Le transformer en offre
-   - Vérifier que DRA-XXX est bien archivé et que l'offre apparaît
-   - Optionnel : supprimer l'offre+brouillon de test ou les marquer pour traçabilité
-6. **Mettre à jour le journal** (Session 9 ✅, date, hash du merge commit) et fermer la branche `feature/brouillons` (la garder localement quelques jours par précaution).
-
-**Rollback si problème** : `git revert <merge-commit>` + push → Vercel redéploie l'état antérieur. La table `drafts` peut rester en base sans impact.
+**Quelques bugs métiers mineurs repérés pendant le smoke test prod, notés
+hors journal. À traiter dans des sessions dédiées.**
 
 ---
 
@@ -80,7 +52,7 @@ Rollback prévu via `git revert` (la table `drafts` peut rester en base sans imp
 **Projet :** `jardin-confort-formulaire`
 **Stack :** Next.js (App Router) + Supabase + Shopify, hébergé sur Vercel
 **Chemin local :** `C:\Users\ezefi\jardin-confort-formulaire`
-**Branche de travail :** `feature/brouillons` — HEAD à `3cb1db6`
+**Branche active :** `main` à `bdc9840`
 **URL prod :** `https://offres.jardin-confort.ch/dashboard`
 
 **Workflow git (PowerShell) après chaque modification :**
@@ -339,18 +311,40 @@ d'un `.env`, **pas de re-hardcoding** de la nouvelle clé.
 **Aucun commit git** créé pendant Phase C (rotation = env vars + Supabase
 console, pas de modification du code source).
 
-**Nouvelle dette** :
-- D9 (ajoutée) : créer un `.env.example` versionné dans le repo pour
-  documenter les noms des env vars requises
+### Session 9 — Phase D (merge prod) — Terminée le 2026-05-15
 
-### Session 9 — Phase D
-_(à exécuter dans un nouveau chat — voir section "Reprise rapide" en haut)_
+**Objectif** : merger `feature/brouillons` → `main` et déployer en prod.
+
+**Étapes effectuées** :
+1. Création de la PR `#1` sur GitHub : `feature/brouillons` → `main`
+   - Titre : `feat(drafts): système de brouillons (DRA-XXX) avec transformation atomique en offre`
+   - 41 commits, 18 fichiers, +7270/-67 lignes
+2. Vérification du Preview Deployment Vercel : **Ready** ✅
+3. Smoke test rapide sur l'URL preview (création brouillon + transformation) : OK ✅
+4. Merge de la PR via **"Create a merge commit"** (préservation de l'historique des 9 sessions)
+   - **Merge commit : `bdc9840`**
+5. Auto-deploy Vercel sur `main` : **Ready** ✅
+6. Smoke test prod sur `https://offres.jardin-confort.ch/dashboard` :
+   - Dashboard charge correctement avec section "Brouillons" + 5 KpiCards ✅
+   - 73 offres existantes intactes ✅
+   - Création brouillon DRA-XXX "TEST PROD" ✅
+   - Aperçu print avec filigrane ✅
+   - Transformation modal + cases à cocher ✅
+   - Brouillon archivé + lien `→ DEV-2026-XXX` cliquable ✅
+   - Filtre "Masquer transformés" fonctionnel ✅
+
+**Bugs métiers mineurs repérés pendant le smoke test prod** : notés hors
+journal (suivi séparé). À traiter dans des sessions dédiées post-S9. Aucun
+n'est bloquant pour l'usage en prod.
+
+**Aucun rollback nécessaire.** La branche `feature/brouillons` reste
+disponible localement et sur l'origin pendant ~1-2 semaines par précaution.
 
 ---
 
 ## 🐛 Dette technique identifiée (HORS périmètre Session 9)
 
-À traiter **après** le déploiement prod (post-Phase D). Aucun n'est bloquant.
+À traiter dans des sessions dédiées. Aucun n'est bloquant pour la prod.
 
 | # | Sujet | Origine | Priorité | Statut |
 |---|---|---|---|---|
@@ -385,7 +379,7 @@ _(à exécuter dans un nouveau chat — voir section "Reprise rapide" en haut)_
 | `factures` | Script d'import local depuis Google Drive | ✅ Oui (script idempotent) |
 | `fiche-travail-pdf` | `app/api/offres/[slug]/fiche-travail-pdf/route.ts` | ✅ Probablement oui |
 
-### Plan de mitigation (À FAIRE APRÈS DÉPLOIEMENT PROD)
+### Plan de mitigation
 
 - [ ] **R1** : déplacer le(s) script(s) d'import dans le repo (refactor `.env`), commit sur `main`
 - [ ] **R2** : Google Takeout one-shot sur "Factures Winbiz"
@@ -397,19 +391,19 @@ _(à exécuter dans un nouveau chat — voir section "Reprise rapide" en haut)_
 
 ---
 
-## 🆘 En cas de problème en cours de Phase D
+## 🆘 En cas de problème post-déploiement
 
-1. **Le chat plante :** ouvrir un nouveau chat, coller ce journal, indiquer la phase en cours et la dernière étape complétée.
-2. **Un commit casse l'app :** `git revert HEAD` puis push.
-3. **Migration SQL douteuse :** la table `drafts` peut être droppée sans impact (`drop table drafts cascade;`) tant qu'on n'a pas de brouillons transformés en prod.
-4. **Déploiement prod casse :** `git revert <merge-commit>` + push → Vercel redéploie automatiquement l'état antérieur. La nouvelle table `drafts` peut rester vide en base.
-5. **Erreur 401 Supabase quelque part :** la rotation Phase C a tué les clés legacy `eyJ...`. Vérifier que la prod et le local utilisent bien les nouvelles `sb_secret_...` / `sb_publishable_...` (Vercel Env Vars + `.env.local`). Si nécessaire récupérer les nouvelles clés via Supabase Dashboard → Settings → API Keys → onglet "Publishable and secret API keys".
-6. **Un des ~50 scripts à `C:\Users\ezefi\` doit être relancé** : il renverra 401 Supabase (clé legacy désactivée Phase C). Le refactorer alors avec lecture depuis un `.env` (créer `C:\Users\ezefi\.env` avec la nouvelle `SUPABASE_SERVICE_ROLE_KEY=sb_secret_...`, et faire que le script lise `process.env.SUPABASE_SERVICE_ROLE_KEY` via un `require("dotenv").config()`). Ne **pas** re-hardcoder la nouvelle clé.
+1. **Régression sur la prod détectée** : `git revert bdc9840` + push → Vercel redéploie l'état antérieur. La table `drafts` peut rester vide en base sans impact.
+2. **Erreur 401 Supabase quelque part** : la rotation Phase C a tué les clés legacy `eyJ...`. Vérifier que la prod et le local utilisent bien les nouvelles `sb_secret_...` / `sb_publishable_...` (Vercel Env Vars + `.env.local`). Si nécessaire récupérer les nouvelles clés via Supabase Dashboard → Settings → API Keys → onglet "Publishable and secret API keys".
+3. **Un des ~50 scripts à `C:\Users\ezefi\` doit être relancé** : il renverra 401 Supabase (clé legacy désactivée Phase C). Le refactorer alors avec lecture depuis un `.env` (créer `C:\Users\ezefi\.env` avec la nouvelle `SUPABASE_SERVICE_ROLE_KEY=sb_secret_...`, et faire que le script lise `process.env.SUPABASE_SERVICE_ROLE_KEY` via un `require("dotenv").config()`). Ne **pas** re-hardcoder la nouvelle clé.
 
+---
 
-chemin pour comitter le fichier:
+## 📦 Commit du journal mis à jour
 
+```powershell
 cd C:\Users\ezefi\jardin-confort-formulaire
 git add journal-brouillons.md
-git commit -m "docs(journal): cloture Phase C de Session 9 (rotation Supabase key)"
+git commit -m "docs(journal): cloture Session 9 Phase D - chantier brouillons termine"
 git push
+```
