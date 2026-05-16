@@ -120,9 +120,117 @@ la visibilité métier "quelles lignes sont synchronisées vs non"). Réservé
 
 ### Pour la suite
 
-PR #3 prévue : statut `skipped_not_shopify` dans `stock_movements` pour
-traiter le bug futur de la conversion sans perdre la visibilité métier.
-Voir dette technique D10 ci-dessous.
+PR #3 réalisée dans la foulée — cf. section suivante.
+
+---
+
+## 🔧 Post-S9 — Statut `skipped_not_shopify` (PR #3, 2026-05-16)
+
+**Bug parallèle traité** (identifié pendant la PR #2) : à la conversion offre →
+commande, le mécanisme `app/api/stock-movements/process/route.ts` envoyait
+**toutes** les lignes avec un SKU non vide à Shopify, y compris les lignes
+custom à la volée. Shopify ne trouvait pas ces SKUs → ligne `stock_movements`
+créée avec `status: 'failed'` + notification "⚠️ Sortie stock partielle"
+envoyée systématiquement à chaque commande contenant au moins une ligne à
+la volée.
+
+### Conséquences gênantes du bug
+
+- Notifs rouges parasites alors qu'il n'y avait pas de vraie erreur Shopify
+- KPI "❌ En erreur" pollué par des lignes qui n'étaient pas censées être synchronisées
+- Impossible de distinguer "vraie erreur Shopify à investiguer" (rouge) de
+  "ligne hors-Shopify normale" (info) → bruit qui masquait les vraies erreurs
+
+### Décision design : préserver la visibilité métier
+
+Solution naïve = filtrer les lignes à la volée en silence (aucune trace).
+**Refusé** parce que le commercial veut pouvoir voir au coup d'œil quelles
+lignes de la commande sont synchronisées avec Shopify et lesquelles sont
+custom (utile pour vérifier qu'on n'a rien oublié).
+
+Solution retenue = nouveau statut dédié **`skipped_not_shopify`** :
+- Créé sans aucun appel API Shopify (pas de tentative `findVariantBySKU`)
+- N'incrémente pas le compteur `failed`
+- Ne déclenche pas la notification d'erreur (qui reste conditionnée à `failed > 0`)
+- Apparaît proprement dans le dashboard (violet, libellé "📝 À la volée")
+
+### Migration SQL — aucune
+
+La colonne `stock_movements.status` est `text` libre sans CHECK constraint
+(vérifié avant fix). On peut écrire `'skipped_not_shopify'` directement,
+zéro risque de timing entre déploiement code et schéma DB.
+
+### Architecture livrée
+
+4 commits sur la branche `feat/stock-movements-skipped-not-shopify`,
+mergés via PR #3 (merge commit **`16e1e31`**) :
+
+1. **`974a949`** — `process/route.ts` : séparation en 2 passes
+   Pass A = lignes Shopify (via `isShopifyLine`) → API Shopify comme avant.
+   Pass B = lignes à la volée → insertion directe `status: skipped_not_shopify`,
+   idempotente, sans appel Shopify.
+
+2. **`3d71c6a`** — API `/stock-movements` : `stats.skippedNotShopify`
+   Exposition du compteur dans la réponse JSON pour les KPIs dashboard.
+
+3. **`62ef671`** — `StockMovementsBlock` : libellé violet + compteur
+   Ajout du cas dans `getStatusStyle`, élargissement du type union,
+   compteur "X à la volée" dans le header du tableau.
+
+4. **`9e05cd2`** — Page `/dashboard/stock-movements` : KPI + onglet
+   4ème KPI violet "📝 À la volée (hors-Shopify)" à côté des 3 existants
+   (Total / Réussis / En erreur). 5ème onglet de filtre dédié.
+   Grille KPIs passée de `md:grid-cols-3` à `md:grid-cols-2 lg:grid-cols-4`
+   pour rester responsive.
+
+### Backfill historique (2026-05-16)
+
+À la livraison, **13 lignes historiques** étaient en `status: 'failed'` avec
+`error_message: 'SKU introuvable dans Shopify'` (faux positifs du bug avant
+fix). Décision : les requalifier en masse pour repartir d'une base propre
+où le KPI "❌ En erreur" reflète UNIQUEMENT de vraies erreurs Shopify.
+
+Procédure suivie :
+1. SELECT de dry-run pour identifier les 13 lignes (date min : 2026-05-06,
+   date max : 2026-05-13)
+2. SELECT GROUP BY pour vérifier les SKUs concernés (5 SKUs Glatz à espaces,
+   3 SKUs Fermob, 2 SKUs Hunn descriptifs, etc. — tous clairement
+   non-Shopify d'origine)
+3. UPDATE en masse :
+```sql
+   UPDATE stock_movements
+   SET status = 'skipped_not_shopify', error_message = NULL
+   WHERE status = 'failed' AND error_message = 'SKU introuvable dans Shopify';
+```
+4. Vérification post-update :
+   - `completed`: 22 (inchangé)
+   - `skipped_not_shopify`: 13 (les requalifiées)
+   - `failed`: 0
+
+### Validation
+
+- ✅ Preview Vercel testée : KPI "À la volée" rempli, KPI erreur à 0
+- ✅ Merge sur main + déploiement prod auto-Vercel OK
+- ✅ Smoke test prod : 4 KPIs corrects, lignes historiques affichées en violet
+
+### Pièges techniques retenus
+
+- **Helper réutilisé entre lecture et écriture** : `isShopifyLine` introduit
+  en PR #2 fait office de source unique de vérité pour les 2 sens (refresh
+  côté offre client + décrémentation côté conversion). Garantit la cohérence
+  des frontières "Shopify vs hors-Shopify" dans tout le code.
+- **Tolérance frontale au nouveau statut** : le `default` du `switch` dans
+  `getStatusStyle` faisait office de filet pendant le déploiement
+  progressif des commits, le front n'a jamais cassé même quand le backend
+  envoyait déjà des `skipped_not_shopify` non encore stylés.
+- **Backfill séparé du code** : aucune migration SQL automatique côté
+  application. Le UPDATE manuel via Supabase SQL Editor reste sous contrôle
+  du développeur. Bonne pratique à reconduire si on doit nettoyer d'autres
+  données historiques un jour.
+
+### Mise à jour de la dette technique
+
+- ✅ Dette **D10** (du journal précédent post-S9 PR #2) → **Résolue**
 
 ---
 
@@ -438,7 +546,7 @@ disponible localement et sur l'origin pendant ~1-2 semaines par précaution.
 | D8 | Fichier parasite `ezefijardin-confort-formulaire` tracké depuis commit `310d262` (chemin Windows mal échappé historique). Inerte. À supprimer dans un commit dédié `chore: cleanup historical garbage` | Pré-chantier (découvert Session 9) | Basse | Ouvert |
 | D9 | Créer un `.env.example` versionné dans le repo pour documenter les noms des env vars Supabase requises (`SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`) | Session 9 Phase C | Basse | Ouvert |
 | D5b | Aperçu offre en création/modification n'affiche pas badges stock | Session 7 | — | ✅ **Résolu post-S9 PR #2** (filtrage `refreshStock` sur lignes Shopify uniquement) |
-| D10 | Décrémentation Shopify à la conversion (`stock-movements/process`) inclut les lignes à la volée → mouvements `failed` parasites + notification "Sortie stock partielle" injustifiée. À traiter avec statut dédié `skipped_not_shopify` (Option C) pour préserver visibilité métier | Post-S9 PR #2 | Moyenne | Ouvert |
+| D10 | Décrémentation Shopify à la conversion (`stock-movements/process`) inclut les lignes à la volée → mouvements `failed` parasites + notification "Sortie stock partielle" injustifiée. | Post-S9 PR #2 | — | ✅ **Résolu Post-S9 PR #3** (statut `skipped_not_shopify` + backfill 13 lignes historiques) |
 | R1 | Script d'import factures non versionné (~50 scripts à `C:\Users\ezefi\` avec clé legacy `eyJ...` hardcodée — **tous cassés depuis désactivation Phase C**). À refactor avec lecture `.env` au moment de réutilisation | Audit Storage + Session 9 Phase C | **Critique** | Ouvert |
 | R2 | Google Drive perso sans backup tiers (10 ans de factures) | Audit Storage | Importante | Ouvert |
 | R3 | Bucket `brand-logos` non régénérable | Audit Storage | Basse | Ouvert |
