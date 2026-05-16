@@ -34,10 +34,12 @@ export async function GET(request: NextRequest) {
       { count: totalCount },
       { count: failedCount },
       { count: completedCount },
+      { count: skippedNotShopifyCount },
     ] = await Promise.all([
       supabaseAdmin.from("stock_movements").select("*", { count: "exact", head: true }),
       supabaseAdmin.from("stock_movements").select("*", { count: "exact", head: true }).eq("status", "failed"),
       supabaseAdmin.from("stock_movements").select("*", { count: "exact", head: true }).eq("status", "completed"),
+      supabaseAdmin.from("stock_movements").select("*", { count: "exact", head: true }).eq("status", "skipped_not_shopify"),
     ])
 
     return NextResponse.json({
@@ -46,6 +48,7 @@ export async function GET(request: NextRequest) {
         total: totalCount || 0,
         completed: completedCount || 0,
         failed: failedCount || 0,
+        skippedNotShopify: skippedNotShopifyCount || 0,
       },
     })
 
