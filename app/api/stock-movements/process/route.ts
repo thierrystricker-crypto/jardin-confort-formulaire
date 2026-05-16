@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 import { findVariantBySKU, adjustInventory, SHOPIFY_LOCATION_ID } from "@/lib/shopify-stock"
 import { createNotification } from "@/lib/notifications"
+import { isShopifyLine } from "@/lib/jc-print-types"
 
 type LineItem = {
   id?: string
@@ -16,6 +17,7 @@ type LineItem = {
   title?: string
   qty?: number
   unitPrice?: number
+  shopifyLocked?: boolean
 }
 
 export async function POST(request: NextRequest) {
@@ -45,14 +47,24 @@ export async function POST(request: NextRequest) {
 
     const lines: LineItem[] = (offre.data?.lines as LineItem[]) || []
 
-    // 2. Filtrer : produits avec SKU + qty > 0 (on exclut comments et custom sans SKU)
-    const eligibleLines = lines.filter(l =>
-      l.type !== "comment"
+    // 2. Séparation en deux passes (cf. PR #3 stock-movements-skipped-not-shopify) :
+    //   Pass A — lignes Shopify (catalogue) : décrémentation réelle via API Shopify
+    //   Pass B — lignes "à la volée" (custom hors-Shopify) : marqueur informatif
+    //            "skipped_not_shopify" pour préserver la visibilité métier ("quelles
+    //            lignes de la commande sont synchronisées vs non") sans polluer
+    //            les notifications d'erreur Shopify.
+    // Le critère unique de distinction est isShopifyLine() (cf. lib/jc-print-types.ts).
+    const shopifyLines = lines.filter(l =>
+      isShopifyLine(l) && (l.qty || 0) > 0
+    )
+    const skippedLines = lines.filter(l =>
+      !isShopifyLine(l)
+      && l.type !== "comment"
       && l.sku && l.sku.trim().length > 0
       && (l.qty || 0) > 0
     )
 
-    if (eligibleLines.length === 0) {
+    if (shopifyLines.length === 0 && skippedLines.length === 0) {
       return NextResponse.json({
         success: true,
         message: "Aucun article éligible (pas de SKU)",
@@ -65,7 +77,7 @@ export async function POST(request: NextRequest) {
       sku: string
       title: string
       qty: number
-      status: "completed" | "skipped" | "failed"
+      status: "completed" | "skipped" | "failed" | "skipped_not_shopify"
       error?: string
       newQuantity?: number
     }> = []
@@ -74,7 +86,53 @@ export async function POST(request: NextRequest) {
     const ledgerUri = (numeroAffiche: string | null) =>
       `gid://offres-jardin-confort/StockMovement/${numeroAffiche || offre_slug}`
 
-    for (const line of eligibleLines) {
+    // ─── Pass B : lignes "à la volée" → marqueur skipped_not_shopify (pas d'appel Shopify) ───
+    for (const line of skippedLines) {
+      const sku = line.sku!.trim()
+      const qty = Math.abs(line.qty || 0)
+      const title = line.title || "Article"
+
+      // Idempotence : si déjà marqué pour cette commande+sku+raison, on saute
+      const { data: existing } = await supabaseAdmin
+        .from("stock_movements")
+        .select("id, status")
+        .eq("offre_slug", offre_slug)
+        .eq("sku", sku)
+        .eq("reason", reason)
+        .in("status", ["pending", "completed", "skipped_not_shopify"])
+        .maybeSingle()
+
+      if (existing) {
+        results.push({ sku, title, qty, status: "skipped", error: "Déjà tracé" })
+        continue
+      }
+
+      // Insertion directe avec status "skipped_not_shopify" + executed_at
+      const { error: insertErr } = await supabaseAdmin
+        .from("stock_movements")
+        .insert({
+          offre_slug,
+          numero_affiche: offre.numero_affiche,
+          sku,
+          product_title: title,
+          location_id: SHOPIFY_LOCATION_ID,
+          quantity_change: -qty,
+          reason,
+          status: "skipped_not_shopify",
+          executed_at: new Date().toISOString(),
+        })
+
+      if (insertErr) {
+        // Race condition possible (contrainte unique) → on skippe, c'est OK
+        results.push({ sku, title, qty, status: "skipped", error: "Race condition" })
+        continue
+      }
+
+      results.push({ sku, title, qty, status: "skipped_not_shopify" })
+    }
+
+    // ─── Pass A : lignes Shopify → décrémentation réelle via Shopify Admin ───
+    for (const line of shopifyLines) {
       const sku = line.sku!.trim()
       const qty = Math.abs(line.qty || 0)
       const title = line.title || "Article"
@@ -186,6 +244,7 @@ export async function POST(request: NextRequest) {
     const completed = results.filter(r => r.status === "completed").length
     const failed = results.filter(r => r.status === "failed").length
     const skipped = results.filter(r => r.status === "skipped").length
+    const skippedNotShopify = results.filter(r => r.status === "skipped_not_shopify").length
 
     // 5. Si erreurs → notification
     if (failed > 0) {
@@ -204,7 +263,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: failed === 0,
-      summary: { completed, failed, skipped, total: results.length },
+      summary: { completed, failed, skipped, skippedNotShopify, total: results.length },
       results,
     })
 
