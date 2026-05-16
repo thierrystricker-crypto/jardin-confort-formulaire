@@ -558,7 +558,7 @@ function copyAddress(type: "facturation" | "livraison") {
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <Link href="/dashboard/clients" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">← Fichier clients</Link>
             <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">📊 Dashboard</Link>
-            <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
+            <Link href={`/drafts/nouveau?prefill=${encodeURIComponent(JSON.stringify({
               nom: client.nom, prenom: client.prenom || "", societe: client.societe || "",
               complement_nom: client.complement_nom || "",
               email: client.email || "", telephone1: client.tel1 || "",
@@ -566,7 +566,7 @@ function copyAddress(type: "facturation" | "livraison") {
               npa: client.npa || "", ville: client.ville || "",
             }))}`} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center rounded-xl border border-[#2B8AD1]/40 bg-[#2B8AD1]/15 px-4 py-2 text-sm text-sky-300 hover:bg-[#2B8AD1]/25">
-              + Nouvelle offre
+              + Nouvelle offre (brouillon)
             </Link>
             <PrintAddressButton client={client} />
           </div>
@@ -966,7 +966,7 @@ function copyAddress(type: "facturation" | "livraison") {
               <div className="rounded-xl border border-white/10 bg-black/10 p-8 text-center text-zinc-500">
                 Aucune offre enregistrée pour ce client.
                 <div className="mt-4">
-                  <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
+                  <Link href={`/drafts/nouveau?prefill=${encodeURIComponent(JSON.stringify({
                     nom: client.nom, prenom: client.prenom || "", societe: client.societe || "",
                     complement_nom: client.complement_nom || "",
                     email: client.email || "", telephone1: client.tel1 || "",
@@ -974,7 +974,7 @@ function copyAddress(type: "facturation" | "livraison") {
                     npa: client.npa || "", ville: client.ville || "",
                   }))}`} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center rounded-xl bg-[#2B8AD1] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2478b8]">
-                    + Créer une offre
+                    + Créer une offre (brouillon)
                   </Link>
                 </div>
               </div>
