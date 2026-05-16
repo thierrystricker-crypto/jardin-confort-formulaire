@@ -6,13 +6,19 @@
 
 ---
 
-## 🎉 Chantier brouillons — TERMINÉ le 2026-05-15
+## 🎉 Chantier brouillons — OFFICIELLEMENT CLÔTURÉ le 2026-05-16
 
 **Sessions 1 à 9 toutes validées.** Le système de brouillons est en production
 sur `https://offres.jardin-confort.ch/dashboard` depuis le merge commit
-**`bdc9840`** sur `main`.
+**`bdc9840`** sur `main` (2026-05-15).
 
-### Récap des 9 sessions
+**4 PR post-S9 mergées sur main le 2026-05-16** :
+- **PR #2** (`6aeb5ca`) — Fix critique stock dynamique
+- **PR #3** (`16e1e31`) — Statut `skipped_not_shopify` + backfill 13 lignes
+- **PR #4** (`b892ec7`) — 4 boutons "Nouvelle offre" du dashboard → `/drafts/nouveau`
+- **PR #5** (`e5ddd20`) — Popup d'onboarding pour l'équipe (jusqu'au 2026-05-21)
+
+### Récap des 9 sessions du chantier
 - **S1** (14/05) — Table `drafts` + branche `feature/brouillons`
 - **S2** (14/05) — 5 routes API CRUD + RPC `next_dra_numero()`
 - **S3** (14/05) — Pages `/drafts/nouveau` + `/drafts/[slug]/editer`
@@ -23,9 +29,9 @@ sur `https://offres.jardin-confort.ch/dashboard` depuis le merge commit
 - **S8** (15/05) — Refonte des 4 boutons de copie + traçabilité Option A
 - **S9** (15/05) — Tests E2E + rotation clés Supabase + merge prod
 
-### Branches
-- `main` à `bdc9840` (merge commit, prod en ligne)
-- `feature/brouillons` à `5666649` — **gardée localement quelques jours
+### État des branches
+- `main` à `e5ddd20` (HEAD, merge PR #5 popup onboarding)
+- `feature/brouillons` à `5666649` — **gardée localement + remote quelques jours
   par précaution**. À supprimer après une période de stabilité confirmée
   (~1-2 semaines) :
   ```powershell
@@ -33,8 +39,9 @@ sur `https://offres.jardin-confort.ch/dashboard` depuis le merge commit
   git branch -d feature/brouillons        # locale
   git push origin --delete feature/brouillons   # distante (ou via UI GitHub)
   ```
+- Toutes les autres branches de fix post-S9 : supprimées (local + remote)
 
-### Smoke test prod effectué le 2026-05-15
+### Smoke test prod effectué le 2026-05-15 (chantier initial)
 - Création brouillon DRA-XXX "TEST PROD" ✅
 - Aperçu print avec filigrane ✅
 - Transformation modal + cases à cocher ✅
@@ -234,12 +241,165 @@ Procédure suivie :
 
 ---
 
+## 🔧 Post-S9 — Boutons "Nouvelle offre" du dashboard (PR #4, 2026-05-16)
+
+**Trouvé juste avant la prod équipe de demain matin** : 4 boutons "Nouvelle
+offre" du dashboard pointaient encore vers `/offres/nouveau` (ancien
+parcours), au lieu de `/drafts/nouveau`. Conséquence : un commercial qui
+cliquait l'un de ces boutons contournait silencieusement le nouveau système
+de brouillon.
+
+La PR #1 (chantier brouillons) avait bien refondu les 4 boutons de copie
+sur `app/dashboard/[slug]/page.tsx` (Session 8), mais les 4 boutons "création
+neuve" sur les autres pages dashboard n'avaient pas été identifiés à
+l'époque.
+
+### Boutons corrigés
+
+| Fichier | Ancien label | Nouveau label |
+|---|---|---|
+| `app/dashboard/page.tsx` | `+ Nouvelle offre` | `+ Nouvelle offre (brouillon)` |
+| `app/dashboard/clients/page.tsx` | `+ Offre` | `+ Offre (brouillon)` |
+| `app/dashboard/clients/[id]/page.tsx` (header) | `+ Nouvelle offre` | `+ Nouvelle offre (brouillon)` |
+| `app/dashboard/clients/[id]/page.tsx` (état vide) | `+ Créer une offre` | `+ Créer une offre (brouillon)` |
+
+Le mécanisme `?prefill=...` (utilisé par 3 des 4 boutons pour pré-remplir
+les champs client depuis la fiche) est **déjà supporté à l'identique** par
+`/drafts/nouveau` via `DraftFormulaire` depuis Session 3. Donc 0 modification
+côté drafts pour faire fonctionner les prefills.
+
+### Choix design des libellés
+
+Garder le mot "offre" et ajouter `(brouillon)` en parenthèse, plutôt que
+remplacer "offre" par "brouillon" :
+- Continuité visuelle avec l'ancien système pour ne pas surprendre l'équipe
+- Le `(brouillon)` clarifie le nouveau parcours sans ambiguïté
+- Évite la confusion avec "brouillon de commande" (qui n'existe pas)
+
+### Architecture livrée
+
+1 commit (`052f5af`) sur branche `fix/dashboard-bouton-nouvelle-offre-vers-draft`,
+mergé via PR #4 (merge commit **`b892ec7`**).
+
+3 fichiers, 7 insertions, 7 suppressions. Très petit fix mais critique pour
+la cohérence du parcours utilisateur en production.
+
+### Bug transitoire observé pendant les tests
+
+Lors d'un test de création de brouillon en preview, une fois sur N essais
+le popup d'erreur "Le numéro n'a pas pu être récupéré. Rechargez la page
+et réessayez." est apparu. Rééssai immédiat → OK.
+
+Cause probable : timeout RPC Supabase `next_dra_numero` ou cold-start
+Vercel. **Aucun lien avec la PR #4** (qui ne touche que des `<Link href=...>`).
+Bug pré-existant depuis le déploiement initial du chantier brouillons.
+
+**Décision** : ne pas traiter dans la fenêtre de prod équipe. Noté en
+dette technique D12 pour traitement dans une session dédiée (retry
+automatique côté front + log côté API).
+
+### Note pour la prochaine session
+
+Le bouton "+ Nouvelle offre (brouillon)" du dashboard principal aura un
+**popup d'onboarding** lors des premiers clics, pour expliquer à l'équipe
+le nouveau parcours (brouillon → modification → transformation en offre).
+Réalisé immédiatement après en PR #5 — cf. section suivante.
+
+---
+
+## 🎓 Post-S9 — Popup d'onboarding (PR #5, 2026-05-16)
+
+**Contexte** : équipe découvre demain (2026-05-17) le nouveau système de
+création de brouillons en prod. Pour éviter les questions du type
+"pourquoi je tombe sur un brouillon au lieu d'une offre", un popup
+d'onboarding s'affiche à chaque ouverture de `/drafts/nouveau`.
+
+### Comportement choisi
+
+- **Apparait** : à chaque ouverture de `/drafts/nouveau` (création de brouillon)
+- **Disparait automatiquement** : après le 2026-05-21 (5 jours d'onboarding)
+- **Fermable** : bouton "Compris", touche Escape, clic overlay, bouton ✕
+- **Pas de localStorage** : volontairement simple, ré-affiché à chaque visite
+  jusqu'à la date butoir hardcodée
+- **Pas affiché en édition** : `/drafts/[slug]/editer` n'est pas concerné
+
+### Architecture livrée
+
+1 commit (`36fa1cf`) sur branche `feat/popup-onboarding-drafts`, mergé via
+PR #5 (merge commit **`e5ddd20`**).
+
+- **Nouveau** : `components/OnboardingDraftPopup.tsx` (composant autonome, ~110 lignes)
+- **Modifié** : `app/drafts/nouveau/page.tsx` (3 lignes : import + fragment React + utilisation)
+- **Aucun** changement à `DraftFormulaire.tsx` (le composant partagé reste intact)
+
+### Choix design
+
+- **Pas de "Ne plus afficher"** : décision Thierry — l'équipe voit le popup à
+  chaque ouverture pendant 5 jours, ça force la lecture en cas de doute, puis
+  disparait pour toujours sans intervention.
+- **Date butoir hardcodée** plutôt que durée relative : pas de calcul, pas de
+  premier-affichage à stocker, pas de timezone à gérer. Date `SHOW_UNTIL`
+  fixée à `2026-05-22T00:00:00Z` (exclusif) = popup actif jusqu'au 21 mai inclus.
+- **Rollback chirurgical** : si bug visuel ou comportemental, désactivable
+  instantanément en commentant 2 lignes dans `app/drafts/nouveau/page.tsx`.
+
+### Texte affiché
+
+> 🎉 Bienvenue dans le nouveau système de création d'offres
+>
+> À partir de maintenant, vous rédigez d'abord un **brouillon** (DRA-XXX) que
+> vous pouvez modifier et dupliquer à volonté.
+>
+> Quand votre brouillon est prêt, vous le **transformez en offre** définitive
+> (DEV-XXXX) — l'offre est non modifiable et peut être partagée au client
+> comme d'habitude.
+>
+> **Bonus** : n'importe quelle offre, commande ou autre brouillon peut être
+> **dupliquée en nouveau brouillon** depuis son dashboard.
+
+### Pour la suite
+
+Ce popup peut servir de **template** pour de futurs onboardings de feature.
+Si une nouvelle feature débarque et qu'on veut alerter l'équipe pendant
+quelques jours, on peut soit :
+- Dupliquer `OnboardingDraftPopup.tsx` et changer le texte/date
+- OU refactorer en composant générique `<TemporaryAnnouncementPopup ... />`
+  paramétré (à voir si on a 3+ cas d'usage à l'avenir)
+
+---
+
+## 🎉 Récap final session 2026-05-16
+
+**Énorme journée.** 4 PRs mergées en prod, 0 régression, équipe prête pour
+demain matin.
+
+| PR | Commit merge | Description |
+|---|---|---|
+| **PR #2** | `6aeb5ca` | Fix critique stock dynamique (lignes à la volée n'invalident plus la query Shopify) |
+| **PR #3** | `16e1e31` | Statut `skipped_not_shopify` + backfill 13 lignes historiques |
+| **PR #4** | `b892ec7` | 4 boutons "Nouvelle offre" dashboard redirigent vers `/drafts/nouveau` |
+| **PR #5** | `e5ddd20` | Popup d'onboarding pour l'équipe (jusqu'au 2026-05-21) |
+
+### Méthodologie validée pour les sessions futures
+
+1. **Diagnostic SQL/lecture avant de toucher au code** — on évite de coder à
+   l'aveugle
+2. **Format `cherche / remplace par`** par blocs courts à appliquer dans
+   VS Code via Ctrl+F + Ctrl+V
+3. **Pas de scripts PowerShell avec `exit 1`** dans le terminal VS Code
+   (ils crashent le shell)
+4. **`git --no-pager diff`** pour éviter d'être bloqué dans `less`
+5. **Branche dédiée + PR + Preview Vercel + smoke test avant merge** systématiquement
+6. **Journal mis à jour dans la foulée** pendant que c'est frais en tête
+
+---
+
 ## 🎯 Contexte du projet
 
 **Projet :** `jardin-confort-formulaire`
 **Stack :** Next.js (App Router) + Supabase + Shopify, hébergé sur Vercel
 **Chemin local :** `C:\Users\ezefi\jardin-confort-formulaire`
-**Branche active :** `main` à `bdc9840`
+**Branche active :** `main` à `e5ddd20`
 **URL prod :** `https://offres.jardin-confort.ch/dashboard`
 
 **Workflow git (PowerShell) après chaque modification :**
@@ -313,6 +473,20 @@ sont :
 Les nouvelles clés sont auto-créées par Supabase sur les projets existants
 et coexistent avec les legacy jusqu'à désactivation explicite.
 
+### Piège 7 — Diff `git` partiellement lisible : valider avant de conclure
+
+**Découvert post-S9 PR #4 (2026-05-16).** Un diff `git --no-pager diff` qui
+contient plusieurs hunks dans le même fichier peut induire en erreur si on
+lit trop vite. Exemple concret : sur `app/dashboard/clients/[id]/page.tsx`,
+Claude a affirmé "le 4ème label n'a pas été modifié" en lisant seulement les
+2 premiers hunks visibles, alors que le 3ème hunk (plus bas dans la sortie)
+contenait bien le changement attendu.
+
+**Bonne pratique** : avant de conclure qu'un changement manque, demander
+`git --no-pager diff -- <fichier_unique>` et vérifier **tous** les `@@ ... @@`
+hunks. Si plusieurs hunks dans le même fichier, ils peuvent être séparés
+par des dizaines de lignes invisibles dans la sortie tronquée.
+
 ---
 
 ## 🐛 Problème métier (rappel)
@@ -344,6 +518,7 @@ Aujourd'hui, dès qu'une offre est enregistrée, elle est **immuable**. Conséqu
 - Aperçu/PDF sans filigrane
 
 ### Traçabilité bidirectionnelle 3 niveaux
+```
 DEV-2026-047 (offre source originelle)
 │
 │ Copier offre → brouillon
@@ -357,11 +532,13 @@ DRA-019 (brouillon)
 ▼
 DEV-2026-058 (nouvelle offre)
 │ data.fromDraftSlug = "dra-019-ama4u"               ← Session 5
+│
 DRA-019 archivé avec :
 - archived = true
 - transformed_at = même timestamp que offre.created_at (atomicité)
 - transformed_into_offre_slug = "dev-2026-058-63a24"
 - data.copiedFromOffreSlug PRÉSERVÉ = "dev-2026-047-l321a"
+```
 
 **Test bout-en-bout effectué en Session 9 sur DRA-019 → DEV-2026-058.** Tous les liens validés en SQL.
 
@@ -381,6 +558,7 @@ DRA-019 archivé avec :
 | Transformation multiple | **Non** — un brouillon = 1 transformation max |
 | Bouton "📋 Dupliquer en brouillon" | Disponible **même** sur brouillons transformés (cas variantes), s'ouvre en **nouvel onglet** |
 | Boutons de copie depuis offre/commande | **Tous deviennent des brouillons** (Session 8). Aucun bouton ne crée plus directement une offre. |
+| Boutons "Nouvelle offre" du dashboard | **Tous redirigent vers `/drafts/nouveau`** (PR #4 post-S9). Label "Nouvelle offre (brouillon)" pour clarifier le parcours. |
 | Mécanisme de copie | **POST direct `/api/drafts`** (Session 8 — Option A). Plus de localStorage. |
 | Aperçu brouillon | Page print dynamique avec filigrane "BROUILLON — DRA-XXX" |
 | Récap modal de transformation | Détail complet (Sous-total, Remise (X%), Services inclus, Arrondi, TVA, Total) — Session 9 fix `3cb1db6` |
@@ -389,6 +567,7 @@ DRA-019 archivé avec :
 | URL d'édition | Route dynamique `/drafts/[slug]/editer` |
 | Filigrane | SVG inline data-URI, ambre `#f59e0b`, opacité 0.11, rotation -30° |
 | Auto-print | **Aucun** nulle part |
+| Onboarding équipe | Popup hardcodé jusqu'au 2026-05-21, sans localStorage (PR #5 post-S9) |
 | Clés Supabase | **Nouvelles API keys** `sb_publishable_...` / `sb_secret_...` (depuis Session 9 Phase C). Plus les anciennes JWT `eyJ...` legacy. |
 
 ---
@@ -529,7 +708,7 @@ disponible localement et sur l'origin pendant ~1-2 semaines par précaution.
 
 ---
 
-## 🐛 Dette technique identifiée (HORS périmètre Session 9)
+## 🐛 Dette technique identifiée
 
 À traiter dans des sessions dédiées. Aucun n'est bloquant pour la prod.
 
@@ -540,13 +719,14 @@ disponible localement et sur l'origin pendant ~1-2 semaines par précaution.
 | D3 | Affichage "Type cible" cosmétique à nettoyer dans `app/dashboard/draft/[slug]/page.tsx` | Session 5 | Basse | Ouvert |
 | D4 | `save/route.ts` utilise des URLs absolues avec fallback prod | Session 5 | Moyenne | Ouvert |
 | D5a | Bug `ambianceImages` trop lourdes pour localStorage | Pré-chantier | — | ✅ **Résolu Session 8** |
-| D5b | Aperçu offre en création/modification n'affiche pas badges stock | Session 7 (pré-chantier) | Moyenne | Ouvert |
+| D5b | Aperçu offre en création/modification n'affiche pas badges stock (côté drafts `/drafts/[slug]/editer`) | Session 7 (pré-chantier) | Moyenne | Ouvert (porter `refreshStock` dans `GET /api/drafts/[slug]`) |
 | D6 | Code mort `?from_copy=1` + `localStorage["jc-offre-copy"]` dans `DraftFormulaire.tsx` (useEffect ~ligne 1145) et `app/offres/nouveau/page.tsx` | Session 8 | Basse | Ouvert |
 | D7 | Affichage du pourcentage de remise manquant sur aperçu print offre et page brouillon (seul le montant CHF est affiché) — fix appliqué uniquement sur modal de transformation Session 9 | Session 9 | Moyenne | Ouvert |
 | D8 | Fichier parasite `ezefijardin-confort-formulaire` tracké depuis commit `310d262` (chemin Windows mal échappé historique). Inerte. À supprimer dans un commit dédié `chore: cleanup historical garbage` | Pré-chantier (découvert Session 9) | Basse | Ouvert |
 | D9 | Créer un `.env.example` versionné dans le repo pour documenter les noms des env vars Supabase requises (`SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`) | Session 9 Phase C | Basse | Ouvert |
-| D5b | Aperçu offre en création/modification n'affiche pas badges stock | Session 7 | — | ✅ **Résolu post-S9 PR #2** (filtrage `refreshStock` sur lignes Shopify uniquement) |
 | D10 | Décrémentation Shopify à la conversion (`stock-movements/process`) inclut les lignes à la volée → mouvements `failed` parasites + notification "Sortie stock partielle" injustifiée. | Post-S9 PR #2 | — | ✅ **Résolu Post-S9 PR #3** (statut `skipped_not_shopify` + backfill 13 lignes historiques) |
+| D11 | Popup d'onboarding pour expliquer à l'équipe le nouveau parcours brouillon → offre lors des premiers clics sur "+ Nouvelle offre (brouillon)". Affichage à durée limitée (quelques jours) ou avec checkbox "Ne plus afficher". | Post-S9 PR #4 | — | ✅ **Résolu Post-S9 PR #5** (popup actif jusqu'au 2026-05-21, sans localStorage) |
+| D12 | Bug transitoire observé une fois en prod le 2026-05-16 sur `POST /api/drafts` : popup "Le numéro n'a pas pu être récupéré. Rechargez la page et réessayez." apparu une fois, rééssai immédiat OK. Cause probable : timeout RPC Supabase `next_dra_numero` ou cold-start Vercel. **À traiter dans une session dédiée** avec retry automatique côté front (2-3 tentatives avec backoff) + log côté API pour mesurer la fréquence. | Post-S9 PR #4 | Faible (workaround utilisateur OK : recharger + réessayer) | Ouvert |
 | R1 | Script d'import factures non versionné (~50 scripts à `C:\Users\ezefi\` avec clé legacy `eyJ...` hardcodée — **tous cassés depuis désactivation Phase C**). À refactor avec lecture `.env` au moment de réutilisation | Audit Storage + Session 9 Phase C | **Critique** | Ouvert |
 | R2 | Google Drive perso sans backup tiers (10 ans de factures) | Audit Storage | Importante | Ouvert |
 | R3 | Bucket `brand-logos` non régénérable | Audit Storage | Basse | Ouvert |
@@ -582,9 +762,10 @@ disponible localement et sur l'origin pendant ~1-2 semaines par précaution.
 
 ## 🆘 En cas de problème post-déploiement
 
-1. **Régression sur la prod détectée** : `git revert bdc9840` + push → Vercel redéploie l'état antérieur. La table `drafts` peut rester vide en base sans impact.
+1. **Régression sur la prod détectée** : `git revert <commit-merge-fautif>` + push → Vercel redéploie l'état antérieur. La table `drafts` peut rester vide en base sans impact.
 2. **Erreur 401 Supabase quelque part** : la rotation Phase C a tué les clés legacy `eyJ...`. Vérifier que la prod et le local utilisent bien les nouvelles `sb_secret_...` / `sb_publishable_...` (Vercel Env Vars + `.env.local`). Si nécessaire récupérer les nouvelles clés via Supabase Dashboard → Settings → API Keys → onglet "Publishable and secret API keys".
 3. **Un des ~50 scripts à `C:\Users\ezefi\` doit être relancé** : il renverra 401 Supabase (clé legacy désactivée Phase C). Le refactorer alors avec lecture depuis un `.env` (créer `C:\Users\ezefi\.env` avec la nouvelle `SUPABASE_SERVICE_ROLE_KEY=sb_secret_...`, et faire que le script lise `process.env.SUPABASE_SERVICE_ROLE_KEY` via un `require("dotenv").config()`). Ne **pas** re-hardcoder la nouvelle clé.
+4. **Le popup d'onboarding pose problème** : désactivable instantanément en commentant 2 lignes dans `app/drafts/nouveau/page.tsx` (import + utilisation). Rollback chirurgical sans toucher au reste.
 
 ---
 
@@ -593,6 +774,6 @@ disponible localement et sur l'origin pendant ~1-2 semaines par précaution.
 ```powershell
 cd C:\Users\ezefi\jardin-confort-formulaire
 git add journal-brouillons.md
-git commit -m "docs(journal): cloture Session 9 Phase D - chantier brouillons termine"
+git commit -m "docs(journal): post-S9 PR #4 + PR #5 - cloture officielle chantier brouillons"
 git push
 ```
