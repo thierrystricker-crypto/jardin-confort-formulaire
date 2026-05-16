@@ -8,7 +8,13 @@
 // l'URL vers /drafts/[slug]/editer via router.replace() — sans remount.
 
 import DraftFormulaire from "../_components/DraftFormulaire";
+import OnboardingDraftPopup from "@/components/OnboardingDraftPopup";
 
 export default function DraftNouveauPage() {
-  return <DraftFormulaire />;
+  return (
+    <>
+      <OnboardingDraftPopup />
+      <DraftFormulaire />
+    </>
+  );
 }
