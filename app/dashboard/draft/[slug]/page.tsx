@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import TransformerModal from "./TransformerModal";
+import TransformerModal from "@/components/TransformerModal";
 
 type TypeDocument = "Offre" | "Commande";
 

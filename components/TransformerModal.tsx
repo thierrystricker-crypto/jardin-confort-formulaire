@@ -15,6 +15,7 @@
 // 6. Sur 404/500/réseau : message d'erreur + bouton Fermer/Réessayer
 
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -97,6 +98,11 @@ export default function TransformerModal({
 
   if (!open) return null;
 
+  // SSR guard : createPortal a besoin de document.body qui n'existe pas côté serveur.
+  // En pratique cette modal est ouverte via un onClick côté client, donc le check
+  // est défensif (Next.js SSR-prerender le composant parent).
+  if (typeof document === "undefined") return null;
+
   const canSubmit =
     check1 && check2 && state.kind === "idle";
 
@@ -170,7 +176,7 @@ export default function TransformerModal({
     }
   }
 
-  return (
+  return createPortal(
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
@@ -388,6 +394,7 @@ export default function TransformerModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

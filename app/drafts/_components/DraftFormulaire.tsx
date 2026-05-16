@@ -3,6 +3,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import MediaLinePicker from "../../offres/nouveau/MediaLinePicker";
+import TransformerModal from "@/components/TransformerModal";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
@@ -104,9 +105,6 @@ const serviceOptions = [
 
 // TVA Suisse 2024 : 8.1%
 const TVA_RATE = 0.081;
-// Key séparée du formulaire offres pour éviter qu'un brouillon local
-// brouillon n'écrase un brouillon local offre (ou inversement).
-const STORAGE_KEY = "jc-draft-v1-local";
 
 const STATUS_CONFIG: Record<OfferStatus, { color: string; bg: string; border: string }> = {
   "En cours": { color: "#f59e0b", bg: "rgba(245,158,11,0.15)",  border: "rgba(245,158,11,0.4)"  },
@@ -340,6 +338,10 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
   const [savedAtTick, setSavedAtTick]       = useState(0); // tick 10s pour rafraîchir "il y a Xs"
   const [isSaving, setIsSaving]             = useState(false);
   const [saveError, setSaveError]           = useState("");
+  // ── Modal de transformation brouillon → offre (Session 5)
+  // Réutilise components/TransformerModal.tsx pour éviter au commercial
+  // de devoir aller dans le dashboard juste pour transformer.
+  const [showTransformModal, setShowTransformModal] = useState(false);
   const isInitializingRef = useRef(true);
   const customImageInputRef = useRef<HTMLInputElement | null>(null);
   const remarksEditorRef = useRef<HTMLDivElement | null>(null);
@@ -722,14 +724,6 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
     try {
       const snap = { ...makeSnapshot(), ambianceImages };
 
-      // Backup localStorage : utile uniquement si le serveur tombe avant qu'on ait
-      // pu créer le brouillon en base. Best-effort, on swallow les erreurs de quota.
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
-      } catch {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...snap, ambianceImages: [] })); } catch { /* ignore */ }
-      }
-
       // Création du client en base (seulement au save manuel — éviter de créer
       // des clients fantômes pour des brouillons jamais finalisés)
       if (!silent && !selectedClientId && nom.trim()) {
@@ -825,39 +819,9 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
     window.open(`/print/draft/${slug}`, "_blank");
   }
 
-  function saveLocalSnapshot() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(makeSnapshot()));
-      setDraftSavedAt(new Date().toLocaleString("fr-CH"));
-    } catch {
-      setSaveError("⚠️ Brouillon trop volumineux — réduisez le nombre d'images d'ambiance.");
-    }
-  }
+  
 
-  function loadDraftLocal() {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const s: DraftSnapshot = JSON.parse(raw);
-    setFormType(s.formType); setClientType(s.clientType); setPaymentMode(s.paymentMode);
-    setDeliveryMode((s as any).deliveryMode || "Livraison à domicile");
-    setOfferStatus(s.offerStatus || "En cours"); setDate(s.date); setCommercial(s.commercial);
-    setOfferNumber(s.offerNumber); setReference(s.reference || "");
-    setSociete(s.societe); setNom(s.nom); setPrenom(s.prenom);
-    setComplementNom((s as any).complement_nom || "");
-    setRue(s.rue); setRue2((s as any).rue2 || ""); setNumero(s.numero); setNpa(s.npa); setVille(s.ville);
-    setTelephone1(s.telephone1); setTelephone2(s.telephone2); setEmail(s.email);
-    setLivrDiff(s.livrDiff || false); setLivrSociete(s.livrSociete || "");
-    setLivrNom(s.livrNom || ""); setLivrPrenom(s.livrPrenom || "");
-    setLivrComplementNom((s as any).livr_complement_nom || "");
-    setLivrTel(s.livrTel || ""); setLivrRue(s.livrRue || ""); setLivrRue2((s as any).livrRue2 || "");
-    setLivrNumero(s.livrNumero || ""); setLivrNpa(s.livrNpa || ""); setLivrVille(s.livrVille || "");
-    setLines(cloneLines(s.lines)); setDiscount(s.discount); setDiscountPercent(s.discountPercent || "0");
-    setRemarks(s.remarks); setNotesInternes(s.notesInternes || "");
-    setLeadTime(s.leadTime); setValiditeDuree((s as any).validiteDuree || "30 jours"); setAccesLivraison((s as any).accesLivraison || ""); setRoundingStr(s.manualRounding || "");
-    setEnabledServices({ ...initialEnabledServices, ...s.enabledServices });
-    setServicePrices({ ...initialServicePrices, ...s.servicePrices });
-    setDraftSavedAt(new Date().toLocaleString("fr-CH"));
-  }
+  
 
   // Reset du formulaire — bouton "🔄 Nouveau brouillon".
   // Si on est déjà en mode édition (currentSlug !== null), on remet aussi à null
@@ -887,6 +851,28 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
     isInitializingRef.current = false;
   }
 
+  // ── Bouton "Transformer en offre" sur la page d'édition ──
+  //
+  // Comportement (validé Session post-S9, 2026-05-16) :
+  // 1. Si modifs non sauvées → save auto avant ouverture de la modal
+  //    (validation stricte : alerte si nom/email/commercial/ville manquants)
+  // 2. Si save OK ou rien à sauver → ouvre la modal de confirmation
+  // 3. La modal gère elle-même l'appel à transformer_draft (RPC SQL atomique)
+  //    et la redirection vers /dashboard/[offre-slug]
+  async function handleTransformClick() {
+    if (initialLoadStatus !== "ready") return;
+    if (!currentSlug) return; // sécurité : le bouton est censé être caché en mode création
+
+    // Si modifs non sauvées, on save d'abord (validation stricte = affiche l'alerte
+    // si nom/email/commercial/ville manquants, exactement comme le bouton manuel)
+    if (isDirty) {
+      const ok = await saveDraft({ silent: false });
+      if (!ok) return; // saveDraft a déjà setté saveError, modal pas ouverte
+    }
+
+    setShowTransformModal(true);
+  }
+
   async function onCustomImageChange(file?: File | null) { if (!file) return; setCustomImage(await readFileAsDataUrl(file)); }
   async function onLineImageChange(id: string, file?: File | null) { if (!file) return; updateLine(id, { image: await readFileAsDataUrl(file) }); }
   async function onLineImageDrop(id: string, event: React.DragEvent<HTMLDivElement>) {
@@ -899,8 +885,6 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
     // Titre de la page : "Brouillon DRA-001 — Offre" ou "Nouveau brouillon — Offre"
     const numLabel = currentSlug && offerNumber ? `Brouillon ${offerNumber}` : "Nouveau brouillon";
     document.title = `Jardin-Confort | ${numLabel} — ${formType}`;
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw && !currentSlug) setDraftSavedAt("Brouillon local trouvé");
   }, [formType, offerNumber, currentSlug]);
 
   // ────────────────────────────────────────────────────────────────────
@@ -1261,38 +1245,30 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
           <button className="jc-btn jc-btn-ghost" onClick={() => setWideMode((w) => !w)} title="Mode grand écran — recherche à droite">
             {wideMode ? "◧ Mode normal" : "⬛ Grand écran"}
           </button>
-          {/* ── Bouton "Nouveau brouillon" — comportement contextuel ──
-              Sur un brouillon transformé (lecture seule), pas besoin de
-              confirmation : il n'y a rien à perdre puisque toute modif est
-              déjà bloquée. Lien direct vers /drafts/nouveau.
-              Sur un brouillon actif (en cours d'édition), demande confirmation
-              car resetForm() abandonne les modifs courantes et navigue. */}
-          {initialLoadStatus === "transformed" ? (
-            <a href="/drafts/nouveau" className="jc-btn jc-btn-ghost">🔄 Nouveau brouillon</a>
-          ) : showResetConfirm ? (
-            <>
-              <span className="jc-warn-inline">Effacer tout ?</span>
-              <button className="jc-btn jc-btn-danger" onClick={resetForm}>Confirmer</button>
-              <button className="jc-btn jc-btn-ghost" onClick={() => setShowResetConfirm(false)}>Annuler</button>
-            </>
-          ) : (
-            <button className="jc-btn jc-btn-ghost" onClick={() => setShowResetConfirm(true)}>🔄 Nouveau brouillon</button>
+          {/* ── Bouton "Nouveau brouillon" ──
+              Comportement contextuel :
+              - Mode création (currentSlug === null) : bouton CACHÉ — on est déjà
+                sur la page de création, redirection vers la même page = no-op
+              - Brouillon transformé (lecture seule) : lien direct vers /drafts/nouveau,
+                pas de confirmation car il n'y a rien à perdre
+              - Brouillon actif en édition : confirmation car resetForm() abandonne
+                les modifs courantes et navigue */}
+          {currentSlug !== null && (
+            initialLoadStatus === "transformed" ? (
+              <a href="/drafts/nouveau" className="jc-btn jc-btn-ghost">🔄 Nouveau brouillon</a>
+            ) : showResetConfirm ? (
+              <>
+                <span className="jc-warn-inline">Effacer tout ?</span>
+                <button className="jc-btn jc-btn-danger" onClick={resetForm}>Confirmer</button>
+                <button className="jc-btn jc-btn-ghost" onClick={() => setShowResetConfirm(false)}>Annuler</button>
+              </>
+            ) : (
+              <button className="jc-btn jc-btn-ghost" onClick={() => setShowResetConfirm(true)}>🔄 Nouveau brouillon</button>
+            )
           )}
-          {/* Charger / Local / Undo : désactivés sur brouillon transformé.
-              Charger écraserait l'affichage avec un snapshot localStorage,
-              Local sauverait par-dessus, Undo n'a pas de sens en lecture seule. */}
-          <button
-            className="jc-btn jc-btn-ghost"
-            onClick={loadDraftLocal}
-            disabled={initialLoadStatus === "transformed"}
-            title={initialLoadStatus === "transformed" ? "Indisponible : brouillon transformé" : "Charger le brouillon local depuis le navigateur"}
-          >📂 Charger</button>
-          <button
-            className="jc-btn jc-btn-ghost"
-            onClick={saveLocalSnapshot}
-            disabled={initialLoadStatus === "transformed"}
-            title={initialLoadStatus === "transformed" ? "Indisponible : brouillon transformé" : "Sauvegarder localement dans le navigateur"}
-          >💾 Local</button>
+          {/* Undo : désactivé sur brouillon transformé (n'a pas de sens en lecture seule).
+              Les boutons Charger / Local ont été retirés post-S9 (vestiges de l'ancien
+              parcours localStorage, remplacé par /api/drafts depuis Session 2). */}
           <button
             className="jc-btn jc-btn-ghost"
             disabled={!undoSnapshot || initialLoadStatus === "transformed"}
@@ -1349,6 +1325,36 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
           >
             {isSaving ? "⏳ Enregistrement…" : currentSlug ? "💾 Enregistrer" : "💾 Créer le brouillon"}
           </button>
+          {/* ── Bouton "Transformer en offre" ──
+              Visible uniquement en mode édition (currentSlug !== null), pas en
+              création où il n'y a rien à transformer. Grisé si déjà transformé,
+              avec tooltip qui pointe vers le numéro d'offre cible. */}
+          {currentSlug !== null && (
+            initialLoadStatus === "transformed" ? (
+              <button
+                className="jc-btn jc-btn-ghost"
+                disabled
+                title={
+                  transformedInfo?.transformed_into_offre_slug
+                    ? `Déjà transformé en ${transformedInfo.transformed_into_offre_slug.toUpperCase().split("-").slice(0, 3).join("-")}`
+                    : "Déjà transformé en offre"
+                }
+                style={{ opacity: 0.5, cursor: "not-allowed" }}
+              >⚡ Transformer en offre</button>
+            ) : (
+              <button
+                className="jc-btn"
+                style={{
+                  background: "linear-gradient(135deg, #10b981, #059669)",
+                  color: "white",
+                  borderColor: "#059669",
+                }}
+                onClick={handleTransformClick}
+                disabled={isSaving || initialLoadStatus !== "ready"}
+                title="Transformer ce brouillon en offre définitive (DEV-XXXX). Les modifications en attente seront sauvegardées d'abord."
+              >⚡ Transformer en offre</button>
+            )
+          )}
           <button
             className="jc-btn jc-btn-primary"
             onClick={openPrint}
@@ -2757,7 +2763,89 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
 
       </div>{/* end sheet */}
 
+      {/* ── Modal de transformation brouillon → offre ──
+          Montée conditionnellement, alimentée par le state local du formulaire.
+          La modal gère elle-même l'appel à l'API et la redirection vers /dashboard/[slug]. */}
+      {showTransformModal && currentSlug && (
+        <TransformerModal
+          open={showTransformModal}
+          onClose={() => setShowTransformModal(false)}
+          draft={{
+            slug: currentSlug,
+            numero_affiche: offerNumber || "DRA-???",
+            client_societe: societe || null,
+            client_nom: nom || null,
+            client_prenom: prenom || null,
+            commercial: commercial || null,
+            sous_total: subTotal,
+            tva_montant: tvaAmount,
+            total_ttc: finalTotal,
+            remise_chf: discountValue,
+            services_total: serviceTotal,
+            arrondi: roundingValue,
+            discountPercent: discountPercent,
+            nb_articles: lines.filter(l => l.type !== "comment" && l.type !== "media").length,
+          }}
+        />
+      )}
+
       <style jsx global>{`
+        /* ─────────────────────────────────────────────────────────────
+           Override ciblé pour la modal TransformerModal (Tailwind).
+           Le bloc <style jsx global> ci-dessous applique :
+           - des règles agressives sur input/select/textarea (width:100%,
+             background, border, padding...)
+           - un reset universel *, *::before, *::after { margin:0; padding:0 }
+           Ces règles cassent le layout flex Tailwind de la modal — même
+           quand elle est rendue via React Portal dans document.body, car
+           le style jsx global est injecté dans head avec portée globale.
+           Solution en 2 volets :
+           1. Réinitialiser les inputs checkbox/radio à leur taille native.
+           2. Préserver les espacements Tailwind sur les éléments internes
+              de la modal (utilise revert-layer pour revenir au comportement
+              par défaut du navigateur sans casser Tailwind).
+        ───────────────────────────────────────────────────────────── */
+        [role="dialog"][aria-modal="true"] input[type="checkbox"],
+        [role="dialog"][aria-modal="true"] input[type="radio"] {
+          width: auto !important;
+          background: transparent !important;
+          border: 0 !important;
+          padding: 0 !important;
+          border-radius: 0 !important;
+        }
+        /* Restaurer le comportement Tailwind à l'intérieur de la modal.
+           On laisse Tailwind (utility classes) gérer les espacements,
+           on ne fait que neutraliser les overrides globaux ci-dessous. */
+        [role="dialog"][aria-modal="true"],
+        [role="dialog"][aria-modal="true"] * {
+          margin: revert-layer;
+          padding: revert-layer;
+        }
+        /* Re-cascader les utilities Tailwind après le revert : sans ça,
+           les classes p-3, p-4, gap-3, etc. seraient elles aussi revert.
+           On cible les conteneurs typiques de la modal (div, label, button,
+           h2, p, span) où Tailwind doit reprendre la main. */
+        [role="dialog"][aria-modal="true"] [class*="p-"],
+        [role="dialog"][aria-modal="true"] [class*="px-"],
+        [role="dialog"][aria-modal="true"] [class*="py-"],
+        [role="dialog"][aria-modal="true"] [class*="m-"],
+        [role="dialog"][aria-modal="true"] [class*="mx-"],
+        [role="dialog"][aria-modal="true"] [class*="my-"],
+        [role="dialog"][aria-modal="true"] [class*="mt-"],
+        [role="dialog"][aria-modal="true"] [class*="mb-"],
+        [role="dialog"][aria-modal="true"] [class*="ml-"],
+        [role="dialog"][aria-modal="true"] [class*="mr-"],
+        [role="dialog"][aria-modal="true"] [class*="pt-"],
+        [role="dialog"][aria-modal="true"] [class*="pb-"],
+        [role="dialog"][aria-modal="true"] [class*="gap-"],
+        [role="dialog"][aria-modal="true"] [class*="space-y-"],
+        [role="dialog"][aria-modal="true"] [class*="space-x-"] {
+          /* Tailwind utilities prennent le dessus naturellement, ce sélecteur
+             garantit juste qu'elles ne sont pas écrasées par le * { margin:0 } */
+          margin: revert-layer;
+          padding: revert-layer;
+        }
+
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
