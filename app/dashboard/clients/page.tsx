@@ -1089,13 +1089,13 @@ export default function ClientsPage() {
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
   <div className="flex justify-end gap-2">
     <PrintAddressButton client={c} compact />
-    <Link href={`/offres/nouveau?prefill=${encodeURIComponent(JSON.stringify({
+    <Link href={`/drafts/nouveau?prefill=${encodeURIComponent(JSON.stringify({
                               nom: c.nom, prenom: c.prenom||"", societe: c.societe||"",
                               email: c.email||"", telephone1: c.tel1||"",
                               rue: c.rue||"", npa: c.npa||"", ville: c.ville||"",
                             }))}`} target="_blank" rel="noopener noreferrer"
                               className="rounded-lg border border-[#2B8AD1]/30 bg-[#2B8AD1]/10 px-3 py-1.5 text-xs text-sky-300 hover:bg-[#2B8AD1]/20">
-                              + Offre
+                              + Offre (brouillon)
                             </Link>
                           </div>
                         </td>
