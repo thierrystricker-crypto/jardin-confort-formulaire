@@ -17,7 +17,7 @@ type StockMovement = {
   quantity_change: number;
   quantity_before: number | null;
   quantity_after: number | null;
-  status: "pending" | "completed" | "failed" | "skipped";
+  status: "pending" | "completed" | "failed" | "skipped" | "skipped_not_shopify";
   error_message: string | null;
   created_at: string;
   executed_at: string | null;
@@ -29,6 +29,7 @@ function getStatusStyle(status: string) {
     case "failed": return { bg: "bg-rose-500/15", text: "text-rose-300", border: "border-rose-500/30", icon: "❌", label: "Erreur" };
     case "pending": return { bg: "bg-amber-500/15", text: "text-amber-300", border: "border-amber-500/30", icon: "⏳", label: "En cours" };
     case "skipped": return { bg: "bg-zinc-500/15", text: "text-zinc-400", border: "border-zinc-500/30", icon: "⏭", label: "Ignoré" };
+    case "skipped_not_shopify": return { bg: "bg-violet-500/15", text: "text-violet-300", border: "border-violet-500/30", icon: "📝", label: "À la volée" };
     default: return { bg: "bg-white/5", text: "text-zinc-300", border: "border-white/10", icon: "•", label: status };
   }
 }
@@ -113,6 +114,7 @@ export default function StockMovementsBlock({ slug }: { slug: string }) {
 
   const completed = movements.filter(m => m.status === "completed").length;
   const failed = movements.filter(m => m.status === "failed").length;
+  const skippedNotShopify = movements.filter(m => m.status === "skipped_not_shopify").length;
 
   return (
     <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
@@ -120,7 +122,7 @@ export default function StockMovementsBlock({ slug }: { slug: string }) {
         <h2 className="text-xl font-semibold flex items-center gap-2">
           📦 Mouvements de stock
           <span className="text-xs font-normal text-zinc-400">
-            ({completed} OK{failed > 0 && <span className="text-rose-400"> · {failed} erreur{failed > 1 ? "s" : ""}</span>})
+            ({completed} OK{failed > 0 && <span className="text-rose-400"> · {failed} erreur{failed > 1 ? "s" : ""}</span>}{skippedNotShopify > 0 && <span className="text-violet-300"> · {skippedNotShopify} à la volée</span>})
           </span>
         </h2>
         <div className="flex gap-2">
