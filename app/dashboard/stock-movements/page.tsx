@@ -17,13 +17,13 @@ type StockMovement = {
   quantity_before: number | null;
   quantity_after: number | null;
   reason: string;
-  status: "pending" | "completed" | "failed" | "skipped";
+  status: "pending" | "completed" | "failed" | "skipped" | "skipped_not_shopify";
   error_message: string | null;
   created_at: string;
   executed_at: string | null;
 };
 
-type Stats = { total: number; completed: number; failed: number };
+type Stats = { total: number; completed: number; failed: number; skippedNotShopify: number };
 
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString("fr-CH", {
@@ -49,15 +49,16 @@ function getStatusStyle(status: string) {
     case "failed": return { bg: "bg-rose-500/15", text: "text-rose-300", border: "border-rose-500/30", icon: "❌", label: "Erreur" };
     case "pending": return { bg: "bg-amber-500/15", text: "text-amber-300", border: "border-amber-500/30", icon: "⏳", label: "En cours" };
     case "skipped": return { bg: "bg-zinc-500/15", text: "text-zinc-400", border: "border-zinc-500/30", icon: "⏭", label: "Ignoré" };
+    case "skipped_not_shopify": return { bg: "bg-violet-500/15", text: "text-violet-300", border: "border-violet-500/30", icon: "📝", label: "À la volée" };
     default: return { bg: "bg-white/5", text: "text-zinc-300", border: "border-white/10", icon: "•", label: status };
   }
 }
 
 export default function StockMovementsPage() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
-  const [stats, setStats] = useState<Stats>({ total: 0, completed: 0, failed: 0 });
+  const [stats, setStats] = useState<Stats>({ total: 0, completed: 0, failed: 0, skippedNotShopify: 0 });
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "completed" | "failed" | "pending">("all");
+  const [filter, setFilter] = useState<"all" | "completed" | "failed" | "pending" | "skipped_not_shopify">("all");
 
   const load = useCallback(async () => {
     try {
@@ -66,7 +67,7 @@ export default function StockMovementsPage() {
       if (res.ok) {
         const json = await res.json();
         setMovements(json.movements || []);
-        setStats(json.stats || { total: 0, completed: 0, failed: 0 });
+        setStats(json.stats || { total: 0, completed: 0, failed: 0, skippedNotShopify: 0 });
       }
     } catch (e) {
       console.error("Stock movements error:", e);
@@ -96,7 +97,7 @@ export default function StockMovementsPage() {
         </div>
 
         {/* STATS */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-5">
             <div className="text-sm text-zinc-400">Total mouvements</div>
             <div className="mt-2 text-3xl font-semibold">{stats.total}</div>
@@ -109,19 +110,23 @@ export default function StockMovementsPage() {
             <div className="text-sm text-rose-300/70">❌ En erreur</div>
             <div className="mt-2 text-3xl font-semibold text-rose-300">{stats.failed}</div>
           </div>
+          <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-5">
+            <div className="text-sm text-violet-300/70">📝 À la volée (hors-Shopify)</div>
+            <div className="mt-2 text-3xl font-semibold text-violet-300">{stats.skippedNotShopify}</div>
+          </div>
         </div>
 
         {/* FILTRES */}
         <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-4">
           <div className="flex gap-2 flex-wrap">
-            {(["all", "completed", "failed", "pending"] as const).map(f => (
+            {(["all", "completed", "failed", "pending", "skipped_not_shopify"] as const).map(f => (
               <button key={f} onClick={() => setFilter(f)}
                 className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
                   filter === f
                     ? "bg-[#2B8AD1]/20 text-sky-300 border border-sky-500/40"
                     : "bg-[#34383d] text-zinc-300 border border-white/10 hover:bg-[#40454b]"
                 }`}>
-                {f === "all" ? "Tous" : f === "completed" ? "✅ Réussis" : f === "failed" ? "❌ Erreurs" : "⏳ En cours"}
+                {f === "all" ? "Tous" : f === "completed" ? "✅ Réussis" : f === "failed" ? "❌ Erreurs" : f === "pending" ? "⏳ En cours" : "📝 À la volée"}
               </button>
             ))}
           </div>
