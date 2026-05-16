@@ -6,6 +6,169 @@
 
 ---
 
+## 🔧 Post-S9 — UI boutons + Transformer sur édition (PR #6, 2026-05-17)
+
+**Premier matin de prod avec l'équipe.** Deux bugs UI remontés au démarrage :
+
+### Bug 1 — Boutons obsolètes Charger/Local/Nouveau brouillon
+
+Sur `/drafts/nouveau` et `/drafts/[slug]/editer`, 3 boutons faisaient résidu
+du parcours pré-chantier :
+- 📂 **Charger** : vestige de l'ancien parcours localStorage (avant chantier
+  brouillons, la persistance se faisait via `STORAGE_KEY = "jc-draft-v1-local"`)
+- 💾 **Local** : idem, pour sauvegarder le draft en local navigateur
+- 🔄 **Nouveau brouillon** sur `/drafts/nouveau` : pointait vers la page
+  courante → no-op silencieux
+
+**Décision** : retirer les 3 boutons. Garder "Nouveau brouillon" uniquement
+en mode édition (`currentSlug !== null`) où il sert de raccourci utile
+(créer un autre brouillon vierge sans passer par le dashboard).
+
+### Bug 2 — Bouton "Transformer en offre" manquant sur l'édition
+
+Trou UX évident : après avoir enregistré son brouillon, le commercial restait
+sur `/drafts/[slug]/editer` **sans aucun bouton pour transformer**. Il devait
+faire 3 clics inutiles (Dashboard → cliquer sur le brouillon → bouton
+Transformer sur `/dashboard/draft/[slug]`).
+
+**Solution** : ajouter le bouton "⚡ Transformer en offre" directement sur la
+page d'édition, à côté de "💾 Enregistrer".
+
+### Architecture livrée
+
+1 commit (`2ae036f`) sur branche `fix/drafts-ui-boutons-et-transformation`,
+mergé via PR #6 (merge commit **`b807d15`**).
+
+3 fichiers modifiés, 174 insertions / 79 suppressions :
+
+1. **`components/TransformerModal.tsx`** (renommé depuis
+   `app/dashboard/draft/[slug]/TransformerModal.tsx` via `git mv`)
+   Le composant existait déjà depuis Session 5 mais était co-localisé dans
+   la page lecture-seule du dashboard. Maintenant utilisé par 2 pages
+   (lecture-seule dashboard + édition formulaire), il a sa place dans
+   `components/` partagé.
+
+   Ajout de **`createPortal(...)` (React Portal)** pour monter la modal
+   dans `document.body` plutôt que dans l'arbre du composant parent. Évite
+   les conflits de stacking context et c'est la bonne pratique React 2025+
+   pour les modals (alignée avec Radix, Headless UI, etc.).
+
+2. **`app/dashboard/draft/[slug]/page.tsx`** : 1 ligne — mise à jour du chemin
+   d'import de TransformerModal après le `git mv`.
+
+3. **`app/drafts/_components/DraftFormulaire.tsx`** (la grosse partie) :
+   - Import de TransformerModal
+   - State `showTransformModal`
+   - Handler `handleTransformClick()` qui sauve d'abord les modifs en
+     attente (avec validation stricte), puis ouvre la modal
+   - Boutons toolbar refactorés : suppression de Charger/Local, masquage
+     conditionnel de "Nouveau brouillon" en mode création
+   - Nouveau bouton "⚡ Transformer en offre" entre Enregistrer et Aperçu,
+     grisé avec tooltip si brouillon déjà transformé en offre
+   - Mount du `<TransformerModal />` à la fin du JSX
+   - Nettoyage code mort : `STORAGE_KEY`, `saveLocalSnapshot()`,
+     `loadDraftLocal()`, bloc try/catch localStorage dans `saveDraft()`,
+     lecture localStorage dans le useEffect du titre
+
+### Le piège du jour : CSS global vs Tailwind
+
+**Découverte gênante en cours de PR** : la modal Tailwind, parfaitement
+fonctionnelle sur `/dashboard/draft/[slug]`, était **complètement cassée
+visuellement** sur `/drafts/[slug]/editer` :
+- Texte des checkboxes rejeté à droite hors de la modal
+- Layout flex écrasé
+- Cases à cocher étirées sur toute la largeur
+
+Cause racine : le bloc `<style jsx global>` de `DraftFormulaire.tsx` (1500+
+lignes de CSS pour styler le formulaire en mode sombre/clair) contient des
+règles **agressives** :
+```css
+input, select, textarea {
+  width: 100%; background: var(--card-2); border: 1px solid ...
+}
+*, *::before, *::after { margin: 0; padding: 0; }
+```
+
+Ces règles sont **injectées dans `<head>` avec portée globale**, donc
+elles s'appliquent **partout dans le document** — y compris à la modal
+portée via `createPortal(..., document.body)`. Le portal échappe au DOM
+parent mais pas au CSS global.
+
+**Fix en 2 volets** dans le bloc `<style jsx global>` :
+
+```css
+/* Volet 1 : checkboxes/radios à taille native dans la modal */
+[role="dialog"][aria-modal="true"] input[type="checkbox"],
+[role="dialog"][aria-modal="true"] input[type="radio"] {
+  width: auto !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* Volet 2 : restaurer les espacements Tailwind via revert-layer */
+[role="dialog"][aria-modal="true"],
+[role="dialog"][aria-modal="true"] * {
+  margin: revert-layer;
+  padding: revert-layer;
+}
+[role="dialog"][aria-modal="true"] [class*="p-"], ... {
+  margin: revert-layer;
+  padding: revert-layer;
+}
+```
+
+Le sélecteur sémantique `[role="dialog"][aria-modal="true"]` (convention
+W3C standard pour toute modal) cible précisément les modals sans matcher
+quoi que ce soit d'autre dans le formulaire.
+
+**Effet de bord positif** : le popup d'onboarding `OnboardingDraftPopup`
+de la PR #5 (qui utilise les mêmes attributs ARIA) a aussi vu son layout
+se réparer "gratuitement". Avant : compressé, illisible. Après : aéré et
+beau. Pas prévu, mais ravi.
+
+### Pièges techniques retenus
+
+- **Tester sur les 2 parcours** : créer brouillon from scratch
+  (`/drafts/nouveau` → save → `/drafts/[slug]/editer`) **ET** ouvrir un
+  brouillon existant depuis le dashboard. Les 2 parcours produisent
+  visuellement la même page mais ont un cycle de mount React différent
+  qui peut révéler des bugs distincts.
+
+- **React Portal ne suffit pas contre `<style jsx global>`** : le portal
+  échappe à l'arbre React parent mais pas au DOM-global CSS. Pour vraiment
+  isoler un composant, il faut aussi un override CSS scoped au composant
+  ou un Shadow DOM. À retenir pour de futures modals.
+
+- **Backticks dans les commentaires JSX** : à l'intérieur d'un template
+  literal JSX `` <style jsx>{` ... `} ``, les backticks de markdown style
+  (\`padding\`, \`margin\`) **ferment prématurément le template literal**
+  et provoquent une erreur de parsing SWC. Toujours utiliser des
+  apostrophes ou pas de délimiteur dans ces commentaires.
+
+- **VS Code peut ouvrir un fichier hors-projet** : si on a une copie
+  `DraftFormulaire.tsx` dans `Downloads/` (typiquement après l'avoir
+  envoyée comme document à Claude), Ctrl+P peut la proposer en premier.
+  **Toujours vérifier le chemin complet de l'onglet** (`app > drafts >
+  _components > ...`) avant de modifier. Sinon les changements s'écrivent
+  sur le mauvais fichier et `git status` ne montre rien de modifié.
+
+- **`revert-layer` CSS** : valeur moderne (Chrome 99+, Firefox 97+,
+  Safari 15.4+, ~99% des navigateurs en 2026). Indique "ignore les styles
+  de cette couche et utilise ceux de la couche précédente". Parfait pour
+  neutraliser un reset global sans toucher au code Tailwind.
+
+### Mise à jour de la dette technique
+
+- ✅ **D11** (popup onboarding) — Toujours résolu (la PR #5 reste valable).
+  Bonus inattendu : la PR #6 améliore visuellement aussi le popup grâce
+  à la mutualisation des règles CSS sur `[role="dialog"]`.
+
+Pas de nouvelle dette technique créée.
+
+---
+
 ## 🎉 Chantier brouillons — OFFICIELLEMENT CLÔTURÉ le 2026-05-16
 
 **Sessions 1 à 9 toutes validées.** Le système de brouillons est en production
