@@ -194,11 +194,14 @@ CREATE INDEX idx_corrections_slug ON corrections (entity_slug);
 - **`fields_changed` JSONB** : flexible, indexable plus tard si besoin (`fields_changed ? 'client_nom'`).
 - **`pdf_regenerated_at`** : si pdf.co timeout, on peut retry sans recréer une correction.
 
-### RLS (à définir en Session 1)
+### RLS implémenté en Session 1
 
-- Lecture : tous les utilisateurs authentifiés
-- Insertion : tous les utilisateurs authentifiés
-- Update/Delete : interdits (historique immuable)
+- Lecture : tous (SELECT TO public USING true)
+- Insertion : tous (INSERT TO public WITH CHECK true)
+- Update/Delete : interdits (historique immuable, pas de policy donc bloqué par défaut RLS)
+
+**Schéma final livré (différences avec le brouillon ci-dessus)** :
+- `entity_id` est `bigint` et pas `uuid` (la table `offres` utilise `bigint` comme clé primaire — bug découvert et corrigé en Session 1)
 
 ---
 
@@ -241,18 +244,75 @@ CREATE INDEX idx_corrections_slug ON corrections (entity_slug);
 - [ ] Tests manuels sur preview Vercel
 - [ ] Commit + push + smoke test
 
-### Session 3 — Historique + finitions PDF (~ 1h)
+### Session 3 — Historique dashboard + PDF offre uniquement (~ 1h)
 **PR à venir :** `#9`
 
+Périmètre v1 **limité aux offres en cours** (DEV-XXXX, pas encore converties) :
+
 - [ ] Composant `<CorrectionsHistoryBlock />` (collapsible, masqué par défaut)
-- [ ] Intégration sur page dashboard offre + commande
-- [ ] Modification du template PDF principal (offre/commande) :
-  - Ajout footer "Édition mise à jour le JJ.MM.AAAA — version N" si `corrections.count >= 1`
-- [ ] Modification du template PDF fiche de travail :
+- [ ] Intégration sur page dashboard offre + commande (lecture seule)
+- [ ] Modification du template PDF offre (`app/print/offre/[slug]/page.tsx`) :
+  - Ajout footer discret "Édition mise à jour le JJ.MM.AAAA — version N" si `corrections.count >= 1`
+- [ ] Modification du template fiche de travail (`app/print/fiche-travail/[slug]/page.tsx`) :
   - Ajout section détaillée "Historique des corrections" en fin de document
+- [ ] **Hors scope v1 (reporté en Session 4)** : régénération du PDF commande (CMD-XXXXX et offres acceptées/converties) — voir section Session 4 ci-dessous
 - [ ] Smoke test bout-en-bout sur preview Vercel
 - [ ] Merge prod
 - [ ] Mise à jour du journal
+
+### Session 4 — Régénération PDF commande avec merge snapshot (à planifier)
+**À démarrer après stabilisation Session 3 en prod**
+
+Problématique métier critique soulevée le 2026-05-17 par Thierry :
+> Lorsque qu'une offre est confirmée par client/vendeur, la commande est créée et un PDF est généré avec le stock figé tel que juste avant la commande. Si un PDF doit être régénéré pour les commandes avec les corrections, il faut bien réfléchir pour que le PDF corresponde au stock tel qu'avant la commande.
+
+**Exemple concret du piège** :
+- T0 : Client commande 2 chaises (stock affiché : 6 pces) → PDF figé "Stock : 6", décrémentation Shopify → stock réel 4
+- T1 (3 jours plus tard) : autres ventes + livraisons + réassort → stock réel peut être n'importe quoi (0, 8, 12...)
+- T2 : Commercial corrige une faute de frappe dans le nom client
+- ⚠️ Si on régénère le PDF avec stock live → PDF afficherait "Stock : 8" (faux et pire, détruit la preuve de ce qui a été vendu au client)
+
+**Solution retenue (architecture)** :
+La régénération PDF commande doit utiliser le **snapshot figé** (`data_snapshot` ou `data.lines` figées à T0), avec overlay des **seuls champs cosmétiques corrigés** (whitelist v1 — qui par définition ne touchent pas aux lignes ni au stock).
+
+```
+function regenererPDFCommande(commandeSlug) {
+  const baseData = offre.data_snapshot ?? offre.data;  // stock T0 figé
+  const liveData = offre.data;                          // contient corrections
+  const overlayKeys = CORRECTIBLE_FIELDS_V1;            // whitelist cosmétique
+
+  const mergedData = { ...baseData };
+  for (const key of overlayKeys) {
+    mergedData[key] = liveData[key];
+  }
+  generatePDF(mergedData);  // lignes/stock = T0, nom/adresse = corrigés
+}
+```
+
+**Cas limite à traiter** : les commandes anciennes (pré-snapshot, avant Session 7 du chantier brouillons) qui n'ont pas de `data_snapshot`. À voir : migration en masse ou fallback "non régénérable".
+
+**Process métier à implémenter (notes Thierry 2026-05-17)** :
+
+1. **Warning au commercial à chaque correction sur une commande** : modal post-save expliquant que :
+   - Le PDF a été régénéré (lignes/stock figés respectés, corrections cosmétiques appliquées)
+   - L'équipe doit **réimprimer les documents nécessaires** (commande, fiche de travail, bulletin de livraison, page de garde, fiche bleue archive)
+   - L'équipe doit **mettre à jour le dossier papier physique**
+   - Checkbox "✅ Je confirme avoir réimprimé les documents et mis à jour le dossier papier" — obligatoire pour fermer la modal
+
+2. **Garder une trace du PDF initial** :
+   - À chaque régénération PDF commande, archiver l'ancien PDF dans une colonne `pdf_versions` (jsonb array) ou dans un sous-dossier Supabase Storage `commandes/v1/`, `commandes/v2/`, etc.
+   - Sur la page dashboard de la commande, afficher un sélecteur de version PDF : "Contrat original (T0)" vs "Édition actuelle (T+N corrections)"
+   - Le PDF "Contrat original" reste **immuable** et téléchargeable comme preuve juridique en cas de litige
+
+3. **Indicateurs visuels** dans le dashboard pour les commandes corrigées :
+   - Badge "✏️ Corrigée N fois" à côté du numéro CMD-
+   - Lien "Voir versions PDF" qui ouvre l'historique des versions
+
+**Pourquoi reporter en Session 4** :
+- Le mécanisme de merge snapshot + corrections est nouveau et nécessite des tests approfondis
+- L'archivage des versions PDF nécessite probablement une nouvelle table `pdf_versions` ou colonne JSONB sur `offres`
+- Le warning post-save avec confirmation papier est une vraie feature métier à part entière
+- Ne pas mélanger ça avec la Session 3 pour ne pas retarder la mise en prod du drawer + historique qui apportent déjà 90% de la valeur
 
 ---
 
@@ -306,15 +366,60 @@ npm run dev
 - **Dette technique pertinente :**
   - D1 / D2 : `client_numero_client` et création fiche `clients` non synchronisées (non bloquant pour corrections v1, mais bon à savoir : pas d'intégrité référentielle dure entre `offres` et `clients`)
 
+## 📊 État actuel (fin Session 3, avant Session 4)
+
+- **Branche `feature/corrections`** au commit `8807bf9` (à jour sur GitHub)
+- **Commits :** `a814137` → `4f2e5f4` → `ef91d42` → `a5d8e55` → `0831e00` → `8807bf9` (6 commits)
+- **Sessions 1-3 livrées et testées en local**, en attente de smoke test preview Vercel + merge prod
+- **PR à créer :** `feature/corrections` → `main` sur GitHub avec titre "feat(corrections): système de corrections cosmétiques v1 (drawer + traçabilité + historique)"
+- **Fichier `test-correction.http`** reste local (untracked, non commité, c'est un fichier de test)
+- **Offre cobaye `dev-2026-074-aa0be`** : nettoyée (0 corrections), valeurs restaurées à leur état initial (Stricker Thierry, contact@jardinconfort.ch, complement_nom "employé", À l'emporter)
+
 ---
 
 ## 📝 Sessions réalisées
 
-_(à remplir au fur et à mesure)_
+### Session 1 — ✅ Livrée le 2026-05-17
+**Commits :** `a814137` → `4f2e5f4` → `ef91d42`
+**Périmètre livré :**
+- Table `corrections` + RLS + 2 index (migration `docs/sql/004-create-corrections-table.sql`)
+- `lib/corrections-config.ts` : whitelist 26 champs JSONB + CLIENT_IDENTITY_FIELDS + FLAT_COLUMN_MAP
+- `app/api/corrections/route.ts` : POST + GET avec validation stricte, rollback automatique si insert correction échoue (invariant "modif → trace"), synchronisation JSONB ↔ colonnes plates
+- Tests via REST Client (test-correction.http) : valide, raison <5, champ hors whitelist, slug inexistant
 
-### Session 1 — non démarrée
-### Session 2 — non démarrée
-### Session 3 — non démarrée
+**Bugs résolus pendant la session :**
+- `entity_id` était `uuid` au départ, corrigé en `bigint` (la table `offres` utilise `bigint` comme PK)
+- Whitelist initiale utilisait des labels UI (`modePaiement`, `tel1`) au lieu des vraies clés JSONB du formulaire (`paymentMode`, `telephone1`). Alignée après lecture de `app/api/offres/save/route.ts` et SELECT JSONB sur offre réelle.
+
+### Session 2 — ✅ Livrée le 2026-05-17
+**Commit :** `a5d8e55`
+**Périmètre livré :**
+- `components/CorrectionDrawer.tsx` : drawer latéral via createPortal, 4 sections repliables (Document / Facturation / Livraison / Notes), diff temps réel, mémorisation auteur localStorage `corrections-author`
+- `components/CorrectionConfirmModal.tsx` : modal confirmation avec nom + raison + avertissement contextuel identité client (Option 1)
+- Modifs `app/dashboard/[slug]/page.tsx` : bouton "✏️ Corriger" dans "Suivi commercial", montage du drawer, reload window après success
+- Autocomplete navigateur désactivé partout (`autoComplete="new-password"`) en cohérence avec `DraftFormulaire.tsx`
+
+**Tests effectués :**
+- 8 corrections successives sur offre cobaye `dev-2026-074-aa0be` : tous champs validés (notes, complement_nom, email, mode livraison, rue/numéro, modes de paiement)
+- Synchro JSONB ↔ colonne plate vérifiée pour `notes_internes` et `client_complement_nom` (les 2 mis à jour des deux côtés)
+- Avertissement bleu sky bien affiché quand modification d'email
+
+### Session 3 — ✅ Livrée le 2026-05-18
+**Commits :** `0831e00` → `8807bf9`
+**Périmètre livré :**
+- `components/CorrectionsHistoryBlock.tsx` : section "📝 Historique des corrections" sur dashboard, **ouverte par défaut** (changement décidé en fin de session, pour visibilité immédiate), affichage version N+1 (doc initial = v1)
+- Intégration sur `app/dashboard/[slug]/page.tsx` entre "Suivi commercial" et "Modèle d'email"
+- Modifs `app/print/offre/[slug]/page.tsx` : state `correctionsCount` + `lastCorrectionAt`, fetch parallèle `/api/corrections`, footer italique gris "Édition mise à jour le JJ.MM.AAAA — version N" sous Facebook/Instagram
+- Modifs `app/print/fiche-travail/[slug]/page.tsx` : bloc rouge "⚠ Document corrigé · N corrections" placé **en fin de document** (pas en haut), format compact 1-ligne par correction avec séparateurs `/` entre zones et `·` entre champs multi, page-break autorisé sur le bloc complet mais pas sur header ni items individuels
+
+**Bugs résolus pendant la session :**
+- Fiche de travail ne chargeait pas les corrections : lecture de state `typeDocument` dans closure async React où le setState n'avait pas encore été appliqué. Fix : re-fetch local de `/api/offres/${slug}` au lieu de lire le state.
+- Avec 8+ corrections en test, bloc rouge prenait une page A4 entière en haut. Fix : format compact + déplacement en fin de document + page-break autorisé.
+
+**Décisions UX prises en cours de session :**
+- Historique dashboard ouvert par défaut (au lieu de masqué) pour visibilité immédiate
+- Bloc rouge fiche travail placé en FIN et pas en haut, avec page-break autorisé pour éviter qu'il bascule entièrement sur une page suivante non lue
+- PDF commande **non régénéré** en v1 (reporté Session 4 pour respecter le stock figé T0)
 
 ---
 
