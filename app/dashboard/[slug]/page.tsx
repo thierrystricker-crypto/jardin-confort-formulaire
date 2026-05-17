@@ -169,6 +169,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [relancing,setRelancing]=useState(false)
   const [relanceStatus,setRelanceStatus]=useState("")
   const [emailCopied,setEmailCopied]=useState(false)
+  const [addrCopied,setAddrCopied]=useState<"fact"|"livr"|null>(null)
   const [mailType, setMailType] = useState<"envoi" | "relance">("envoi")
   const [mailCopied, setMailCopied] = useState(false)
   const [clientId,setClientId]=useState<number|null>(null)
@@ -493,6 +494,44 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     } catch(e) {
       alert("Erreur réseau: " + (e as Error).message)
     }
+  }
+
+  // Copie l'adresse facturation ou livraison du client dans le presse-papier.
+  // Format identique à celui de la fiche client (voir Phase 7 du 13.05.2026) :
+  //   Société (si présente)
+  //   Nom Prénom
+  //   Complément nom (si présent)
+  //   Rue Numéro
+  //   Complément d'adresse (rue2, si présent)
+  //   NPA Ville
+  function copyAddress(kind: "fact" | "livr") {
+    if (!offre) return
+    const data = offre.data as Record<string,unknown>
+
+    const lines: (string|null|undefined)[] = kind === "fact"
+      ? [
+          offre.client_societe,
+          [offre.client_prenom, offre.client_nom].filter(Boolean).join(" ") || null,
+          (data.complement_nom as string) || null,
+          [offre.client_rue, (data.numero as string) || ""].filter(Boolean).join(" ") || null,
+          (data.rue2 as string) || null,
+          [offre.client_npa, offre.client_ville].filter(Boolean).join(" ") || null,
+        ]
+      : [
+          (data.livrSociete as string) || null,
+          [(data.livrPrenom as string) || "", (data.livrNom as string) || ""].filter(Boolean).join(" ") || null,
+          (data.livr_complement_nom as string) || null,
+          [(data.livrRue as string) || "", (data.livrNumero as string) || ""].filter(Boolean).join(" ") || null,
+          (data.livrRue2 as string) || null,
+          [(data.livrNpa as string) || "", (data.livrVille as string) || ""].filter(Boolean).join(" ") || null,
+        ]
+
+    const text = lines.filter((l): l is string => !!l && l.trim().length > 0).join("\n")
+    if (!text) return
+
+    navigator.clipboard.writeText(text)
+    setAddrCopied(kind)
+    setTimeout(() => setAddrCopied(null), 2000)
   }
 
   async function convertirEnCommande() {
@@ -1169,7 +1208,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
 
             <div className="grid gap-6 lg:grid-cols-2">
               <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-xl font-semibold">Client</h2>
                   {clientId ? (
                     <a href={`/dashboard/clients/${clientId}`} target="_blank" rel="noopener noreferrer"
@@ -1184,6 +1223,20 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                       👤 Pas de fiche
                     </a>
                   )}
+                </div>
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <button type="button" onClick={()=>copyAddress("fact")}
+                    className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-300 hover:bg-[#40454b] transition"
+                    title="Copier l'adresse de facturation au presse-papier">
+                    {addrCopied==="fact" ? "✓ Copiée" : "📋 Copier adresse"}
+                  </button>
+                  {((d.livrDiff as boolean) || (d.livrRue as string)) ? (
+                    <button type="button" onClick={()=>copyAddress("livr")}
+                      className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-300 hover:bg-[#40454b] transition"
+                      title="Copier l'adresse de livraison au presse-papier">
+                      {addrCopied==="livr" ? "✓ Copiée" : "📦 Copier livraison"}
+                    </button>
+                  ) : null}
                 </div>
                 <div className="space-y-2 text-sm">
                   {([["Nom",nomClient(offre)],["Société",offre.client_societe],["Tél.",offre.client_tel1],
