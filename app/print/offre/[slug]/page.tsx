@@ -37,6 +37,8 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
   const [ready, setReady] = useState(false);
   const [numeroAffiche, setNumeroAffiche] = useState("");
   const [offreSlug, setOffreSlug] = useState("");
+  const [correctionsCount, setCorrectionsCount] = useState(0);
+  const [lastCorrectionAt, setLastCorrectionAt] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -60,6 +62,27 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
       } catch (e) {
         console.error("Erreur chargement offre:", e);
       }
+
+      // ─── Chargement des corrections (Session 3 chantier corrections) ───
+      // Affiché en footer si >= 1 correction enregistrée pour cette entité.
+      // Aucune dépendance avec le chargement principal : si l'appel échoue,
+      // le PDF s'affiche normalement sans la mention.
+      try {
+        const { slug: s } = await params;
+        const cRes = await fetch(`/api/corrections?entity_type=offre&entity_slug=${encodeURIComponent(s)}`);
+        if (cRes.ok) {
+          const cJson = await cRes.json();
+          const list = cJson.corrections || [];
+          setCorrectionsCount(list.length);
+          if (list.length > 0) {
+            // La liste est ordonnée par corrected_at DESC, donc [0] = la plus récente
+            setLastCorrectionAt(list[0].corrected_at);
+          }
+        }
+      } catch (e) {
+        console.error("Erreur chargement corrections:", e);
+      }
+
       setReady(true);
     }
     load();
@@ -613,6 +636,20 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
             <img src="https://cdn.shopify.com/s/files/1/0398/5025/files/Fb_icon.jpg?11755453313570768267" alt="Facebook" />
             <img src="https://cdn.shopify.com/s/files/1/0398/5025/files/instagram_9.png?576915513262272927" alt="Instagram" />
           </div>
+          {correctionsCount > 0 && lastCorrectionAt && (
+            <div style={{
+              marginTop: 8,
+              paddingTop: 8,
+              borderTop: "1px dashed #ccc",
+              fontSize: 9,
+              color: "#999",
+              fontStyle: "italic",
+            }}>
+              Édition mise à jour le {new Date(lastCorrectionAt).toLocaleDateString("fr-CH", {
+                day: "2-digit", month: "2-digit", year: "numeric",
+              })} — version {correctionsCount + 1}
+            </div>
+          )}
         </div>
 
  {/* IMAGES D'AMBIANCE — à la suite sans saut de page */}
