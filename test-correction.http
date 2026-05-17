@@ -1,0 +1,68 @@
+### Variables
+@baseUrl = http://localhost:3000
+@slug = dev-2026-074-aa0be
+
+### Test B : POST correction notesInternes - doit reussir
+POST {{baseUrl}}/api/corrections
+Content-Type: application/json
+
+{
+  "entity_type": "offre",
+  "entity_slug": "{{slug}}",
+  "corrected_by": "Thierry (test Session 1)",
+  "reason": "Test de l'API corrections - Session 1",
+  "fields_changed": {
+    "notesInternes": {
+      "old": "",
+      "new": "Test correction API - Session 1 - 17/05/2026"
+    }
+  }
+}
+
+### Test C : POST avec champ hors whitelist - doit echouer en 400
+POST {{baseUrl}}/api/corrections
+Content-Type: application/json
+
+{
+  "entity_type": "offre",
+  "entity_slug": "{{slug}}",
+  "corrected_by": "Thierry",
+  "reason": "Test rejet champ hors whitelist",
+  "fields_changed": {
+    "commercial": {
+      "old": "Brice",
+      "new": "Modification interdite"
+    }
+  }
+}
+
+### Test D : POST avec reason trop courte - doit echouer en 400
+POST {{baseUrl}}/api/corrections
+Content-Type: application/json
+
+{
+  "entity_type": "offre",
+  "entity_slug": "{{slug}}",
+  "corrected_by": "Thierry",
+  "reason": "ok",
+  "fields_changed": {
+    "notesInternes": { "old": "", "new": "x" }
+  }
+}
+
+### Test E : POST sur slug inexistant - doit echouer en 404
+POST {{baseUrl}}/api/corrections
+Content-Type: application/json
+
+{
+  "entity_type": "offre",
+  "entity_slug": "slug-qui-existe-pas-12345",
+  "corrected_by": "Thierry",
+  "reason": "Test entite introuvable",
+  "fields_changed": {
+    "notesInternes": { "old": "", "new": "x" }
+  }
+}
+
+### Test F : GET historique apres Test B - doit retourner 1 correction
+GET {{baseUrl}}/api/corrections?entity_type=offre&entity_slug={{slug}}

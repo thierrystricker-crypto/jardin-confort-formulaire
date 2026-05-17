@@ -704,11 +704,217 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
 </body></html>`
   },[offre])
 
+  // Mail d'envoi initial d'une COMMANDE (créée manuellement au backoffice).
+  // Le client n'a pas validé en ligne → c'est son 1er contact avec la commande.
+  // Reprend le design du mail Make "Nouvelle commande validée online" en
+  // l'adaptant : on s'adresse au client (pas au commercial interne).
+  const mailEnvoiCommande=useMemo(()=>{
+    if(!offre) return ""
+    const nomComplet=[offre.client_prenom, offre.client_nom].filter(Boolean).join(" ")
+    const commandeUrl=`${APP_URL}/print/offre/${offre.slug}`
+    const total=new Intl.NumberFormat("fr-CH",{minimumFractionDigits:2,maximumFractionDigits:2}).format(offre.total_ttc||0)
+    const adresseLignes=[
+      offre.client_rue && `${offre.client_rue}${(offre.data as Record<string,unknown>)?.numero ? " " + ((offre.data as Record<string,unknown>).numero as string) : ""}`,
+      [offre.client_npa, offre.client_ville].filter(Boolean).join(" "),
+    ].filter(Boolean).join("<br>")
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#F3F5F6;font-family:Verdana,Arial,Helvetica,sans-serif;">
+<table border="0" width="100%" cellspacing="0" cellpadding="0" bgcolor="#F3F5F6"><tbody><tr><td align="center" style="padding:28px 16px;">
+
+<table style="border-radius:16px;border:1px solid #E8EAF3;max-width:600px;width:100%;" border="0" cellspacing="0" cellpadding="0" bgcolor="#FFFFFF"><tbody>
+
+<tr><td style="padding:28px 28px 18px 28px;">
+  <div style="font-size:14px;color:#0a1551;line-height:1.7;">
+    Bonjour ${nomComplet},
+  </div>
+  <div style="margin-top:14px;font-size:14px;color:#0a1551;line-height:1.7;">
+    J'ai le plaisir de vous confirmer l'enregistrement de votre commande chez Jardin-Confort.
+  </div>
+  <div style="margin-top:14px;font-size:14px;color:#0a1551;line-height:1.7;">
+    Vous trouverez ci-dessous le récapitulatif de votre commande ainsi que les liens pour la consulter et procéder au règlement.
+  </div>
+  <div style="margin-top:14px;font-size:14px;color:#0a1551;line-height:1.7;">
+    Je reste à votre disposition pour toute question ou information complémentaire.
+  </div>
+  <div style="margin-top:18px;font-size:14px;color:#0a1551;line-height:1.7;">
+    Avec mes meilleures salutations,<br>
+    <strong>${offre.commercial || ""}</strong>
+  </div>
+</td></tr>
+
+<tr><td style="padding:6px 28px 6px 28px;text-align:center;">
+  <img style="display:block;width:260px;max-width:100%;height:auto;margin:0 auto 18px auto;"
+    src="https://www.jotform.com/uploads/Lutry/form_files/logo%20jardin%20confort%202025%20bleu%20comme%20instagram.698a4ad6553317.03187337.png"
+    alt="Jardin-Confort"/>
+  <div style="font-size:20px;font-weight:bold;color:#0a1551;">Commande ${offre.numero_affiche}</div>
+</td></tr>
+
+<tr><td style="padding:4px 28px 18px 28px;text-align:center;font-size:13px;color:#5e678f;line-height:1.6;">
+  ${nomComplet}${offre.client_societe?`<br>${offre.client_societe}`:""}<br>
+  CHF ${total} &middot; ${offre.payment_mode||""}
+</td></tr>
+
+<tr><td style="padding:0 28px 12px 28px;" align="center">
+  <table border="0" cellspacing="0" cellpadding="0"><tbody><tr>
+    <td style="border-radius:26px;" align="center" bgcolor="#2B8AD1">
+      <a style="display:inline-block;padding:14px 24px;font-family:Verdana,Arial,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:26px;"
+        href="${commandeUrl}" target="_blank">
+        👁 Voir ma commande
+      </a>
+    </td>
+  </tr></tbody></table>
+</td></tr>
+
+${qrUrl ? `<tr><td style="padding:0 28px 22px 28px;" align="center">
+  <table border="0" cellspacing="0" cellpadding="0"><tbody><tr>
+    <td style="border-radius:26px;border:1px solid #D1D5DB;" align="center" bgcolor="#FFFFFF">
+      <a style="display:inline-block;padding:14px 24px;font-family:Verdana,Arial,sans-serif;font-size:15px;font-weight:bold;color:#2a2b2a;text-decoration:none;border-radius:26px;"
+        href="${qrUrl}" target="_blank">
+        🧾 QR de paiement
+      </a>
+    </td>
+  </tr></tbody></table>
+</td></tr>` : `<tr><td style="padding:0 28px 22px 28px;"></td></tr>`}
+
+<tr><td style="padding:0 28px 32px 28px;">
+  <table style="border-collapse:collapse;" border="0" width="100%" cellspacing="0" cellpadding="0"><tbody>
+    ${[
+      ["Commande", offre.numero_affiche],
+      ["Client", nomComplet],
+      ...(offre.client_societe ? [["Société", offre.client_societe]] : []),
+      ...(adresseLignes ? [["Adresse", adresseLignes]] : []),
+      ["Conseiller·ère", offre.commercial||"—"],
+      ["Date", offre.date_document ? new Date(offre.date_document).toLocaleDateString("fr-CH",{day:"2-digit",month:"2-digit",year:"numeric"}) : "—"],
+      ["Montant total", `CHF ${total}`],
+      ["Mode de paiement", offre.payment_mode||"—"],
+      ["Lien commande", `<a style="color:#4573e3;text-decoration:underline;" href="${commandeUrl}">${commandeUrl}</a>`],
+      ...(qrUrl ? [["Lien QR paiement", `<a style="color:#4573e3;text-decoration:underline;" href="${qrUrl}">${qrUrl}</a>`]] : []),
+    ].map(([k,v])=>`
+    <tr>
+      <td style="padding:10px 0;border-top:1px solid #ecedf2;font-size:13px;color:#6f76a7;width:38%;">${k}</td>
+      <td style="padding:10px 0;border-top:1px solid #ecedf2;font-size:13px;font-weight:bold;color:#0a1551;">${v}</td>
+    </tr>`).join("")}
+  </tbody></table>
+</td></tr>
+
+<tr><td style="padding:16px 28px;background:#F8FAFC;border-top:1px solid #E8EAF3;border-radius:0 0 16px 16px;text-align:center;font-size:11px;color:#9ca3af;line-height:1.7;">
+  <strong style="color:#0a1551;">Jardin-Confort SA</strong><br>
+  Route de Lavaux 425 · 1095 Lutry · Suisse<br>
+  +41 21 791 36 71 · <a href="https://www.jardin-confort.ch" style="color:#2B8AD1;">www.jardin-confort.ch</a>
+</td></tr>
+
+</tbody></table>
+</td></tr></tbody></table>
+</body></html>`
+  },[offre, qrUrl])
+
+  // Mail de RELANCE d'une COMMANDE = rappel de paiement de l'acompte.
+  // Ton chaleureux : remerciements + question polie sur le règlement +
+  // liens utiles (commande + QR de paiement).
+  const mailRelanceCommande=useMemo(()=>{
+    if(!offre) return ""
+    const nomComplet=[offre.client_prenom, offre.client_nom].filter(Boolean).join(" ")
+    const commandeUrl=`${APP_URL}/print/offre/${offre.slug}`
+    const total=new Intl.NumberFormat("fr-CH",{minimumFractionDigits:2,maximumFractionDigits:2}).format(offre.total_ttc||0)
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#F3F5F6;font-family:Verdana,Arial,Helvetica,sans-serif;">
+<table border="0" width="100%" cellspacing="0" cellpadding="0" bgcolor="#F3F5F6"><tbody><tr><td align="center" style="padding:28px 16px;">
+
+<table style="border-radius:16px;border:1px solid #E8EAF3;max-width:600px;width:100%;" border="0" cellspacing="0" cellpadding="0" bgcolor="#FFFFFF"><tbody>
+
+<tr><td style="padding:28px 28px 18px 28px;">
+  <div style="font-size:14px;color:#0a1551;line-height:1.7;">
+    Bonjour ${nomComplet},
+  </div>
+  <div style="margin-top:14px;font-size:14px;color:#0a1551;line-height:1.7;">
+    Tout d'abord, nous tenons à vous remercier encore une fois pour votre commande chez Jardin-Confort.
+  </div>
+  <div style="margin-top:14px;font-size:14px;color:#0a1551;line-height:1.7;">
+    Nous nous permettons de faire le point avec vous afin de savoir si le paiement de <strong>CHF ${total}</strong> à verser à la commande a pu être effectué, afin que nous puissions poursuivre le traitement de votre commande.
+  </div>
+  <div style="margin-top:14px;font-size:14px;color:#0a1551;line-height:1.7;">
+    À toutes fins utiles, vous trouverez ci-dessous les liens vers les documents nécessaires.
+  </div>
+  <div style="margin-top:18px;font-size:14px;color:#0a1551;line-height:1.7;">
+    Avec mes meilleures salutations,<br>
+    <strong>${offre.commercial || ""}</strong>
+  </div>
+</td></tr>
+
+<tr><td style="padding:6px 28px 6px 28px;text-align:center;">
+  <img style="display:block;width:260px;max-width:100%;height:auto;margin:0 auto 18px auto;"
+    src="https://www.jotform.com/uploads/Lutry/form_files/logo%20jardin%20confort%202025%20bleu%20comme%20instagram.698a4ad6553317.03187337.png"
+    alt="Jardin-Confort"/>
+  <div style="font-size:20px;font-weight:bold;color:#0a1551;">Commande ${offre.numero_affiche}</div>
+</td></tr>
+
+<tr><td style="padding:4px 28px 18px 28px;text-align:center;font-size:13px;color:#5e678f;line-height:1.6;">
+  ${nomComplet}${offre.client_societe?`<br>${offre.client_societe}`:""}<br>
+  CHF ${total} &middot; ${offre.payment_mode||""}
+</td></tr>
+
+<tr><td style="padding:0 28px 12px 28px;" align="center">
+  <table border="0" cellspacing="0" cellpadding="0"><tbody><tr>
+    <td style="border-radius:26px;" align="center" bgcolor="#2B8AD1">
+      <a style="display:inline-block;padding:14px 24px;font-family:Verdana,Arial,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:26px;"
+        href="${commandeUrl}" target="_blank">
+        👁 Voir ma commande
+      </a>
+    </td>
+  </tr></tbody></table>
+</td></tr>
+
+${qrUrl ? `<tr><td style="padding:0 28px 22px 28px;" align="center">
+  <table border="0" cellspacing="0" cellpadding="0"><tbody><tr>
+    <td style="border-radius:26px;border:1px solid #D1D5DB;" align="center" bgcolor="#FFFFFF">
+      <a style="display:inline-block;padding:14px 24px;font-family:Verdana,Arial,sans-serif;font-size:15px;font-weight:bold;color:#2a2b2a;text-decoration:none;border-radius:26px;"
+        href="${qrUrl}" target="_blank">
+        🧾 QR de paiement
+      </a>
+    </td>
+  </tr></tbody></table>
+</td></tr>` : `<tr><td style="padding:0 28px 22px 28px;"></td></tr>`}
+
+<tr><td style="padding:0 28px 32px 28px;">
+  <table style="border-collapse:collapse;" border="0" width="100%" cellspacing="0" cellpadding="0"><tbody>
+    ${[
+      ["Commande", offre.numero_affiche],
+      ["Client", nomComplet],
+      ["Conseiller·ère", offre.commercial||"—"],
+      ["Date", offre.date_document ? new Date(offre.date_document).toLocaleDateString("fr-CH",{day:"2-digit",month:"2-digit",year:"numeric"}) : "—"],
+      ["Montant à verser", `CHF ${total}`],
+      ["Mode de paiement", offre.payment_mode||"—"],
+      ["Lien commande", `<a style="color:#4573e3;text-decoration:underline;" href="${commandeUrl}">${commandeUrl}</a>`],
+      ...(qrUrl ? [["Lien QR paiement", `<a style="color:#4573e3;text-decoration:underline;" href="${qrUrl}">${qrUrl}</a>`]] : []),
+    ].map(([k,v])=>`
+    <tr>
+      <td style="padding:10px 0;border-top:1px solid #ecedf2;font-size:13px;color:#6f76a7;width:38%;">${k}</td>
+      <td style="padding:10px 0;border-top:1px solid #ecedf2;font-size:13px;font-weight:bold;color:#0a1551;">${v}</td>
+    </tr>`).join("")}
+  </tbody></table>
+</td></tr>
+
+<tr><td style="padding:16px 28px;background:#F8FAFC;border-top:1px solid #E8EAF3;border-radius:0 0 16px 16px;text-align:center;font-size:11px;color:#9ca3af;line-height:1.7;">
+  <strong style="color:#0a1551;">Jardin-Confort SA</strong><br>
+  Route de Lavaux 425 · 1095 Lutry · Suisse<br>
+  +41 21 791 36 71 · <a href="https://www.jardin-confort.ch" style="color:#2B8AD1;">www.jardin-confort.ch</a>
+</td></tr>
+
+</tbody></table>
+</td></tr></tbody></table>
+</body></html>`
+  },[offre, qrUrl])
+
   // Mail actuellement sélectionné (envoi par défaut, ou relance)
-  const mailBody = mailType === "envoi" ? mailEnvoi : mailRelance
+  const isCommandeMail = offre?.type_document === "Commande"
+  const mailBody = mailType === "envoi"
+    ? (isCommandeMail ? mailEnvoiCommande : mailEnvoi)
+    : (isCommandeMail ? mailRelanceCommande : mailRelance)
   const mailSubject = mailType === "envoi"
-    ? `Votre ${offre?.type_document?.toLowerCase() || "offre"} Jardin-Confort ${offre?.numero_affiche || ""}`
-    : `Suivi de votre ${offre?.type_document?.toLowerCase() || "offre"} Jardin-Confort ${offre?.numero_affiche || ""}`
+    ? (isCommandeMail
+        ? `Confirmation de votre commande Jardin-Confort ${offre?.numero_affiche || ""}`
+        : `Votre offre Jardin-Confort ${offre?.numero_affiche || ""}`)
+    : (isCommandeMail
+        ? `Rappel acompte — Commande Jardin-Confort ${offre?.numero_affiche || ""}`
+        : `Suivi de votre offre Jardin-Confort ${offre?.numero_affiche || ""}`)
 
   if(loading) return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
@@ -1175,7 +1381,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                         ? "bg-sky-500/25 text-sky-200"
                         : "text-zinc-400 hover:text-zinc-200"
                     }`}>
-                    📧 Envoi de l&apos;{(offre.type_document || "offre").toLowerCase()}
+                    {isCommandeMail ? "📧 Envoi de la commande" : "📧 Envoi de l'offre"}
                   </button>
                   <button
                     onClick={() => setMailType("relance")}
@@ -1184,7 +1390,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                         ? "bg-amber-500/25 text-amber-200"
                         : "text-zinc-400 hover:text-zinc-200"
                     }`}>
-                    🔔 Relance
+                    {isCommandeMail ? "🔔 Rappel acompte" : "🔔 Relance"}
                   </button>
                 </div>
               </div>
