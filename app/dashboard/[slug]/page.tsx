@@ -3,6 +3,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import CorrectionDrawer from "@/components/CorrectionDrawer";
 import StockMovementsBlock from "@/components/StockMovementsBlock";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
@@ -175,6 +176,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [probabilite,setProbabilite]=useState<string>("neutre")
   const [probSaving,setProbSaving]=useState(false)
   const [converting,setConverting]=useState(false)
+  const [correctionDrawerOpen, setCorrectionDrawerOpen] = useState(false)
 
   async function pollPdf(slugToCheck: string) {
     for (let i = 0; i < 15; i++) {
@@ -1073,6 +1075,14 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
               </div>
 
               <div className="mb-4 flex flex-wrap gap-2 rounded-xl border border-white/10 bg-black/10 p-4">
+                <button
+                  type="button"
+                  onClick={() => setCorrectionDrawerOpen(true)}
+                  className="rounded-xl border border-sky-500/30 bg-sky-500/15 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20"
+                  title="Corriger les champs cosmétiques (adresses, téléphones, notes)"
+                >
+                  ✏️ Corriger
+                </button>
                 {isOffre&&(
                   <>
                     <button type="button" onClick={convertirEnCommande} disabled={converting}
@@ -1362,6 +1372,22 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
         </div>
 
       </div>
+
+      {/* Drawer de correction (Session 2 chantier corrections) */}
+      {offre && (
+        <CorrectionDrawer
+          open={correctionDrawerOpen}
+          entityType={offre.type_document === "Commande" ? "commande" : "offre"}
+          entitySlug={slug}
+          entityNumero={offre.numero_affiche}
+          currentData={offre.data}
+          onClose={() => setCorrectionDrawerOpen(false)}
+          onSuccess={() => {
+            // Recharger la page pour voir les nouvelles valeurs
+            window.location.reload();
+          }}
+        />
+      )}
     </main>
   )
 }
