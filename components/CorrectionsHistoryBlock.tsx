@@ -85,7 +85,10 @@ export default function CorrectionsHistoryBlock({ entityType, entitySlug }: Prop
   const [corrections, setCorrections] = useState<Correction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [expanded, setExpanded] = useState(false);
+  // Ouvert par défaut : si l'offre/commande a été corrigée, l'historique
+  // doit être visible immédiatement (l'équipe ne doit pas avoir à cliquer
+  // pour découvrir qu'il y a eu des modifications).
+  const [expanded, setExpanded] = useState(true);
 
   useEffect(() => {
     async function load() {
