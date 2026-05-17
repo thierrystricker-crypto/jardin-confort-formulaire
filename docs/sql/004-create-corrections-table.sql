@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS corrections (
   -- mais en pratique toutes les corrections pointent vers la table `offres`
   -- distinguée par `type_document`)
   entity_type text NOT NULL CHECK (entity_type IN ('offre', 'commande')),
-  entity_id uuid NOT NULL,
+  entity_id bigint NOT NULL,
   entity_slug text NOT NULL,
   entity_numero text NOT NULL,
 

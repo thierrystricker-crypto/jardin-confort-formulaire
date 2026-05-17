@@ -181,13 +181,12 @@ export async function POST(request: NextRequest) {
       .from("corrections")
       .insert({
         entity_type: body.entity_type,
-        entity_id: entity.id,
+        entity_id: entity.id as number,
         entity_slug: entity.slug,
         entity_numero: entityNumero,
         corrected_by: body.corrected_by.trim(),
         fields_changed: body.fields_changed,
         reason: body.reason.trim(),
-        // pdf_regenerated_at sera renseigné en Session 3 (régénération PDF)
       })
       .select()
       .single();
@@ -195,15 +194,30 @@ export async function POST(request: NextRequest) {
     if (insertError) {
       console.error("Insert correction error:", insertError);
       // L'entité a été modifiée mais la trace n'a pas pu être insérée.
-      // On loggue et on retourne quand même un succès partiel pour ne pas
-      // bloquer l'utilisateur (la donnée principale est sauvée).
+      // On ROLLBACK les modifications de l'entité pour préserver l'invariant
+      // "toute modification est tracée". Sans ça, on aurait des modifs
+      // fantômes en base sans aucune trace de qui/quand/pourquoi.
+      const { error: rollbackError } = await supabase
+        .from("offres")
+        .update({
+          data: currentData,
+          // Note : on ne rollback PAS les colonnes plates ici car ce serait
+          // ajouter de la complexité pour un cas qui ne devrait jamais arriver
+          // en production une fois le schéma stable. Si le rollback est
+          // partiel, le mismatch sera de toute façon visible dans les logs.
+        })
+        .eq("id", entity.id);
+
+      if (rollbackError) {
+        console.error("Rollback failed (state may be inconsistent):", rollbackError);
+      }
+
       return NextResponse.json(
         {
-          success: true,
-          warning: "Modifications appliquées mais trace de correction non enregistrée",
+          error: "Impossible d'enregistrer la trace de correction. Modifications annulées.",
           details: insertError.message,
         },
-        { status: 200 }
+        { status: 500 }
       );
     }
 
