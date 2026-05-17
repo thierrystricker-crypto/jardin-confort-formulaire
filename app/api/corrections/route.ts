@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabase } from "@/lib/supabase";
 import {
   CORRECTIBLE_FIELDS_V1,
+  FLAT_COLUMN_MAP,
   isCorrectibleField,
 } from "@/lib/corrections-config";
 
@@ -135,25 +136,9 @@ export async function POST(request: NextRequest) {
     // garder la cohérence (le matching dashboard utilise les colonnes plates).
 
     const flatColumnUpdates: Record<string, unknown> = {};
-    const flatFieldMap: Record<string, string> = {
-      nom: "client_nom",
-      prenom: "client_prenom",
-      email: "client_email",
-      tel1: "client_tel1",
-      tel2: "client_tel2",
-      societe: "client_societe",
-      rue: "client_rue",
-      numero: "client_numero_rue",
-      npa: "client_npa",
-      ville: "client_ville",
-      complement_nom: "client_complement_nom",
-      complement_adresse: "client_complement_adresse",
-      livr_complement_nom: "livr_complement_nom",
-    };
-
     for (const fieldName of Object.keys(body.fields_changed)) {
-      if (flatFieldMap[fieldName]) {
-        flatColumnUpdates[flatFieldMap[fieldName]] = body.fields_changed[fieldName].new;
+      if (FLAT_COLUMN_MAP[fieldName]) {
+        flatColumnUpdates[FLAT_COLUMN_MAP[fieldName]] = body.fields_changed[fieldName].new;
       }
     }
 
