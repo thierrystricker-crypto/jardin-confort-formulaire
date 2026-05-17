@@ -150,6 +150,16 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
   const [dateDocument, setDateDocument] = useState<string>("");
   const [typeDocument, setTypeDocument] = useState<string>("Commande");
   // ──────────────────────────────────────────────────────────────────
+  // ─── Session 3 chantier corrections : historique des corrections ───
+  type CorrectionEntry = {
+    id: string;
+    corrected_at: string;
+    corrected_by: string;
+    reason: string;
+    fields_changed: Record<string, { old: unknown; new: unknown }>;
+  };
+  const [corrections, setCorrections] = useState<CorrectionEntry[]>([]);
+  // ──────────────────────────────────────────────────────────────────
   const [printedAt] = useState(formatDateTime());
   const barcodesRendered = useRef(false);
 
@@ -172,6 +182,31 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
       } catch (e) {
         console.error("Erreur chargement commande:", e);
       }
+
+      // ─── Chargement des corrections (Session 3 chantier corrections) ───
+      // Affiché en haut de la fiche, sous le bandeau, si >= 1 correction.
+      // Détail complet : auteur, date, raison, champs modifiés (l'équipe
+      // entrepôt doit savoir précisément ce qui a changé après préparation).
+      //
+      // ⚠️ On NE peut PAS lire `typeDocument` (state) ici car les setState
+      // précédents ne sont pas encore appliqués (closure async React).
+      // → On re-fetch le slug et on lit directement la réponse.
+      try {
+        const { slug: s } = await params;
+        const offreRes = await fetch(`/api/offres/${s}?snapshot=false`);
+        const offreJson = offreRes.ok ? await offreRes.json() : null;
+        const localTypeDoc = (offreJson?.offre?.type_document as string) || "Commande";
+        const entityType = localTypeDoc === "Offre" ? "offre" : "commande";
+
+        const cRes = await fetch(`/api/corrections?entity_type=${entityType}&entity_slug=${encodeURIComponent(s)}`);
+        if (cRes.ok) {
+          const cJson = await cRes.json();
+          setCorrections(cJson.corrections || []);
+        }
+      } catch (e) {
+        console.error("Erreur chargement corrections:", e);
+      }
+
       setReady(true);
     }
     load();
@@ -796,6 +831,115 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
         /* Footer remplacé par @page @bottom-left+@bottom-right qui s'affiche sur chaque page */
         .doc-footer-mini { display: none; }
+
+        /* ══ HISTORIQUE DES CORRECTIONS (Session 3) ══ */
+        /* Bloc placé en fin de document. On AUTORISE explicitement la
+           coupure entre les pages : on préfère voir le DÉBUT du bloc en
+           bas de la dernière page de la fiche plutôt que de pousser tout
+           le bloc sur une nouvelle page (au risque qu'il ne soit pas vu).
+           Le titre rouge "DOCUMENT CORRIGÉ" reste alors visible en pied
+           et alerte le commercial qui tournera la page pour voir le détail. */
+        .doc-corrections-block {
+          margin-top: 4mm;
+          margin-bottom: 2mm;
+          background: linear-gradient(90deg, #fee2e2 0%, #fecaca 100%);
+          border: 2px solid #dc2626;
+          border-radius: 6px;
+          padding: 10px 14px;
+          /* page-break-inside: auto par défaut → on laisse couper si besoin */
+        }
+        /* En revanche, on garde l'EN-TÊTE (titre + intro) groupé : si on
+           commence le bloc en bas de page, on veut au moins ces 2 éléments
+           côte à côte. */
+        .doc-corrections-head {
+          page-break-inside: avoid;
+          page-break-after: avoid;
+        }
+        /* Et chaque correction individuelle reste insécable pour ne pas
+           qu'une ligne unique soit coupée en 2. */
+        .doc-correction-item {
+          page-break-inside: avoid;
+        }
+        .doc-corrections-title {
+          display: inline-block;
+          background: #dc2626;
+          color: white;
+          padding: 3px 10px;
+          border-radius: 3px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          margin-bottom: 8px;
+        }
+        .doc-corrections-intro {
+          font-size: 11px;
+          color: #7f1d1d;
+          font-weight: 600;
+          margin-bottom: 8px;
+        }
+        .doc-correction-item {
+          background: white;
+          border: 1px solid #fca5a5;
+          border-radius: 4px;
+          padding: 5px 9px;
+          margin-bottom: 3px;
+          font-size: 10.5px;
+          line-height: 1.5;
+          display: flex;
+          flex-wrap: wrap;
+          align-items: baseline;
+          gap: 0;
+        }
+        .doc-correction-item:last-child { margin-bottom: 0; }
+        .doc-correction-version {
+          background: #dc2626;
+          color: white;
+          padding: 1px 6px;
+          border-radius: 3px;
+          font-size: 9.5px;
+          font-weight: 700;
+          margin-right: 6px;
+          flex-shrink: 0;
+        }
+        .doc-correction-author {
+          font-weight: 700;
+          color: #1f2937;
+          margin-right: 6px;
+        }
+        .doc-correction-date {
+          font-size: 9.5px;
+          color: #6b7280;
+        }
+        .doc-correction-sep {
+          margin: 0 6px;
+          color: #cbd5e1;
+          font-weight: 400;
+        }
+        .doc-correction-reason {
+          font-style: italic;
+          color: #1f2937;
+        }
+        .doc-correction-field-label {
+          font-weight: 700;
+          color: #7f1d1d;
+        }
+        .doc-correction-old {
+          text-decoration: line-through;
+          color: #9ca3af;
+        }
+        .doc-correction-arrow {
+          margin: 0 4px;
+          color: #dc2626;
+          font-weight: 700;
+        }
+        .doc-correction-new {
+          color: #1f2937;
+          font-weight: 600;
+        }
+        .doc-correction-multifield {
+          color: #7f1d1d;
+        }
       `}</style>
 
       <button className="print-btn" onClick={() => window.print()}>🖨 Imprimer</button>
@@ -1164,6 +1308,103 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         </div>
 
         {/* (Le bloc signature a été déplacé dans la colonne gauche, à côté des totaux) */}
+
+        {/* ══ HISTORIQUE DES CORRECTIONS (Session 3 chantier corrections) ══ */}
+        {/* Placé en FIN de document avec coupure de page autorisée : si le
+            bloc dépasse en bas de la page courante, le DÉBUT (titre rouge
+            "DOCUMENT CORRIGÉ") reste visible en pied, ce qui alerte le
+            commercial qui tournera la page pour voir le détail. Contraire
+            au pattern "tout ou rien" qui risquerait de masquer la
+            notification entière sur une page suivante non lue. */}
+        {corrections.length > 0 && (
+          <div className="doc-corrections-block">
+            <div className="doc-corrections-head">
+              <div className="doc-corrections-title">⚠ Document corrigé · {corrections.length} correction{corrections.length > 1 ? "s" : ""}</div>
+              <div className="doc-corrections-intro">
+                Cette fiche reflète les corrections suivantes appliquées après création initiale.
+                Vérifier que le dossier physique a bien été mis à jour.
+              </div>
+            </div>
+            {corrections.map((c, idx) => {
+              const version = corrections.length - idx + 1; // doc initial = v1, première correction = v2
+              const date = new Date(c.corrected_at).toLocaleString("fr-CH", {
+                day: "2-digit", month: "2-digit", year: "2-digit",
+                hour: "2-digit", minute: "2-digit",
+              });
+              const formatVal = (v: unknown) => {
+                if (typeof v === "boolean") return v ? "Oui" : "Non";
+                if (v === null || v === undefined || v === "") return "(vide)";
+                return String(v);
+              };
+              const labels: Record<string, string> = {
+                paymentMode: "Mode de paiement",
+                deliveryMode: "Mode de livraison",
+                leadTime: "Délai de livraison",
+                societe: "Société",
+                nom: "Nom",
+                prenom: "Prénom",
+                complement_nom: "Complément nom",
+                rue: "Rue",
+                numero: "N°",
+                rue2: "Complément d'adresse",
+                npa: "NPA",
+                ville: "Ville",
+                telephone1: "Téléphone 1",
+                telephone2: "Téléphone 2",
+                email: "Email",
+                livrDiff: "Adresse livraison différente",
+                livrSociete: "Société livraison",
+                livrNom: "Nom livraison",
+                livrPrenom: "Prénom livraison",
+                livr_complement_nom: "Complément nom livraison",
+                livrRue: "Rue livraison",
+                livrNumero: "N° livraison",
+                livrRue2: "Complément d'adresse livraison",
+                livrNpa: "NPA livraison",
+                livrVille: "Ville livraison",
+                livrTel: "Téléphone livraison",
+                accesLivraison: "Accès livraison",
+                remarks: "Remarques",
+                notesInternes: "Notes internes",
+              };
+              const fieldEntries = Object.entries(c.fields_changed);
+              const isSingleField = fieldEntries.length === 1;
+
+              return (
+                <div key={c.id} className="doc-correction-item">
+                  <span className="doc-correction-version">v{version}</span>
+                  <span className="doc-correction-author">{c.corrected_by}</span>
+                  <span className="doc-correction-date">{date}</span>
+                  <span className="doc-correction-sep">/</span>
+                  <span className="doc-correction-reason">« {c.reason} »</span>
+                  <span className="doc-correction-sep">/</span>
+                  {isSingleField ? (
+                    fieldEntries.map(([key, change]) => (
+                      <React.Fragment key={key}>
+                        <span className="doc-correction-field-label">{labels[key] || key} :</span>
+                        <span className="doc-correction-old" style={{marginLeft: 4}}>{formatVal(change.old)}</span>
+                        <span className="doc-correction-arrow">→</span>
+                        <span className="doc-correction-new">{formatVal(change.new)}</span>
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    <span className="doc-correction-multifield">
+                      {fieldEntries.map(([key, change], i) => (
+                        <React.Fragment key={key}>
+                          {i > 0 && <span className="doc-correction-sep">·</span>}
+                          <span className="doc-correction-field-label">{labels[key] || key} :</span>{" "}
+                          <span className="doc-correction-old">{formatVal(change.old)}</span>
+                          <span className="doc-correction-arrow">→</span>
+                          <span className="doc-correction-new">{formatVal(change.new)}</span>
+                        </React.Fragment>
+                      ))}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
       </div>
     </>
