@@ -804,10 +804,14 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               } else if (line.stock === "sur_commande" || line.stock === 0) {
                 stockDisplay = <span className="ft-stock-cmd">Sur commande</span>;
               } else if (typeof line.stock === "number") {
-                if (line.stock > 2) {
-                  stockDisplay = <span className="ft-stock-ok">✓ {line.stock} pce{line.stock > 1 ? "s" : ""}</span>;
+                const sn = line.stock;
+                const qty = line.qty || 0;
+                if (sn >= qty) {
+                  stockDisplay = <span className="ft-stock-ok">✓ En stock ({sn} pce{sn > 1 ? "s" : ""})</span>;
+                } else if (sn > 0 && sn < qty) {
+                  stockDisplay = <span className="ft-stock-low">🟠 Stock partiel ({sn} / {qty} pce{qty > 1 ? "s" : ""})</span>;
                 } else {
-                  stockDisplay = <span className="ft-stock-low">⚠ {line.stock} pce{line.stock > 1 ? "s" : ""}</span>;
+                  stockDisplay = <span className="ft-stock-low">⚠ {sn} pce{sn > 1 ? "s" : ""}</span>;
                 }
               }
               const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
@@ -1109,8 +1113,6 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                       const lineLock = line as { shopifyLocked?: boolean; id?: string };
                       const isLocked = lineLock.shopifyLocked === true || lineLock.id?.startsWith("shopify-");
                       const isSC = line.stock === "sur_commande" || (sn !== null && sn < 1);
-                      const isOk = sn !== null && sn > 2;
-                      const isLow = sn !== null && sn > 0 && sn <= 2;
                       const baseStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, marginTop: 4 };
                       // CAS PRIORITAIRE : ligne Shopify dont le SKU est introuvable côté API
                       if (isLocked && sn === null && line.stock !== "sur_commande") {
@@ -1120,20 +1122,23 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                           </div>
                         );
                       }
+                      const qty = line.qty || 0;
+                      const isPartial = sn !== null && sn > 0 && sn < qty;
+                      const isOkFull = sn !== null && sn >= qty;
                       if (isSC) return (
                         <div style={{ ...baseStyle, color: "#E67E22" }}>
                           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                           📦 {(line as any).delaiLivraison || "Sur commande"}
                         </div>
                       );
-                      if (isOk) return (
-                        <div style={{ ...baseStyle, color: "#2C7E3F" }}>
-                          ✓ En stock ({sn} pce{sn! > 1 ? "s" : ""})
+                      if (isPartial) return (
+                        <div style={{ ...baseStyle, color: "#E67E22" }}>
+                          🟠 Stock partiel ({sn} / {qty} pce{qty > 1 ? "s" : ""})
                         </div>
                       );
-                      if (isLow) return (
-                        <div style={{ ...baseStyle, color: "#E67E22" }}>
-                          ⚠ Stock limité ({sn} pce{sn! > 1 ? "s" : ""})
+                      if (isOkFull) return (
+                        <div style={{ ...baseStyle, color: "#2C7E3F" }}>
+                          ✓ En stock ({sn} pce{sn! > 1 ? "s" : ""})
                         </div>
                       );
                       return null;
@@ -1787,10 +1792,15 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                         : <span className="fb-stock-na-bleue">—</span>;
                     } else if (line.stock === "sur_commande" || (snFB !== null && snFB < 1)) {
                       stockElFB = <span className="fb-stock-cmd-bleue">CMD</span>;
-                    } else if (snFB !== null && snFB > 2) {
-                      stockElFB = <span className="fb-stock-ok-bleue">✓ {snFB}</span>;
-                    } else if (snFB !== null && snFB > 0) {
-                      stockElFB = <span className="fb-stock-low-bleue">⚠ {snFB}</span>;
+                    } else if (snFB !== null) {
+                      const qtyFB = line.qty || 0;
+                      if (snFB >= qtyFB) {
+                        stockElFB = <span className="fb-stock-ok-bleue">✓ {snFB}</span>;
+                      } else if (snFB > 0 && snFB < qtyFB) {
+                        stockElFB = <span className="fb-stock-low-bleue">🟠 {snFB}/{qtyFB}</span>;
+                      } else {
+                        stockElFB = <span className="fb-stock-low-bleue">⚠ {snFB}</span>;
+                      }
                     }
                     return (
                       <tr key={line.id}>
