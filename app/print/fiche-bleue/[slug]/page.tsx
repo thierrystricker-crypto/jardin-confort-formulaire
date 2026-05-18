@@ -680,10 +680,15 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
                       : <span className="fb-stock-na">—</span>;
                   } else if (line.stock === "sur_commande" || (sn !== null && sn < 1)) {
                     stockEl = <span className="fb-stock-cmd">CMD</span>;
-                  } else if (sn !== null && sn > 2) {
-                    stockEl = <span className="fb-stock-ok">✓ {sn}</span>;
-                  } else if (sn !== null && sn > 0) {
-                    stockEl = <span className="fb-stock-low">⚠ {sn}</span>;
+                  } else if (sn !== null) {
+                    const qtyFB = line.qty || 0;
+                    if (sn >= qtyFB) {
+                      stockEl = <span className="fb-stock-ok">✓ {sn}</span>;
+                    } else if (sn > 0 && sn < qtyFB) {
+                      stockEl = <span className="fb-stock-low">🟠 {sn}/{qtyFB}</span>;
+                    } else {
+                      stockEl = <span className="fb-stock-low">⚠ {sn}</span>;
+                    }
                   }
 
                   return (

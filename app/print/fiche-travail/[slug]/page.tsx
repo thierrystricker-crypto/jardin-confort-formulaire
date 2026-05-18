@@ -1107,10 +1107,14 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               } else if (line.stock === "sur_commande" || line.stock === 0) {
                 stockDisplay = <span className="stock-cmd">Sur commande</span>;
               } else if (typeof line.stock === "number") {
-                if (line.stock > 2) {
-                  stockDisplay = <span className="stock-ok">✓ {line.stock} pce{line.stock > 1 ? "s" : ""}</span>;
+                const sn = line.stock;
+                const qty = line.qty || 0;
+                if (sn >= qty) {
+                  stockDisplay = <span className="stock-ok">✓ En stock ({sn} pce{sn > 1 ? "s" : ""})</span>;
+                } else if (sn > 0 && sn < qty) {
+                  stockDisplay = <span className="stock-low">🟠 Stock partiel ({sn} / {qty} pce{qty > 1 ? "s" : ""})</span>;
                 } else {
-                  stockDisplay = <span className="stock-low">⚠ {line.stock} pce{line.stock > 1 ? "s" : ""}</span>;
+                  stockDisplay = <span className="stock-low">⚠ {sn} pce{sn > 1 ? "s" : ""}</span>;
                 }
               }
 
