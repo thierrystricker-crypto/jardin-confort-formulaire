@@ -430,3 +430,121 @@ _(à remplir au fur et à mesure)_
 | # | Sujet | Origine | Priorité | Statut |
 |---|---|---|---|---|
 | C1 | Permettre l'option "synchroniser aussi la fiche client" au moment d'une correction de `client_email`, `client_nom` ou `client_prenom`. Gestion des conflits si une fiche client existe déjà avec les nouvelles valeurs. | Cadrage v1 (2026-05-17) | Moyenne | Ouvert (v1.5) |
+
+
+
+📝 Bloc journal — Post-PR #8
+markdown## 🔧 Post-PR #7 — Modèles email commande + bouton copier adresse (PR #8, 2026-05-18)
+
+**Demande utilisateur** : sur les pages dashboard d'une commande (`/dashboard/cmd-XXXXX-XXXXX`), le modèle d'email proposé pointait par erreur vers les liens d'offre (`/offre/[slug]` pour validation) au lieu des liens de commande, et le texte parlait encore d'« offre commerciale » alors qu'il s'agit d'une commande déjà confirmée.
+
+### Architecture livrée
+
+Le composant Modèle d'email sur `app/dashboard/[slug]/page.tsx` détecte maintenant `offre.type_document === "Commande"` et bascule automatiquement vers des modèles dédiés. **Aucune modification** sur les mails offre (qui fonctionnaient déjà bien — pas de régression possible).
+
+**Mails ajoutés** :
+
+1. **`mailEnvoiCommande`** — Mail d'envoi initial d'une commande créée manuellement au backoffice (le client n'a pas validé en ligne, c'est son 1er contact avec la commande)
+   - Intro : « J'ai le plaisir de vous confirmer l'enregistrement de votre commande chez Jardin-Confort »
+   - Bouton bleu principal : **👁 Voir ma commande** → `/print/offre/[slug]` (page web commande)
+   - Bouton blanc secondaire : **🧾 QR de paiement** → `qrUrl` Supabase (affiché uniquement si dispo)
+   - Tableau récap enrichi : Commande, Client, Société (si), Adresse, Conseiller, Date, Montant total, Mode paiement, Lien commande, Lien QR paiement
+
+2. **`mailRelanceCommande`** — Rappel d'acompte chaleureux quand le paiement tarde
+   - Intro : « Tout d'abord, nous tenons à vous remercier encore une fois pour votre commande chez Jardin-Confort »
+   - Question polie : « Nous nous permettons de faire le point avec vous afin de savoir si le paiement de **CHF X** à verser à la commande a pu être effectué, afin que nous puissions poursuivre le traitement de votre commande »
+   - Mêmes boutons + tableau récap que mail envoi commande, avec « Montant à verser » au lieu de « Montant total »
+
+### Sujets adaptés selon type document
+
+| Document | Onglet Envoi | Onglet Relance / Rappel |
+|---|---|---|
+| Offre | `Votre offre Jardin-Confort DEV-XXXX` | `Suivi de votre offre Jardin-Confort DEV-XXXX` |
+| Commande | `Confirmation de votre commande Jardin-Confort CMD-XXXXX` | `Rappel acompte — Commande Jardin-Confort CMD-XXXXX` |
+
+### Libellés onglets adaptés
+
+| Document | Onglet 1 | Onglet 2 |
+|---|---|---|
+| Offre | `📧 Envoi de l'offre` | `🔔 Relance` |
+| Commande | `📧 Envoi de la commande` | `🔔 Rappel acompte` |
+
+### Bonus livré dans la même PR : bouton "Copier adresse" sur card Client
+
+Réplique de la feature Phase 7 de la session 13.05.2026 (qui existait déjà sur `/dashboard/clients/[id]`) maintenant disponible aussi sur la card Client de `/dashboard/[slug]` :
+
+- **📋 Copier adresse** (toujours visible) — copie l'adresse de facturation
+- **📦 Copier livraison** (visible si `data.livrDiff` est `true` OU si `data.livrRue` est renseigné) — copie l'adresse de livraison
+
+Format multi-lignes identique à la fiche client :
+Société (si présente)
+Nom Prénom
+Complément nom (si présent)
+Rue Numéro
+Complément d'adresse (rue2, si présent)
+NPA Ville
+
+Feedback visuel : label bascule sur **✓ Copiée** pendant 2 secondes, indépendant pour facturation et livraison grâce au state typé `"fact"|"livr"|null`.
+
+### Harmonisation visuelle des mails commande avec mail offre
+
+Première itération avait introduit un bouton orange `#E67E22` pour le QR paiement (repris du mail Make), incohérent avec le mail offre qui n'utilise que la combinaison bleu plein + blanc bordé.
+
+**Grammaire visuelle unifiée** (4 mails — offre envoi, offre relance, commande envoi, commande rappel) :
+- **Bouton 1 (principal)** : `#2B8AD1` plein · texte blanc · 15px bold · padding 14×24
+- **Bouton 2 (secondaire)** : `#FFFFFF` · bordure `#D1D5DB` · texte `#2a2b2a` · 15px bold · padding 14×24
+- Police partout : Verdana/Arial/Helvetica/sans-serif
+- Tableau récap : 13px, border-top `#ecedf2`, label gris `#6f76a7` / valeur bleu marine `#0a1551` bold
+
+### Pièges techniques rencontrés
+
+#### Type 'unknown' is not assignable to ReactNode
+
+Premier essai du bouton "Copier livraison" :
+```tsx
+{(d.livrDiff || d.livrRue) && (<button>...</button>)}
+```
+
+TypeScript râlait parce que `d` est typé `Record<string,unknown>` et l'expression `(d.livrDiff || d.livrRue)` renvoyait `unknown`. React refuse de rendre un `unknown` comme ReactNode.
+
+**Fix** : cast explicite + ternaire avec `null` :
+```tsx
+{((d.livrDiff as boolean) || (d.livrRue as string)) ? (<button>...</button>) : null}
+```
+
+Le ternaire `? ... : null` indique clairement à TypeScript que les deux branches retournent soit un élément React, soit `null` (jamais un `unknown`).
+
+#### Branche `feature/corrections` qui contenait déjà 7 autres commits
+
+Au moment de merger, la branche `feature/corrections` contenait 10 commits — 7 du chantier corrections Sessions 1-3 (PR #7) déjà mergés en main, et 3 commits récents (notre travail). Il a fallu vérifier via `git --no-pager log main..feature/corrections --oneline` qu'on ne ré-introduisait rien (les 7 anciens commits étant déjà ancêtres de `main` depuis PR #7, le merge n'a effectivement pris que les 3 nouveaux).
+
+### Commits de la PR #8
+164b4a2  docs(corrections): mise a jour journal post-sessions 1-3 livrees
+431902d  style(dashboard): harmoniser visuel mails commande avec mail offre
+5444d6c  fix(dashboard): typage condition affichage bouton copier livraison
+
+Merge commit : (à compléter avec le SHA réel — visible dans GitHub PR #8)
+
+### Tests prod effectués le 2026-05-18
+
+Sur `https://offres.jardin-confort.ch/dashboard/dev-2026-074-aa0be` (offre) :
+- ✅ Onglet "📧 Envoi de l'offre" inchangé (texte commercial classique)
+- ✅ Onglet "🔔 Relance" inchangé
+- ✅ Sujets : "Votre offre Jardin-Confort DEV-2026-074"
+- ✅ Card Client : bouton "📋 Copier adresse" visible et fonctionnel
+
+Sur une commande récente :
+- ✅ Onglet "📧 Envoi de la commande" : texte « J'ai le plaisir de vous confirmer... »
+- ✅ Onglet "🔔 Rappel acompte" : texte « Tout d'abord, nous tenons à vous remercier... »
+- ✅ Bouton bleu : "👁 Voir ma commande" → page `/print/offre/[slug]`
+- ✅ Bouton blanc : "🧾 QR de paiement" → URL Supabase QR
+- ✅ Sujets : "Confirmation de votre commande Jardin-Confort CMD-XXXXX" / "Rappel acompte — Commande Jardin-Confort CMD-XXXXX"
+- ✅ Card Client : "📋 Copier adresse" + "📦 Copier livraison" si livraison différente
+
+### Mise à jour de la dette technique
+
+Aucune nouvelle dette créée. Pas de migration SQL nécessaire.
+
+### Pour la suite
+
+Modèle de mail Make actuellement utilisé pour les commandes validées en ligne (cf. extrait fourni en début de session, qui dit « Nouvelle commande validée online ») n'est **pas** modifié par cette PR — il continue à être envoyé automatiquement via le scénario Make existant. La PR #8 ne touche QUE le bouton "Modèle d'email" du backoffice (utilisé pour les commandes créées manuellement par le commercial).
