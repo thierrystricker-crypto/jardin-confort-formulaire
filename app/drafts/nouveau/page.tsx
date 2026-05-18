@@ -9,11 +9,13 @@
 
 import DraftFormulaire from "../_components/DraftFormulaire";
 import OnboardingDraftPopup from "@/components/OnboardingDraftPopup";
+import ReleaseNotesPopup from "@/components/ReleaseNotesPopup";
 
 export default function DraftNouveauPage() {
   return (
     <>
       <OnboardingDraftPopup />
+      <ReleaseNotesPopup />
       <DraftFormulaire />
     </>
   );
