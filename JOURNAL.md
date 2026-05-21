@@ -2195,3 +2195,39 @@ Aucune nouvelle dette créée. Pas de migration SQL nécessaire.
 ### Pour la suite
 
 Modèle de mail Make actuellement utilisé pour les commandes validées en ligne (cf. extrait fourni en début de session, qui dit « Nouvelle commande validée online ») n'est **pas** modifié par cette PR — il continue à être envoyé automatiquement via le scénario Make existant. La PR #8 ne touche QUE le bouton "Modèle d'email" du backoffice (utilisé pour les commandes créées manuellement par le commercial).
+
+
+
+## Session 18.05.2026 (suite) — PR #9 popup release notes + PR #10 fix stock partiel
+
+### PR #9 — Popup release notes 18.05.2026 (mergée, commit `2664a24`)
+- **Composant** : `components/ReleaseNotesPopup.tsx` (~250 lignes, design cohérent mails Verdana/bleu marine)
+- **Intégration** : `app/drafts/nouveau/page.tsx` (à côté de `OnboardingDraftPopup`)
+- **Comportement** :
+  - Affichage automatique sur `/drafts/nouveau` jusqu'au 2026-05-25
+  - Fermable : bouton "Compris", Escape, clic overlay, bouton ✕
+  - Checkbox "Ne plus afficher pendant 24h" → localStorage avec timestamp
+  - Clé versionnée : `jc-release-notes-hidden-until-2026-05-18`
+  - Pas affiché sur `/drafts/[slug]/editer`
+- **Contenu annoncé** : Corrections offres/commandes · Transformation brouillon → offre · Mails commande harmonisés · Copier adresse · 27 logos de marques
+
+### PR #10 — Fix stock partiel templates print (mergée, déployée en prod)
+- **Bug** : sur fiche de travail PDF (et autres templates print), une ligne `qty=4 / stock=3` affichait `✓ 3 pces` alors que la page web client affichait correctement `🟠 Stock partiel (3 / 4 pces)`
+- **Cause** : cascade stock basée sur seuil absolu (`stock > 2`) au lieu de comparaison relative à `qty`
+- **Fichiers fixés** :
+  - `app/print/fiche-travail/[slug]/page.tsx`
+  - `app/print/all/[slug]/page.tsx` (3 cascades : page 1 ft-, page 2 cc-, page 5 fb-)
+  - `app/print/fiche-bleue/[slug]/page.tsx`
+- **Cascade unifiée désormais** :
+  - `stock >= qty` → ✓ En stock (X pces) (vert)
+  - `0 < stock < qty` → 🟠 Stock partiel (X / Y pces) (orange)
+  - `stock = 0` / `"sur_commande"` → Sur commande / CMD (rouge)
+  - Shopify locked + stock null → ⚠ À vérifier (orange)
+
+### Piège git rencontré
+Commit fix initialement parti sur `main` au lieu de la branche `fix/stock-partiel-templates-print` (oubli du `git checkout -b` avant les modifs). Réparé par :
+1. `git reset --hard fa80d42` sur la branche fix
+2. `git reset --hard origin/main` sur main local
+3. `git push --force-with-lease` sur la branche fix
+
+**Rituel anti-bug pour la suite** : toujours faire `git status` juste après `git checkout -b` pour confirmer "On branch nom-de-ta-branche" AVANT de toucher au code.
