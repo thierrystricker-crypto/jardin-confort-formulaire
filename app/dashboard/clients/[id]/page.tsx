@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { getShopifyPdfUrls } from "@/lib/shopify-pdf-urls";
 import PrintAddressButton from "@/components/PrintAddressButton";
+import EmailBadge from "@/components/EmailBadge";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -16,6 +17,9 @@ type Client = {
   societe: string | null
   complement_nom: string | null
   email: string | null
+  email_status: "verified" | "auto_thunderbird" | "auto_low_confidence" | "manual_unverified" | null
+  email_source: string | null
+  email_verified_at: string | null
   tel1: string | null
   tel2: string | null
   rue: string | null
@@ -885,16 +889,33 @@ function copyAddress(type: "facturation" | "livraison") {
                       <span>{v}</span>
                     </div>
                   ) : null)}
-                  <div className="flex gap-2 items-center">
-                    <span className="w-28 shrink-0 text-zinc-400">Email :</span>
-                    <span className="flex-1">{client.email || "—"}</span>
-                    {client.email && (
-                      <button onClick={() => { navigator.clipboard.writeText(client.email!); setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000) }}
-                        className="rounded-lg border border-white/10 bg-[#34383d] px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-100 transition">
-                        {emailCopied ? "✓" : "📋"}
-                      </button>
-                    )}
-                  </div>
+                  <div className="flex flex-col gap-1.5">
+  <div className="flex gap-2 items-center">
+    <span className="w-28 shrink-0 text-zinc-400">Email :</span>
+    <span className="flex-1">{client.email || "—"}</span>
+    {client.email && (
+      <button onClick={() => { navigator.clipboard.writeText(client.email!); setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000) }}
+        className="rounded-lg border border-white/10 bg-[#34383d] px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-100 transition">
+        {emailCopied ? "✓" : "📋"}
+      </button>
+    )}
+  </div>
+  {client.email && (
+    <div className="pl-28">
+      <EmailBadge
+        clientId={client.id}
+        email={client.email}
+        emailStatus={client.email_status}
+        emailSource={client.email_source}
+        emailVerifiedAt={client.email_verified_at}
+        onUpdate={(updated) => {
+          setClient(c => c ? { ...c, ...updated } : c)
+          setForm(f => ({ ...f, ...updated }))
+        }}
+      />
+    </div>
+  )}
+</div>
 
                   {client.livr_rue && (
                     <div className="mt-3 rounded-xl border border-white/10 bg-black/10 p-3 space-y-1">
