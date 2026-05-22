@@ -396,45 +396,73 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     if(!offre) return
     const offreData = offre.data as Record<string,unknown>
 
-    // Construction du snapshot au format DraftSnapshot
-    // (cf. app/drafts/_components/DraftFormulaire.tsx > type DraftSnapshot)
+    // ─── Spread complet du JSONB data source ───
+    // On part de TOUT ce qui est dans offreData (incluant notes, adresse de
+    // livraison, validité, accès livraison, status local du formulaire, etc.)
+    // puis on écrase uniquement les champs qui doivent changer sur le nouveau
+    // brouillon. Avantage : si on ajoute demain un nouveau champ au formulaire,
+    // il sera automatiquement copié sans modifier cette fonction.
     const data: Record<string,unknown> = {
-      // Métadonnées document
+      ...offreData,
+
+      // ─── Forçage type document (cas source = Commande) ───
       formType: "Offre",
-      commercial: offre.commercial || "",
-      paymentMode: offreData.paymentMode || "",
-      deliveryMode: offreData.deliveryMode || "",
-      leadTime: offreData.leadTime || "",
 
-      // Lignes + remises + services
-      lines: offreData.lines || [],
-      discount: offreData.discount || "0",
-      discountPercent: offreData.discountPercent || "0",
-      enabledServices: offreData.enabledServices || {},
-      servicePrices: offreData.servicePrices || {},
+      // ─── Notes (colonnes plates de la table offres, prioritaires) ───
+      // Elles existent en colonnes plates, donc on les réinjecte au cas où
+      // elles auraient été modifiées via le bloc "Notes" du dashboard après
+      // la création de l'offre.
+      remarks: offre.remarques || offreData.remarks || "",
+      noteCommerciale: offre.note_commerciale || offreData.noteCommerciale || "",
+      notesInternes: offre.notes_internes || offreData.notesInternes || "",
 
-      // Notes
-      remarks: offreData.remarks || "",
-      ambianceImages: offreData.ambianceImages || [],
+      // ─── Commercial (priorité colonne plate) ───
+      commercial: offre.commercial || offreData.commercial || "",
 
       // ─── Traçabilité de la source (Session 8) ───
       copiedFromOffreSlug: offre.slug,
       copiedFromOffreNumero: offre.numero_affiche,
+
+      // ─── Nettoyage : marqueurs du document source à NE PAS hériter ───
+      // Le nouveau brouillon doit avoir sa propre identité.
+      date: undefined,                  // ← date = aujourd'hui (gérée par DraftFormulaire)
+      offerNumber: undefined,           // ← DRA-XXX attribué par /api/drafts
+      offerStatus: undefined,           // ← redémarre neutre (pas "Envoyée"/"Acceptée")
+      fromDraftSlug: undefined,         // ← marqueur transformation Session 5
+      copiedFromDraftSlug: undefined,   // ← marqueur copie brouillon→brouillon
+      signedAt: undefined,
+      signedBy: undefined,
     }
 
     if(avecClient) {
+      // On privilégie les colonnes plates client_* (à jour si la fiche client
+      // a été modifiée après la création de l'offre source), avec fallback
+      // sur le JSONB offreData.
       Object.assign(data, {
-        nom: offre.client_nom || "",
-        prenom: offre.client_prenom || "",
-        societe: offre.client_societe || "",
+        nom: offre.client_nom || offreData.nom || "",
+        prenom: offre.client_prenom || offreData.prenom || "",
+        societe: offre.client_societe || offreData.societe || "",
         complement_nom: (offreData.complement_nom as string) || "",
-        livr_complement_nom: (offreData.livr_complement_nom as string) || "",
-        email: offre.client_email || "",
-        telephone1: offre.client_tel1 || "",
-        rue: offre.client_rue || "",
+        email: offre.client_email || offreData.email || "",
+        telephone1: offre.client_tel1 || offreData.telephone1 || "",
+        telephone2: (offreData.telephone2 as string) || "",
+        rue: offre.client_rue || offreData.rue || "",
         numero: (offreData.numero as string) || "",
-        npa: offre.client_npa || "",
-        ville: offre.client_ville || "",
+        rue2: (offreData.rue2 as string) || "",
+        npa: offre.client_npa || offreData.npa || "",
+        ville: offre.client_ville || offreData.ville || "",
+      })
+    } else {
+      // ─── Copie SANS client : on vide explicitement les champs client ET
+      //     livraison (sinon le spread laisserait passer les livr_* fantômes)
+      Object.assign(data, {
+        nom: "", prenom: "", societe: "", complement_nom: "",
+        email: "", telephone1: "", telephone2: "",
+        rue: "", numero: "", rue2: "", npa: "", ville: "",
+        livrDiff: false,
+        livrSociete: "", livrNom: "", livrPrenom: "", livr_complement_nom: "",
+        livrRue: "", livrNumero: "", livrRue2: "",
+        livrNpa: "", livrVille: "", livrTel: "",
       })
     }
 

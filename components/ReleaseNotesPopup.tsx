@@ -17,13 +17,13 @@ import { useEffect, useState } from "react";
  * app/drafts/nouveau/page.tsx (rollback chirurgical, voir PR #5 onboarding).
  */
 
-// Date butoir (exclusif) : popup actif jusqu'au 24/05/2026 23:59 UTC
-const SHOW_UNTIL = new Date("2026-05-25T00:00:00Z");
-
+// Date butoir (exclusif) : popup actif jusqu'au 28/05/2026 23:59 UTC
+const SHOW_UNTIL = new Date("2026-05-29T00:00:00Z");
 // Clé localStorage pour la fonction "ne plus afficher pendant 24h".
 // Le nom contient la date du release pour permettre des popups futurs sans
-// collision (un popup du 2026-06-01 aurait sa propre clé).
-const HIDE_KEY = "jc-release-notes-hidden-until-2026-05-18";
+// collision. Mise à jour 22.05.2026 : nouvelle clé pour que les commerciaux
+// qui avaient masqué le popup 18.05 voient bien la nouvelle entrée Michel 2.0.
+const HIDE_KEY = "jc-release-notes-hidden-until-2026-05-22";
 
 export default function ReleaseNotesPopup() {
   const [open, setOpen] = useState(false);
@@ -146,7 +146,7 @@ export default function ReleaseNotesPopup() {
             textTransform: "uppercase",
             marginBottom: 10,
           }}>
-            🆕 Mise à jour · 18.05.2026
+            🆕 Mises à jour · 18.05 & 22.05.2026
           </div>
           <h2 id="release-notes-title" style={{
             margin: 0,
@@ -156,6 +156,93 @@ export default function ReleaseNotesPopup() {
           }}>
             Quoi de neuf sur le système d&apos;offres
           </h2>
+        </div>
+
+        {/* ─── Section Michel 2.0 (22.05.2026) ─── */}
+        {/* Bloc visuellement différencié (fond vert pâle) pour mettre en
+            évidence la nouveauté ajoutée le 22.05 par-dessus le popup 18.05. */}
+        <div style={{ padding: "0 28px 18px 28px" }}>
+          <div style={{
+            background: "#ecfdf5",
+            border: "1px solid #a7f3d0",
+            borderLeft: "4px solid #10b981",
+            borderRadius: 12,
+            padding: "16px 18px",
+          }}>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 10,
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#047857",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+            }}>
+              <span style={{
+                background: "#10b981",
+                color: "#ffffff",
+                padding: "2px 8px",
+                borderRadius: 999,
+                fontSize: 10,
+                letterSpacing: "0.05em",
+              }}>NOUVEAU</span>
+              Mise à jour Michel 2.0 · 22.05.2026
+            </div>
+
+            <div style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: "#064e3b",
+              marginBottom: 8,
+            }}>
+              📋 Duplication d&apos;offre/brouillon enfin complète
+            </div>
+
+            <div style={{
+              fontSize: 14,
+              lineHeight: 1.6,
+              color: "#064e3b",
+              marginBottom: 10,
+            }}>
+              La duplication d&apos;une offre, d&apos;une commande ou d&apos;un brouillon
+              copie maintenant <strong>tous les champs</strong> :
+            </div>
+
+            <ul style={{
+              margin: 0,
+              padding: "0 0 0 22px",
+              fontSize: 13.5,
+              lineHeight: 1.7,
+              color: "#064e3b",
+            }}>
+              <li><strong>Adresse de livraison différente</strong> (tous les champs livraison)</li>
+              <li><strong>Notes internes</strong> et <strong>note commerciale</strong></li>
+              <li>Délai de livraison, mode de paiement, accès livraison</li>
+              <li>Validité de l&apos;offre, remises, services, et tous les autres champs</li>
+            </ul>
+
+            <div style={{
+              marginTop: 12,
+              padding: "8px 12px",
+              background: "rgba(255,255,255,0.6)",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "#065f46",
+            }}>
+              ⚠️ Seule <strong>la date n&apos;est pas reprise</strong> — elle prend automatiquement la date du jour.
+            </div>
+
+            <div style={{
+              marginTop: 10,
+              fontSize: 13,
+              fontStyle: "italic",
+              color: "#047857",
+            }}>
+              Particulièrement utile pour refaire des variantes d&apos;offres complexes.
+            </div>
+          </div>
         </div>
 
         {/* Section Majeures */}
@@ -170,7 +257,7 @@ export default function ReleaseNotesPopup() {
             borderBottom: "1px solid #E8EAF3",
             paddingBottom: 6,
           }}>
-            ⭐ Évolutions majeures
+            ⛹ Évolutions majeures (18.05.2026)
           </div>
 
           <ul style={{
