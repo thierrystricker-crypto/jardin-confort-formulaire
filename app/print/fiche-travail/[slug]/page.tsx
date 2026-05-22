@@ -432,6 +432,33 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .doc-addr-tel { margin-top: 3px; font-size: 12.5px; font-weight: 600; }
         .doc-addr-email { font-size: 11.5px; color: #555; }
 
+        /* ══ NOUVEAU : Nom client TRES VISIBLE en haut + ligne date ══ */
+        .doc-addr-client-hero {
+          background: #f8fafc;
+          border-left: 4px solid ${THEME};
+          padding: 8px 10px;
+          margin: 4px 0 6px 0;
+          border-radius: 3px;
+        }
+        .doc-addr-client-hero-name {
+          font-size: 22px;
+          font-weight: 800;
+          color: ${BLACK};
+          line-height: 1.15;
+          letter-spacing: -0.01em;
+        }
+        .doc-addr-client-hero-meta {
+          margin-top: 4px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #555;
+        }
+        .doc-addr-divider {
+          height: 1px;
+          background: #e5e7eb;
+          margin: 6px 0;
+        }
+
         .doc-pickup-badge {
           display: inline-block;
           background: ${ORANGE};
@@ -993,7 +1020,20 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           <div className="doc-header-right">
             <div className="doc-addr-window">
               <span className="doc-addr-window-title">📦 Adresse de livraison</span>
-              <div className="doc-addr-ref">Réf : {numeroAffiche}</div>
+
+              {/* ─── HERO : nom client en gros + date + n° doc ─── */}
+              {/* Le nom du destinataire de livraison (livrNom si livrDiff,
+                  sinon data.nom) est mis en évidence pour identification rapide
+                  par le magasinier. La date et le n° de commande suivent juste
+                  en dessous, toujours visibles d'un coup d'oeil. */}
+              <div className="doc-addr-client-hero">
+                <div className="doc-addr-client-hero-name">
+                  {(data.livrDiff ? livrNom : data.nom) || ""} {(data.livrDiff ? livrPrenom : data.prenom) || ""}
+                </div>
+                <div className="doc-addr-client-hero-meta">
+                  📅 {formatDate(dateDocument)} · {numeroAffiche}
+                </div>
+              </div>
 
               {isPickup ? (
                 <>
@@ -1009,14 +1049,12 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                     <strong style={{color:"#000", fontStyle:"normal"}}>Jardin-Confort SA</strong><br/>
                     Route de Lavaux 425 · 1095 Lutry
                   </div>
-                  <div className="doc-addr-name" style={{marginTop: 8, fontSize: 13}}>
-                    Client : {data.nom} {data.prenom}
-                  </div>
                   {livrTelEffectif && <div className="doc-addr-tel">📞 {livrTelEffectif}</div>}
                   {clientEmail && <div className="doc-addr-email">✉ {clientEmail}</div>}
                 </>
               ) : (
                 <>
+                  <div className="doc-addr-divider"></div>
                   {livrSociete && <div className="doc-addr-line">{livrSociete}</div>}
                   <div className="doc-addr-name">{livrNom} {livrPrenom}</div>
                   {livrComplementNomEffectif && <div className="doc-addr-line">{livrComplementNomEffectif}</div>}

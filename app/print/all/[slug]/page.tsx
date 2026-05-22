@@ -292,6 +292,32 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .ft-addr-line { font-size: 14px; color: ${BLACK}; line-height: 1.3; font-weight: 400; }
         .ft-addr-tel { margin-top: 3px; font-size: 12.5px; font-weight: 600; }
         .ft-addr-email { font-size: 11.5px; color: #555; }
+        /* ══ NOUVEAU : Nom client TRES VISIBLE en haut + ligne date ══ */
+        .ft-addr-client-hero {
+          background: #f8fafc;
+          border-left: 4px solid ${THEME};
+          padding: 8px 10px;
+          margin: 4px 0 6px 0;
+          border-radius: 3px;
+        }
+        .ft-addr-client-hero-name {
+          font-size: 22px;
+          font-weight: 800;
+          color: ${BLACK};
+          line-height: 1.15;
+          letter-spacing: -0.01em;
+        }
+        .ft-addr-client-hero-meta {
+          margin-top: 4px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #555;
+        }
+        .ft-addr-divider {
+          height: 1px;
+          background: #e5e7eb;
+          margin: 6px 0;
+        }
         .ft-pickup-badge { display: inline-block; background: ${ORANGE}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 800; margin-bottom: 5px; letter-spacing: 0.05em; }
         .ft-remarks-top { margin-bottom: 4mm; background: linear-gradient(90deg, #fef3c7 0%, #fef9c3 100%); border: 2px solid #f59e0b; border-radius: 6px; padding: 10px 14px; page-break-inside: avoid; }
         .ft-remarks-top-title { display: inline-block; background: #f59e0b; color: white; padding: 3px 10px; border-radius: 3px; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
@@ -710,7 +736,21 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           <div className="ft-header-right">
             <div className="ft-addr-window">
               <span className="ft-addr-window-title">📦 Adresse de livraison</span>
-              <div className="ft-addr-ref">Réf : {numeroAffiche}</div>
+
+              {/* ─── HERO : nom client en gros + date + n° doc ─── */}
+              {/* Le nom du destinataire de livraison (livrNom si livrDiff,
+                  sinon data.nom) est mis en évidence pour identification rapide
+                  par le magasinier. La date et le n° de commande suivent juste
+                  en dessous, toujours visibles d'un coup d'oeil. */}
+              <div className="ft-addr-client-hero">
+                <div className="ft-addr-client-hero-name">
+                  {(data.livrDiff ? livrNomFT : data.nom) || ""} {(data.livrDiff ? livrPrenomFT : data.prenom) || ""}
+                </div>
+                <div className="ft-addr-client-hero-meta">
+                  📅 {formatDate(dateDocument)} · {numeroAffiche}
+                </div>
+              </div>
+
               {isPickup ? (
                 <>
                   <div className="ft-pickup-badge">⚠ À L&apos;EMPORTER</div>
@@ -719,12 +759,12 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     <strong style={{color:"#000", fontStyle:"normal"}}>Jardin-Confort SA</strong><br/>
                     Route de Lavaux 425 · 1095 Lutry
                   </div>
-                  <div className="ft-addr-name" style={{marginTop: 8, fontSize: 13}}>Client : {data.nom} {data.prenom}</div>
                   {livrTelFTeff && <div className="ft-addr-tel">📞 {livrTelFTeff}</div>}
                   {data.email && <div className="ft-addr-email">✉ {data.email}</div>}
                 </>
               ) : (
                 <>
+                  <div className="ft-addr-divider"></div>
                   {livrSocieteFT && <div className="ft-addr-line">{livrSocieteFT}</div>}
                   <div className="ft-addr-name">{livrNomFT} {livrPrenomFT}</div>
                   {livrComplementNomFTeff && <div className="ft-addr-line">{livrComplementNomFTeff}</div>}
