@@ -2,7 +2,7 @@
 // app/dashboard/page.tsx
 
 import StatsCards from "./StatsCards";
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 
 type OffreStatut = "En cours"|"Envoyée"|"Convertie"|"Acceptée"|"Abandonnée"|"Refusée"
@@ -150,7 +150,12 @@ function NotificationsButton() {
   const [unreadCount, setUnreadCount] = useState<number|null>(null)
   const [makeAlert, setMakeAlert] = useState(false)
   const [pulse, setPulse] = useState(false)
-  const [previousCount, setPreviousCount] = useState<number|null>(null)
+  
+
+  // useRef pour stocker previousCount sans déclencher de re-render quand il change.
+  // Évite la boucle "fetch → setPreviousCount → loadCount recréé → useEffect
+  // redéclenché → nouveau fetch" qui causait des appels en cascade.
+  const previousCountRef = useRef<number | null>(null)
 
   const loadCount = useCallback(async () => {
     try {
@@ -162,11 +167,11 @@ function NotificationsButton() {
         const json = await notifsRes.json()
         const newCount = json.unread_count || 0
         // Animation pulse si nouvelle notif arrivée
-        if (previousCount !== null && newCount > previousCount) {
+        if (previousCountRef.current !== null && newCount > previousCountRef.current) {
           setPulse(true)
           setTimeout(() => setPulse(false), 3000)
         }
-        setPreviousCount(newCount)
+        previousCountRef.current = newCount
         setUnreadCount(newCount)
       }
       if (healthRes.ok) {
@@ -176,7 +181,7 @@ function NotificationsButton() {
     } catch (e) {
       console.error("Notifications count error:", e)
     }
-  }, [previousCount])
+  }, [])  // ← plus de dépendance, useCallback ne se recrée plus jamais
 
   useEffect(() => {
     loadCount()
