@@ -1021,7 +1021,7 @@ export default function ClientsPage() {
                     <th className="px-4 py-3 font-medium">Société</th>
                     <th className="px-4 py-3 font-medium">Email</th>
                     <th className="px-4 py-3 font-medium">Téléphone</th>
-                    <th className="px-4 py-3 font-medium">Ville</th>
+                    <th className="px-4 py-3 font-medium">Adresse</th>
                     <th className="px-4 py-3 font-medium">Source</th>
                     <th className="px-4 py-3 font-medium" title="Offres et commandes internes Jardin-Confort">📄 Offres / 🛒 Commandes</th>
                     <th className="px-4 py-3 font-medium" title="Factures WinBiz et commandes Shopify">📊 WinBiz / 🛍️ Shopify</th>
@@ -1075,7 +1075,20 @@ export default function ClientsPage() {
     : <span className="text-zinc-600">—</span>}
 </td>
                         <td className="px-4 py-3 text-zinc-400">{c.tel1 || "—"}</td>
-                        <td className="px-4 py-3 text-zinc-400">{[c.npa, c.ville].filter(Boolean).join(" ") || "—"}</td>
+                        <td className="px-4 py-3 text-zinc-400">
+                          {(() => {
+                            const ligne1 = [c.rue, c.numero_rue].filter(Boolean).join(" ")
+                            const ligne2 = c.rue2 || ""
+                            const ligne3 = [c.npa, c.ville].filter(Boolean).join(" ")
+                            const lignes = [ligne1, ligne2, ligne3].filter(l => l.trim().length > 0)
+                            if (lignes.length === 0) return "—"
+                            return (
+                              <div className="flex flex-col gap-0.5">
+                                {lignes.map((l, i) => <div key={i}>{l}</div>)}
+                              </div>
+                            )
+                          })()}
+                        </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${src.cls}`}>{src.label}</span>
                         </td>

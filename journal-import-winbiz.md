@@ -675,3 +675,30 @@ Dans `C:\Users\ezefi\` :
 ---
 
 **Dernière mise à jour** : 20.05.2026 (après import complet exercice 2020)
+
+
+
+
+### 24.05.2026 — Import complet exercice 2018
+- 1287 PDFs sur disque
+- Match : 1235 matched + 13 multiples + 17 notFound + 22 errors + 0 alreadyImported (**96,0% auto**)
+- Diagnostic des 52 cas problématiques via SQL `WITH ... LEFT JOIN ILIKE` (méthode 2020 reproduite)
+- **3 nouveaux clients créés** : XL&CO SARL Charmey, INVOICE CENTRE placeholder Vevey (Nestlé ?), THE 2000 MANAGEMENT CORP Montreux
+- 52 corrections manuelles : 49 par match en base + 3 via clients créés
+- **1 erreur 502 Bad Gateway sur facture 44504** au run réel → relance → 1286 skippées + 1 importée = 1287 ✅
+- Volume final exercice 2018 : 1287 factures
+
+#### Décisions de matching notables exercice 2018
+- **5× Hotel Best Western Chavannes-de-Bogis** (43969/43973/43975/44000/44773) → CL-22398 (créé en 2019)
+- **6× LEDUNFLY SA** (44115/116/284/342/988, 45002) → CL-18207 (vu en 2019)
+- **5× MATTEI Karim** (43729/44602/44805/44883/44974) — adresse manquante PDF → CL-18636
+- **3× EMERICH Jérôme France** → CL-16214
+- **2× MONNARD Denis** → CL-18948 (adresse vide en base, match nom+prénom)
+- **2× BADOGLIO Flavio** → CL-14528 (adresse changée Mont-sur-Lausanne)
+- **2× STUTZ Muriel ANTILLES** → CL-20987
+- **2× GOSSELKE-ZBINDEN** → CL-17037
+- ECOLE INTERNATIONALE GENEVE 44980 → CL-16145 (vrai siège 1208 Genève, pas le campus Grand-Saconnex)
+- WYSS Raymond 44345 → CL-08874 (ID bas + adresse complète vs CL-21722 sans adresse)
+- Doublons résolus par ID le plus bas : TEPR Christoph CL-21079/21411, THYREGOD CL-21146/21413, DYTAN CL-18168/21923
+
+**Triplet de scripts** : `match-factures-2018.js`, `fix-factures-2018.js`, `import-factures-2018.js`
