@@ -1055,6 +1055,41 @@ function copyAddress(type: "facturation" | "livraison") {
             <h2 className="text-xl font-semibold">Factures WinBiz</h2>
             <div className="flex items-center gap-3">
               <span className="text-sm text-zinc-400">{factures.length} facture{factures.length !== 1 ? "s" : ""}</span>
+              {factures.filter(f => f.pdf_url).length > 1 && (
+                <>
+                  <button
+                    onClick={() => {
+                      const avecPdf = factures.filter(f => f.pdf_url)
+                      if (avecPdf.length > 5) {
+                        if (!confirm(`⚠ Ouvrir ${avecPdf.length} onglets ?\n\nAssure-toi que les popups sont autorisés pour ce site.`)) return
+                      }
+                      avecPdf.forEach((f, i) => {
+                        setTimeout(() => {
+                          const a = document.createElement("a")
+                          a.href = f.pdf_url!
+                          a.target = "_blank"
+                          a.rel = "noopener noreferrer"
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                        }, i * 150)
+                      })
+                    }}
+                    title="Ouvre chaque facture dans un onglet séparé"
+                    className="rounded-xl border border-violet-500/30 bg-violet-500/15 px-3 py-1.5 text-xs text-violet-300 hover:bg-violet-500/20">
+                    📂 Ouvrir tout ({factures.filter(f => f.pdf_url).length})
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!client) return
+                      window.open(`/api/clients/${client.id}/factures/merge-pdf`, "_blank", "noopener,noreferrer")
+                    }}
+                    title="Fusionne toutes les factures PDF dans un seul document (du plus récent au plus ancien)"
+                    className="rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/20">
+                    📎 Fusionner PDF
+                  </button>
+                </>
+              )}
               <button onClick={() => setShowAddFacture(v => !v)}
                 className="rounded-xl border border-sky-500/30 bg-sky-500/15 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/20">
                 + Ajouter
