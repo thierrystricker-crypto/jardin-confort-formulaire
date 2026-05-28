@@ -1598,7 +1598,11 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                     </div>
                   )}
                   <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                    <iframe src={pdfUrl} title="Aperçu commande PDF" className="h-[800px] w-full border-0"/>
+                    <iframe
+  src={pdfUrl ? `${pdfUrl}?t=${encodeURIComponent(offre.updated_at || offre.created_at || '')}` : undefined}
+  title="Aperçu commande PDF"
+  className="h-[800px] w-full border-0"
+/>
                   </div>
                 </section>
               )

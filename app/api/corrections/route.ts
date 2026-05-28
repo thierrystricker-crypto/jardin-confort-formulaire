@@ -13,6 +13,43 @@ import {
 } from "@/lib/corrections-config";
 
 // ============================================================================
+// Helper - regeneration PDF (Session 4a chantier corrections)
+// ============================================================================
+
+/**
+ * Determine si le PDF Storage doit etre regenere apres une correction.
+ *
+ * Critere metier :
+ *   - On regenere uniquement pour les commandes. Les offres en cours
+ *     ont leur PDF servi dynamiquement par le template (stock live),
+ *     pas fige en Storage de maniere durable.
+ *   - Pour qu'une commande soit regenerable, son snapshot stock doit
+ *     exister : on verifie data.lines[].shopifyLocked (invariant fort
+ *     pose a la conversion offre->commande), plutot que
+ *     data.stock_frozen_at qui peut manquer sur des cas marginaux
+ *     (anciennes commandes pre-deploiement, conversion manuelles
+ *     anterieures).
+ *
+ * Consequence : les ~11 anciennes commandes sans snapshot retournent
+ * `false` ici - leur correction est tracee mais leur PDF reste fige
+ * a son etat d'origine (preuve juridique preservee).
+ */
+function shouldRegeneratePdf(
+  entityType: "offre" | "commande",
+  data: Record<string, unknown>
+): boolean {
+  if (entityType !== "commande") return false;
+  const lines = data?.lines;
+  if (!Array.isArray(lines) || lines.length === 0) return false;
+  return lines.every(
+    (line: unknown) =>
+      typeof line === "object" &&
+      line !== null &&
+      (line as { shopifyLocked?: boolean }).shopifyLocked === true
+  );
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -206,10 +243,59 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // --- Regeneration PDF (Session 4a chantier corrections) ---
+    // Apres que la correction soit DEFINITIVEMENT enregistree (trace OK +
+    // entite modifiee), on regenere le PDF Storage pour qu'il reflete les
+    // corrections cosmetiques. Les lignes/stock figes restent intacts car :
+    //   1. La whitelist CORRECTIBLE_FIELDS_V1 n'autorise pas leur modif
+    //   2. data.lines[] est deja fige a la conversion offre->commande
+    //
+    // En cas d'echec pdf.co, la correction RESTE enregistree mais
+    // pdf_regenerated_at reste NULL. Le front affiche un toast warning et
+    // un retry manuel sera possible via le bouton dashboard (Session 4b).
+    let pdfRegenerated = false;
+    let pdfRegenerationError: string | null = null;
+
+    if (shouldRegeneratePdf(body.entity_type, updatedData)) {
+      try {
+        const APP_URL =
+          process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch";
+        const regenRes = await fetch(`${APP_URL}/api/offres/${entity.slug}/pdf`, {
+          method: "POST",
+        });
+        const regenJson = await regenRes.json();
+
+        if (regenRes.ok && regenJson.success) {
+          pdfRegenerated = true;
+          const { error: stampError } = await supabase
+            .from("corrections")
+            .update({ pdf_regenerated_at: new Date().toISOString() })
+            .eq("id", correction.id);
+          if (stampError) {
+            console.error(
+              "[corrections] pdf_regenerated_at stamp failed:",
+              stampError
+            );
+          }
+        } else {
+          pdfRegenerationError = regenJson.error || "Erreur inconnue pdf.co";
+          console.error(
+            "[corrections] PDF regeneration failed:",
+            pdfRegenerationError,
+            regenJson
+          );
+        }
+      } catch (err) {
+        pdfRegenerationError = err instanceof Error ? err.message : String(err);
+        console.error("[corrections] PDF regeneration exception:", err);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       correction_id: correction.id,
-      pdf_regenerated: false, // sera true à partir de Session 3
+      pdf_regenerated: pdfRegenerated,
+      pdf_regeneration_error: pdfRegenerationError,
     });
   } catch (err) {
     console.error("POST /api/corrections error:", err);
