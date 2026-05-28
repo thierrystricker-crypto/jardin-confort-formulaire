@@ -26,8 +26,14 @@ function fmtMoney(v: number): string {
 
 function generateQrPageHtml(offre: Record<string,unknown>, montant: number, isAcompte: boolean): string {
   const d = (offre.data as Record<string,unknown>) || {}
-  const nomClient = [offre.client_prenom, offre.client_nom].filter(Boolean).join(" ") || offre.client_societe || ""
-  const societe = (offre.client_societe as string) || ""
+  // Coherence avec le QR : si societe rempli, elle est le client principal
+  // affiche en gros (B2B). Sinon, prenom + nom (B2C).
+  const personneNom = [offre.client_prenom, offre.client_nom]
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter(Boolean)
+    .join(" ")
+  const societe = ((offre.client_societe as string) || "").trim()
+  const nomClient = societe || personneNom || ""
   const rue = [offre.client_rue, (d.numero as string) || ""].filter(Boolean).join(" ")
   const npaVille = [offre.client_npa, offre.client_ville].filter(Boolean).join(" ")
   const libelle = isAcompte ? "Acompte 50% à la commande" : "Paiement d'avance à la commande"
@@ -118,7 +124,7 @@ body {
 <div class="section-title">Adresse de facturation</div>
 <div class="client-block">
   <div class="client-name">${nomClient}</div>
-  ${societe && nomClient !== societe ? `<div>${societe}</div>` : ""}
+  ${societe && personneNom ? `<div style="font-size:11px;color:#666;">À l'attention de ${personneNom}</div>` : ""}
   ${rue ? `<div>${rue}</div>` : ""}
   ${npaVille ? `<div>${npaVille}</div>` : ""}
 </div>
