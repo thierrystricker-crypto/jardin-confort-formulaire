@@ -167,8 +167,19 @@ async function htmlToPdfBase64(html: string): Promise<string> {
 
 async function addSwissQrBill(pdfBase64: string, offre: Record<string,unknown>, montant: number, isAcompte: boolean): Promise<ArrayBuffer> {
   const d = (offre.data as Record<string,unknown>) || {}
-  const udName = ([offre.client_prenom, offre.client_nom].filter(Boolean).join(" ")
-    || offre.client_societe || "Client").toString().slice(0, 70)
+  // Priorite societe pour les clients B2B : si client_societe rempli,
+  // c'est elle qui apparait comme debiteur sur le QR-bill (norme ISO 20022
+  // = un seul champ "nom" cote debiteur, 70 chars max). Pour les clients
+  // particuliers (pas de societe), fallback sur prenom + nom.
+  const personneNom = [offre.client_prenom, offre.client_nom]
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter(Boolean)
+    .join(" ");
+  const udName = (
+    (offre.client_societe as string)?.trim() ||
+    personneNom ||
+    "Client"
+  ).toString().slice(0, 70);
   const udStreet = ((offre.client_rue as string) || "Rue inconnue").slice(0, 70)
   const udNumber = ((d.numero as string) || "1").slice(0, 16)
   const udPostalCode = ((offre.client_npa as string) || "0000").slice(0, 16)
