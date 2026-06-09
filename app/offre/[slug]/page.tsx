@@ -963,9 +963,18 @@ useEffect(() => {
                         <td style={{ padding: "12px 8px", verticalAlign: "middle" }}>
                           <div style={{ fontWeight: 600, color: C.text, fontSize: 15 }}>{line.title}</div>
                           {line.sku && <div style={{ fontSize: 13, color: C.grey, marginTop: 1 }}>Réf. {line.sku}</div>}
-                          {(line.lineDiscount || 0) > 0 && (
-                            <div style={{ fontSize: 13, color: C.green, marginTop: 2, fontWeight: 500 }}>Remise : − {fmt(line.lineDiscount || 0)}</div>
-                          )}
+                          {(line.lineDiscount || 0) > 0 && (() => {
+                            const lineSubtotal = line.qty * line.unitPrice;
+                            const pct = lineSubtotal > 0 ? (line.lineDiscount! / lineSubtotal) * 100 : 0;
+                            const pctStr = pct > 0 && pct <= 100
+                              ? (Math.abs(pct - Math.round(pct)) < 0.05 ? `−${Math.round(pct)}%` : `−${pct.toFixed(1)}%`)
+                              : null;
+                            return (
+                              <div style={{ fontSize: 13, color: C.green, marginTop: 2, fontWeight: 500 }}>
+                                Remise{pctStr ? ` (${pctStr})` : ""} : − {fmt(line.lineDiscount || 0)}
+                              </div>
+                            );
+                          })()}
                           <div style={{ marginTop: 4, fontSize: 13, fontWeight: 600 }}>
                             {isUnknown ? <span style={{ color: C.orange }}>⚠ Stock à vérifier</span>
                               : isSC ? <span style={{ color: C.orange }}>📦 {line.delaiLivraison || "Sur commande"}</span>
@@ -1019,7 +1028,7 @@ useEffect(() => {
                   </div>
                   {discountValue > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 24px", fontSize: 15 }}>
-                      <span style={{ color: C.grey }}>Remise</span>
+                      <span style={{ color: C.grey }}>Remise{discountPct > 0 ? ` (−${discountPct}%)` : ""}</span>
                       <span style={{ color: C.green, fontWeight: 600 }}>− {fmt(discountValue)}</span>
                     </div>
                   )}

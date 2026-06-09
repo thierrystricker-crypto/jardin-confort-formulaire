@@ -1205,9 +1205,18 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
                   <td className="td-total">
                     {formatMoney(lineTotal)}
-                    {(line.lineDiscount || 0) > 0 && (
-                      <div className="line-discount">− {formatMoney(line.lineDiscount || 0)}</div>
-                    )}
+                    {(line.lineDiscount || 0) > 0 && (() => {
+                      const lineSubtotal = line.qty * line.unitPrice;
+                      const pct = lineSubtotal > 0 ? (line.lineDiscount! / lineSubtotal) * 100 : 0;
+                      const pctStr = pct > 0 && pct <= 100
+                        ? (Math.abs(pct - Math.round(pct)) < 0.05 ? `−${Math.round(pct)}%` : `−${pct.toFixed(1)}%`)
+                        : null;
+                      return (
+                        <div className="line-discount">
+                          − {formatMoney(line.lineDiscount || 0)}{pctStr ? ` (${pctStr})` : ""}
+                        </div>
+                      );
+                    })()}
                   </td>
 
                   <td className="td-stock">
@@ -1274,7 +1283,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                 </tr>
                 {totals.discountValue > 0 && (
                   <tr>
-                    <td className="pt-label">Remise</td>
+                    <td className="pt-label">Remise{Number(data.discountPercent || 0) > 0 ? ` (−${Number(data.discountPercent)}%)` : ""}</td>
                     <td className="pt-value" style={{color:"#2a8a2a"}}>− {formatMoney(totals.discountValue)}</td>
                   </tr>
                 )}
