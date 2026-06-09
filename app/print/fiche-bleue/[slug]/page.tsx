@@ -703,9 +703,18 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
                       <td className="fb-td-sku">{line.sku || "—"}</td>
                       <td className="fb-td-desc">
                         <div className="fb-td-desc-title">{line.title}</div>
-                        {(line.lineDiscount || 0) > 0 && (
-                          <div className="fb-line-discount">Remise : − {formatMoney(line.lineDiscount || 0)}</div>
-                        )}
+                        {(line.lineDiscount || 0) > 0 && (() => {
+                          const lineSubtotal = line.qty * line.unitPrice;
+                          const pct = lineSubtotal > 0 ? (line.lineDiscount! / lineSubtotal) * 100 : 0;
+                          const pctStr = pct > 0 && pct <= 100
+                            ? (Math.abs(pct - Math.round(pct)) < 0.05 ? `−${Math.round(pct)}%` : `−${pct.toFixed(1)}%`)
+                            : null;
+                          return (
+                            <div className="fb-line-discount">
+                              Remise{pctStr ? ` (${pctStr})` : ""} : − {formatMoney(line.lineDiscount || 0)}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="fb-td-price">{formatMoney(line.unitPrice)}</td>
                       <td className="fb-td-total">{formatMoney(lineTotal)}</td>
@@ -750,7 +759,7 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
               </div>
               {discountValue > 0 && (
                 <div className="fb-totals-row fb-discount">
-                  <span>Remise</span>
+                  <span>Remise{Number(data.discountPercent || 0) > 0 ? ` (−${Number(data.discountPercent)}%)` : ""}</span>
                   <span>− {formatMoney(discountValue)}</span>
                 </div>
               )}

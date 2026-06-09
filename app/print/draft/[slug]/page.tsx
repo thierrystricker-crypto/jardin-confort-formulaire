@@ -508,9 +508,18 @@ export default function PrintDraftSlug({ params }: { params: Promise<{ slug: str
                   <td className="td-desc">
                     <div className="item-title">{line.title}</div>
                     {line.sku && <div className="item-sku">{line.sku}</div>}
-                    {(line.lineDiscount || 0) > 0 && (
-                      <div className="item-discount">Remise : − {formatMoney(line.lineDiscount || 0)}</div>
-                    )}
+                    {(line.lineDiscount || 0) > 0 && (() => {
+                      const lineSubtotal = line.qty * line.unitPrice;
+                      const pct = lineSubtotal > 0 ? (line.lineDiscount! / lineSubtotal) * 100 : 0;
+                      const pctStr = pct > 0 && pct <= 100
+                        ? (Math.abs(pct - Math.round(pct)) < 0.05 ? `−${Math.round(pct)}%` : `−${pct.toFixed(1)}%`)
+                        : null;
+                      return (
+                        <div className="item-discount">
+                          Remise{pctStr ? ` (${pctStr})` : ""} : − {formatMoney(line.lineDiscount || 0)}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="td-center">× {line.qty}</td>
                   <td className="td-right">{formatMoney(line.unitPrice)}</td>
@@ -541,7 +550,7 @@ export default function PrintDraftSlug({ params }: { params: Promise<{ slug: str
                 </tr>
                 {discountValue > 0 && (
                   <tr>
-                    <td className="pt-label">Remise</td>
+                    <td className="pt-label">Remise{Number(data.discountPercent || 0) > 0 ? ` (−${Number(data.discountPercent)}%)` : ""}</td>
                     <td className="pt-value" style={{color:"#2a8a2a"}}>− {formatMoney(discountValue)}</td>
                   </tr>
                 )}
