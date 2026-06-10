@@ -69,6 +69,7 @@ async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: u
         productVariants(first: 50, query: $query) {
           nodes {
             sku
+            inventoryPolicy
             product {
               tags
             }
@@ -102,6 +103,7 @@ async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: u
         productVariants?: {
           nodes?: Array<{
             sku: string | null;
+            inventoryPolicy?: "DENY" | "CONTINUE" | null;
             product?: { tags?: string[] } | null;
             inventoryItem?: {
               inventoryLevels?: {
@@ -137,7 +139,7 @@ async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: u
     }
 
     // Construire la map SKU → { stock, delay }
-    const skuMap = new Map<string, { stock: number; delay: string }>();
+    const skuMap = new Map<string, { stock: number; delay: string; inventoryPolicy: "DENY" | "CONTINUE" | null }>();
     for (const node of json.data?.productVariants?.nodes ?? []) {
       const sku = node.sku ?? "";
       const qty =
@@ -145,7 +147,8 @@ async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: u
           (q) => q.name === "available"
         )?.quantity ?? 0;
       const delay = getDelayFromTags(node.product?.tags);
-      if (sku) skuMap.set(sku, { stock: qty, delay });
+      const inventoryPolicy = node.inventoryPolicy ?? null;
+      if (sku) skuMap.set(sku, { stock: qty, delay, inventoryPolicy });
     }
 
     // Mettre à jour le stock + délai dans chaque ligne

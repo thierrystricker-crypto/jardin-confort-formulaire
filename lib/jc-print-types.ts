@@ -20,6 +20,8 @@ export type QuoteLine = {
   unitPrice: number;
   qty: number;
   stock?: number | null | "sur_commande";
+  inventoryPolicy?: "DENY" | "CONTINUE";
+  shopifyLocked?: boolean;
   lineDiscount?: number;
   // ── Lignes média (logo / image de marque) ──
   mediaUrl?: string;
@@ -104,6 +106,29 @@ export const TVA_RATE    = 0.081;
 export const STORAGE_KEY = "jc-offre-v15-draft";
 
 // ── Helpers ──
+
+/**
+ * Détermine si une ligne Shopify est "non-réassortable" (vente bloquée à 0).
+ * Source unique de vérité utilisée par toutes les UI internes.
+ */
+export function isNonReassortable(line: QuoteLine): boolean {
+  return line.type === "product"
+    && line.shopifyLocked === true
+    && line.inventoryPolicy === "DENY";
+}
+
+/**
+ * Détermine si une ligne est en rupture critique (non-réassortable + qté > stock).
+ * Déclenche le badge rouge dans le formulaire.
+ */
+export function isStockCritical(line: QuoteLine): boolean {
+  if (!isNonReassortable(line)) return false;
+  const stock = typeof line.stock === "number" ? line.stock : null;
+  if (stock === null) return false;
+  const qty = line.qty || 0;
+  return qty > stock;
+}
+
 export function formatMoney(value: number): string {
   const formatted = new Intl.NumberFormat("de-CH", {
     minimumFractionDigits: 2,
