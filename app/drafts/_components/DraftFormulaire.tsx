@@ -4,6 +4,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import { useRouter } from "next/navigation";
 import MediaLinePicker from "../../offres/nouveau/MediaLinePicker";
 import TransformerModal from "@/components/TransformerModal";
+import { isStockCritical } from "@/lib/jc-print-types";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
@@ -292,6 +293,9 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
   const [darkMode, setDarkMode]             = useState(true);
   const [wideMode, setWideMode]             = useState(true);
   const [filterInStock, setFilterInStock]   = useState(false);
+  // Garde-fou stock : ids des lignes critiques (non-réassortables + qté > stock)
+  // que le commercial a explicitement confirmées. Vidé si la ligne sort de l'état critique.
+  const [confirmedCritical, setConfirmedCritical] = useState<Record<string, boolean>>({});
 
   // ── Supabase — sauvegarde brouillon ──
   //
@@ -870,7 +874,26 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
     // si nom/email/commercial/ville manquants, exactement comme le bouton manuel)
     if (isDirty) {
       const ok = await saveDraft({ silent: false });
-      if (!ok) return; // saveDraft a déjà setté saveError, modal pas ouverte
+      if (!ok) return; // saveDraft a dÃ©jÃ  settÃ© saveError, modal pas ouverte
+    }
+
+    // Garde-fou stock : transformation bloquée tant que les lignes critiques
+    // (non-réassortables avec qté > stock) ne sont pas toutes confirmées.
+    const unconfirmedCritical = lines.filter(
+      (l) => isStockCritical(l) && confirmedCritical[l.id] !== true
+    );
+    if (unconfirmedCritical.length > 0) {
+      const skus = unconfirmedCritical
+        .map((l) => `• ${l.title || l.sku || "(sans titre)"} — demandé ${l.qty}, stock ${typeof l.stock === "number" ? l.stock : 0}`)
+        .join("\n");
+      setSaveError(
+        `Transformation bloquée : ${unconfirmedCritical.length} article(s) non-réassortable(s) en rupture.\n\n` +
+        `${skus}\n\n` +
+        `Ces articles ne peuvent pas être réapprovisionnés chez le fournisseur. ` +
+        `Cochez « J'ai vérifié la dispo fournisseur » sur chaque ligne concernée avant de transformer en offre.`
+      );
+      setSaveStatus("error");
+      return;
     }
 
     setShowTransformModal(true);
@@ -2272,16 +2295,33 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
                           {/* Colonne stock */}
                           <td className="td-stock">
                             {isLocked ? (
-                              // Ligne Shopify : stock figé venant de l'API, affichage seul
-                              line.stock === undefined || line.stock === null ? (
-                                <span className="jc-stock-cmd" title="🔒 Stock Shopify introuvable">—</span>
-                              ) : line.stock === "sur_commande" ? (
-                                <span className="jc-stock-cmd">Sur commande</span>
-                              ) : (
-                                <span className={(line.stock as number) > 2 ? "jc-stock-ok" : (line.stock as number) > 0 ? "jc-stock-low" : "jc-stock-cmd"}>
-                                  {line.stock === 0 ? "Sur commande" : `${line.stock} pce${(line.stock as number) > 1 ? "s" : ""}`}
-                                </span>
-                              )
+                              // Ligne Shopify : stock figÃ© venant de l'API, affichage seul
+                              <>
+                                {line.stock === undefined || line.stock === null ? (
+                                  <span className="jc-stock-cmd" title="ðŸ”’ Stock Shopify introuvable">â€”</span>
+                                ) : line.stock === "sur_commande" ? (
+                                  <span className="jc-stock-cmd">Sur commande</span>
+                                ) : (
+                                  <span className={(line.stock as number) > 2 ? "jc-stock-ok" : (line.stock as number) > 0 ? "jc-stock-low" : "jc-stock-cmd"}>
+                                    {line.stock === 0 ? "Sur commande" : `${line.stock} pce${(line.stock as number) > 1 ? "s" : ""}`}
+                                  </span>
+                                )}
+                                {isStockCritical(line) && (
+                                  <div className="jc-critical-wrap">
+                                    <span className="jc-critical-badge" title="Article non-réassortable (vente bloquée à 0 chez Shopify). La quantité demandée dépasse le stock disponible et aucun réassort n'est possible.">
+                                      🔴 Rupture ({typeof line.stock === "number" ? line.stock : 0}/{line.qty})
+                                    </span>
+                                    <label className="jc-critical-confirm">
+                                      <input
+                                        type="checkbox"
+                                        checked={confirmedCritical[line.id] === true}
+                                        onChange={(e) => setConfirmedCritical((c) => ({ ...c, [line.id]: e.target.checked }))}
+                                      />
+                                      <span>J&apos;ai vérifié la dispo fournisseur</span>
+                                    </label>
+                                  </div>
+                                )}
+                              </>
                             ) : (
                               // Ligne à la volée : stock toujours éditable (corrige le bug "one shot")
                               <input
@@ -3518,6 +3558,20 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
         .jc-service-custom-label:focus { border-color: var(--accent) !important; }
         .jc-stock-zero { color: var(--danger); font-weight: 700; font-size: 12px; }
         .jc-stock-cmd { color: #f59e0b; font-weight: 700; font-size: 12px; }
+        .jc-critical-wrap { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+        .jc-critical-badge {
+          display: inline-flex; align-items: center; gap: 4px;
+          font-size: 10px; font-weight: 700;
+          color: #dc2626; background: rgba(220,38,38,0.10);
+          border: 1px solid rgba(220,38,38,0.40); border-radius: 8px;
+          padding: 3px 7px; line-height: 1.25; box-sizing: border-box;
+          white-space: normal; max-width: 100%;
+        }
+        .jc-critical-confirm {
+          display: flex; align-items: center; gap: 5px;
+          font-size: 10.5px; color: #dc2626; cursor: pointer; user-select: none;
+        }
+        .jc-critical-confirm input { cursor: pointer; }
 
         /* Colonne stock dans le tableau */
         .td-stock { text-align: center; vertical-align: middle; }

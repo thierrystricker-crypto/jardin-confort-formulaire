@@ -123,8 +123,13 @@ export function isNonReassortable(line: QuoteLine): boolean {
  */
 export function isStockCritical(line: QuoteLine): boolean {
   if (!isNonReassortable(line)) return false;
-  const stock = typeof line.stock === "number" ? line.stock : null;
-  if (stock === null) return false;
+  // Rupture totale : article non-réassortable sans stock vendable.
+  //   - "sur_commande" : converti depuis stock 0 par le picker Shopify
+  //   - 0              : stock nul brut
+  //   - null/undefined : SKU introuvable côté Shopify (filet de sécurité refreshStock)
+  if (line.stock === "sur_commande" || line.stock === 0 || line.stock == null) return true;
+  // Rupture partielle : quantité demandée supérieure au stock numérique disponible.
+  const stock = typeof line.stock === "number" ? line.stock : 0;
   const qty = line.qty || 0;
   return qty > stock;
 }

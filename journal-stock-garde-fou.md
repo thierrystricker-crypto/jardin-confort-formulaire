@@ -205,7 +205,7 @@ Get-ChildItem -Path .\app\drafts -Filter "*.tsx" -Recurse | Select-String -Patte
 **Branche :** `feature/stock-garde-fou` (déjà créée, déjà commit Phase 1.A)
 
 - [x] Phase 1.A — `app/api/shopify-search/route.ts` (livrée 10.06.2026, commit `8875e31`)
-- [ ] Phase 1.B — `refreshStock` dans `app/api/offres/[slug]/route.ts`
+- [x] Phase 1.B — `refreshStock` dans `app/api/offres/[slug]/route.ts`
 - [ ] Phase 1.C — type `QuoteLine` + helpers dans `lib/jc-print-types.ts`
 - [ ] Phase 1.D — `addShopifyItem` dans `DraftFormulaire.tsx`
 - [ ] Test : créer brouillon, ajouter article DENY, vérifier que `line.inventoryPolicy === "DENY"` est bien persisté dans JSONB
@@ -308,3 +308,29 @@ Get-ChildItem -Path .\app\drafts -Filter "*.tsx" -Recurse | Select-String -Patte
    Get-ChildItem -Path .\app\drafts -Filter "*.tsx" -Recurse | Select-String -Pattern "addShopifyItem|shopifyLocked: true" -Context 2,8 | Select-Object -First 50
 ```
 4. Lancer "On enchaîne Phase 1.B (refreshStock) du chantier stock-garde-fou. Tout le contexte est en mémoire."
+
+## ✅ Phase 1.B + 1.C helpers — LIVRÉE le 2026-06-10
+
+**Commit** : `dbfa1b7` sur branche `feature/stock-garde-fou`
+**Fichiers patchés** : `lib/jc-print-types.ts` + `app/api/offres/[slug]/route.ts` (2 fichiers, 30 insertions, 2 suppressions)
+**Validation** : `npm run build` clean, 30 pages générées, 0 erreur TypeScript
+
+### Phase 1.B — refreshStock (app/api/offres/[slug]/route.ts)
+- Query GraphQL `productVariants` : ajout du champ `inventoryPolicy` après `sku`
+- Type de réponse parsée étendu : `inventoryPolicy?: "DENY" | "CONTINUE" | null`
+- `skuMap` : signature passée à `Map<string, { stock; delay; inventoryPolicy }>` (déclaration + `.set()` alignés)
+- `.map()` final : propagation via spread conditionnel `...(fresh.inventoryPolicy ? { inventoryPolicy: fresh.inventoryPolicy } : {})`
+
+**Arbitrage préservation** : sur SKU locked introuvable côté Shopify, on PRÉSERVE `line.inventoryPolicy` (pas d'écrasement), cohérent avec le filet `stock: null` existant. La politique est rafraîchie à chaque load si Shopify renvoie une valeur (gère le cas DENY → CONTINUE).
+
+### Phase 1.C — helpers (lib/jc-print-types.ts)
+- Type `QuoteLine` global étendu : `inventoryPolicy?: "DENY" | "CONTINUE"` + `shopifyLocked?: boolean`
+- Helpers `isNonReassortable(line)` et `isStockCritical(line)` ajoutés avant `formatMoney`
+
+### Piège rencontré
+Build cassé sur `skuMap.set` : la déclaration (1.B.3a) exigeait `inventoryPolicy` mais le `.set()` (1.B.3b) n'était pas encore patché → `Property 'inventoryPolicy' is missing`. Appliquer les deux ensemble.
+
+### Note harmonisation future (hors scope)
+`isNonReassortable` pourrait réutiliser `isShopifyLine()` mais ce n'est PAS équivalent : `isShopifyLine` accepte le fallback `id "shopify-"` et `type === "custom"`, alors que le garde-fou restreint volontairement à `type === "product"`. Garder la version actuelle.
+
+**Backend du garde-fou COMPLET** (1.A → 1.D + helpers). Reste Session 2 (UI formulaire), Session 3 (docs internes), Session 4 (merge prod).
