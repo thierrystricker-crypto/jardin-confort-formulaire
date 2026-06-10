@@ -22,6 +22,7 @@ type ShopifyItem = {
   price: string;
   compareAtPrice: string | null;
   stock: number | null;
+  inventoryPolicy: "DENY" | "CONTINUE" | null;
   productUrl: string;
   variantImage: string;
   image1: string;
@@ -41,6 +42,7 @@ type QuoteLine = {
   stock?: number | null | "sur_commande";
   lineDiscount?: number;
   shopifyLocked?: boolean;
+  inventoryPolicy?: "DENY" | "CONTINUE";
   // ── Lignes média uniquement ──
   mediaUrl?: string;
   mediaSize?: "small" | "medium" | "large";
@@ -620,6 +622,7 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
       stock: stockVal,
       lineDiscount: hasPromo ? Math.round((compareAt - price) * 100) / 100 : 0,
       shopifyLocked: true,
+      inventoryPolicy: item.inventoryPolicy === "DENY" ? "DENY" : "CONTINUE",
     }]);
     highlightAdded(id);
     setFlashProductId(item.id);
