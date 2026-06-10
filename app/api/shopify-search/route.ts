@@ -59,6 +59,7 @@ type AdminInventoryResponse = {
     productVariants?: {
       nodes?: Array<{
         sku: string | null;
+        inventoryPolicy?: "DENY" | "CONTINUE" | null;
         inventoryItem?: {
           inventoryLevels?: {
             nodes?: Array<{
@@ -82,6 +83,7 @@ type ResultItem = {
   price: string;
   compareAtPrice: string | null;
   stock: number | null;
+  inventoryPolicy: "DENY" | "CONTINUE" | null;
   productUrl: string;
   variantImage: string;
   image1: string;
@@ -185,7 +187,7 @@ async function getAdminAccessToken() {
 }
 
 async function getAdminAvailableBySku(skus: string[]) {
-  if (!skus.length) return new Map<string, number>();
+  if (!skus.length) return new Map<string, { qty: number; inventoryPolicy: "DENY" | "CONTINUE" }>();
 
   const adminToken = await getAdminAccessToken();
   const queryString = skus
@@ -198,6 +200,7 @@ async function getAdminAvailableBySku(skus: string[]) {
       productVariants(first: 100, query: $query) {
         nodes {
           sku
+          inventoryPolicy
           inventoryItem {
             inventoryLevels(first: 1) {
               nodes {
@@ -223,14 +226,15 @@ async function getAdminAvailableBySku(skus: string[]) {
   const json = (await response.json()) as AdminInventoryResponse;
   if (!response.ok || json.errors) throw new Error('Erreur Shopify Admin Inventory');
 
-  const map = new Map<string, number>();
+  const map = new Map<string, { qty: number; inventoryPolicy: "DENY" | "CONTINUE" }>();
   for (const node of json.data?.productVariants?.nodes ?? []) {
     const sku = node.sku ?? '';
     const qty =
       node.inventoryItem?.inventoryLevels?.nodes?.[0]?.quantities?.find(
         (q) => q.name === 'available'
       )?.quantity ?? 0;
-    if (sku) map.set(sku, qty);
+    const inventoryPolicy = (node.inventoryPolicy === 'DENY' ? 'DENY' : 'CONTINUE') as "DENY" | "CONTINUE";
+    if (sku) map.set(sku, { qty, inventoryPolicy });
   }
   return map;
 }
@@ -272,6 +276,7 @@ function buildStorefrontItems(products: ShopifyProduct[], words: string[]): Resu
           price: Number(variant.price.amount).toFixed(2),
           compareAtPrice: variant.compareAtPrice ? Number(variant.compareAtPrice.amount).toFixed(2) : null,
           stock: null,
+          inventoryPolicy: null,
           productUrl: product.onlineStoreUrl
             ? `${product.onlineStoreUrl}?variant=${variantNumericId}`
             : `https://${SHOP}/products/${product.handle}?variant=${variantNumericId}`,
@@ -314,13 +319,17 @@ export async function GET(request: NextRequest) {
     try {
       const skus = storefrontItems.map((item) => item.sku).filter(Boolean);
       const adminAvailableMap = await getAdminAvailableBySku(skus);
-      const items = storefrontItems.map((item) => ({
-        ...item,
-        stock: adminAvailableMap.has(item.sku) ? (adminAvailableMap.get(item.sku) as number) : null,
-      }));
+      const items = storefrontItems.map((item) => {
+        const adminData = adminAvailableMap.get(item.sku);
+        return {
+          ...item,
+          stock: adminData ? adminData.qty : null,
+          inventoryPolicy: adminData ? adminData.inventoryPolicy : null,
+        };
+      });
       return NextResponse.json({ items });
     } catch {
-      return NextResponse.json({ items: storefrontItems.map((item) => ({ ...item, stock: null })) });
+      return NextResponse.json({ items: storefrontItems.map((item) => ({ ...item, stock: null, inventoryPolicy: null })) });
     }
   } catch (error) {
     return NextResponse.json({ error: 'Erreur serveur', details: String(error) }, { status: 500 });
