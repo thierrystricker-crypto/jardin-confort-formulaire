@@ -20,7 +20,9 @@ export type QuoteLine = {
   unitPrice: number;
   qty: number;
   stock?: number | null | "sur_commande";
-  lineDiscount?: number;
+  lineDiscount?: number;          // total ligne (= qty × lineDiscountPerUnit), dérivé
+  lineDiscountPerUnit?: number;   // rabais à la pièce en CHF — source de vérité
+  shopifyVariantId?: string;      // gid variante Shopify — matching stock fiable (SKU non unique)
   // ── Lignes média (logo / image de marque) ──
   mediaUrl?: string;
   mediaSize?: "small" | "medium" | "large";

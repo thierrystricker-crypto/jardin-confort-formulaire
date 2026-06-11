@@ -75,6 +75,25 @@ type AdminInventoryResponse = {
   errors?: unknown;
 };
 
+type AdminInventoryByIdResponse = {
+  data?: {
+    nodes?: Array<{
+      id: string;
+      inventoryItem?: {
+        inventoryLevels?: {
+          nodes?: Array<{
+            quantities?: Array<{
+              name: string;
+              quantity: number;
+            }>;
+          }>;
+        };
+      } | null;
+    } | null>;
+  };
+  errors?: unknown;
+};
+
 type ResultItem = {
   id: string;
   sku: string;
@@ -184,22 +203,16 @@ async function getAdminAccessToken() {
   return cachedAdminToken;
 }
 
-async function getAdminAvailableBySku(skus: string[]) {
-  if (!skus.length) return new Map<string, number>();
-
+async function getAdminAvailableByVariantId(variantIds: string[]) {
+  if (!variantIds.length) return new Map<string, number>();
   const adminToken = await getAdminAccessToken();
-  const queryString = skus
-    .filter(Boolean)
-    .map((sku) => `sku:${sku.replace(/"/g, '\\"')}`)
-    .join(' OR ');
-
   const graphqlQuery = `
-    query VariantInventoryBySku($query: String!) {
-      productVariants(first: 100, query: $query) {
-        nodes {
-          sku
+    query VariantInventoryByIds($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on ProductVariant {
+          id
           inventoryItem {
-            inventoryLevels(first: 1) {
+            inventoryLevels(first: 20) {
               nodes {
                 quantities(names: ["available"]) {
                   name
@@ -216,21 +229,20 @@ async function getAdminAvailableBySku(skus: string[]) {
   const response = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': adminToken },
-    body: JSON.stringify({ query: graphqlQuery, variables: { query: queryString } }),
+    body: JSON.stringify({ query: graphqlQuery, variables: { ids: variantIds } }),
     cache: 'no-store',
   });
-
-  const json = (await response.json()) as AdminInventoryResponse;
+  const json = (await response.json()) as AdminInventoryByIdResponse;
   if (!response.ok || json.errors) throw new Error('Erreur Shopify Admin Inventory');
-
   const map = new Map<string, number>();
-  for (const node of json.data?.productVariants?.nodes ?? []) {
-    const sku = node.sku ?? '';
-    const qty =
-      node.inventoryItem?.inventoryLevels?.nodes?.[0]?.quantities?.find(
-        (q) => q.name === 'available'
-      )?.quantity ?? 0;
-    if (sku) map.set(sku, qty);
+  for (const node of json.data?.nodes ?? []) {
+    if (!node?.id) continue;
+    // Somme du stock "available" sur tous les emplacements (robuste multi-locations).
+    const qty = (node.inventoryItem?.inventoryLevels?.nodes ?? []).reduce((sum, lvl) => {
+      const avail = lvl.quantities?.find((q) => q.name === 'available')?.quantity ?? 0;
+      return sum + avail;
+    }, 0);
+    map.set(node.id, qty);
   }
   return map;
 }
@@ -312,11 +324,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ items: storefrontItems });
 
     try {
-      const skus = storefrontItems.map((item) => item.sku).filter(Boolean);
-      const adminAvailableMap = await getAdminAvailableBySku(skus);
+      const variantIds = storefrontItems.map((item) => item.id).filter(Boolean);
+      const adminAvailableMap = await getAdminAvailableByVariantId(variantIds);
       const items = storefrontItems.map((item) => ({
         ...item,
-        stock: adminAvailableMap.has(item.sku) ? (adminAvailableMap.get(item.sku) as number) : null,
+        stock: adminAvailableMap.has(item.id) ? (adminAvailableMap.get(item.id) as number) : null,
       }));
       return NextResponse.json({ items });
     } catch {
