@@ -42,6 +42,7 @@ type QuoteLine = {
     lineDiscount?: number;          // total ligne (= qty × lineDiscountPerUnit), dérivé
     lineDiscountPerUnit?: number;   // rabais à la pièce en CHF — source de vérité
     shopifyLocked?: boolean;
+    shopifyVariantId?: string;      // gid variante Shopify — matching stock fiable (SKU non unique)
   // ── Lignes média uniquement ──
   mediaUrl?: string;
   mediaSize?: "small" | "medium" | "large";
@@ -623,6 +624,7 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
     setLines((c) => [...c, {
       id,
       type: "product",
+      shopifyVariantId: item.id,
       image: item.variantImage,
       sku: item.sku,
       title: item.variant,
