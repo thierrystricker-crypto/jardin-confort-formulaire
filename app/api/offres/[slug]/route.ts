@@ -110,6 +110,7 @@ async function refreshStock(
   type VariantNode = {
     id?: string;
     sku?: string | null;
+    inventoryPolicy?: "DENY" | "CONTINUE" | null;
     product?: { tags?: string[] } | null;
     inventoryItem?: {
       inventoryLevels?: {
@@ -119,9 +120,10 @@ async function refreshStock(
   };
 
   try {
-    // Map par ID de variante (matching fiable) ET par SKU (fallback)
-    const idMap = new Map<string, { stock: number; delay: string }>();
-    const skuMap = new Map<string, { stock: number; delay: string }>();
+    // Map par ID de variante (matching fiable) ET par SKU (fallback).
+    // On transporte aussi inventoryPolicy (DENY = non-réassortable) pour le garde-fou interne.
+    const idMap = new Map<string, { stock: number; delay: string; inventoryPolicy: "DENY" | "CONTINUE" | null }>();
+    const skuMap = new Map<string, { stock: number; delay: string; inventoryPolicy: "DENY" | "CONTINUE" | null }>();
 
     // 1) Lignes récentes : query par IDs de variante (infaillible)
     if (variantIds.length > 0) {
@@ -130,6 +132,7 @@ async function refreshStock(
           nodes(ids: $ids) {
             ... on ProductVariant {
               id
+              inventoryPolicy
               product { tags }
               inventoryItem {
                 inventoryLevels(first: 20) {
@@ -149,7 +152,11 @@ async function refreshStock(
       const jsonIds = await resIds.json() as { data?: { nodes?: Array<VariantNode | null> } };
       for (const node of jsonIds.data?.nodes ?? []) {
         if (!node?.id) continue;
-        idMap.set(node.id, { stock: sumAvailable(node.inventoryItem), delay: getDelayFromTags(node.product?.tags) });
+        idMap.set(node.id, {
+          stock: sumAvailable(node.inventoryItem),
+          delay: getDelayFromTags(node.product?.tags),
+          inventoryPolicy: node.inventoryPolicy ?? null,
+        });
       }
     }
 
@@ -161,6 +168,7 @@ async function refreshStock(
           productVariants(first: 50, query: $query) {
             nodes {
               sku
+              inventoryPolicy
               product { tags }
               inventoryItem {
                 inventoryLevels(first: 20) {
@@ -180,7 +188,11 @@ async function refreshStock(
       const jsonSku = await resSku.json() as { data?: { productVariants?: { nodes?: VariantNode[] } } };
       for (const node of jsonSku.data?.productVariants?.nodes ?? []) {
         const sku = node.sku ?? "";
-        if (sku) skuMap.set(sku, { stock: sumAvailable(node.inventoryItem), delay: getDelayFromTags(node.product?.tags) });
+        if (sku) skuMap.set(sku, {
+          stock: sumAvailable(node.inventoryItem),
+          delay: getDelayFromTags(node.product?.tags),
+          inventoryPolicy: node.inventoryPolicy ?? null,
+        });
       }
     }
 
@@ -196,6 +208,7 @@ async function refreshStock(
       if (!fresh) {
         // Variante/SKU introuvable côté Shopify (produit retiré du catalogue, etc.) :
         // pour une ligne Shopify d'origine, on invalide le stock pour ne pas afficher d'obsolète.
+        // inventoryPolicy est PRÉSERVÉ tel quel (on n'écrase pas une valeur déjà connue).
         const lineWithLock = line as { shopifyLocked?: boolean; id?: string };
         const wasShopify = lineWithLock.shopifyLocked === true || lineWithLock.id?.startsWith("shopify-");
         if (wasShopify) {
@@ -207,6 +220,7 @@ async function refreshStock(
         ...line,
         stock: fresh.stock < 1 ? "sur_commande" : fresh.stock,
         delaiLivraison: fresh.delay, // 🚚 Délai estimé depuis tags Shopify
+        inventoryPolicy: fresh.inventoryPolicy ?? undefined, // 🔒 DENY = non-réassortable (garde-fou interne)
       };
     });
 

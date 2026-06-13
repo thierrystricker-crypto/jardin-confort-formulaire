@@ -1134,7 +1134,13 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               // Détection ligne Shopify locked (flag explicite OU id "shopify-*" rétroactif)
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const isLockedFT = (line as any).shopifyLocked === true || line.id?.startsWith("shopify-");
-
+              // Rupture / non-réassortable (inventoryPolicy DENY) : article Shopify locked dont le
+              // stock ne couvre pas la qté demandée et qui n'est PAS réassortable. Alerte entrepôt.
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const invPolicyFT = (line as any).inventoryPolicy;
+              const snFTcrit = typeof line.stock === "number" ? line.stock : null;
+              const isCritiqueFT = isLockedFT && invPolicyFT === "DENY"
+                && (line.stock === "sur_commande" || line.stock === 0 || snFTcrit === null || (line.qty || 0) > snFTcrit);
               // Stock
               let stockDisplay: React.ReactNode;
               if (line.stock === undefined || line.stock === null) {
@@ -1155,7 +1161,10 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                   stockDisplay = <span className="stock-low">⚠ {sn} pce{sn > 1 ? "s" : ""}</span>;
                 }
               }
-
+              // Override prioritaire : non-réassortable + stock insuffisant → alerte rupture rouge
+              if (isCritiqueFT) {
+                stockDisplay = <span style={{ color: "#dc2626", fontWeight: 700, fontSize: 11 }}>🔴 Rupture · non réassort. ({snFTcrit ?? 0} / {line.qty || 0})</span>;
+              }
               const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
               const isMultiQty = line.qty > 1;
 

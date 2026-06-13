@@ -20,6 +20,8 @@ export type QuoteLine = {
   unitPrice: number;
   qty: number;
   stock?: number | null | "sur_commande";
+  inventoryPolicy?: "DENY" | "CONTINUE";
+  shopifyLocked?: boolean;
   lineDiscount?: number;          // total ligne (= qty × lineDiscountPerUnit), dérivé
   lineDiscountPerUnit?: number;   // rabais à la pièce en CHF — source de vérité
   shopifyVariantId?: string;      // gid variante Shopify — matching stock fiable (SKU non unique)
@@ -106,6 +108,34 @@ export const TVA_RATE    = 0.081;
 export const STORAGE_KEY = "jc-offre-v15-draft";
 
 // ── Helpers ──
+
+/**
+ * Détermine si une ligne Shopify est "non-réassortable" (vente bloquée à 0).
+ * Source unique de vérité utilisée par toutes les UI internes.
+ */
+export function isNonReassortable(line: QuoteLine): boolean {
+  return line.type === "product"
+    && line.shopifyLocked === true
+    && line.inventoryPolicy === "DENY";
+}
+
+/**
+ * Détermine si une ligne est en rupture critique (non-réassortable + qté > stock).
+ * Déclenche le badge rouge dans le formulaire.
+ */
+export function isStockCritical(line: QuoteLine): boolean {
+  if (!isNonReassortable(line)) return false;
+  // Rupture totale : article non-réassortable sans stock vendable.
+  //   - "sur_commande" : converti depuis stock 0 par le picker Shopify
+  //   - 0              : stock nul brut
+  //   - null/undefined : SKU introuvable côté Shopify (filet de sécurité refreshStock)
+  if (line.stock === "sur_commande" || line.stock === 0 || line.stock == null) return true;
+  // Rupture partielle : quantité demandée supérieure au stock numérique disponible.
+  const stock = typeof line.stock === "number" ? line.stock : 0;
+  const qty = line.qty || 0;
+  return qty > stock;
+}
+
 export function formatMoney(value: number): string {
   const formatted = new Intl.NumberFormat("de-CH", {
     minimumFractionDigits: 2,

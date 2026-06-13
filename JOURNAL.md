@@ -2231,3 +2231,227 @@ Commit fix initialement parti sur `main` au lieu de la branche `fix/stock-partie
 3. `git push --force-with-lease` sur la branche fix
 
 **Rituel anti-bug pour la suite** : toujours faire `git status` juste après `git checkout -b` pour confirmer "On branch nom-de-ta-branche" AVANT de toucher au code.
+
+## Session du 10.06.2026 — Lot de 3 features client + clôture dette D7
+
+> Date : 2026-06-10
+> Statut : ✅ Mergée et déployée en production (PR #18 sur main, commit `c78899f`)
+> Stack : Next.js 16.2.3, pdf-lib (nouvelle dépendance)
+
+### 🎯 Objectifs de la session
+
+1. Améliorer l'affichage du fichier clients : voir l'adresse complète directement dans la liste sans cliquer
+2. Faciliter la consultation des factures WinBiz multiples d'un même client (ouvrir tout / fusionner en 1 PDF)
+3. Clôturer la dette technique D7 : afficher le pourcentage de remise (ligne + globale) sur tous les templates et la page web client
+
+---
+
+### ✅ Feature 1 — Colonne "Adresse" multi-ligne sur liste clients
+
+**Fichier** : `app/dashboard/clients/page.tsx`
+
+**Avant** : la colonne "Ville" affichait uniquement `NPA + Ville` (ex: `1095 Lutry`). Pour voir la rue, il fallait cliquer sur le client → fiche détaillée. Pénible quand on cherche à différencier 2 clients homonymes par leur adresse.
+
+**Après** : colonne renommée "Adresse" qui affiche 3 lignes (sans bullet, simple `<div>` empilés) :
+- `Route de Lavaux 425`
+- `Bâtiment B` (uniquement si `rue2` rempli)
+- `1095 Lutry`
+
+**Pattern utilisé** :
+```jsx
+<td className="px-4 py-3 text-zinc-400">
+  {(() => {
+    const ligne1 = [c.rue, c.numero_rue].filter(Boolean).join(" ")
+    const ligne2 = c.rue2 || ""
+    const ligne3 = [c.npa, c.ville].filter(Boolean).join(" ")
+    const lignes = [ligne1, ligne2, ligne3].filter(l => l.trim().length > 0)
+    if (lignes.length === 0) return "—"
+    return (
+      <div className="flex flex-col gap-0.5">
+        {lignes.map((l, i) => <div key={i}>{l}</div>)}
+      </div>
+    )
+  })()}
+</td>
+```
+
+Tiret `—` affiché si toutes les lignes sont vides (clients sans adresse). Aucune cellule ne casse l'alignement vertical.
+
+---
+
+### ✅ Feature 2 — Boutons "Ouvrir tout" + "Fusionner PDF" pour factures WinBiz
+
+**Contexte métier** : un client peut avoir 5-10 factures WinBiz importées. Pour retrouver un achat précis, il fallait ouvrir les PDF un par un. Demande Thierry : "j'en ai marre, je veux soit tous les ouvrir d'un coup, soit avoir un PDF unique fusionné".
+
+**Architecture livrée** :
+
+**Nouvelle dépendance npm** : `pdf-lib` (~150 KB, JavaScript pur, pas de binaires natifs). Installation :
+```powershell
+npm install pdf-lib
+```
+
+**Nouvelle route API** : `app/api/clients/[id]/factures/merge-pdf/route.ts`
+- GET endpoint, récupère toutes les factures du client avec `pdf_url` non nul
+- Tri anti-chronologique (plus récent d'abord) via `.order("date_facture", { ascending: false })`
+- Télécharge chaque PDF depuis Supabase Storage via fetch()
+- Fusionne avec `PDFDocument.create()` + `copyPages()` de pdf-lib
+- Renvoie le PDF fusionné en `Content-Disposition: inline` (ouvre en onglet, le client peut Ctrl+S pour sauver)
+- Nom de fichier : `factures-CL-22094-NomClient-2026-06-10.pdf`
+- Gère les PDFs corrompus/inaccessibles : saute la facture et continue, expose les erreurs via header `X-Merge-Errors`
+- `ignoreEncryption: true` pour les PDFs WinBiz parfois chiffrés mais lisibles
+
+**2 boutons UI ajoutés** dans la section "Factures WinBiz" de `app/dashboard/clients/[id]/page.tsx`, visibles uniquement si le client a **≥ 2 factures avec PDF** :
+
+1. **📂 Ouvrir tout (N)** — bouton violet
+   - Ouvre chaque PDF dans un onglet séparé via simulated `<a>` clicks
+   - Délai de 150ms entre chaque ouverture pour contourner le bloqueur popup Chrome
+   - Confirmation `confirm()` si > 5 factures (évite l'ouverture massive accidentelle)
+   - Méthode `document.createElement("a") + .click() + .removeChild()` plutôt que `window.open()` directement (plus tolérée par les navigateurs modernes)
+
+2. **📎 Fusionner PDF** — bouton emerald
+   - Ouvre `/api/clients/[id]/factures/merge-pdf` dans un nouvel onglet
+   - PDF généré à la demande (pas de cache, ~1s pour 2-3 factures, ~5-10s pour 10 factures)
+
+**Décision archi** : génération **à la demande** (pas de cache) plutôt que pré-calculée :
+- Pas de stockage Supabase gaspillé (la plupart des fusions ne seraient ouvertes qu'une fois)
+- Toujours à jour (si nouvelle facture ajoutée, elle est incluse au prochain clic)
+- Pas de complexité de cache à invalider
+
+**UX validée** : sur la plupart des clients (2-3 factures), la fusion est imperceptible. Sur 10 factures de 5 Mo, ~10s d'attente reste acceptable. Limite haute à surveiller à 20+ factures (timeout Vercel 60s sur plan Pro).
+
+**Limite Chrome popup blocker** : la première utilisation de "Ouvrir tout" déclenche le bloqueur Chrome. Le commercial doit cliquer "Toujours autoriser les popups pour ce site" UNE FOIS, et c'est définitif pour ce navigateur sur ce domaine. À documenter pour l'équipe.
+
+---
+
+### ✅ Feature 3 — Affichage % de remise sur tous les templates (D7 résolue)
+
+**Contexte** : depuis le chantier brouillons (Session 9, commit `3cb1db6`), seule la modal de transformation brouillon → offre affichait le pourcentage de remise. Tous les autres templates (PDF, page web client) affichaient juste le montant CHF. Le client devait faire le calcul mentalement.
+
+**Décision visuelle** : afficher `(−X%)` avec un **vrai signe moins typographique** (Unicode U+2212) pour cohérence avec le `− CHF X.XX` déjà utilisé partout. Résultat : `Remise (−18%) : − CHF 67.50`.
+
+**Pour la remise ligne**, le pourcentage est **recalculé à la volée** depuis `(lineDiscount / (qty × unitPrice)) × 100`. Le toggle %− du formulaire convertit le % en CHF avant sauvegarde, donc le pourcentage original n'est pas stocké. Mais on peut le re-déduire facilement.
+
+**Pour la remise globale**, on utilise directement `data.discountPercent` (déjà persisté).
+
+**Pattern remise ligne (réutilisé sur tous les templates)** :
+```jsx
+{(line.lineDiscount || 0) > 0 && (() => {
+  const lineSubtotal = line.qty * line.unitPrice;
+  const pct = lineSubtotal > 0 ? (line.lineDiscount! / lineSubtotal) * 100 : 0;
+  const pctStr = pct > 0 && pct <= 100
+    ? (Math.abs(pct - Math.round(pct)) < 0.05 ? `−${Math.round(pct)}%` : `−${pct.toFixed(1)}%`)
+    : null;
+  return (
+    <div className="item-discount">
+      Remise{pctStr ? ` (${pctStr})` : ""} : − {formatMoney(line.lineDiscount || 0)}
+    </div>
+  );
+})()}
+```
+
+Le `pct.toFixed(1)` pour les % décimaux gère le cas `7.5%` proprement, sans afficher `7.5000000001%`.
+
+**Récap fichiers patchés (7 fichiers, ~11 patches)** :
+
+| # | Fichier | Patches |
+|---|---|---|
+| 1 | `app/print/offre/[slug]/page.tsx` | Ligne + global |
+| 2 | `app/offre/[slug]/page.tsx` (page web client) | Ligne + global |
+| 3 | `app/print/draft/[slug]/page.tsx` | Ligne + global |
+| 4 | `app/print/offre/page.tsx` (preview localStorage) | Ligne + global |
+| 5 | `app/print/all/[slug]/page.tsx` (jeu complet) | 4 patches (FT, CC, FB) |
+| 6 | `app/print/fiche-travail/[slug]/page.tsx` | Ligne (cellule total, format spécifique) + global |
+| 7 | `app/print/fiche-bleue/[slug]/page.tsx` | Ligne + global |
+
+**Bug fix au passage** dans `app/offre/[slug]/page.tsx` : un texte parasite `app/dashboard/clients/[id]/page.tsx` s'était glissé dans le JSX (probablement copier-coller raté du chemin de fichier dans VS Code). Visible en clair sur la page web client. Supprimé.
+
+---
+
+### 🐛 Pièges techniques rencontrés
+
+#### Cache `.next` corrompu après crash dev server
+Page `/dashboard/clients` retournait 404 alors que les autres routes marchaient. Cause : cache Next.js corrompu après un crash. Fix universel à mémoriser :
+```powershell
+Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
+Remove-Item -LiteralPath ".\.next" -Recurse -Force -ErrorAction SilentlyContinue
+npm run dev
+```
+
+#### Chrome popup blocker sur "Ouvrir tout"
+Le bouton ouvrait silencieusement 1 seul onglet sur N. Cause : Chrome bloque les ouvertures multi-onglets via `window.open` en boucle. Solutions essayées dans l'ordre :
+1. ❌ `setTimeout(... , i * 100)` simple : partiel
+2. ❌ `window.open(url, "_blank", "noopener,noreferrer")` : toujours bloqué
+3. ✅ **Simulated `<a>` click** avec `document.createElement("a") + .click() + .removeChild()` + délai 150ms
+
+Même avec la bonne méthode, le commercial doit autoriser les popups pour le site UNE seule fois.
+
+#### Patch partiel mal collé qui crée un `}}` en double
+Lors du patch du bouton "Ouvrir tout", j'ai inclus un `}}` en trop qui a cassé la compile : `Expected '</', got '}'` à la ligne 1078. Le fix : supprimer la ligne dupliquée. Leçon : quand on remplace un bloc qui contient déjà des accolades fermantes, **toujours capturer le bloc complet incluant ses délimiteurs**, pas juste son intérieur.
+
+#### Preview Vercel obsolète (URL périmée)
+Thierry testait sur `https://...-git-77d117-...` alors que le dernier commit était `702d621`. L'URL `77d117` était une ancienne preview. **Bonne pratique** : toujours récupérer l'URL preview directement depuis Vercel → Deployments → ligne du commit visé (pas garder une URL en favori, elles changent à chaque commit).
+
+#### Texte parasite copié dans JSX
+En relisant `app/offre/[slug]/page.tsx`, repéré `app/dashboard/clients/[id]/page.tsx` collé en plein milieu du JSX (juste après un `</div>`). Probablement un Ctrl+V d'un nom de fichier au mauvais endroit. **Leçon** : utiliser `git diff` avant push pour scanner les anomalies. Le scan PowerShell ne l'aurait pas attrapé.
+
+---
+
+### 🚦 Workflow git de la session
+
+Tout sur la branche `feature/corrections-session4` (qui contenait déjà les commits du chantier corrections Session 4a). PR #18 créée et mergée en main.
+
+**Commits** :
+- (les features 1 et 2 ont été pushées avant les patches templates, dans des commits antérieurs sur la même branche)
+- `702d621` — `feat(templates): afficher % de remise (ligne + globale) sur tous les templates print + page web client`
+
+**Merge PR #18** : commit `c78899f` sur main.
+
+**Vercel auto-deploy** : OK, prod à jour sur `https://offres.jardin-confort.ch`.
+
+**Cleanup** :
+```powershell
+git checkout main
+git pull origin main          # → fast-forward, 5 commits
+git branch -d feature/corrections-session4
+```
+
+Branche distante déjà supprimée via le bouton "Delete branch" de GitHub au moment du merge.
+
+---
+
+### Mise à jour de la dette technique
+
+| # | Sujet | Statut |
+|---|---|---|
+| D7 | Affichage du pourcentage de remise manquant sur aperçu print offre et page brouillon | ✅ **Résolue** Post-S9 PR #18 (7 fichiers patchés + bug fix texte parasite `app/offre/[slug]`) |
+
+Aucune nouvelle dette technique créée dans cette session.
+
+---
+
+### 💡 Méthode validée pour les chantiers multi-fichiers
+
+Pour ce type de chantier (un même pattern à appliquer sur N fichiers similaires), méthode qui a très bien marché :
+
+1. **Identifier le pattern à appliquer sur 1 ou 2 fichiers** d'abord (les plus représentatifs)
+2. **Valider visuellement sur preview** que le résultat est OK
+3. **Scanner le repo** avec PowerShell pour lister tous les fichiers contenant le pattern :
+```powershell
+   Get-ChildItem -Path .\app -Filter "*.tsx" -Recurse | Select-String -Pattern "lineDiscount" -SimpleMatch | Group-Object Path | Sort-Object Name
+```
+4. **Extraire le contexte** de chaque occurrence avec `Select-String -Pattern "..." -Context 1,4` pour générer les patches `cherche/remplace par` précis
+5. **Appliquer tous les patches en lot** dans VS Code via Ctrl+F / Ctrl+V
+6. **Valider à nouveau** sur preview
+7. **Scanner de vérification** pour confirmer qu'aucun affichage n'est resté avec l'ancien format (commande PowerShell custom)
+
+Cette méthode garantit la couverture sans surprise.
+
+---
+
+### 🔧 Prochain chantier identifié — Stock garde-fou
+
+Voir le document de cadrage dédié `journal-stock-garde-fou.md` créé en fin de session.
+
+**Résumé** : ajouter un garde-fou pour les articles Shopify avec `inventoryPolicy === "DENY"` (continue selling when out of stock = désactivé) quand `qty > stock`. Affichage interne uniquement (formulaire brouillon + 4 documents internes), aucun impact sur les docs client.
+
+**À démarrer dans un nouveau chat** pour partir d'un contexte frais. Voir le document de cadrage pour le détail.

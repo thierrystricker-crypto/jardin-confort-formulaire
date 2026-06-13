@@ -835,6 +835,10 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               // Détection ligne Shopify locked (flag explicite OU id "shopify-*" rétroactif)
               const lineLockFT = line as { shopifyLocked?: boolean; id?: string };
               const isLockedFT = lineLockFT.shopifyLocked === true || lineLockFT.id?.startsWith("shopify-");
+              const invPolicyFT = (line as { inventoryPolicy?: "DENY" | "CONTINUE" }).inventoryPolicy;
+              const snFTcrit = typeof line.stock === "number" ? line.stock : null;
+              const isCritiqueFT = isLockedFT && invPolicyFT === "DENY"
+                && (line.stock === "sur_commande" || line.stock === 0 || snFTcrit === null || (line.qty || 0) > snFTcrit);
               let stockDisplay: React.ReactNode;
               if (line.stock === undefined || line.stock === null) {
                 // Si ligne Shopify locked → SKU introuvable côté API → badge clair pour l'entrepôt
@@ -853,6 +857,10 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 } else {
                   stockDisplay = <span className="ft-stock-low">⚠ {sn} pce{sn > 1 ? "s" : ""}</span>;
                 }
+              }
+              // Override prioritaire : non-réassortable + stock insuffisant → alerte rupture rouge
+              if (isCritiqueFT) {
+                stockDisplay = <span style={{ color: "#dc2626", fontWeight: 700, fontSize: 11 }}>🔴 Rupture · non réassort. ({snFTcrit ?? 0} / {line.qty || 0})</span>;
               }
               const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
               const isMultiQty = line.qty > 1;
@@ -1843,8 +1851,11 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     // Détection ligne Shopify locked (flag explicite OU id "shopify-*" rétroactif)
                     const lineLockFB = line as { shopifyLocked?: boolean; id?: string };
                     const isLockedFB = lineLockFB.shopifyLocked === true || lineLockFB.id?.startsWith("shopify-");
+                    const invPolicyFB = (line as { inventoryPolicy?: "DENY" | "CONTINUE" }).inventoryPolicy;
                     let stockElFB: React.ReactNode;
                     const snFB = typeof line.stock === "number" ? line.stock : null;
+                    const isCritiqueFB = isLockedFB && invPolicyFB === "DENY"
+                      && (line.stock === "sur_commande" || line.stock === 0 || snFB === null || (line.qty || 0) > snFB);
                     if (line.stock === undefined || line.stock === null) {
                       // Si ligne Shopify locked → SKU introuvable → badge orange
                       stockElFB = isLockedFB
@@ -1861,6 +1872,10 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                       } else {
                         stockElFB = <span className="fb-stock-low-bleue">⚠ {snFB}</span>;
                       }
+                    }
+                   // Override prioritaire : non-réassortable + stock insuffisant → rupture (compact)
+                    if (isCritiqueFB) {
+                      stockElFB = <span style={{ color: "#dc2626", fontWeight: 700 }}>🔴 NR {snFB ?? 0}/{line.qty || 0}</span>;
                     }
                     return (
                       <tr key={line.id}>
