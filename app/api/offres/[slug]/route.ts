@@ -40,126 +40,175 @@ async function getAdminToken(): Promise<string | null> {
   return null;
 }
 
-// Re-fetch le stock réel depuis Shopify Admin pour chaque SKU des lignes
-async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: unknown }>) {
+// Re-fetch le stock réel depuis Shopify Admin pour les lignes Shopify.
+// MATCHING : par ID de variante (shopifyVariantId) quand disponible — fiable même
+// quand un SKU est partagé par plusieurs produits (les SKU ne sont pas uniques,
+// contrairement aux EAN : deux fabricants peuvent attribuer le même numéro).
+// FALLBACK : par SKU pour les anciennes lignes sans shopifyVariantId (dette assumée :
+// re-sélectionner l'article dans le picker corrige définitivement la ligne).
+async function refreshStock(
+  lines: Array<{ type: string; sku?: string; stock?: unknown; shopifyVariantId?: string }>
+) {
   if (!lines || lines.length === 0) return lines;
 
-  // Ne consulter Shopify QUE pour les lignes Shopify (cf. helper isShopifyLine).
-  // Les lignes "à la volée" (custom) sont par définition hors-Shopify : leur
-  // stock est saisi manuellement ou laissé null, et ne doit pas être rafraîchi.
-  // Bénéfice supplémentaire : évite qu'un SKU custom à syntaxe bizarre
-  // (ex: avec espaces) ne casse la query GraphQL et invalide TOUTES les lignes.
-  const skus = lines
-    .filter(isShopifyLine)
-    .map((l) => l.sku as string);
+  const shopifyLines = lines.filter(isShopifyLine);
+  if (shopifyLines.length === 0) return lines;
 
-  if (skus.length === 0) return lines;
+  // Lignes récentes : on a l'ID de variante (gid). Lignes anciennes : seulement le SKU.
+  const variantIds = Array.from(
+    new Set(
+      shopifyLines
+        .map((l) => l.shopifyVariantId)
+        .filter((v): v is string => typeof v === "string" && v.startsWith("gid://"))
+    )
+  );
+  const fallbackSkus = Array.from(
+    new Set(
+      shopifyLines
+        .filter((l) => !l.shopifyVariantId || !l.shopifyVariantId.startsWith("gid://"))
+        .map((l) => l.sku as string)
+        .filter(Boolean)
+    )
+  );
+
+  if (variantIds.length === 0 && fallbackSkus.length === 0) return lines;
 
   const adminToken = await getAdminToken();
   if (!adminToken) return lines; // Pas de token → stock inchangé
 
+  // Helper : calcule le délai depuis les tags Shopify
+  // Cohérence métier : mêmes tags utilisés dans le template Liquid Order Printer Pro
+  const DELAY_MAP: Array<{ tag: string; label: string }> = [
+    { tag: "1week",   label: "1–2 semaines" },
+    { tag: "2weeks",  label: "2–3 semaines" },
+    { tag: "3weeks",  label: "3–4 semaines" },
+    { tag: "4weeks",  label: "4–5 semaines" },
+    { tag: "5weeks",  label: "5–6 semaines" },
+    { tag: "6weeks",  label: "6–8 semaines" },
+    { tag: "8weeks",  label: "8–10 semaines" },
+    { tag: "10weeks", label: "10–12 semaines" },
+  ];
+  function getDelayFromTags(tags: string[] | undefined | null): string {
+    if (!tags || tags.length === 0) return "Sur commande";
+    const tagList = tags.map((t) => t.toLowerCase().trim());
+    for (const { tag, label } of DELAY_MAP) {
+      if (tagList.includes(tag)) return label;
+    }
+    return "Sur commande";
+  }
+
+  // Somme du stock "available" sur tous les emplacements (robuste multi-locations)
+  function sumAvailable(inv: {
+    inventoryLevels?: { nodes?: Array<{ quantities?: Array<{ name: string; quantity: number }> }> };
+  } | null | undefined): number {
+    return (inv?.inventoryLevels?.nodes ?? []).reduce((sum, lvl) => {
+      const avail = lvl.quantities?.find((q) => q.name === "available")?.quantity ?? 0;
+      return sum + avail;
+    }, 0);
+  }
+
+  type VariantNode = {
+    id?: string;
+    sku?: string | null;
+    inventoryPolicy?: "DENY" | "CONTINUE" | null;
+    product?: { tags?: string[] } | null;
+    inventoryItem?: {
+      inventoryLevels?: {
+        nodes?: Array<{ quantities?: Array<{ name: string; quantity: number }> }>;
+      };
+    } | null;
+  };
+
   try {
-    // Échappement : SKUs entre guillemets pour gérer ceux qui contiennent des espaces
-    // ou d'autres caractères spéciaux (rare mais possible côté fournisseur).
-    // Sans ça, `sku:123 456 789` serait interprété par Shopify comme `sku:123` suivi
-    // de termes parasites → query invalide ou résultat erroné.
-    const query = skus.map((s) => `sku:"${s.replace(/"/g, '\\"')}"`).join(" OR ");
-    const gql = `
-      query($query: String!) {
-        productVariants(first: 50, query: $query) {
-          nodes {
-            sku
-            inventoryPolicy
-            product {
-              tags
-            }
-            inventoryItem {
-              inventoryLevels(first: 5) {
-                nodes {
-                  quantities(names: ["available"]) {
-                    name
-                    quantity
-                  }
+    // Map par ID de variante (matching fiable) ET par SKU (fallback).
+    // On transporte aussi inventoryPolicy (DENY = non-réassortable) pour le garde-fou interne.
+    const idMap = new Map<string, { stock: number; delay: string; inventoryPolicy: "DENY" | "CONTINUE" | null }>();
+    const skuMap = new Map<string, { stock: number; delay: string; inventoryPolicy: "DENY" | "CONTINUE" | null }>();
+
+    // 1) Lignes récentes : query par IDs de variante (infaillible)
+    if (variantIds.length > 0) {
+      const gqlIds = `
+        query($ids: [ID!]!) {
+          nodes(ids: $ids) {
+            ... on ProductVariant {
+              id
+              inventoryPolicy
+              product { tags }
+              inventoryItem {
+                inventoryLevels(first: 20) {
+                  nodes { quantities(names: ["available"]) { name quantity } }
                 }
               }
             }
           }
         }
+      `;
+      const resIds = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": adminToken },
+        body: JSON.stringify({ query: gqlIds, variables: { ids: variantIds } }),
+        cache: "no-store",
+      });
+      const jsonIds = await resIds.json() as { data?: { nodes?: Array<VariantNode | null> } };
+      for (const node of jsonIds.data?.nodes ?? []) {
+        if (!node?.id) continue;
+        idMap.set(node.id, {
+          stock: sumAvailable(node.inventoryItem),
+          delay: getDelayFromTags(node.product?.tags),
+          inventoryPolicy: node.inventoryPolicy ?? null,
+        });
       }
-    `;
-
-    const res = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": adminToken,
-      },
-      body: JSON.stringify({ query: gql, variables: { query } }),
-      cache: "no-store",
-    });
-
-    const json = await res.json() as {
-      data?: {
-        productVariants?: {
-          nodes?: Array<{
-            sku: string | null;
-            inventoryPolicy?: "DENY" | "CONTINUE" | null;
-            product?: { tags?: string[] } | null;
-            inventoryItem?: {
-              inventoryLevels?: {
-                nodes?: Array<{
-                  quantities?: Array<{ name: string; quantity: number }>;
-                }>;
-              };
-            } | null;
-          }>;
-        };
-      };
-    };
-
-    // Helper : calcule le délai depuis les tags Shopify
-    // Cohérence métier : mêmes tags utilisés dans le template Liquid Order Printer Pro
-    const DELAY_MAP: Array<{ tag: string; label: string }> = [
-      { tag: "1week",   label: "1–2 semaines" },
-      { tag: "2weeks",  label: "2–3 semaines" },
-      { tag: "3weeks",  label: "3–4 semaines" },
-      { tag: "4weeks",  label: "4–5 semaines" },
-      { tag: "5weeks",  label: "5–6 semaines" },
-      { tag: "6weeks",  label: "6–8 semaines" },
-      { tag: "8weeks",  label: "8–10 semaines" },
-      { tag: "10weeks", label: "10–12 semaines" },
-    ];
-    function getDelayFromTags(tags: string[] | undefined | null): string {
-      if (!tags || tags.length === 0) return "Sur commande";
-      const tagList = tags.map((t) => t.toLowerCase().trim());
-      for (const { tag, label } of DELAY_MAP) {
-        if (tagList.includes(tag)) return label;
-      }
-      return "Sur commande";
     }
 
-    // Construire la map SKU → { stock, delay }
-    const skuMap = new Map<string, { stock: number; delay: string; inventoryPolicy: "DENY" | "CONTINUE" | null }>();
-    for (const node of json.data?.productVariants?.nodes ?? []) {
-      const sku = node.sku ?? "";
-      const qty =
-        node.inventoryItem?.inventoryLevels?.nodes?.[0]?.quantities?.find(
-          (q) => q.name === "available"
-        )?.quantity ?? 0;
-      const delay = getDelayFromTags(node.product?.tags);
-      const inventoryPolicy = node.inventoryPolicy ?? null;
-      if (sku) skuMap.set(sku, { stock: qty, delay, inventoryPolicy });
+    // 2) Lignes anciennes : fallback par SKU (peut être ambigu si SKU dupliqué — dette assumée)
+    if (fallbackSkus.length > 0) {
+      const query = fallbackSkus.map((s) => `sku:"${s.replace(/"/g, '\\"')}"`).join(" OR ");
+      const gqlSku = `
+        query($query: String!) {
+          productVariants(first: 50, query: $query) {
+            nodes {
+              sku
+              inventoryPolicy
+              product { tags }
+              inventoryItem {
+                inventoryLevels(first: 20) {
+                  nodes { quantities(names: ["available"]) { name quantity } }
+                }
+              }
+            }
+          }
+        }
+      `;
+      const resSku = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": adminToken },
+        body: JSON.stringify({ query: gqlSku, variables: { query } }),
+        cache: "no-store",
+      });
+      const jsonSku = await resSku.json() as { data?: { productVariants?: { nodes?: VariantNode[] } } };
+      for (const node of jsonSku.data?.productVariants?.nodes ?? []) {
+        const sku = node.sku ?? "";
+        if (sku) skuMap.set(sku, {
+          stock: sumAvailable(node.inventoryItem),
+          delay: getDelayFromTags(node.product?.tags),
+          inventoryPolicy: node.inventoryPolicy ?? null,
+        });
+      }
     }
 
     // Mettre à jour le stock + délai dans chaque ligne
     return lines.map((line) => {
       if (line.type === "comment" || !line.sku) return line;
-      const fresh = skuMap.get(line.sku as string);
+      // Priorité au matching par ID de variante, sinon fallback SKU
+      const fresh =
+        (line.shopifyVariantId && line.shopifyVariantId.startsWith("gid://")
+          ? idMap.get(line.shopifyVariantId)
+          : undefined) ?? skuMap.get(line.sku as string);
+
       if (!fresh) {
-        // SKU introuvable côté Shopify (modif à la volée OU produit retiré du catalogue) :
-        // - Si la ligne était une ligne Shopify d'origine (locked ou id "shopify-*") → on
-        //   invalide le stock pour éviter d'afficher un snapshot obsolète au client.
-        // - Si c'est une ligne custom (sans lock), on garde le stock manuel saisi.
+        // Variante/SKU introuvable côté Shopify (produit retiré du catalogue, etc.) :
+        // pour une ligne Shopify d'origine, on invalide le stock pour ne pas afficher d'obsolète.
+        // inventoryPolicy est PRÉSERVÉ tel quel (on n'écrase pas une valeur déjà connue).
         const lineWithLock = line as { shopifyLocked?: boolean; id?: string };
         const wasShopify = lineWithLock.shopifyLocked === true || lineWithLock.id?.startsWith("shopify-");
         if (wasShopify) {
@@ -171,6 +220,7 @@ async function refreshStock(lines: Array<{ type: string; sku?: string; stock?: u
         ...line,
         stock: fresh.stock < 1 ? "sur_commande" : fresh.stock,
         delaiLivraison: fresh.delay, // 🚚 Délai estimé depuis tags Shopify
+        inventoryPolicy: fresh.inventoryPolicy ?? undefined, // 🔒 DENY = non-réassortable (garde-fou interne)
       };
     });
 

@@ -37,8 +37,9 @@ type QuoteLine = {
   unitPrice: number;
   qty: number;
   stock?: number | null | "sur_commande";
-  lineDiscount?: number;
-  shopifyLocked?: boolean;
+    lineDiscount?: number;          // total ligne (= qty × lineDiscountPerUnit), dérivé
+    lineDiscountPerUnit?: number;   // rabais à la pièce en CHF — source de vérité
+    shopifyLocked?: boolean;
   // ── Lignes média uniquement ──
   mediaUrl?: string;
   mediaSize?: "small" | "medium" | "large";
@@ -173,7 +174,17 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-function cloneLines(lines: QuoteLine[]) { return lines.map((l) => ({ ...l })); }
+function cloneLines(lines: QuoteLine[]) {
+  return lines.map((l) => {
+    const clone = { ...l };
+    // Migration douce : anciens enregistrements sans lineDiscountPerUnit.
+    // On dérive le rabais unitaire depuis l'ancien total (neutre : (total/qty)×qty = total).
+    if (clone.lineDiscountPerUnit == null && (clone.lineDiscount || 0) > 0 && clone.qty > 0) {
+      clone.lineDiscountPerUnit = Math.round(((clone.lineDiscount || 0) / clone.qty) * 100) / 100;
+    }
+    return clone;
+  });
+}
 
 const initialEnabledServices = Object.fromEntries(serviceOptions.map((s) => [s.code, false]));
 const initialServicePrices   = Object.fromEntries(serviceOptions.map((s) => [s.code, String(s.defaultPrice)]));
@@ -549,7 +560,8 @@ const [savedSlug, setSavedSlug]           = useState("");
       qty: 1,
       stock: stockVal,
       lineDiscount: hasPromo ? Math.round((compareAt - price) * 100) / 100 : 0,
-      shopifyLocked: true,
+        lineDiscountPerUnit: hasPromo ? Math.round((compareAt - price) * 100) / 100 : 0,
+        shopifyLocked: true,
     }]);
     highlightAdded(id);
     setFlashProductId(item.id);
@@ -567,7 +579,18 @@ const [savedSlug, setSavedSlug]           = useState("");
   }
 
   function updateLine(id: string, patch: Partial<QuoteLine>) {
-    setLines((c) => c.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+    setLines((c) => c.map((l) => {
+      if (l.id !== id) return l;
+      const merged = { ...l, ...patch };
+      // Invariant rabais : lineDiscountPerUnit (CHF/pce) est la source de vérité,
+      // lineDiscount (total) en est dérivé. Recalcul à chaque changement de qty ou de rabais.
+      if (merged.lineDiscountPerUnit != null && merged.lineDiscountPerUnit > 0) {
+        merged.lineDiscount = Math.round(merged.qty * merged.lineDiscountPerUnit * 100) / 100;
+      } else if (merged.lineDiscountPerUnit === 0) {
+        merged.lineDiscount = 0;
+      }
+      return merged;
+    }));
   }
 
   function removeLine(id: string) { captureUndo(); setLines((c) => c.filter((l) => l.id !== id)); }
@@ -1745,19 +1768,28 @@ const [savedSlug, setSavedSlug]           = useState("");
                                 <input
                                   className="jc-cell-input jc-line-discount-input no-spin"
                                   type="number" step="0.01" min="0"
-                                  placeholder="Remise CHF"
-                                  value={line.lineDiscount || ""}
-                                  autoFocus
-                                  onChange={(e) => updateLine(line.id, { lineDiscount: e.target.value === "" ? 0 : Number(e.target.value) })}
+                                  placeholder="Remise CHF/pce"
+                                  value={line.lineDiscountPerUnit || ""}
+                                    autoFocus
+                                    onChange={(e) => updateLine(line.id, { lineDiscountPerUnit: e.target.value === "" ? 0 : Number(e.target.value) })}
                                 />
                               )}
                             </div>
                           </td>
                           <td className="td-money">
                             {formatMoney(lineTotal)}
-                            {(line.lineDiscount || 0) > 0 && (
-                              <div className="jc-line-discount-shown">− {formatMoney(line.lineDiscount || 0)}</div>
-                            )}
+                            {(line.lineDiscount || 0) > 0 && (() => {
+                                const lineSub = line.qty * line.unitPrice;
+                                const pct = lineSub > 0 ? ((line.lineDiscount || 0) / lineSub) * 100 : 0;
+                                const pctStr = pct > 0 && pct <= 100
+                                  ? (Math.abs(pct - Math.round(pct)) < 0.05 ? `${Math.round(pct)}` : pct.toFixed(1))
+                                  : null;
+                                return (
+                                  <div className="jc-line-discount-shown">
+                                    Remise{pctStr ? ` ${pctStr}%` : ""} : − {formatMoney(line.lineDiscount || 0)} total
+                                  </div>
+                                );
+                              })()}
                           </td>
                           {/* Colonne stock */}
                           <td className="td-stock">

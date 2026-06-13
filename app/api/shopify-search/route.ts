@@ -76,6 +76,26 @@ type AdminInventoryResponse = {
   errors?: unknown;
 };
 
+type AdminInventoryByIdResponse = {
+  data?: {
+    nodes?: Array<{
+      id: string;
+      inventoryPolicy?: "DENY" | "CONTINUE" | null;
+      inventoryItem?: {
+        inventoryLevels?: {
+          nodes?: Array<{
+            quantities?: Array<{
+              name: string;
+              quantity: number;
+            }>;
+          }>;
+        };
+      } | null;
+    } | null>;
+  };
+  errors?: unknown;
+};
+
 type ResultItem = {
   id: string;
   sku: string;
@@ -186,23 +206,17 @@ async function getAdminAccessToken() {
   return cachedAdminToken;
 }
 
-async function getAdminAvailableBySku(skus: string[]) {
-  if (!skus.length) return new Map<string, { qty: number; inventoryPolicy: "DENY" | "CONTINUE" }>();
-
+async function getAdminAvailableByVariantId(variantIds: string[]) {
+  if (!variantIds.length) return new Map<string, { qty: number; inventoryPolicy: "DENY" | "CONTINUE" }>();
   const adminToken = await getAdminAccessToken();
-  const queryString = skus
-    .filter(Boolean)
-    .map((sku) => `sku:${sku.replace(/"/g, '\\"')}`)
-    .join(' OR ');
-
   const graphqlQuery = `
-    query VariantInventoryBySku($query: String!) {
-      productVariants(first: 100, query: $query) {
-        nodes {
-          sku
+    query VariantInventoryByIds($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on ProductVariant {
+          id
           inventoryPolicy
           inventoryItem {
-            inventoryLevels(first: 1) {
+            inventoryLevels(first: 20) {
               nodes {
                 quantities(names: ["available"]) {
                   name
@@ -219,22 +233,21 @@ async function getAdminAvailableBySku(skus: string[]) {
   const response = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': adminToken },
-    body: JSON.stringify({ query: graphqlQuery, variables: { query: queryString } }),
+    body: JSON.stringify({ query: graphqlQuery, variables: { ids: variantIds } }),
     cache: 'no-store',
   });
-
-  const json = (await response.json()) as AdminInventoryResponse;
+  const json = (await response.json()) as AdminInventoryByIdResponse;
   if (!response.ok || json.errors) throw new Error('Erreur Shopify Admin Inventory');
-
   const map = new Map<string, { qty: number; inventoryPolicy: "DENY" | "CONTINUE" }>();
-  for (const node of json.data?.productVariants?.nodes ?? []) {
-    const sku = node.sku ?? '';
-    const qty =
-      node.inventoryItem?.inventoryLevels?.nodes?.[0]?.quantities?.find(
-        (q) => q.name === 'available'
-      )?.quantity ?? 0;
+  for (const node of json.data?.nodes ?? []) {
+    if (!node?.id) continue;
+    // Somme du stock "available" sur tous les emplacements (robuste multi-locations).
+    const qty = (node.inventoryItem?.inventoryLevels?.nodes ?? []).reduce((sum, lvl) => {
+      const avail = lvl.quantities?.find((q) => q.name === 'available')?.quantity ?? 0;
+      return sum + avail;
+    }, 0);
     const inventoryPolicy = (node.inventoryPolicy === 'DENY' ? 'DENY' : 'CONTINUE') as "DENY" | "CONTINUE";
-    if (sku) map.set(sku, { qty, inventoryPolicy });
+    map.set(node.id, { qty, inventoryPolicy });
   }
   return map;
 }
@@ -317,10 +330,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ items: storefrontItems });
 
     try {
-      const skus = storefrontItems.map((item) => item.sku).filter(Boolean);
-      const adminAvailableMap = await getAdminAvailableBySku(skus);
+      const variantIds = storefrontItems.map((item) => item.id).filter(Boolean);
+      const adminAvailableMap = await getAdminAvailableByVariantId(variantIds);
       const items = storefrontItems.map((item) => {
-        const adminData = adminAvailableMap.get(item.sku);
+        const adminData = adminAvailableMap.get(item.id);
         return {
           ...item,
           stock: adminData ? adminData.qty : null,
