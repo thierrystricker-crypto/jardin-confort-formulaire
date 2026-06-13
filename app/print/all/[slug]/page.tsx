@@ -860,7 +860,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               }
               // Override prioritaire : non-réassortable + stock insuffisant → alerte rupture rouge
               if (isCritiqueFT) {
-                stockDisplay = <span style={{ color: "#dc2626", fontWeight: 700, fontSize: 11 }}>🔴 Rupture · non réassort.</span>;
+                stockDisplay = <span style={{ color: "#dc2626", fontWeight: 700, fontSize: 11 }}>🔴 Rupture · non réassort. ({snFTcrit ?? 0} / {line.qty || 0})</span>;
               }
               const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
               const isMultiQty = line.qty > 1;
@@ -1873,9 +1873,9 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                         stockElFB = <span className="fb-stock-low-bleue">⚠ {snFB}</span>;
                       }
                     }
-                    // Override prioritaire : non-réassortable + stock insuffisant → rupture (compact)
+                   // Override prioritaire : non-réassortable + stock insuffisant → rupture (compact)
                     if (isCritiqueFB) {
-                      stockElFB = <span style={{ color: "#dc2626", fontWeight: 700 }}>🔴 NR</span>;
+                      stockElFB = <span style={{ color: "#dc2626", fontWeight: 700 }}>🔴 NR {snFB ?? 0}/{line.qty || 0}</span>;
                     }
                     return (
                       <tr key={line.id}>

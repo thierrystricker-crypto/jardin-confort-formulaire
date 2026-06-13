@@ -696,7 +696,7 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
                   }
                   // Override prioritaire : non-réassortable + stock insuffisant → rupture (compact colonne 60px)
                   if (isCritiqueFB) {
-                    stockEl = <span style={{ color: "#dc2626", fontWeight: 700 }}>🔴 NR</span>;
+                    stockEl = <span style={{ color: "#dc2626", fontWeight: 700 }}>🔴 NR {sn ?? 0}/{line.qty || 0}</span>;
                   }
                   return (
                     <tr key={line.id}>
