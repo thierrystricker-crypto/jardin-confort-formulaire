@@ -671,8 +671,12 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
                   // Détection ligne Shopify locked (flag explicite OU id "shopify-*" rétroactif)
                   const lineLockFB = line as { shopifyLocked?: boolean; id?: string };
                   const isLockedFB = lineLockFB.shopifyLocked === true || lineLockFB.id?.startsWith("shopify-");
+                  const invPolicyFB = (line as { inventoryPolicy?: "DENY" | "CONTINUE" }).inventoryPolicy;
                   let stockEl: React.ReactNode;
                   const sn = typeof line.stock === "number" ? line.stock : null;
+                  // Rupture / non-réassortable (DENY) : stock insuffisant ET pas de réassort → alerte
+                  const isCritiqueFB = isLockedFB && invPolicyFB === "DENY"
+                    && (line.stock === "sur_commande" || line.stock === 0 || sn === null || (line.qty || 0) > sn);
                   if (line.stock === undefined || line.stock === null) {
                     // Si ligne Shopify locked → SKU introuvable → badge orange
                     stockEl = isLockedFB
@@ -690,7 +694,10 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
                       stockEl = <span className="fb-stock-low">⚠ {sn}</span>;
                     }
                   }
-
+                  // Override prioritaire : non-réassortable + stock insuffisant → rupture (compact colonne 60px)
+                  if (isCritiqueFB) {
+                    stockEl = <span style={{ color: "#dc2626", fontWeight: 700 }}>🔴 NR</span>;
+                  }
                   return (
                     <tr key={line.id}>
                       <td className="fb-td-img">
