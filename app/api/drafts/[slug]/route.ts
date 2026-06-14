@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { computeTotals } from "@/lib/jc-print-types";
 import { supabaseAdmin } from "@/lib/supabase";
+import { refreshStock } from "@/lib/shopify-refresh-stock";
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/drafts/[slug] — récupérer un brouillon complet
@@ -39,6 +40,15 @@ export async function GET(
         { error: "Brouillon introuvable" },
         { status: 404 }
       );
+    }
+
+    // Stock dynamique : un brouillon est toujours "en cours" (jamais figé).
+    // On rafraîchit le stock Shopify live à chaque lecture pour ne pas afficher
+    // le stock gelé au moment de la copie depuis une offre/commande source.
+    const draftData = data.data as { lines?: Array<{ type: string; sku?: string; stock?: unknown; shopifyVariantId?: string }> } | null;
+    if (draftData && Array.isArray(draftData.lines) && draftData.lines.length > 0) {
+      const freshLines = await refreshStock(draftData.lines);
+      data.data = { ...draftData, lines: freshLines };
     }
 
     return NextResponse.json({ draft: data });
