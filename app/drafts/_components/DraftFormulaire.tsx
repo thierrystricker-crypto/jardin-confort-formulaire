@@ -923,11 +923,13 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
     }
 
     const livrEff = adresseLivraisonEffective({ livrDiff, rue, numero, livrRue, livrNumero });
-    if (manqueNumero(livrEff.rue, livrEff.numero)) {
+    const factSansNumero = manqueNumero(rue, numero);
+    const livrSansNumero = manqueNumero(livrEff.rue, livrEff.numero);
+    if (factSansNumero || livrSansNumero) {
       const okAdresse = window.confirm(
-        `⚠ L'adresse de livraison ne contient aucun numéro de rue :\n\n` +
-        `${livrEff.rue || "(rue vide)"}\n\n` +
-        `Le livreur risque de ne pas trouver. Vérifiez l'adresse avant de continuer.\n\n` +
+        `⚠ Adresse sans numéro de rue détectée.\n\n` +
+        `Vérifiez l'adresse de facturation ET de livraison avant de continuer — ` +
+        `un numéro manquant empêche souvent le livreur de trouver.\n\n` +
         `Transformer quand même en offre ?`
       );
       if (!okAdresse) return;
