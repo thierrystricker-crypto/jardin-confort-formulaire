@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import MediaLinePicker from "../../offres/nouveau/MediaLinePicker";
 import TransformerModal from "@/components/TransformerModal";
 import { isStockCritical } from "@/lib/jc-print-types";
+import { manqueNumero, adresseLivraisonEffective } from "@/lib/adresse-utils";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
@@ -921,6 +922,18 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
       return;
     }
 
+    const livrEff = adresseLivraisonEffective({ livrDiff, rue, numero, livrRue, livrNumero });
+    const factSansNumero = manqueNumero(rue, numero);
+    const livrSansNumero = manqueNumero(livrEff.rue, livrEff.numero);
+    if (factSansNumero || livrSansNumero) {
+      const okAdresse = window.confirm(
+        `⚠ Adresse sans numéro de rue détectée.\n\n` +
+        `Vérifiez l'adresse de facturation ET de livraison avant de continuer — ` +
+        `un numéro manquant empêche souvent le livreur de trouver.\n\n` +
+        `Transformer quand même en offre ?`
+      );
+      if (!okAdresse) return;
+    }
     setShowTransformModal(true);
   }
 
@@ -1626,6 +1639,11 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
                   ))}
                 </div>
               )}
+              {manqueNumero(rue, numero) && (
+                <div style={{ color: "#ea580c", fontSize: 11, marginTop: 4, fontWeight: 600 }}>
+                  ⚠ Aucun numéro de rue détecté — vérifiez l&apos;adresse
+                </div>
+              )}
             </div>
             <div className="jc-field">
               <label>No</label>
@@ -1826,6 +1844,11 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
                       {livrAddrSuggestions.map((s, i) => (
                         <div key={i} className="jc-addr-item" onClick={() => applyLivrSuggestion(s)}>{s.label}</div>
                       ))}
+                    </div>
+                  )}
+                  {manqueNumero(livrRue, livrNumero) && (
+                    <div style={{ color: "#dc2626", fontSize: 11, marginTop: 4, fontWeight: 600 }}>
+                      ⚠ Adresse de livraison sans numéro — le livreur risque de ne pas trouver
                     </div>
                   )}
                 </div>

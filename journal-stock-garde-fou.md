@@ -334,3 +334,45 @@ Build cassé sur `skuMap.set` : la déclaration (1.B.3a) exigeait `inventoryPoli
 `isNonReassortable` pourrait réutiliser `isShopifyLine()` mais ce n'est PAS équivalent : `isShopifyLine` accepte le fallback `id "shopify-"` et `type === "custom"`, alors que le garde-fou restreint volontairement à `type === "product"`. Garder la version actuelle.
 
 **Backend du garde-fou COMPLET** (1.A → 1.D + helpers). Reste Session 2 (UI formulaire), Session 3 (docs internes), Session 4 (merge prod).
+
+---
+
+## ✅ CLÔTURE — Chantier livré en prod (14.06.2026)
+
+> Statut : ✅ Terminé et déployé en production
+> PR #21 · merge commit `e14a43c` (main 751356d..e14a43c, fast-forward, 9 fichiers +734/-32)
+> Prod : https://offres.jardin-confort.ch · smoke test OK sur cmd-80666-l8i6x
+
+### Ce qui a été livré cette session
+
+**Synchro branche** : merge de `main` dans `feature/stock-garde-fou` (commit `8a94932`) — la branche datait d'avant 2 fix prod du 11.06 (rabais ligne `c83b92c` + stock variant ID `bca2f26`). 4 fichiers en conflit résolus en adoptant l'architecture de main (matching stock par variant ID) et en y greffant `inventoryPolicy` : `app/api/shopify-search/route.ts`, `lib/jc-print-types.ts`, `app/drafts/_components/DraftFormulaire.tsx`, `app/api/offres/[slug]/route.ts`.
+
+**Session 3 — badges sur docs internes** (commit `f4fa8d7`) : pattern non destructif (flag `isCritique*` calculé en amont + OVERRIDE en fin de cascade stock existante) sur 3 fichiers : `app/print/fiche-travail/[slug]/page.tsx`, `app/print/fiche-bleue/[slug]/page.tsx`, `app/print/all/[slug]/page.tsx` (sections `ft-` et `fb-`). La section `cc-` (commande, doc client) n'est PAS touchée.
+
+**Badges chiffrés (X/Y)** (commit `6afb50b`) : libellés finaux — fiche-travail + print/all `ft-` → `🔴 Rupture · non réassort. (X / Y)` ; fiche-bleue + print/all `fb-` → `🔴 NR X/Y` (compact colonne 60px). Aligne le badge rouge sur le format du partiel orange `🟠 X/Y` déjà présent.
+
+### Fichiers ÉCARTÉS après exploration
+- `app/print/draft/[slug]/page.tsx` : n'affiche AUCUN stock par design (commentaires « brouillon ≠ stock live » lignes 14 + 466).
+- `app/dashboard/[slug]/page.tsx` : ne liste pas les articles par ligne (aucun accès `data.lines`).
+
+### Logique métier finale (validée)
+Garde-fou à 2 niveaux : (1) formulaire/transformation = badge rouge + checkbox bloquante AU MOMENT DE LA DÉCISION (Session 2, commit `071ddb5`) ; (2) fiches internes print travail/bleue POUR L'ENTREPÔT. Badge 🔴 = article Shopify locked + `inventoryPolicy: "DENY"` + stock insuffisant (qty > stock, ou 0, ou sur_commande). Distingue 🟠 partiel réassortable (CONTINUE) de 🔴 rupture non-réassortable (DENY). Rien sur les docs client.
+
+### Rétroactivité (de fait)
+Pas de migration rétroactive par design, MAIS les commandes créées depuis la Phase 1 portent déjà `inventoryPolicy` figé J0 → le badge apparaît dessus. Seules les vraies anciennes commandes (avant Phase 1) n'ont pas de badge — comportement voulu.
+
+### Piège récurrent à retenir
+Sur `fiche-travail/[slug]/page.tsx` (~ligne 1141), la variable `snFT`/`snFTcrit` revenait 2× à une version cassée (ternaire `? 0 : null`) après réédition → erreur TS « comparison null/number ». Forme CORRECTE : `const snFTcrit = typeof line.stock === "number" ? line.stock : null;` puis condition `… || line.stock === 0 || snFTcrit === null || (line.qty || 0) > snFTcrit`.
+
+### Reste à faire (différé)
+Supprimer la branche après 1-2 semaines de stabilité :
+```powershell
+git branch -d feature/stock-garde-fou
+git push origin --delete feature/stock-garde-fou
+```
+
+### Amélioration future notée
+Bandeau de synthèse « ⚠ N article(s) non-réassortable(s) en rupture » en haut du dashboard `/dashboard/[slug]` (feature en soi : charger `data.lines` côté dashboard). Pas faite.
+
+### SKUs de test DENY
+`LFM2952.9311` (Lafuma Marsanne tapis, stock 0, critique dès qty 1) · `020301` (Höfats Cube, stock 3, critique qty 4+).

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import MediaLinePicker from "./MediaLinePicker";
+import { manqueNumero } from "@/lib/adresse-utils";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
@@ -1084,6 +1085,11 @@ const [savedSlug, setSavedSlug]           = useState("");
             <div className="jc-field" style={{position:"relative"}}>
               <label>Rue</label>
               <input value={rue} onChange={(e) => onRueChange(e.target.value)} placeholder="Commencez à taper…" autoComplete="new-password" />
+              {manqueNumero(rue, numero) && (
+                <div style={{ color: "#ea580c", fontSize: 11, marginTop: 4, fontWeight: 600 }}>
+                  ⚠ Aucun numéro de rue détecté — vérifiez l&apos;adresse
+                </div>
+              )}
               {addrSuggestions.length > 0 && (
                 <div className="jc-addr-dropdown">
                   {addrSuggestions.map((s, i) => (
@@ -1286,6 +1292,11 @@ const [savedSlug, setSavedSlug]           = useState("");
                 <div className="jc-field" style={{position:"relative"}}>
                   <label>Rue livraison</label>
                   <input value={livrRue} onChange={(e) => onLivrRueChange(e.target.value)} placeholder="Commencez à taper…" autoComplete="new-password"/>
+                  {manqueNumero(livrRue, livrNumero) && (
+                    <div style={{ color: "#dc2626", fontSize: 11, marginTop: 4, fontWeight: 600 }}>
+                      ⚠ Adresse de livraison sans numéro — le livreur risque de ne pas trouver
+                    </div>
+                  )}
                   {livrAddrSuggestions.length > 0 && (
                     <div className="jc-addr-dropdown">
                       {livrAddrSuggestions.map((s, i) => (

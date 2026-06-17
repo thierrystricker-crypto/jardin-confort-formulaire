@@ -940,3 +940,50 @@ git add journal-brouillons.md
 git commit -m "docs(journal): post-S9 PR #4 + PR #5 - cloture officielle chantier brouillons"
 git push
 ```
+
+
+---
+
+## ✅ CLÔTURE D5b — Fix stock dynamique dans les brouillons (14.06.2026)
+
+> Statut : ✅ Terminé et déployé en production
+> PR #22 · merge commit `8b957c7` (main e14a43c..8b957c7, fast-forward, 3 fichiers +245/-221)
+> Prod : https://offres.jardin-confort.ch
+
+### Le bug (dette D5b)
+Quand on copie une offre/commande → brouillon, l'inventaire des articles était copié depuis l'état FIGÉ du document original au lieu d'être dynamique (ex : stock d'une commande d'il y a 2 semaines au lieu du temps réel). Visible dans `/drafts/[slug]/editer`, `/drafts/nouveau`, et `/print/draft`.
+
+### Cause
+`app/api/drafts/[slug]/route.ts` (GET) ne contenait AUCUN `refreshStock` (renvoyait `{draft: data}` brut). `app/api/drafts/route.ts` (POST/copie) stocke `data` brut avec stock figé embarqué. L'API offres rafraîchissait, l'API drafts non → incohérence.
+
+### Solution : extraction d'un helper partagé (vs duplication)
+Choix d'extraire `refreshStock` dans `lib/shopify-refresh-stock.ts` = une seule source de vérité (fonction critique qui bouge souvent : réécrite au fix stock variant ID, puis au merge inventoryPolicy). 3 fichiers :
+
+| Fichier | Changement |
+|---|---|
+| `lib/shopify-refresh-stock.ts` (NOUVEAU) | Helper autonome exporté : `getAdminToken` + `refreshStock` (avec inventoryPolicy, matching variant ID + fallback SKU, préservation si introuvable). Constantes SHOP/ADMIN_CLIENT_ID/SECRET + cache token dedans |
+| `app/api/offres/[slug]/route.ts` | Importe le helper, supprime la copie locale (−221 lignes ; STOREFRONT_TOKEN était déjà mort). Conditions `isCommande`/`isOffreConvertie` INTACTES |
+| `app/api/drafts/[slug]/route.ts` | GET appelle `refreshStock` sur `data.data.lines` avant de renvoyer. Pas de condition isCommande (brouillon toujours dynamique) |
+
+### Règle stock par document (préservée, vérifiée en prod)
+- Brouillon → dynamique (le fix)
+- Offre en cours → dynamique (`stockFrozen:false`, `stockRefreshedAt` horodaté)
+- Offre signée / Commande → figé J0 (`stockFrozen:true`, `stockRefreshedAt:null`, jamais rafraîchi)
+
+C'est l'APPELANT qui décide d'appeler `refreshStock` ; le helper ne fait que rafraîchir.
+
+### Validation complète (preview + prod)
+1. Brouillon dynamique — `dra-334-ezy7q` article `28023.3002` passe de `stock:1` figé à `"sur_commande"` live, badge « Rupture » cohérent avec le picker.
+2. NON-RÉGRESSION offre `dev-2026-314-73b9b` = `stockFrozen:false` + `stockRefreshedAt` horodaté, stocks live.
+3. NON-RÉGRESSION commande `cmd-80661-ct8sm` = `stockFrozen:true` + `stockRefreshedAt:null`, article `28023.3002` garde `stock:1` figé (pas écrasé par le live).
+
+### Pièges retenus
+- **Build périmé** : `npm run start` servait un ancien build (ancien serveur node encore actif sur port 3000, EADDRINUSE silencieux). Le fix semblait ne pas marcher. → `Get-Process node | Stop-Process -Force` puis rebuild. Toujours tuer node + rebuild avant de tester.
+- **Preview Vercel** : `print/offre` s'ouvre sur l'URL PROD même depuis la preview → tester la non-régression via `/api/offres/[slug]` (JSON brut, reste sur preview), marqueurs `stockFrozen` + `stockRefreshedAt`.
+
+### Reste à faire (différé)
+Supprimer la branche après stabilité :
+```powershell
+git branch -d fix/draft-stock-dynamique
+git push origin --delete fix/draft-stock-dynamique
+```
