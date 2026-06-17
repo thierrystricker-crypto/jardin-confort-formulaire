@@ -2455,3 +2455,85 @@ Voir le document de cadrage dédié `journal-stock-garde-fou.md` créé en fin d
 **Résumé** : ajouter un garde-fou pour les articles Shopify avec `inventoryPolicy === "DENY"` (continue selling when out of stock = désactivé) quand `qty > stock`. Affichage interne uniquement (formulaire brouillon + 4 documents internes), aucun impact sur les docs client.
 
 **À démarrer dans un nouveau chat** pour partir d'un contexte frais. Voir le document de cadrage pour le détail.
+
+
+---
+
+## Session du 17.06.2026 — Alerte « adresse sans numéro de rue »
+
+> Date : 2026-06-17
+> Statut : ✅ Terminé et déployé en production
+> PR #23 · merge commit `62e2f16` (main 8b957c7..62e2f16, fast-forward, 5 fichiers +186/-1)
+> Prod : https://offres.jardin-confort.ch
+
+### 🎯 Origine — un bug signalé qui n'en était pas un
+
+Symptôme rapporté : « les numéros de rue disparaissent parfois entre la création du brouillon, l'offre et la commande, en utilisant la base clients ou en copiant des offres existantes ».
+
+**Diagnostic : ce n'est PAS un bug de code.** Investigation menée sur un cas réel (cliente Fiona Rice, ID 19631, commande `cmd-80643-e4g8u`) :
+
+| | Fiche client (WinBiz) | Commande |
+|---|---|---|
+| rue | `Rte de Baumaroche 16B` | `Route de Baumaroche` |
+| numero_rue / numero | `null` | `""` |
+| ville | `Le Mont-Pèlerin` | `Chardonne` |
+
+Trois champs ont changé (`Rte`→`Route`, `16B` disparu, ville différente). Un prefill automatique copie à l'identique — donc cette adresse a été **réécrite à la main** par le commercial, qui a oublié le `16B`. La commande venait d'ailleurs d'une copie d'offre (`copiedFromOffreSlug: dev-2026-250-0bfe8`), pas d'un prefill client frais.
+
+**Test décisif** : prefill d'une nouvelle offre depuis la fiche de Fiona → le champ Rue affiche bien `Rte de Baumaroche 16B`, numéro préservé. Le code de prefill est sain : il concatène déjà `[c.rue, c.numero_rue].filter(Boolean).join(" ")` (offres/nouveau ligne 329-330, DraftFormulaire ligne 406).
+
+**Vrai risque métier identifié** : les LIVREURS qui ne trouvent pas certaines adresses sans numéro → re-livraisons, clients mécontents. C'est l'impact opérationnel, pas administratif, qui a justifié le chantier.
+
+### 📐 Structure de données à retenir (clé du chantier)
+
+Les fiches clients importées de **WinBiz** ont souvent le numéro **collé dans le champ `rue`** (ex `"Rte de Baumaroche 16B"`) avec `numero_rue: null`. Conséquence directe pour toute détection : **on ne peut PAS tester si le champ `numero` est vide** — il faut chercher un chiffre dans `(rue + numero)` combinés. Sinon, fausses alertes sur toutes les adresses WinBiz normales.
+
+### ✅ Solution livrée
+
+**Helper `lib/adresse-utils.ts`** (nouveau, réutilisable) :
+- `aUnNumero(rue, numero)` — regex `/\d/` sur `rue + numero` combinés (gère le cas WinBiz, zéro faux positif)
+- `adresseEstRenseignee(rue)` — évite d'alerter sur du vide (à l'emporter, formulaire vierge)
+- `manqueNumero(rue, numero)` — adresse renseignée MAIS sans aucun chiffre = cas à signaler
+- `adresseLivraisonEffective({livrDiff, rue, numero, livrRue, livrNumero})` — résout l'héritage : adresse de livraison propre si `livrDiff`, sinon facturation (c'est cette adresse-là qui finit sur l'étiquette colis)
+
+**3 garde-fous, tous NON bloquants** (lieux-dits sans numéro légitimes existent) :
+1. Alerte orange `#ea580c` sous le champ Rue facturation (formulaire)
+2. Alerte rouge `#dc2626` sous le champ Rue livraison « le livreur risque de ne pas trouver »
+3. `window.confirm` à la transformation brouillon→offre, dans `handleTransformClick()`, qui vérifie facturation OU livraison effective. Message final : « ⚠ Adresse sans numéro de rue détectée. Vérifiez l'adresse de facturation ET de livraison avant de continuer — un numéro manquant empêche souvent le livreur de trouver. Transformer quand même en offre ? »
+
+**Fichiers** : `lib/adresse-utils.ts` (nouveau) ; `app/offres/nouveau/page.tsx` (import + 2 alertes) ; `app/drafts/_components/DraftFormulaire.tsx` (import + 2 alertes + check transformation avant `setShowTransformModal(true)`).
+
+### 🐛 Pièges rencontrés (à ne PAS refaire)
+
+#### Édition de la mauvaise copie du fichier (≈2h perdues)
+J'éditais par erreur `C:\Users\ezefi\Downloads\DraftFormulaire.tsx` — une vieille copie téléchargée — au lieu du vrai fichier du projet. Ctrl+H ne « trouvait » jamais les ancres car ce n'était pas le bon fichier. **Leçon : TOUJOURS vérifier le fil d'Ariane en haut de VS Code — il doit commencer par `jardin-confort-formulaire`, jamais `Downloads`.**
+
+#### « Tout rouge » dans VS Code = correcteur orthographique, pas erreurs TS
+Les vaguelettes rouges sous `div`, `label`, `Rue`, etc. étaient le correcteur orthographique (français/anglais), pas du TypeScript. **Pour connaître les vraies erreurs : `npx tsc --noEmit`** (a renvoyé zéro erreur → code sain).
+
+#### Autocomplete Google ne marche pas en local
+Le dropdown d'adresse ne s'affiche pas sur `localhost` car la clé `GOOGLE_MAPS_SERVER_KEY` n'est PAS dans `.env.local` (configurée uniquement sur Vercel prod). `app/api/places/route.ts` renvoie alors 500 « Google Maps key not configured ». **C'est NORMAL.** Tester l'autocomplete sur la preview Vercel ; tester les alertes en local via saisie manuelle.
+
+#### Build périmé (récurrent)
+Une fenêtre locale servait un ancien build → le garde-fou transformation semblait inopérant. Rouvrir une fenêtre fraîche (ou `Get-Process node | Stop-Process -Force` + rebuild) a réglé. Toujours tuer node + rebuild avant de tester un fix.
+
+#### Ctrl+H capricieux sur ce gros fichier
+Les ancres contenant `@` `/` `.` cassent en mode regex ; les guillemets courbes empêchent le match. **Préférer Ctrl+G (aller à la ligne) + insertion manuelle** pour `DraftFormulaire.tsx`. Vérifier que les 3 icônes Aa/ab|/.* sont éteintes dans Ctrl+H.
+
+### 🚦 Commits
+
+```
+1d798c0  docs: cloture journaux garde-fou stock (PR #21) et brouillons D5b (PR #22)
+e111032  feat(adresse): alerte non bloquante si adresse sans numero de rue (facturation + livraison effective)
+ad381fb  refactor(adresse): check transformation couvre facturation + livraison, retrait log debug
+```
+Merge PR #23 : `62e2f16`
+
+### 🔧 Reste à faire (différé)
+
+1. **Corriger l'adresse de Fiona Rice à la main** : commande `cmd-80643-e4g8u` a `Route de Baumaroche` sans le `16B`, alors que sa fiche client (ID 19631) a `Rte de Baumaroche 16B`. Commande figée (statut Acceptée) → adresse dans le JSONB `data` ; corriger via UI si possible, sinon SQL Supabase (`data.rue` + `client_rue`).
+2. **Supprimer la branche** après 1-2 semaines de stabilité :
+   ```powershell
+   git branch -d feature/alerte-numero-rue
+   git push origin --delete feature/alerte-numero-rue
+   ```
