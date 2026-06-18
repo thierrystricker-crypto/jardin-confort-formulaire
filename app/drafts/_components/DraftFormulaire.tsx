@@ -242,6 +242,8 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
   const [prenom, setPrenom]           = useState("");
   const [complementNom, setComplementNom] = useState("");
   const [rue, setRue]                 = useState("");
+  const [adresseChoisie, setAdresseChoisie] = useState(false);
+  const [adresseLivrChoisie, setAdresseLivrChoisie] = useState(false);
   const [numero, setNumero]           = useState("");
   const [rue2, setRue2]               = useState("");
   const [npa, setNpa]                 = useState("");
@@ -493,6 +495,11 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
   // Adresse facturation
   function onRueChange(val: string) {
     setRue(val);
+    if (adresseChoisie && val.startsWith(rue)) {
+      setAddrSuggestions([]);
+      return;
+    }
+    setAdresseChoisie(false);
     if (addrDebounceRef.current) clearTimeout(addrDebounceRef.current);
     addrDebounceRef.current = setTimeout(async () => {
       const suggestions = await fetchGoogleSuggestions(val);
@@ -505,18 +512,25 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
     const details = await fetchPlaceDetails(s.placeId);
     if (details) {
       if (details.road) setRue(details.road);
-      if (details.houseNumber) setNumero(details.houseNumber); else setNumero("");
+      if (details.houseNumber) setNumero(details.houseNumber);
       if (details.postcode) setNpa(details.postcode);
       if (details.city) setVille(details.city);
+      setAdresseChoisie(true);
     } else {
       // Fallback : afficher le label brut
       setRue(s.label);
+      setAdresseChoisie(true);
     }
   }
 
   // Adresse livraison
   function onLivrRueChange(val: string) {
     setLivrRue(val);
+    if (adresseLivrChoisie && val.startsWith(livrRue)) {
+      setLivrAddrSuggestions([]);
+      return;
+    }
+    setAdresseLivrChoisie(false);
     if (livrDebounceRef.current) clearTimeout(livrDebounceRef.current);
     livrDebounceRef.current = setTimeout(async () => {
       const suggestions = await fetchGoogleSuggestions(val);
@@ -529,11 +543,13 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
     const details = await fetchPlaceDetails(s.placeId);
     if (details) {
       if (details.road) setLivrRue(details.road);
-      if (details.houseNumber) setLivrNumero(details.houseNumber); else setLivrNumero("");
+      if (details.houseNumber) setLivrNumero(details.houseNumber);
       if (details.postcode) setLivrNpa(details.postcode);
       if (details.city) setLivrVille(details.city);
+      setAdresseLivrChoisie(true);
     } else {
       setLivrRue(s.label);
+      setAdresseLivrChoisie(true);
     }
   }
   
