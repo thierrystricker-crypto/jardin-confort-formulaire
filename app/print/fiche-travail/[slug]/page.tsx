@@ -264,11 +264,13 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         }
       }
 
-      // 2e QR : "NomClient Mag" (utilisé pour identifier le client en magasin)
-      if (qrcode && data.nom) {
+      // 2e QR : "<Société ou Nom> Mag" (identifie le client en magasin)
+      // Priorité société (B2B) puis nom seul (jamais le prénom).
+      const refMag = (data.societe || "").trim() || (data.nom || "").trim();
+      if (qrcode && refMag) {
         const qrClientEl = document.getElementById("qr-client");
         if (qrClientEl) {
-          const refValue = `${data.nom} Mag`;
+          const refValue = `${refMag} Mag`;
           const qr2 = qrcode(0, "M");
           qr2.addData(refValue);
           qr2.make();
@@ -278,7 +280,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
       barcodesRendered.current = true;
     }).catch((err) => console.error("Erreur chargement librairies barcode:", err));
-  }, [ready, data.lines, data.nom, numeroAffiche]);
+  }, [ready, data.lines, data.nom, data.societe, numeroAffiche]);
 
   if (!ready) return <div style={{padding:40, textAlign:"center", color:GREY}}>Chargement…</div>;
 
@@ -559,7 +561,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           font-weight: 700;
           font-size: 11px;
           color: ${BLACK};
-          text-transform: uppercase;
+          text-transform: none;
           letter-spacing: 0.04em;
         }
         .doc-table thead th.th-left { text-align: left; }
@@ -1028,7 +1030,9 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                   en dessous, toujours visibles d'un coup d'oeil. */}
               <div className="doc-addr-client-hero">
                 <div className="doc-addr-client-hero-name">
-                  {(data.livrDiff ? livrNom : data.nom) || ""} {(data.livrDiff ? livrPrenom : data.prenom) || ""}
+                  {(livrSociete || "").trim()
+                    ? livrSociete
+                    : `${livrNom || ""} ${livrPrenom || ""}`.trim()}
                 </div>
                 <div className="doc-addr-client-hero-meta">
                   📅 {formatDate(dateDocument)} · {numeroAffiche}
