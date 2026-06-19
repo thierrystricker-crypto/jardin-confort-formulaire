@@ -2537,3 +2537,96 @@ Merge PR #23 : `62e2f16`
    git branch -d feature/alerte-numero-rue
    git push origin --delete feature/alerte-numero-rue
    ```
+
+
+---
+
+## Session du 18.06.2026 — Numéros de rue : la VRAIE cause racine (autocomplete)
+
+> Date : 2026-06-18
+> Statut : ✅ Terminé et déployé en production
+> PR #24 (merge `ebc17e9`) + PR #25 (merge `35742c4`)
+> Prod : https://offres.jardin-confort.ch
+> Suite directe de la session 17.06 (alertes adresse sans numéro, PR #23)
+
+### 🎯 Contexte — l'enquête continue
+
+Hier on a posé des **alertes** de prévention (numéro manquant à la saisie/transformation). Mais le feedback de l'équipe persistait : « le numéro disparaît parfois sur les documents ». Les alertes traitaient le symptôme, pas la cause. Cette session a trouvé et corrigé la **vraie cause racine**.
+
+### 🔍 Étape 1 — Transformer le feedback diffus en données
+
+Problème : feedback vague, aucun cas reproductible (un cas concret a même été « réparé » par re-saisie avant analyse, effaçant la preuve). Plutôt que tester au hasard, on a lancé une **requête de détection** en base pour quantifier :
+
+```sql
+select slug, numero_affiche, type_document, statut, date_document, commercial,
+       data->>'rue' as rue, data->>'numero' as numero, data->>'ville' as ville
+from offres
+where date_document >= current_date - interval '60 days'
+  and coalesce(data->>'rue','') <> ''
+  and (coalesce(data->>'rue','') || ' ' || coalesce(data->>'numero','')) !~ '[0-9]'
+order by date_document desc;
+```
+
+**Résultat : ~90 documents en 60 jours, tous commerciaux confondus** (Brice, Michel, Thierry). Le champ `numero` vide partout, la rue sans numéro. Donc problème **systémique**, pas anecdotique. (Quelques cas sont des « A CONFIRMER »/« ADRESSE A DEFINIR » volontaires, mais la majorité = vraies pertes.)
+
+**Leçon de méthode** : quand un bug ne se reproduit pas sous tes doigts, ne cherche pas plus fort — mets en place un filet (requête SQL) qui capture les cas réels et chiffre l'ampleur.
+
+### 🎯 Étape 2 — La cause racine (confirmée par captures écran)
+
+Le commercial a relié le problème à l'autocomplete. Les captures l'ont prouvé :
+
+1. Le commercial tape « gare » → Google propose des **rues** (Gare/Bex, Rue de la Gare/Coppet…), jamais de numéro. C'est le type `address` de l'API (`app/api/places/route.ts`).
+2. Il clique « Gare, Bex » → Rue = « Gare », NPA = « 1880 », Ville = « Bex », champ N° **vide**.
+3. Il retourne dans le champ Rue pour ajouter « 12 » → **`onRueChange` se redéclenche à chaque frappe** → le dropdown **se rouvre** et propose « Place de la Gare 12, Lausanne »… → un re-clic réflexe **écrase** toute l'adresse.
+
+**Conclusion : Google ne fournit JAMAIS le numéro ici** (il suggère des rues). Le numéro vient toujours de la saisie manuelle, et le code le détruisait de deux façons : le dropdown intrusif à la complétion, et `else setNumero("")` qui vidait le champ.
+
+### ✅ Étape 3 — Le correctif (PR #24)
+
+**Décision design : Option B** — garder l'adresse + numéro dans le champ Rue, NE PAS extraire vers le champ N° séparé. Raisons : cohérent avec les données WinBiz (numéro déjà dans `rue`), zéro regex d'extraction fragile (numéros suisses tordus : « 12bis », « 3A », lieux-dits sans numéro), et les templates affichent déjà `{rue} {numero}`.
+
+Mécanisme : un flag `adresseChoisie` (useState booléen).
+- `onRueChange` : si `adresseChoisie && val.startsWith(rue)` → on **ne rouvre pas** le dropdown (le commercial ne fait qu'ajouter à la fin). Sinon `setAdresseChoisie(false)` + comportement normal (vraie réécriture).
+- `applyAddrSuggestion` : retrait du `else setNumero("")` (ne jamais effacer) + `setAdresseChoisie(true)`.
+- Idem couple livraison avec `adresseLivrChoisie`.
+
+Fichiers : `app/offres/nouveau/page.tsx` + `app/drafts/_components/DraftFormulaire.tsx`.
+
+### ✅ Étape 4 — Trois cas dérivés trouvés en testant (PR #25)
+
+En testant le correctif, trois bugs supplémentaires sont apparus :
+
+1. **Le modal nouveau client** (`app/dashboard/clients/page.tsx`) avait le MÊME bug autocomplete (déclenchement inline dans le `onChange` du champ Rue, `applyAddrSuggestion` distincte). → même flag `adresseChoisie`.
+
+2. **Changement de rue qui efface le numéro** : tu mets « 12 » dans N°, tu changes de rue, `applyAddrSuggestion` réécrivait `numero_rue: get("street_number")` (vide) → « 12 » perdu. Fix : `numero_rue: streetNum || p.numero_rue` (conserver si Google n'en fournit pas).
+
+3. **Numéro fantôme au chargement client** : `applyClient()` charge un client existant via `setRue(rueComplete)` (qui contient déjà `rue + numero_rue`) mais **sans `setNumero("")`** → le numéro d'une saisie précédente restait collé. Fix : ajout de `setNumero("")` dans `applyClient`. Présent dans `offres/nouveau` ET `DraftFormulaire`.
+
+**Règle design distinguée** : charger un client existant DOIT écraser toute l'adresse (nouvelle identité, numéro inclus même vide). Mais l'autocomplete Google ne doit JAMAIS effacer un numéro saisi (absence = Google n'en a pas). Deux flux, deux comportements opposés.
+
+### 📊 Couverture finale
+
+Les **3 points d'entrée d'adresse** sont corrigés et cohérents :
+- formulaire offre (`offres/nouveau`)
+- formulaire brouillon (`DraftFormulaire`)
+- modal nouveau client (`dashboard/clients`)
+
+La fiche client `[id]/page.tsx` n'a pas d'autocomplete (saisie manuelle pure) → rien à corriger.
+
+### 🐛 Pièges rappelés
+
+- **Autocomplete en local** : le dropdown ne marche pas en localhost (clé `GOOGLE_MAPS_SERVER_KEY` absente de `.env.local`, seulement sur Vercel). `api/places` renvoie 500. NORMAL. Tester l'autocomplete sur preview Vercel.
+- **Build périmé** : fenêtre locale qui sert un ancien build → fix semble inopérant. Rouvrir une fenêtre fraîche.
+
+### 🚦 Commits
+
+```
+PR #24 : fix(autocomplete): ne plus rouvrir le dropdown ni effacer le numero (offre + brouillon) → merge ebc17e9
+PR #25 : 4 commits (modal client dropdown + conservation numero + numero fantome offre + brouillon) → merge 35742c4
+```
+
+### 🔧 Reste à faire (différé)
+
+1. **Trier les ~90 documents déjà en base** sans numéro (beaucoup sont des abandons ou des « A CONFIRMER » volontaires — pas tous à corriger).
+2. **Corriger l'adresse de Fiona Rice** : commande `cmd-80643-e4g8u`, « Route de Baumaroche » sans le « 16B » (fiche client ID 19631 a « Rte de Baumaroche 16B »).
+3. **Supprimer les branches mergées** après stabilité : `feature/alerte-numero-rue`, `fix/autocomplete-numero-rue`, `fix/autocomplete-client`.
