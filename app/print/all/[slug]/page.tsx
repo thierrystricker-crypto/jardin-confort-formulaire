@@ -145,10 +145,11 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           qrEl.innerHTML = qr.createImgTag(3, 0);
         }
       }
-      if (qrcode && data.nom) {
+      const refMagAll = (data.societe || "").trim() || (data.nom || "").trim();
+      if (qrcode && refMagAll) {
         const qrClientEl = document.getElementById("qr-client-all");
         if (qrClientEl) {
-          const refValue = `${data.nom} Mag`;
+          const refValue = `${refMagAll} Mag`;
           const qr2 = qrcode(0, "M");
           qr2.addData(refValue); qr2.make();
           qrClientEl.innerHTML = qr2.createImgTag(3, 0);
@@ -156,7 +157,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       }
       barcodesRendered.current = true;
     }).catch((err) => console.error("Erreur chargement librairies barcode:", err));
-  }, [ready, data.lines, data.nom, numeroAffiche]);
+  }, [ready, data.lines, data.nom, data.societe, numeroAffiche]);
 
   // Pas de SSR : on attend le mount côté client pour tout rendre
   if (!mounted || !ready) {
@@ -326,7 +327,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .ft-acces-title { display: inline-block; background: #8b5cf6; color: white; padding: 3px 10px; border-radius: 3px; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
         .ft-acces-text { font-size: 12px; color: #1f2937; line-height: 1.55; white-space: pre-wrap; font-weight: 500; }
         .ft-table { width: 100%; border-collapse: collapse; margin-bottom: 3mm; }
-        .ft-table thead th { padding: 6px 4px; border-top: 2px solid ${THEME}; border-bottom: 2px solid ${THEME}; font-weight: 700; font-size: 11px; color: ${BLACK}; text-transform: uppercase; letter-spacing: 0.04em; }
+        .ft-table thead th { padding: 6px 4px; border-top: 2px solid ${THEME}; border-bottom: 2px solid ${THEME}; font-weight: 700; font-size: 11px; color: ${BLACK}; text-transform: none; letter-spacing: 0.04em; }
         .ft-table thead th.ft-th-left { text-align: left; }
         .ft-table thead th.ft-th-center { text-align: center; }
         .ft-table thead th.ft-th-right { text-align: right; }
@@ -744,7 +745,9 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                   en dessous, toujours visibles d'un coup d'oeil. */}
               <div className="ft-addr-client-hero">
                 <div className="ft-addr-client-hero-name">
-                  {(data.livrDiff ? livrNomFT : data.nom) || ""} {(data.livrDiff ? livrPrenomFT : data.prenom) || ""}
+                  {(livrSocieteFT || "").trim()
+                    ? livrSocieteFT
+                    : `${livrNomFT || ""} ${livrPrenomFT || ""}`.trim()}
                 </div>
                 <div className="ft-addr-client-hero-meta">
                   📅 {formatDate(dateDocument)} · {numeroAffiche}
