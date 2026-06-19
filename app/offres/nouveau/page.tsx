@@ -331,6 +331,7 @@ const [savedSlug, setSavedSlug]           = useState("");
     setTelephone2(c.tel2 || "")
     const rueComplete = [c.rue, c.numero_rue].filter(Boolean).join(" ")
     setRue(rueComplete)
+    setNumero("")
     setRue2(c.rue2 || "")
     setNpa(c.npa || "")
     setVille(c.ville || "")
