@@ -430,6 +430,7 @@ export default function ClientsPage() {
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const addrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [addrSuggestions, setAddrSuggestions] = useState<{placeId:string;label:string}[]>([])
+  const [adresseChoisie, setAdresseChoisie] = useState(false)
 
   async function fetchSuggestions(q: string) {
     if (q.length < 3) { setAddrSuggestions([]); return }
@@ -459,6 +460,7 @@ export default function ClientsPage() {
         npa: getShort("postal_code").slice(0,4),
         ville: get("locality") || get("administrative_area_level_2"),
       }))
+      setAdresseChoisie(true)
     } catch { /* ignore */ }
   }
 
@@ -892,9 +894,17 @@ export default function ClientsPage() {
                   <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Rue</label>
                   <input type="text" value={newClient.rue}
                     onChange={e => {
-                      setNewClient(p => ({...p, rue: e.target.value}))
+                      const val = e.target.value
+                      setNewClient(p => ({...p, rue: val}))
+                      // Si une adresse a déjà été choisie et qu'on ne fait qu'ajouter
+                      // à la fin (typiquement le numéro), ne pas rouvrir le dropdown.
+                      if (adresseChoisie && val.startsWith(newClient.rue)) {
+                        setAddrSuggestions([])
+                        return
+                      }
+                      setAdresseChoisie(false)
                       if (addrDebounceRef.current) clearTimeout(addrDebounceRef.current)
-                      addrDebounceRef.current = setTimeout(() => fetchSuggestions(e.target.value), 400)
+                      addrDebounceRef.current = setTimeout(() => fetchSuggestions(val), 400)
                     }}
                     placeholder="Commencez à taper…"
                     autoComplete="new-password"
