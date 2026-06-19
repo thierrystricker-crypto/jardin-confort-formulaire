@@ -453,10 +453,11 @@ export default function ClientsPage() {
       const comps = json.result?.address_components || []
       const get = (type: string) => comps.find((c:{types:string[];long_name:string}) => c.types.includes(type))?.long_name || ""
       const getShort = (type: string) => comps.find((c:{types:string[];short_name:string}) => c.types.includes(type))?.short_name || ""
+      const streetNum = get("street_number")
       setNewClient(p => ({
         ...p,
         rue: get("route"),
-        numero_rue: get("street_number"),
+        numero_rue: streetNum || p.numero_rue,
         npa: getShort("postal_code").slice(0,4),
         ville: get("locality") || get("administrative_area_level_2"),
       }))
