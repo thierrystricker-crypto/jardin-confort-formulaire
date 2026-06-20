@@ -124,8 +124,9 @@ function todayLabel() {
 
 function KpiCard({title,value,sub,extra,onClick,active}:{title:string;value:string|number;sub?:string;extra?:string;onClick?:()=>void;active?:boolean}) {
   return (
-    <div onClick={onClick} className={`rounded-2xl border p-6 transition ${onClick?"cursor-pointer hover:bg-[#34383d]":""} ${active?"border-[#2B8AD1]/50 bg-[#2B8AD1]/10":"border-white/10 bg-[#2a2d31]"}`}>
-      <div className="text-sm text-zinc-400">{title}</div>
+    <div onClick={onClick} className={`relative rounded-2xl border p-6 transition ${onClick?"cursor-pointer":""} ${active?"border-2 border-[#2B8AD1] bg-[#2B8AD1]/20 shadow-[0_0_0_3px_rgba(43,138,209,0.35)] ring-1 ring-[#2B8AD1]":"border border-white/10 bg-[#2a2d31] hover:bg-[#34383d]"}`}>
+      {active && <div className="absolute right-3 top-3 rounded-full bg-[#2B8AD1] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">✓ Filtré</div>}
+      <div className={`text-sm ${active?"text-[#5BB3F0] font-semibold":"text-zinc-400"}`}>{title}</div>
       <div className="mt-4 text-4xl font-semibold tracking-tight text-zinc-100">{value}</div>
       {sub&&<div className="mt-3 text-sm text-zinc-500">{sub}</div>}
       {extra&&<div className="mt-2 text-sm text-sky-300">{extra}</div>}
