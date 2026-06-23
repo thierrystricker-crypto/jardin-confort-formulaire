@@ -158,17 +158,18 @@ export function computeRevisionDiff(
         avant: qtyAvant, apres: qtyApres,
       });
       if (isStockRelevant(a)) {
+        // RÈGLE MÉTIER : sur une ligne EXISTANTE (héritée de la commande),
+        // seule la RÉDUCTION est possible. La qté ne peut pas augmenter
+        // (le stock figé du jour J ne doit jamais être confronté au temps réel).
+        // Un supplément se fait via une NOUVELLE ligne (picker, stock frais).
+        // L'UI bride le champ qté à sa valeur d'origine — ce cas ne devrait
+        // donc pas se produire, mais par sécurité on ne traite QUE la baisse.
         if (qtyApres < qtyAvant) {
           // Réduction → retrait du delta à remettre en stock
           retraits.push(buildRetrait(a, qtyAvant - qtyApres));
-        } else {
-          // Augmentation → décrément Shopify du delta
-          ajouts.push({
-            id: a.id, sku: a.sku || "", title: a.title || "",
-            quantity: qtyApres - qtyAvant,
-            is_shopify: isShopifyLine(a as never),
-          });
         }
+        // qtyApres > qtyAvant : ignoré côté stock (ne devrait pas arriver,
+        // bridé par l'UI). On garde quand même le qtyChanges pour l'audit.
       }
     }
 
