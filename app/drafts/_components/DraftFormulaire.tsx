@@ -2430,7 +2430,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                               const raw = Math.max(1, parseInt(e.target.value || "1", 10));
                               const cap = revisionMode && inheritedQty.has(line.id) ? (inheritedQty.get(line.id) as number) : Infinity;
                               if (raw > cap) {
-                                alert(`Quantité d'origine : ${cap}. Pour ajouter des pièces, utilise le bouton « + Article » (l'ajout part du stock temps réel).`);
+                                alert(`Impossible d'augmenter la quantité d'une ligne existante (quantité d'origine : ${cap}).\n\nPour augmenter la quantité d'un article Shopify déjà sur la commande, ajoutez une nouvelle ligne avec le même article, comme d'habitude.\n\nC'est volontaire : la ligne d'origine conserve l'information de stock du jour de la commande. La nouvelle ligne, elle, repart du stock temps réel — chacune dit ainsi la vérité de son moment.`);
                                 updateLine(line.id, { qty: cap });
                                 return;
                               }
