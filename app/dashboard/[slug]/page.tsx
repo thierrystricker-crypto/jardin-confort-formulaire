@@ -1371,6 +1371,15 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                 >
                   ✏️ Corriger
                 </button>
+                {offre.type_document === "Commande" && (
+                  <a
+                  href={`/dashboard/${offre.slug}/reviser`}
+                    className="rounded-xl border border-amber-500/30 bg-amber-500/15 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/20"
+                    title="Réviser la commande (prix, quantité, articles) avec piste d'audit"
+                  >
+                    🔄 Réviser
+                  </a>
+                )}
                 {isOffre&&(
                   <>
                     <button type="button" onClick={convertirEnCommande} disabled={converting}
