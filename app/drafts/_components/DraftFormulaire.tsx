@@ -992,7 +992,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
 
   useEffect(() => {
     // Titre de la page : "Brouillon DRA-001 — Offre" ou "Nouveau brouillon — Offre"
-    const numLabel = currentSlug && offerNumber ? `Brouillon ${offerNumber}` : "Nouveau brouillon";
+    const numLabel = revisionMode ? `Révision ${offerNumber}` : currentSlug && offerNumber ? `Brouillon ${offerNumber}` : "Nouveau brouillon";
     document.title = `Jardin-Confort | ${numLabel} — ${formType}`;
   }, [formType, offerNumber, currentSlug]);
 
@@ -1446,10 +1446,12 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
           <div>
             <div className="jc-eyebrow">Jardin-Confort · Brouillon</div>
             <h1 className="jc-title">
-              {currentSlug && offerNumber
-                ? `Brouillon ${offerNumber} — ${formType}`
-                : `Nouveau brouillon — ${formType}`}
-            </h1>
+                {revisionMode
+                  ? `Révision ${offerNumber} — ${formType}`
+                  : currentSlug && offerNumber
+                  ? `Brouillon ${offerNumber} — ${formType}`
+                  : `Nouveau brouillon — ${formType}`}
+              </h1>
           </div>
         </div>
         <div className="jc-toolbar">
@@ -1535,10 +1537,11 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
               initialLoadStatus === "transformed" ? "Brouillon transformé en offre — modification interdite" :
               initialLoadStatus === "not_found"   ? "Brouillon introuvable" :
               initialLoadStatus === "error"       ? "Erreur de chargement" :
-              "Enregistrer le brouillon dans Supabase"
+                revisionMode ? "Enregistrer la révision de la commande" :
+                "Enregistrer le brouillon dans Supabase"
             }
           >
-            {isSaving ? "⏳ Enregistrement…" : currentSlug ? "💾 Enregistrer" : "💾 Créer le brouillon"}
+            {isSaving ? "⏳ Enregistrement…" : revisionMode ? "💾 Enregistrer la révision" : currentSlug ? "💾 Enregistrer" : "💾 Créer le brouillon"}
           </button>
           {/* ── Bouton "Transformer en offre" ──
               Visible uniquement en mode édition (currentSlug !== null), pas en
