@@ -809,7 +809,9 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
       // ─── POST (création) ou PUT (mise à jour) ───
       // Mode révision : on ne sauve pas un brouillon, on POST la révision
         // de la commande. Court-circuit total du flux drafts.
-        if (revisionMode && commandeSlug) {
+        // UNIQUEMENT sur save explicite (clic bouton) : jamais un auto-save,
+        // beforeunload ou save-avant-aperçu ne doit créer une version + décrément.
+        if (revisionMode && commandeSlug && !silent) {
           const res = await fetch(`/api/offres/${commandeSlug}/reviser`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1285,8 +1287,11 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
       // que setInterval voit toujours les dernières valeurs si on relance l'effet
       // sur changement de dépendance. Ici on dépend uniquement de isDirty et
       // isSaving pour relancer le timer, ce qui suffit.
-      if (initialLoadStatus !== "ready") return;
-      if (!isDirty || isSaving) return;
+      if (revisionMode) return; // En révision, JAMAIS d'auto-save : un décrément
+                                  // stock + une version archivée ne doivent suivre
+                                  // qu'un clic explicite « Enregistrer », pas un timer.
+        if (initialLoadStatus !== "ready") return;
+        if (!isDirty || isSaving) return;
       if (!nom.trim() || !email.trim() || !commercial.trim()) return;
       saveDraft({ silent: true });
     }, 2 * 60 * 1000); // 2 minutes
