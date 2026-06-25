@@ -513,3 +513,94 @@ stocks différents — c'est CORRECT (2 décisions, 2 moments).
 3. Le décrément Shopify (Option 1) ne concerne donc QUE les lignes neuves
    (ajouts via picker), jamais une augmentation sur ligne existante. Cohérent
    avec l'existant.
+
+
+   ## ✅ Session 2 — UI formulaire de révision — LIVRÉE + VALIDÉE RUNTIME (24-25.06.2026)
+
+**Commits :** `ed5cd8f` (UI) · `64bce48` (fix auto-save) · `82f8d31` (libellés)
+
+### Réalisé
+- Réutilisation de `DraftFormulaire.tsx` via 2 props (`revisionMode`, `commandeSlug`) — pas de copie.
+  Page `app/dashboard/[slug]/reviser/page.tsx` monte `<DraftFormulaire revisionMode commandeSlug={slug} />`.
+- 5 patches dans `DraftFormulaire.tsx` : type props, signature, init `initialLoadStatus`,
+  useEffect révision séparé (fetch `GET /api/offres/[slug]` → `{offre:{...}}`, hydrate `o.data`),
+  `saveDraft` court-circuité → `POST /api/offres/[slug]/reviser`.
+- Bridage qté lignes héritées via `Map inheritedQty` (baisse OK, hausse bloquée + invite picker).
+- Bandeau ambre « Révision de commande » + bouton « 🔄 Réviser » sur le dashboard commande.
+- Libellés mode révision (eyebrow, titre, onglet, bouton vert, infobulle) conditionnés sur `revisionMode`.
+
+### 🛑 BUG AUTO-SAVE découvert au 1er test runtime (corrigé `64bce48`)
+L'auto-save 2 min du `DraftFormulaire` (inoffensif sur brouillons → table `drafts`) déclenchait
+en mode révision le court-circuit vers `/reviser` → **versions fantômes + décréments Shopify
+sur états transitoires non validés**. Signature : 2 révisions à 2 min d'écart, double décrément.
+**Fix :** `if (revisionMode) return;` en tête du `setInterval` auto-save + `&& !silent` sur la
+condition du court-circuit `saveDraft`. Une révision ne se déclenche QUE sur clic explicite.
+**Règle générale retenue :** un décrément stock ne suit qu'un acte délibéré, jamais un timer.
+
+### Finitions S2 (toutes faites)
+- Message d'alerte bridage : déjà correct (faux négatif de recherche dû à l'encodage PowerShell).
+- Libellés « Révision » : commit `82f8d31`.
+- **RPC `reviser_commande` corrigée** : elle ne resynchronisait AUCUNE colonne dénormalisée
+  (`nb_articles`, `sous_total`, `total_ttc`, `tva_montant`, etc. restaient figées → dashboard
+  affichait l'ancien total). Corrigée pour relire depuis `p_new_data->'_totals'` + `nb_articles`
+  = COUNT des lignes `type NOT IN (comment, media)`. Validé runtime (révision-prix → colonnes suivent).
+
+### Test runtime (cmd-80666-l8i6x) — 2 sens validés
+- Ajout via picker → 1 seul décrément `stock_movements` (`revision_ajout_vN`), version archivée, PDF figé préservé.
+- Retrait → 1 ligne `stock_remises_attente` (`a_remettre`), AUCUNE remise Shopify auto.
+- Garde-fou DENY OK sur la fiche de travail.
+
+---
+
+## ✅ Session 3 — Dashboard « Remise en stock » — LIVRÉE + VALIDÉE RUNTIME (25.06.2026)
+
+**Commit :** `60673fb` (3 fichiers, +369)
+
+### Décisions de cadrage
+- **Vocabulaire** : pas de « remise » seul (= rabais dans le métier). Terme = **« Remise en stock »**.
+- **Règle d'or** : l'app ne fait QUE des désincrémentations, **JAMAIS d'incrémentation** (ni auto,
+  ni manuelle via l'app). Toute remise réelle (+) se fait à la main dans Shopify par un responsable,
+  en voyant le vrai stock. Le dashboard = liste de supervision + lien direct vers l'inventaire Shopify.
+
+### Réalisé
+- **Route** `app/api/stock-remises/route.ts` : GET (liste + stock live Shopify via `findVariantBySKU`
+  pour les lignes `is_shopify` + `a_remettre`, dédupliqué par SKU ; génère le lien inventaire Shopify
+  par SKU — le query Shopify accepte le SKU, pas besoin de l'EAN) ; PATCH (marquage `remis`/`ignore`
+  avec garde-fou `.eq status a_remettre`, **aucune** incrémentation Shopify).
+- **Page** `app/dashboard/stock-remises/page.tsx` : KPIs cliquables (filtres), tableau article + SKU
+  + badges (Shopify / À la volée / 🔒 Non-réassort.), qté, stock live, lien « Ouvrir Shopify »,
+  boutons « ✅ Remis » / « 🚫 Ignorer ».
+- **Lien + badge** dans `app/dashboard/page.tsx` : « 📦 Remise en stock » ambre + badge compteur
+  (`remisesCount`, fetch `?status=a_remettre`).
+  ⚠️ Piège vécu : `remisesCount` doit être dans `DashboardPage`, PAS dans le sous-composant
+  `NotificationsButton` (sinon `TS2304 Cannot find name`).
+
+### Fix `is_shopify`
+`isShopifyLine` est correct. Le `is_shopify=false` observé sur la chaise `410192` était un **résidu
+du bug auto-save** (la ligne archivée a bien `shopifyLocked=true`). Corrigé par UPDATE manuel sur la
+ligne de test. À re-confirmer un jour qu'un retrait propre post-`64bce48` produit `is_shopify=true`.
+
+### Test runtime OK (25.06)
+Badge compteur, page, KPIs filtres, stock live, lien Shopify SKU, bouton « Remis » → `status remis`
++ `traite_at` rempli, **aucun mouvement Shopify créé** (règle d'or respectée).
+Détail mineur : `traite_par` null si `localStorage["corrections-author"]` vide (non bloquant).
+
+---
+
+## 📦 État du chantier au 25.06.2026
+
+| Session | Statut |
+|---|---|
+| S0 SQL | ✅ |
+| S1 Backend | ✅ validé runtime |
+| S2 UI + finitions | ✅ validé runtime |
+| S3 Dashboard Remise en stock | ✅ validé runtime |
+| S4 Documents | ⬜ à faire |
+| S5 Merge prod | ⬜ à faire |
+
+**Branche** `feature/revision-commandes` à `60673fb`. **NE PAS merger avant S5.**
+
+**Reprise S4 :** section « Articles retirés » (cumulative) sur la fiche de travail uniquement ·
+marqueur version `· Vn` sur fiche travail + fiche commande interne · bandeau « révisée N fois »
++ historique sur `/dashboard/[slug]` · **vérifier** que `print/offre`, `offre/[slug]`,
+`bulletin-livraison`, `page-garde-colis` ne montrent JAMAIS de trace de révision.
