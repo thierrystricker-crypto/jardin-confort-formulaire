@@ -56,10 +56,12 @@ export async function POST(
     const oldLines: RevisionLine[] = (offre.data?.lines as RevisionLine[]) || [];
     const newLines: RevisionLine[] = newData.lines as RevisionLine[];
 
-    // 2. Calcul du diff
+    // 2. Calcul du diff (lignes + en-tête : tout changement crée une version)
     const { diff, retraits, ajouts, hasChanges } = computeRevisionDiff(
       oldLines,
-      newLines
+      newLines,
+      (offre.data as Record<string, unknown>) || {},
+      (newData as Record<string, unknown>) || {}
     );
 
     if (!hasChanges) {

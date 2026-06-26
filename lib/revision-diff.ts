@@ -56,6 +56,7 @@ export type RevisionDiff = {
   qtyChanges: { sku: string; title: string; avant: number; apres: number }[];
   prixChanges: { sku: string; title: string; avant: number; apres: number }[];
   remiseChanges: { sku: string; title: string; avant: number; apres: number }[];
+  enteteChanges: { champ: string; avant: string; apres: string }[];
 };
 
 // Le résultat complet du calcul
@@ -87,9 +88,26 @@ function isStockRelevant(l: RevisionLine): boolean {
  * @param before lignes de la commande AVANT révision
  * @param after  lignes de la commande APRÈS révision
  */
+// Champs à NE PAS comparer dans l'en-tête :
+//  - lines : géré séparément (ajouts/retraits/qty/prix/remise)
+//  - _totals : dérivé des lignes/rabais, changerait mécaniquement (double comptage)
+//  - offerNumber / formType : immuables par nature (numéro + type de document)
+const ENTETE_IGNORE = new Set(["lines", "_totals", "offerNumber", "formType"]);
+
+// Normalise une valeur de champ en chaîne comparable (objets/tableaux → JSON stable).
+function normEntete(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "object") {
+    try { return JSON.stringify(v); } catch { return String(v); }
+  }
+  return String(v);
+}
+
 export function computeRevisionDiff(
   before: RevisionLine[],
-  after: RevisionLine[]
+  after: RevisionLine[],
+  beforeData?: Record<string, unknown>,
+  afterData?: Record<string, unknown>
 ): RevisionComputation {
   const beforeById = new Map<string, RevisionLine>();
   for (const l of before) {
@@ -106,6 +124,7 @@ export function computeRevisionDiff(
     qtyChanges: [],
     prixChanges: [],
     remiseChanges: [],
+    enteteChanges: [],
   };
   const retraits: Retrait[] = [];
   const ajouts: Ajout[] = [];
@@ -200,12 +219,27 @@ export function computeRevisionDiff(
     }
   }
 
+  // Comparaison des champs d'en-tête (tout sauf lines/_totals/immuables).
+  // Une seule différence suffit à déclencher une révision.
+  if (beforeData && afterData) {
+    const keys = new Set([...Object.keys(beforeData), ...Object.keys(afterData)]);
+    for (const k of keys) {
+      if (ENTETE_IGNORE.has(k)) continue;
+      const av = normEntete(beforeData[k]);
+      const ap = normEntete(afterData[k]);
+      if (av !== ap) {
+        diff.enteteChanges.push({ champ: k, avant: av, apres: ap });
+      }
+    }
+  }
+
   const hasChanges =
     diff.ajouts.length > 0 ||
     diff.retraits.length > 0 ||
     diff.qtyChanges.length > 0 ||
     diff.prixChanges.length > 0 ||
-    diff.remiseChanges.length > 0;
+    diff.remiseChanges.length > 0 ||
+    diff.enteteChanges.length > 0;
 
   return { diff, retraits, ajouts, hasChanges };
 }
