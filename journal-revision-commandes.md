@@ -604,3 +604,83 @@ Détail mineur : `traite_par` null si `localStorage["corrections-author"]` vide 
 marqueur version `· Vn` sur fiche travail + fiche commande interne · bandeau « révisée N fois »
 + historique sur `/dashboard/[slug]` · **vérifier** que `print/offre`, `offre/[slug]`,
 `bulletin-livraison`, `page-garde-colis` ne montrent JAMAIS de trace de révision.
+
+
+## ✅ Détection des changements d'en-tête — LIVRÉE + VALIDÉE RUNTIME (26.06.2026)
+
+**Commits :** `4d5409c` (détection en-tête) · `bfb46f1` (fix faux positifs)
+
+### Cadrage : deux mécanismes de modification post-validation
+Décision Thierry, clarifiée ce jour :
+- **Mode « ✏️ Corriger »** (chantier corrections, en prod) → petites retouches **cosmétiques
+  sans créer de version** (note rouge, table `corrections`). Inchangé.
+- **Mode « 🔄 Réviser »** → peut **tout** modifier (en-tête + lignes) et **crée toujours une version**.
+  C'est le mécanisme lourd avec traçabilité complète.
+
+Les deux coexistent, chacun son usage.
+
+### 🛑 Bug corrigé : les changements d'en-tête n'étaient pas détectés
+`computeRevisionDiff` ne comparait que `data.lines`. Conséquence : changer **seulement** le mode
+de livraison, le commercial, l'adresse, les notes, les services ou le rabais global → `hasChanges`
+restait `false` → « Aucun changement détecté » → **modif perdue silencieusement**.
+
+**Correctif (`4d5409c`)** — `lib/revision-diff.ts` :
+- Signature étendue : `computeRevisionDiff(before, after, beforeData?, afterData?)` (params optionnels,
+  rétrocompatible — un seul appelant : la route reviser).
+- Compare désormais **tout le `data`** en excluant `ENTETE_IGNORE = { lines, _totals, offerNumber, formType }`
+  (`lines` déjà géré, `_totals` dérivé, numéro + type de document immuables).
+- Tout écart d'en-tête remplit `diff.enteteChanges[] = { champ, avant, apres }` et déclenche `hasChanges`.
+- Route `reviser/route.ts` : passe `offre.data` (before) et `newData` (after) complets au helper.
+
+Un changement d'en-tête seul **crée une version mais aucun mouvement de stock**
+(ni `stock_movements`, ni `stock_remises_attente`).
+
+### 🛑 Faux positif corrigé : ordre des clés
+Au premier test, `servicePrices` et `enabledServices` ressortaient toujours comme « modifiés »
+alors que les valeurs étaient identiques — seul **l'ordre des clés** différait (le formulaire
+re-sérialise dans un autre ordre). `JSON.stringify` étant sensible à l'ordre, chaque révision
+les marquait à tort.
+
+**Correctif (`bfb46f1`)** — `normEntete` sérialise avec **clés triées récursivement**
+(`JSON.stringify` + replacer qui trie `Object.entries`). Deux objets identiques au ré-ordonnancement
+près sont désormais égaux.
+
+### Test runtime — validé
+- Changement de commercial seul → version créée, `enteteChanges` = uniquement `commercial`.
+- Plus aucun faux positif `servicePrices` / `enabledServices`.
+- Aucun mouvement de stock parasite.
+- Non-régression : les modifs de lignes (ajout/retrait/prix) fonctionnent toujours.
+
+`enteteChanges` nourrira l'historique des révisions (Session 4).
+
+---
+
+## 📌 Point à trancher en Session 4 / 5
+Si on modifie l'**adresse** (ou un autre champ d'en-tête visible sur le document) via une révision,
+faut-il **régénérer le PDF/les documents** avec la nouvelle valeur, ou garder le **figé** ?
+- Pour les **prix/lignes** → on garde le figé (preuve contractuelle).
+- Pour une **adresse corrigée** → on voudrait sans doute le bon PDF.
+À décider le moment venu (probablement : overlay des seuls champs cosmétiques sur le snapshot figé,
+comme prévu côté chantier corrections Session 4).
+
+---
+
+## 📦 État du chantier au 26.06.2026
+
+| Session | Statut |
+|---|---|
+| S0 SQL | ✅ |
+| S1 Backend | ✅ validé runtime |
+| S2 UI + finitions | ✅ validé runtime |
+| S3 Dashboard Remise en stock | ✅ validé runtime |
+| Détection d'en-tête | ✅ validé runtime |
+| S4 Documents | ⬜ à faire |
+| S5 Merge prod | ⬜ à faire |
+
+**Branche** `feature/revision-commandes` à `bfb46f1`. **NE PAS merger avant S5.**
+Commande de test : `cmd-80666-l8i6x` (à V6, historique riche — utile pour tester l'affichage S4).
+
+**Reprise S4 :** section « Articles retirés » (cumulative) sur la fiche de travail uniquement ·
+marqueur version `· Vn` sur fiche travail + fiche commande interne · bandeau « révisée N fois »
++ historique (incluant `enteteChanges`) sur `/dashboard/[slug]` · **vérifier** que `print/offre`,
+`offre/[slug]`, `bulletin-livraison`, `page-garde-colis` ne montrent JAMAIS de trace de révision.
