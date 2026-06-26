@@ -98,7 +98,15 @@ const ENTETE_IGNORE = new Set(["lines", "_totals", "offerNumber", "formType"]);
 function normEntete(v: unknown): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "object") {
-    try { return JSON.stringify(v); } catch { return String(v); }
+    try {
+      // Sérialisation déterministe : clés triées récursivement, pour que
+      // deux objets identiques au ré-ordonnancement près soient égaux.
+      return JSON.stringify(v, (_key, val) =>
+        val && typeof val === "object" && !Array.isArray(val)
+          ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b)))
+          : val
+      );
+    } catch { return String(v); }
   }
   return String(v);
 }
