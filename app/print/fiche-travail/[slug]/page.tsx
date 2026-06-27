@@ -373,6 +373,12 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
     const nbRetraits = articlesRetires.length;
     const showAlerteRevision = nbRetraits > 0 || nbAjouts > 0;
 
+    // Marqueur de version vivante (chantier revision-commandes).
+    // " . Vn" uniquement sur une COMMANDE deja revisee. Vivante = count + 1.
+    const showVersionMarker = typeDocument === "Commande" && revisionCount >= 1;
+    const versionVivante = revisionCount + 1;
+    const versionSuffix = showVersionMarker ? ` \u00B7 V${versionVivante}` : "";
+
   return (
     <>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1126,7 +1132,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
         {/* BANDEAU */}
         <div className="doc-banner">
-          <span>📋 FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · ${numeroAffiche}` : ""}</span>
+          <span>📋 FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · ${numeroAffiche}${versionSuffix}` : ""}</span>
           <span className="doc-banner-printed">Imprimée le {printedAt}</span>
         </div>
 
@@ -1153,7 +1159,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               <tbody>
                 <tr>
                   <td className="doc-meta-label">{numeroLabel}</td>
-                  <td><strong>{numeroAffiche}</strong></td>
+                  <td><strong>{numeroAffiche}{versionSuffix}</strong></td>
                 </tr>
                 {data.reference && (
                   <tr><td className="doc-meta-label">Référence</td><td>{data.reference}</td></tr>
@@ -1196,7 +1202,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                     : `${livrNom || ""} ${livrPrenom || ""}`.trim()}
                 </div>
                 <div className="doc-addr-client-hero-meta">
-                  📅 {formatDate(dateDocument)} · {numeroAffiche}
+                  📅 {formatDate(dateDocument)} · {numeroAffiche}{versionSuffix}
                 </div>
               </div>
 
