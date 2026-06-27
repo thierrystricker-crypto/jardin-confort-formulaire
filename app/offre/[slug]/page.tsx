@@ -222,6 +222,9 @@ function ValidationOverlay({ step }: { step: number }) {
 
 export default function OffrePage({ params }: { params: Promise<{ slug: string }> }) {
   const [offre, setOffre] = useState<OffreRow | null>(null);
+  // Version vivante (chantier revision-commandes) : nb revisions + 1.
+  // Affichee discretement dans le fil d'Ariane si commande revisee.
+  const [versionVivante, setVersionVivante] = useState(1);
   const [loading, setLoading] = useState(true);
   const [slug, setSlug] = useState("");
   const [pageError, setPageError] = useState("");
@@ -254,7 +257,19 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
         const json = await res.json();
         const o = json.offre as OffreRow;
         setOffre(o);
-        setSignataire(`${o.client_prenom || ""} ${o.client_nom || ""}`.trim());
+          setSignataire(`${o.client_prenom || ""} ${o.client_nom || ""}`.trim());
+          // Marqueur de version : uniquement pour une commande (revisable).
+          if (o.type_document === "Commande") {
+            try {
+              const rRes = await fetch(`/api/revisions?commande_slug=${encodeURIComponent(o.slug)}`);
+              if (rRes.ok) {
+                const rJson = await rRes.json();
+                setVersionVivante(rJson.versionVivante || 1);
+              }
+            } catch {
+              // marqueur non bloquant : on ignore une erreur de fetch revisions
+            }
+          }
         // Récupérer URLs PDF + QR si déjà disponibles
         setPdfUrl(o.pdf_url || "");
         setQrUrl(o.qr_url || "");
@@ -632,7 +647,7 @@ useEffect(() => {
 
         {/* Breadcrumb */}
         <div style={{ fontSize: 14, color: C.grey, marginBottom: 20 }}>
-          Offres clients / <span style={{ color: C.text, fontWeight: 600 }}>{offre.numero_affiche}</span>
+          Offres clients{offre.type_document === "Commande" && versionVivante >= 2 ? ` (V${versionVivante})` : ""} / <span style={{ color: C.text, fontWeight: 600 }}>{offre.numero_affiche}</span>
         </div>
 
         {/* Titre */}
