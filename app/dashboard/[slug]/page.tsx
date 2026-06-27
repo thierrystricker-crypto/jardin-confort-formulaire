@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import CorrectionDrawer from "@/components/CorrectionDrawer";
 import CorrectionsHistoryBlock from "@/components/CorrectionsHistoryBlock";
+import RevisionsHistoryBlock from "@/components/RevisionsHistoryBlock";
 import StockMovementsBlock from "@/components/StockMovementsBlock";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
@@ -1456,6 +1457,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
             </section>
 
 <CorrectionsHistoryBlock entityType={offre.type_document === "Commande" ? "commande" : "offre"} entitySlug={slug} />
+{offre.type_document === "Commande" && <RevisionsHistoryBlock commandeSlug={slug} />}
 
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
               <div className="mb-3 flex items-start justify-between gap-3 flex-wrap">
