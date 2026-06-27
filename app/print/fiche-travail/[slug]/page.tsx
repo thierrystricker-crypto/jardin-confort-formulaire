@@ -366,6 +366,13 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
     const isLigneAjoutee = (lineId?: string): boolean =>
       revisionCount >= 1 && !!lineId && !idsOrigine.includes(lineId);
 
+    // Compteur de lignes ajoutees (pour la bande d'alerte en tete de fiche).
+    const nbAjouts = data.lines.filter(
+      (l) => l.type !== "comment" && l.type !== "media" && isLigneAjoutee(l.id)
+    ).length;
+    const nbRetraits = articlesRetires.length;
+    const showAlerteRevision = nbRetraits > 0 || nbAjouts > 0;
+
   return (
     <>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -630,8 +637,9 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
              ligne. Place APRES le zebrage pour primer sur le nth-child(even). */
           .doc-table tbody tr.row-ajoutee td { background: #e9f7ef !important; }
           .item-ajoutee-badge {
-            display: inline-block;
-            margin-left: 8px;
+            display: block;
+            width: fit-content;
+            margin-top: 3px;
             background: #1e7e45;
             color: white;
             font-size: 9px;
@@ -957,7 +965,34 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .doc-correction-item {
           page-break-inside: avoid;
         }
-        .doc-retires-block {
+        .doc-alerte-revision {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 4mm 0 2mm;
+            padding: 8px 14px;
+            background: #fef2f2;
+            border: 2px solid #dc2626;
+            border-radius: 6px;
+            color: #7f1d1d;
+            font-size: 12px;
+            font-weight: 700;
+            page-break-after: avoid;
+          }
+          .doc-alerte-revision-icon {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #dc2626;
+            color: white;
+            font-weight: 900;
+            font-size: 13px;
+          }
+          .doc-retires-block {
             margin-top: 6mm;
             border: 2px solid #b91c1c;
             border-radius: 6px;
@@ -1094,6 +1129,18 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           <span>📋 FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · ${numeroAffiche}` : ""}</span>
           <span className="doc-banner-printed">Imprimée le {printedAt}</span>
         </div>
+
+{showAlerteRevision && (
+          <div className="doc-alerte-revision">
+            <span className="doc-alerte-revision-icon">!</span>
+            <span>
+              COMMANDE RÉVISÉE
+              {nbRetraits > 0 ? ` \u00B7 ${nbRetraits} article${nbRetraits > 1 ? "s" : ""} retiré${nbRetraits > 1 ? "s" : ""}` : ""}
+              {nbAjouts > 0 ? ` \u00B7 ${nbAjouts} article${nbAjouts > 1 ? "s" : ""} ajouté${nbAjouts > 1 ? "s" : ""}` : ""}
+              {" "}&mdash; voir le détail en bas de la fiche (lignes vertes ajoutées, bloc rouge retirés).
+            </span>
+          </div>
+        )}
 
         {/* HEADER 3 colonnes */}
         <div className="doc-header">
@@ -1313,7 +1360,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                     <div className="item-title">
                       {isCustom && <span className="item-custom-badge">À la volée</span>}
                       {line.title}
-                      {isLigneAjoutee(line.id) && <span className="item-ajoutee-badge">+ AJOUTE</span>}
+                      {isLigneAjoutee(line.id) && <span className="item-ajoutee-badge">+ AJOUTÉ</span>}
                     </div>
                     {line.sku ? (
                       <>
@@ -1498,10 +1545,10 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         {articlesRetires.length > 0 && (
           <div className="doc-retires-block">
             <div className="doc-retires-head">
-              <div className="doc-retires-title">Articles retires des revisions</div>
+              <div className="doc-retires-title">Articles retirés des révisions</div>
               <div className="doc-retires-intro">
-                Articles retires ou reduits lors des revisions successives de cette
-                commande (cumulatif). Ne pas preparer ces articles.
+                Articles retirés ou réduits lors des révisions successives de cette
+                commande (cumulatif). Ne pas préparer ces articles.
               </div>
             </div>
             {articlesRetires.map((r, i) => {
@@ -1514,7 +1561,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                     {r.qty}&times; {r.title}
                     {r.sku ? ` (${r.sku})` : ""}
                   </span>
-                  <span className="doc-retire-date">retire le {d}</span>
+                  <span className="doc-retire-date">retiré le {d}</span>
                 </div>
               );
             })}
