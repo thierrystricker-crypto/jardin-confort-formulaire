@@ -171,6 +171,9 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
   const [articlesRetires, setArticlesRetires] = useState<RevisionRetrait[]>([]);
   // Version vivante de la commande (= nb revisions archivees + 1). 0 si jamais revisee.
   const [revisionCount, setRevisionCount] = useState(0);
+  // ids des lignes presentes a l'origine (snapshot V1). Une ligne du data
+  // vivant dont l'id n'est PAS la-dedans = ligne ajoutee lors d'une revision.
+  const [idsOrigine, setIdsOrigine] = useState<string[]>([]);
   // ──────────────────────────────────────────────────────────────────
   const [printedAt] = useState(formatDateTime());
   const barcodesRendered = useRef(false);
@@ -242,6 +245,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               }
               setArticlesRetires(cumul);
               setRevisionCount(rJson.count || 0);
+              setIdsOrigine(Array.isArray(rJson.idsOrigine) ? rJson.idsOrigine : []);
             }
           }
         } catch (e) {
@@ -354,6 +358,13 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
   // Libellé contextuel pour le numéro de document
   const numeroLabel = typeDocument === "Offre" ? "N° d'offre" : "N° de commande";
   const dateLabel = typeDocument === "Offre" ? "Date offre" : "Date commande";
+
+    // Une ligne est "ajoutee en revision" si la commande a ete revisee ET que
+    // son id n'etait pas present a l'origine (snapshot V1). Matching par id
+    // exact -> gere le cas de deux exemplaires du meme article (un d'origine,
+    // un ajoute) qui partagent sku + titre mais ont des id distincts.
+    const isLigneAjoutee = (lineId?: string): boolean =>
+      revisionCount >= 1 && !!lineId && !idsOrigine.includes(lineId);
 
   return (
     <>
@@ -615,6 +626,22 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           font-size: 11.5px;
         }
         .doc-table tbody tr.row-product:nth-child(even) td { background: ${LIGHT}; }
+          /* Ligne ajoutee lors d'une revision : fond vert leger sur toute la
+             ligne. Place APRES le zebrage pour primer sur le nth-child(even). */
+          .doc-table tbody tr.row-ajoutee td { background: #e9f7ef !important; }
+          .item-ajoutee-badge {
+            display: inline-block;
+            margin-left: 8px;
+            background: #1e7e45;
+            color: white;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            padding: 1px 6px;
+            border-radius: 3px;
+            vertical-align: middle;
+          } }
 
         .td-img { width: 56px; vertical-align: middle; text-align: center; }
         .td-img img { max-width: 50px; max-height: 50px; object-fit: contain; }
@@ -1260,8 +1287,8 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               const isMultiQty = line.qty > 1;
 
               return (
-                <tr key={line.id} className="row-product">
-                  <td className="td-img">
+                  <tr key={line.id} className={`row-product${isLigneAjoutee(line.id) ? " row-ajoutee" : ""}`}>
+                    <td className="td-img">
                     {line.image ? (
                       <img src={line.image} alt="" />
                     ) : (
@@ -1286,6 +1313,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                     <div className="item-title">
                       {isCustom && <span className="item-custom-badge">À la volée</span>}
                       {line.title}
+                      {isLigneAjoutee(line.id) && <span className="item-ajoutee-badge">+ AJOUTE</span>}
                     </div>
                     {line.sku ? (
                       <>
