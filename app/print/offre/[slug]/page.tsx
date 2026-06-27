@@ -38,6 +38,8 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
   const [numeroAffiche, setNumeroAffiche] = useState("");
   const [offreSlug, setOffreSlug] = useState("");
   const [correctionsCount, setCorrectionsCount] = useState(0);
+  // Version vivante (chantier revision-commandes) : nb revisions + 1.
+  const [versionVivante, setVersionVivante] = useState(1);
   const [lastCorrectionAt, setLastCorrectionAt] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,6 +53,19 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
           if (offreData) {
             setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber || slug);
             setOffreSlug(slug);
+            
+            // Marqueur version : uniquement pour une commande revisee.
+              if (json.offre?.type_document === "Commande") {
+                try {
+                  const rRes = await fetch(`/api/revisions?commande_slug=${encodeURIComponent(slug)}`);
+                  if (rRes.ok) {
+                    const rJson = await rRes.json();
+                    setVersionVivante(rJson.versionVivante || 1);
+                  }
+                } catch {
+                  // marqueur non bloquant
+                }
+              }
             setData({
               ...EMPTY,
               ...offreData,
@@ -281,7 +296,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
 
           <div className="doc-header-right">
             <div className="doc-addr-window">
-              <div className="doc-addr-ref">{numeroAffiche || data.offerNumber}</div>
+              <div className="doc-addr-ref">{numeroAffiche || data.offerNumber}{versionVivante >= 2 ? ` \u00B7 V${versionVivante}` : ""}</div>
               {data.societe && <div className="doc-addr-line">{data.societe}</div>}
               <div className="doc-addr-name">{data.nom} {data.prenom}</div>
               {data.complement_nom && <div className="doc-addr-line">{data.complement_nom}</div>}
