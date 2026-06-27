@@ -64,6 +64,11 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
   const [dateDocument, setDateDocument] = useState<string>("");
   const [typeDocument, setTypeDocument] = useState<string>("Commande");
   const [printedAt, setPrintedAt] = useState("");
+  // ─── Chantier revision-commandes : states ───
+  type RevisionRetrait = { sku: string; title: string; qty: number; date: string };
+  const [articlesRetires, setArticlesRetires] = useState<RevisionRetrait[]>([]);
+  const [revisionCount, setRevisionCount] = useState(0);
+  const [idsOrigine, setIdsOrigine] = useState<string[]>([]);
   const barcodesRendered = useRef(false);
 
   // ─── Mount côté client uniquement (évite erreur hydratation #418) ───
@@ -93,6 +98,32 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               ambianceImages: offreData.ambianceImages || [],
             });
           }
+          // Revisions : marqueur version + articles retires (commande only).
+            if (json.offre?.type_document === "Commande") {
+              try {
+                const rRes = await fetch(`/api/revisions?commande_slug=${encodeURIComponent(slug)}`);
+                if (rRes.ok) {
+                  const rJson = await rRes.json();
+                  const revs = (rJson.revisions || []) as {
+                    created_at: string;
+                    diff?: { retraits?: { sku: string; title: string; qty: number }[] };
+                  }[];
+                  const cumul: { sku: string; title: string; qty: number; date: string }[] = [];
+                  for (const rev of revs) {
+                    for (const ret of rev.diff?.retraits || []) {
+                      if ((ret.qty || 0) > 0) {
+                        cumul.push({ sku: ret.sku || "", title: ret.title || "", qty: ret.qty, date: rev.created_at });
+                      }
+                    }
+                  }
+                  setArticlesRetires(cumul);
+                  setRevisionCount(rJson.count || 0);
+                  setIdsOrigine(Array.isArray(rJson.idsOrigine) ? rJson.idsOrigine : []);
+                }
+              } catch {
+                // marqueur non bloquant
+              }
+            }
         }
       } catch (e) {
         console.error("Erreur chargement commande:", e);
@@ -193,7 +224,17 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
   ];
 
   const validationUrl = `https://offres.jardin-confort.ch/offre/${offreSlug || numeroAffiche.toLowerCase().replace(/\s+/g, "-")}`;
-
+// ─── Chantier revision-commandes : socle (fiche de travail + marqueur) ───
+  const isLigneAjoutee = (lineId?: string): boolean =>
+    revisionCount >= 1 && !!lineId && !idsOrigine.includes(lineId);
+  const nbAjouts = data.lines.filter(
+    (l) => l.type !== "comment" && l.type !== "media" && isLigneAjoutee(l.id)
+  ).length;
+  const nbRetraits = articlesRetires.length;
+  const showAlerteRevision = nbRetraits > 0 || nbAjouts > 0;
+  const showVersionMarker = typeDocument === "Commande" && revisionCount >= 1;
+  const versionVivante = revisionCount + 1;
+  const versionSuffix = showVersionMarker ? ` \u00B7 V${versionVivante}` : "";
   // Variables fiche de travail
   const livrSocieteFT = data.livrDiff ? data.livrSociete : data.societe;
   const livrNomFT     = data.livrDiff ? data.livrNom     : data.nom;
