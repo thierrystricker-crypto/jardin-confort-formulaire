@@ -159,6 +159,18 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
     fields_changed: Record<string, { old: unknown; new: unknown }>;
   };
   const [corrections, setCorrections] = useState<CorrectionEntry[]>([]);
+  // --- Chantier revision-commandes (S4) : articles retires cumulatifs ---
+  // Reconstruits a l'affichage depuis tous les diff.retraits de commandes_revisions.
+  // Chaque retrait porte la date de la revision ou il a ete decide.
+  type RevisionRetrait = {
+    sku: string;
+    title: string;
+    qty: number;
+    date: string; // created_at de la revision
+  };
+  const [articlesRetires, setArticlesRetires] = useState<RevisionRetrait[]>([]);
+  // Version vivante de la commande (= nb revisions archivees + 1). 0 si jamais revisee.
+  const [revisionCount, setRevisionCount] = useState(0);
   // ──────────────────────────────────────────────────────────────────
   const [printedAt] = useState(formatDateTime());
   const barcodesRendered = useRef(false);
@@ -200,12 +212,41 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
         const cRes = await fetch(`/api/corrections?entity_type=${entityType}&entity_slug=${encodeURIComponent(s)}`);
         if (cRes.ok) {
-          const cJson = await cRes.json();
-          setCorrections(cJson.corrections || []);
+            const cJson = await cRes.json();
+            setCorrections(cJson.corrections || []);
+          }
+
+          // Revisions (articles retires cumulatifs + version vivante).
+          // Uniquement pertinent pour une commande ; sur une offre la route
+          // renverra simplement une liste vide.
+          if (entityType === "commande") {
+            const rRes = await fetch(`/api/revisions?commande_slug=${encodeURIComponent(s)}`);
+            if (rRes.ok) {
+              const rJson = await rRes.json();
+              const revs = (rJson.revisions || []) as {
+                created_at: string;
+                diff?: { retraits?: { sku: string; title: string; qty: number }[] };
+              }[];
+              const cumul: RevisionRetrait[] = [];
+              for (const rev of revs) {
+                for (const ret of rev.diff?.retraits || []) {
+                  if ((ret.qty || 0) > 0) {
+                    cumul.push({
+                      sku: ret.sku || "",
+                      title: ret.title || "",
+                      qty: ret.qty,
+                      date: rev.created_at,
+                    });
+                  }
+                }
+              }
+              setArticlesRetires(cumul);
+              setRevisionCount(rJson.count || 0);
+            }
+          }
+        } catch (e) {
+          console.error("Erreur chargement corrections:", e);
         }
-      } catch (e) {
-        console.error("Erreur chargement corrections:", e);
-      }
 
       setReady(true);
     }
@@ -889,7 +930,53 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .doc-correction-item {
           page-break-inside: avoid;
         }
-        .doc-corrections-title {
+        .doc-retires-block {
+            margin-top: 6mm;
+            border: 2px solid #b91c1c;
+            border-radius: 6px;
+            padding: 10px 14px;
+            background: #fdf0f0;
+          }
+          .doc-retires-head {
+            page-break-inside: avoid;
+            page-break-after: avoid;
+          }
+          .doc-retires-title {
+            display: inline-block;
+            background: #b91c1c;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+          }
+          .doc-retires-intro {
+            font-size: 10px;
+            color: #7f1d1d;
+            margin-bottom: 8px;
+          }
+          .doc-retire-item {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 3px 0;
+            border-top: 1px dashed #e7b3b3;
+            page-break-inside: avoid;
+          }
+          .doc-retire-text {
+            text-decoration: line-through;
+            color: #7f1d1d;
+            font-size: 11px;
+          }
+          .doc-retire-date {
+            white-space: nowrap;
+            font-size: 10px;
+            color: #9a3a3a;
+          }
+          .doc-corrections-title {
           display: inline-block;
           background: #dc2626;
           color: white;
@@ -1380,6 +1467,32 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
             commercial qui tournera la page pour voir le détail. Contraire
             au pattern "tout ou rien" qui risquerait de masquer la
             notification entière sur une page suivante non lue. */}
+        {articlesRetires.length > 0 && (
+          <div className="doc-retires-block">
+            <div className="doc-retires-head">
+              <div className="doc-retires-title">Articles retires des revisions</div>
+              <div className="doc-retires-intro">
+                Articles retires ou reduits lors des revisions successives de cette
+                commande (cumulatif). Ne pas preparer ces articles.
+              </div>
+            </div>
+            {articlesRetires.map((r, i) => {
+              const d = new Date(r.date).toLocaleDateString("fr-CH", {
+                day: "2-digit", month: "2-digit", year: "numeric",
+              });
+              return (
+                <div className="doc-retire-item" key={i}>
+                  <span className="doc-retire-text">
+                    {r.qty}&times; {r.title}
+                    {r.sku ? ` (${r.sku})` : ""}
+                  </span>
+                  <span className="doc-retire-date">retire le {d}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {corrections.length > 0 && (
           <div className="doc-corrections-block">
             <div className="doc-corrections-head">
