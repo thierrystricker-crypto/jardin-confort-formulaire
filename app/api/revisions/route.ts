@@ -68,10 +68,29 @@ export async function GET(request: NextRequest) {
     diff: parseDiff(r.diff),
   }));
 
+  // Snapshot de la V1 = etat d'origine de la commande (avant toute revision).
+  // On en extrait juste les id de lignes -> permet a la fiche de travail de
+  // distinguer une ligne AJOUTEE (id absent de l'origine) d'une ligne d'origine.
+  // .maybeSingle() : null sans erreur si pas de V1 (commande jamais revisee).
+  let idsOrigine: string[] = [];
+  const { data: v1 } = await supabase
+    .from("commandes_revisions")
+    .select("data_avant")
+    .eq("commande_slug", commandeSlug)
+    .eq("version_num", 1)
+    .maybeSingle();
+  if (v1?.data_avant && typeof v1.data_avant === "object") {
+    const lines = (v1.data_avant as { lines?: { id?: string }[] }).lines || [];
+    idsOrigine = lines
+      .map((l) => l.id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+  }
+
   // count = nombre de revisions archivees ; version vivante = count + 1.
   return NextResponse.json({
     revisions,
     count: revisions.length,
     versionVivante: revisions.length + 1,
+    idsOrigine,
   });
 }
