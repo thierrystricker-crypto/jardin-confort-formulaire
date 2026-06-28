@@ -605,82 +605,73 @@ marqueur version `· Vn` sur fiche travail + fiche commande interne · bandeau �
 + historique sur `/dashboard/[slug]` · **vérifier** que `print/offre`, `offre/[slug]`,
 `bulletin-livraison`, `page-garde-colis` ne montrent JAMAIS de trace de révision.
 
-
-## ✅ Détection des changements d'en-tête — LIVRÉE + VALIDÉE RUNTIME (26.06.2026)
-
-**Commits :** `4d5409c` (détection en-tête) · `bfb46f1` (fix faux positifs)
-
-### Cadrage : deux mécanismes de modification post-validation
-Décision Thierry, clarifiée ce jour :
-- **Mode « ✏️ Corriger »** (chantier corrections, en prod) → petites retouches **cosmétiques
-  sans créer de version** (note rouge, table `corrections`). Inchangé.
-- **Mode « 🔄 Réviser »** → peut **tout** modifier (en-tête + lignes) et **crée toujours une version**.
-  C'est le mécanisme lourd avec traçabilité complète.
-
-Les deux coexistent, chacun son usage.
-
-### 🛑 Bug corrigé : les changements d'en-tête n'étaient pas détectés
-`computeRevisionDiff` ne comparait que `data.lines`. Conséquence : changer **seulement** le mode
-de livraison, le commercial, l'adresse, les notes, les services ou le rabais global → `hasChanges`
-restait `false` → « Aucun changement détecté » → **modif perdue silencieusement**.
-
-**Correctif (`4d5409c`)** — `lib/revision-diff.ts` :
-- Signature étendue : `computeRevisionDiff(before, after, beforeData?, afterData?)` (params optionnels,
-  rétrocompatible — un seul appelant : la route reviser).
-- Compare désormais **tout le `data`** en excluant `ENTETE_IGNORE = { lines, _totals, offerNumber, formType }`
-  (`lines` déjà géré, `_totals` dérivé, numéro + type de document immuables).
-- Tout écart d'en-tête remplit `diff.enteteChanges[] = { champ, avant, apres }` et déclenche `hasChanges`.
-- Route `reviser/route.ts` : passe `offre.data` (before) et `newData` (after) complets au helper.
-
-Un changement d'en-tête seul **crée une version mais aucun mouvement de stock**
-(ni `stock_movements`, ni `stock_remises_attente`).
-
-### 🛑 Faux positif corrigé : ordre des clés
-Au premier test, `servicePrices` et `enabledServices` ressortaient toujours comme « modifiés »
-alors que les valeurs étaient identiques — seul **l'ordre des clés** différait (le formulaire
-re-sérialise dans un autre ordre). `JSON.stringify` étant sensible à l'ordre, chaque révision
-les marquait à tort.
-
-**Correctif (`bfb46f1`)** — `normEntete` sérialise avec **clés triées récursivement**
-(`JSON.stringify` + replacer qui trie `Object.entries`). Deux objets identiques au ré-ordonnancement
-près sont désormais égaux.
-
-### Test runtime — validé
-- Changement de commercial seul → version créée, `enteteChanges` = uniquement `commercial`.
-- Plus aucun faux positif `servicePrices` / `enabledServices`.
-- Aucun mouvement de stock parasite.
-- Non-régression : les modifs de lignes (ajout/retrait/prix) fonctionnent toujours.
-
-`enteteChanges` nourrira l'historique des révisions (Session 4).
-
 ---
 
-## 📌 Point à trancher en Session 4 / 5
-Si on modifie l'**adresse** (ou un autre champ d'en-tête visible sur le document) via une révision,
-faut-il **régénérer le PDF/les documents** avec la nouvelle valeur, ou garder le **figé** ?
-- Pour les **prix/lignes** → on garde le figé (preuve contractuelle).
-- Pour une **adresse corrigée** → on voudrait sans doute le bon PDF.
-À décider le moment venu (probablement : overlay des seuls champs cosmétiques sur le snapshot figé,
-comme prévu côté chantier corrections Session 4).
+## ✅ Session 4 — Documents + dashboard — LIVRÉE + VALIDÉE RUNTIME (28.06.2026)
 
----
+**Branche** `feature/revision-commandes`, commits `0354bef` → `10f0672`. **NE PAS merger avant S5.**
+Tout validé runtime sur `cmd-80666-l8i6x` (à V7 : 6 révisions archivées).
 
-## 📦 État du chantier au 26.06.2026
+### Socle — route de lecture des révisions
+- **`app/api/revisions/route.ts`** (NOUVEAU, GET seul) : `?commande_slug=...` → renvoie
+  `{ revisions[], count, versionVivante, idsOrigine }`. `diff` re-parsé serveur (try/catch,
+  tolère string JSON ou objet). `versionVivante = count + 1`. `idsOrigine` = ids de lignes
+  du snapshot V1 (`data_avant` de la révision `version_num=1`), via `.maybeSingle()`.
+  Commits `0354bef` (route) + `f02e008` (idsOrigine).
 
+### Conventions de version VERROUILLÉES (à ne pas réinterpréter)
+- **V1 = commande d'origine** (jamais modifiée). Snapshot archivé `version_num=N` = état AVANT
+  la N-ième modif = la version **V{N}**. La modif fait passer le doc à **V{N+1}**.
+- **Version vivante = count + 1** (6 révisions → V7). Le bandeau dashboard affiche « N révisions
+  · version actuelle V{N+1} » ; chaque carte d'historique = transition **V{N} → V{N+1}**.
+
+### Détection des lignes AJOUTÉES — par `id`, PAS par sku/title (clé du chantier)
+- Tous les `id` de ligne sont des timestamps (`shopify-<ms>`, `custom-<ms>`), uniques et stables.
+- **Règle d'or** : une ligne du `data` vivant est « ajoutée en révision » si son `id` n'est PAS
+  dans `idsOrigine` (snapshot V1). Matching par `id` exact → distingue 2 exemplaires du même
+  article (même sku 410109) dont l'un est d'origine et l'autre ajouté. Un matching par sku/title
+  aurait colorié les deux à tort. Validé runtime (cmd-80666 : 2 chaises Rouille ajoutées en vert,
+  l'ancienne même sku restée blanche).
+
+### Filtrage des faux positifs d'en-tête (dashboard)
+- `servicePrices`/`enabledServices` sont stockés en string JSON re-sérialisée → des révisions
+  archivées AVANT le fix `bfb46f1` (clés triées) contiennent du bruit (V4/V5 de cmd-80666).
+- Le bloc historique re-normalise avant/après (re-tri des clés) et **masque** les entrées où
+  `avant === apres`. Pour `servicePrices`/`enabledServices`, affichage en libellé opaque
+  (« Prix des services modifié(s) ») sans le JSON brut, et seulement si vrai changement.
+
+### Réalisé — par fichier
+- **Fiche de travail standalone** (`app/print/fiche-travail/[slug]`) : bloc « Articles retirés »
+  cumulatif (fond rougeâtre, barré, date) · badge « + AJOUTÉ » + fond vert sur lignes ajoutées
+  (matching id) · bande d'alerte en tête (retraits OU ajouts) · marqueur `· Vn` aux 3 emplacements.
+  Commits `c679f02`, `951a231`, `87b3d91`, `c8680e4`.
+- **Dashboard** (`app/dashboard/[slug]`) : nouveau **`components/RevisionsHistoryBlock.tsx`**
+  (calqué sur CorrectionsHistoryBlock), monté si `type_document === "Commande"`. Bandeau +
+  cartes par transition Vn→Vn+1, rendu lisible du diff, filtrage faux positifs. Commit `5b68512`.
+- **Jeu complet** (`app/print/all/[slug]`) : ALIGNÉ sur les standalones. Socle (states + fetch +
+  helpers) · marqueur `· V7` sur les 8 emplacements (toutes pages) · badge + fond vert + bande +
+  bloc retirés UNIQUEMENT sur la section fiche de travail (`ft-`). Commits `5cecd11`, `fdf174b`, `10f0672`.
+
+### ⚠️ CHANGEMENT DE CADRAGE ASSUMÉ (28.06.2026) — ne pas prendre pour une régression
+Le cadrage Session 0 disait « marqueur version PAS sur le document client ». **Décision révisée** :
+le marqueur version discret apparaît désormais sur les documents **client** suivants :
+- **`app/offre/[slug]`** (page web client) : `(V7)` dans le fil d'Ariane (« Offres clients (V7) / CMD-… »). Commit `f273a26`.
+- **`app/print/offre/[slug]`** (PDF) : `· V7` à côté du numéro (haut droite). Commit `e0f4c69`.
+- **`app/print/all/[slug]`** section commande (`cc-`) + autres sections : `· V7` à côté du numéro.
+Condition partout : `type_document === "Commande"` ET `versionVivante >= 2` (offres et commandes
+jamais révisées restent vierges). Le **bulletin de livraison** et la **page de garde colis**
+restent SANS marqueur (non touchés).
+
+### Reste à faire
+- **S5** : Preview Vercel + scénarios complets (ajout/retrait/réduction qté/révisions multiples/
+  garde-fou DENY) + merge prod + smoke test + cleanup branche.
+
+### Statut
 | Session | Statut |
 |---|---|
 | S0 SQL | ✅ |
-| S1 Backend | ✅ validé runtime |
-| S2 UI + finitions | ✅ validé runtime |
-| S3 Dashboard Remise en stock | ✅ validé runtime |
-| Détection d'en-tête | ✅ validé runtime |
-| S4 Documents | ⬜ à faire |
+| S1 Backend | ✅ |
+| S2 UI | ✅ |
+| S3 Dashboard remises | ✅ |
+| S4 Documents + dashboard | ✅ validé runtime |
 | S5 Merge prod | ⬜ à faire |
-
-**Branche** `feature/revision-commandes` à `bfb46f1`. **NE PAS merger avant S5.**
-Commande de test : `cmd-80666-l8i6x` (à V6, historique riche — utile pour tester l'affichage S4).
-
-**Reprise S4 :** section « Articles retirés » (cumulative) sur la fiche de travail uniquement ·
-marqueur version `· Vn` sur fiche travail + fiche commande interne · bandeau « révisée N fois »
-+ historique (incluant `enteteChanges`) sur `/dashboard/[slug]` · **vérifier** que `print/offre`,
-`offre/[slug]`, `bulletin-livraison`, `page-garde-colis` ne montrent JAMAIS de trace de révision.
