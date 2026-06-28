@@ -374,6 +374,20 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .ft-table thead th.ft-th-right { text-align: right; }
         .ft-table tbody tr td { padding: 5px 4px; border-bottom: 1px solid #d1d5db; vertical-align: middle; font-size: 11.5px; }
         .ft-table tbody tr.ft-row-product:nth-child(even) td { background: ${LIGHT}; }
+        .ft-table tbody tr.ft-row-ajoutee td { background: #e9f7ef !important; }
+        .ft-item-ajoutee-badge {
+          display: block;
+          width: fit-content;
+          margin-top: 3px;
+          background: #1e7e45;
+          color: white;
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          padding: 1px 6px;
+          border-radius: 3px;
+        }
         .ft-td-img { width: 56px; vertical-align: middle; text-align: center; }
         .ft-td-img img { max-width: 50px; max-height: 50px; object-fit: contain; }
         .ft-td-img-placeholder { width: 50px; height: 50px; margin: 0 auto; border: 1px dashed #d1d5db; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #9ca3af; }
@@ -909,7 +923,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
               const isMultiQty = line.qty > 1;
               return (
-                <tr key={line.id} className="ft-row-product">
+                <tr key={line.id} className={`ft-row-product${isLigneAjoutee(line.id) ? " ft-row-ajoutee" : ""}`}>
                   <td className="ft-td-img">
                     {line.image ? <img src={line.image} alt="" /> : <div className="ft-td-img-placeholder">{isCustom ? "✏️" : "—"}</div>}
                   </td>
@@ -928,6 +942,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     <div className="ft-item-title">
                       {isCustom && <span className="ft-item-custom-badge">À la volée</span>}
                       {line.title}
+                      {isLigneAjoutee(line.id) && <span className="ft-item-ajoutee-badge">+ AJOUTÉ</span>}
                     </div>
                     {line.sku ? (
                       <>
