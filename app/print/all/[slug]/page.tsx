@@ -733,7 +733,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       `}</style>
 
       <div className="printall-info">
-        🖨 Jeu complet — {numeroAffiche} · 5 pages
+        🖨 Jeu complet — {numeroAffiche}{versionSuffix} · 5 pages
       </div>
       <button className="print-btn-all" onClick={() => window.print()}>
         🖨 Imprimer
@@ -744,7 +744,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       {/* ═══════════════════════════════════════════════════════════════════ */}
       <div className="doc-wrap-all">
         <div className="ft-banner">
-          <span>📋 FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · ${numeroAffiche}` : ""}</span>
+          <span>📋 FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · ${numeroAffiche}${versionSuffix}` : ""}</span>
           <span className="ft-banner-printed">Imprimée le {printedAt}</span>
         </div>
 
@@ -756,7 +756,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
             <div className="ft-type">Fiche de travail</div>
             <table className="ft-meta-table">
               <tbody>
-                <tr><td className="ft-meta-label">{numeroLabel}</td><td><strong>{numeroAffiche}</strong></td></tr>
+                <tr><td className="ft-meta-label">{numeroLabel}</td><td><strong>{numeroAffiche}{versionSuffix}</strong></td></tr>
                 {data.reference && <tr><td className="ft-meta-label">Référence</td><td>{data.reference}</td></tr>}
                 <tr><td className="ft-meta-label">{dateLabel}</td><td>{formatDate(dateDocument)}</td></tr>
                 <tr><td className="ft-meta-label">Commercial</td><td>{data.commercial}</td></tr>
@@ -791,7 +791,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     : `${livrNomFT || ""} ${livrPrenomFT || ""}`.trim()}
                 </div>
                 <div className="ft-addr-client-hero-meta">
-                  📅 {formatDate(dateDocument)} · {numeroAffiche}
+                  📅 {formatDate(dateDocument)} · {numeroAffiche}{versionSuffix}
                 </div>
               </div>
 
@@ -1088,7 +1088,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
 
           <div className="cc-header-right">
             <div className="cc-addr-window">
-              <div className="cc-addr-ref">{numeroAffiche || data.offerNumber}</div>
+              <div className="cc-addr-ref">{numeroAffiche || data.offerNumber}{versionSuffix}</div>
               {data.societe && <div className="cc-addr-line">{data.societe}</div>}
               <div className="cc-addr-name">{data.nom} {data.prenom}</div>
               {data.complement_nom && <div className="cc-addr-line">{data.complement_nom}</div>}
@@ -1486,7 +1486,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
 
           <div className="pg-order-info">
             <div className="pg-order-info-line">
-              <strong>N° de commande :</strong> {numeroAffiche || data.offerNumber}
+              <strong>N° de commande :</strong> {numeroAffiche || data.offerNumber}{versionSuffix}
             </div>
             <div className="pg-order-info-line">
               <strong>Date :</strong> {formatDate(data.date)}
@@ -1562,7 +1562,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
 
           <div className="bl-header-right">
             <div className="bl-addr-window">
-              <div className="bl-addr-ref">{numeroAffiche || data.offerNumber}</div>
+              <div className="bl-addr-ref">{numeroAffiche || data.offerNumber}{versionSuffix}</div>
               {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
               {(data as any).deliveryMode === "À l'emporter" ? (
                 <>
@@ -1782,7 +1782,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 <div className="fb-doc-subtitle">Fiche d&apos;archive — Classeur papier · Conservation interne</div>
               </div>
               <div className="fb-header-right">
-                <div className="fb-doc-num">{numeroAffiche}</div>
+                <div className="fb-doc-num">{numeroAffiche}{versionSuffix}</div>
                 <div className="fb-doc-date">{typeDocument === "Offre" ? "N° offre" : "N° commande"}</div>
                 <div className="fb-doc-date-big">{formatDate(dateDocument || data.date)}</div>
                 {data.reference && <div className="fb-doc-date" style={{fontStyle: "italic", marginTop: "2mm"}}>Réf. {data.reference}</div>}
