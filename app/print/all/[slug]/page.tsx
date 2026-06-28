@@ -388,6 +388,35 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           padding: 1px 6px;
           border-radius: 3px;
         }
+          .ft-alerte-revision {
+          display: flex; align-items: center; gap: 10px;
+          margin: 3mm 0 2mm; padding: 7px 12px;
+          background: #fef2f2; border: 2px solid #dc2626; border-radius: 6px;
+          color: #7f1d1d; font-size: 11.5px; font-weight: 700;
+          page-break-after: avoid;
+        }
+        .ft-alerte-revision-icon {
+          flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+          width: 18px; height: 18px; border-radius: 50%;
+          background: #dc2626; color: white; font-weight: 900; font-size: 12px;
+        }
+        .ft-retires-block {
+          margin-top: 5mm; border: 2px solid #b91c1c; border-radius: 6px;
+          padding: 9px 12px; background: #fdf0f0;
+        }
+        .ft-retires-head { page-break-inside: avoid; page-break-after: avoid; }
+        .ft-retires-title {
+          display: inline-block; background: #b91c1c; color: white;
+          padding: 3px 10px; border-radius: 3px; font-size: 11px;
+          font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px;
+        }
+        .ft-retires-intro { font-size: 10px; color: #7f1d1d; margin-bottom: 8px; }
+        .ft-retire-item {
+          display: flex; justify-content: space-between; gap: 12px;
+          padding: 3px 0; border-top: 1px dashed #e7b3b3; page-break-inside: avoid;
+        }
+        .ft-retire-text { text-decoration: line-through; color: #7f1d1d; font-size: 11px; }
+        .ft-retire-date { white-space: nowrap; font-size: 10px; color: #9a3a3a; }
         .ft-td-img { width: 56px; vertical-align: middle; text-align: center; }
         .ft-td-img img { max-width: 50px; max-height: 50px; object-fit: contain; }
         .ft-td-img-placeholder { width: 50px; height: 50px; margin: 0 auto; border: 1px dashed #d1d5db; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #9ca3af; }
@@ -761,6 +790,17 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
           <span>📋 FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · ${numeroAffiche}${versionSuffix}` : ""}</span>
           <span className="ft-banner-printed">Imprimée le {printedAt}</span>
         </div>
+        {showAlerteRevision && (
+          <div className="ft-alerte-revision">
+            <span className="ft-alerte-revision-icon">!</span>
+            <span>
+              COMMANDE RÉVISÉE
+              {nbRetraits > 0 ? ` · ${nbRetraits} article${nbRetraits > 1 ? "s" : ""} retiré${nbRetraits > 1 ? "s" : ""}` : ""}
+              {nbAjouts > 0 ? ` · ${nbAjouts} article${nbAjouts > 1 ? "s" : ""} ajouté${nbAjouts > 1 ? "s" : ""}` : ""}
+              {" "}— voir le détail en bas de la fiche.
+            </span>
+          </div>
+        )}
 
         <div className="ft-header">
           <div className="ft-header-left">
@@ -1047,6 +1087,30 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
             </table>
           </div>
         </div>
+        {articlesRetires.length > 0 && (
+          <div className="ft-retires-block">
+            <div className="ft-retires-head">
+              <div className="ft-retires-title">Articles retirés des révisions</div>
+              <div className="ft-retires-intro">
+                Articles retirés ou réduits lors des révisions successives de cette
+                commande (cumulatif). Ne pas préparer ces articles.
+              </div>
+            </div>
+            {articlesRetires.map((r, i) => {
+              const d = new Date(r.date).toLocaleDateString("fr-CH", {
+                day: "2-digit", month: "2-digit", year: "numeric",
+              });
+              return (
+                <div className="ft-retire-item" key={i}>
+                  <span className="ft-retire-text">
+                    {r.qty}&times; {r.title}{r.sku ? ` (${r.sku})` : ""}
+                  </span>
+                  <span className="ft-retire-date">retiré le {d}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
