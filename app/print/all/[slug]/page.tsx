@@ -227,6 +227,24 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
 // ─── Chantier revision-commandes : socle (fiche de travail + marqueur) ───
   const isLigneAjoutee = (lineId?: string): boolean =>
     revisionCount >= 1 && !!lineId && !idsOrigine.includes(lineId);
+  // Date de l'etat du stock par ligne (format JJ.MM.AA) :
+  // - hors commande -> date du jour ; origine -> date commande ; ajoutee -> date de l'id
+  const dateStockLigne = (line: QuoteLine): string => {
+    const fmt = (ms: number) =>
+      new Date(ms).toLocaleDateString("fr-CH", {
+        day: "2-digit", month: "2-digit", year: "2-digit",
+      });
+    if (typeDocument !== "Commande") return printedAt.split(" ")[0];
+    if (isLigneAjoutee(line.id)) {
+      const ms = parseInt((line.id || "").replace(/\D/g, ""), 10);
+      if (!isNaN(ms)) return fmt(ms);
+    }
+    if (dateDocument) {
+      const t = Date.parse(dateDocument);
+      if (!isNaN(t)) return fmt(t);
+    }
+    return printedAt.split(" ")[0];
+  };
   const nbAjouts = data.lines.filter(
     (l) => l.type !== "comment" && l.type !== "media" && isLigneAjoutee(l.id)
   ).length;
@@ -1011,7 +1029,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                   </td>
                   <td className="ft-td-stock">
                     {stockDisplay}
-                    <span className="ft-stock-date">au {printedAt.split(" ")[0]}</span>
+                    <span className="ft-stock-date">au {dateStockLigne(line)}</span>
                   </td>
                 </tr>
               );
