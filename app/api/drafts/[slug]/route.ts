@@ -166,7 +166,7 @@ export async function PUT(
       client_nom: data.nom || null,
       client_prenom: data.prenom || null,
       client_complement_nom: data.complement_nom || null,
-      client_email: data.email || null,
+      client_email: data.email?.trim().toLowerCase() || null,
       client_tel1: data.telephone1 || null,
       client_tel2: data.telephone2 || null,
       client_rue: data.rue || null,
