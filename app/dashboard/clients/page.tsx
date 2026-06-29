@@ -1116,7 +1116,7 @@ export default function ClientsPage() {
     <Link href={`/drafts/nouveau?prefill=${encodeURIComponent(JSON.stringify({
                               nom: c.nom, prenom: c.prenom||"", societe: c.societe||"",
                               email: c.email||"", telephone1: c.tel1||"",
-                              rue: c.rue||"", npa: c.npa||"", ville: c.ville||"",
+                              rue: c.rue||"", numero: c.numero_rue||"", npa: c.npa||"", ville: c.ville||"",
                             }))}`} target="_blank" rel="noopener noreferrer"
                               className="rounded-lg border border-[#2B8AD1]/30 bg-[#2B8AD1]/10 px-3 py-1.5 text-xs text-sky-300 hover:bg-[#2B8AD1]/20">
                               + Offre (brouillon)
