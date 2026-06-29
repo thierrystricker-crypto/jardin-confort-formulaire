@@ -365,6 +365,23 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
     // un ajoute) qui partagent sku + titre mais ont des id distincts.
     const isLigneAjoutee = (lineId?: string): boolean =>
       revisionCount >= 1 && !!lineId && !idsOrigine.includes(lineId);
+    // Date de l'etat du stock par ligne :
+    // - hors commande (stock dynamique) -> date du jour
+    // - commande, ligne d'origine -> date de la commande (fige a la conversion)
+    // - commande, ligne ajoutee en revision -> date extraite de l'id (fige a l'ajout)
+    const dateStockLigne = (line: QuoteLine): string => {
+      const jour = (s: string) => s.split(" ")[0];
+      if (typeDocument !== "Commande") return jour(printedAt);
+      if (isLigneAjoutee(line.id)) {
+        const ms = parseInt((line.id || "").replace(/\D/g, ""), 10);
+        if (!isNaN(ms)) {
+          return new Date(ms).toLocaleDateString("fr-CH", {
+            day: "2-digit", month: "2-digit", year: "2-digit",
+          });
+        }
+      }
+      return dateDocument ? jour(formatDate(dateDocument)) : jour(printedAt);
+    };
 
     // Compteur de lignes ajoutees (pour la bande d'alerte en tete de fiche).
     const nbAjouts = data.lines.filter(
@@ -1402,7 +1419,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
                   <td className="td-stock">
                     {stockDisplay}
-                    <span className="stock-date">au {printedAt.split(" ")[0]}</span>
+                    <span className="stock-date">au {dateStockLigne(line)}</span>
                   </td>
                 </tr>
               );
