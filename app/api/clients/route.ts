@@ -558,7 +558,7 @@ export async function POST(request: NextRequest) {
         societe: societe?.trim() || null,
         complement_nom: complement_nom?.trim() || null,
         livr_complement_nom: livr_complement_nom?.trim() || null,
-        email: email?.trim() || null,
+        email: email?.trim().toLowerCase() || null,
         tel1: tel1?.trim() || null,
         tel2: tel2?.trim() || null,
         rue: rue?.trim() || null,
