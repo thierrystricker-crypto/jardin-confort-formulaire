@@ -380,7 +380,15 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           });
         }
       }
-      return dateDocument ? jour(formatDate(dateDocument)) : jour(printedAt);
+      if (dateDocument) {
+        const t = Date.parse(dateDocument);
+        if (!isNaN(t)) {
+          return new Date(t).toLocaleDateString("fr-CH", {
+            day: "2-digit", month: "2-digit", year: "2-digit",
+          });
+        }
+      }
+      return jour(printedAt);
     };
 
     // Compteur de lignes ajoutees (pour la bande d'alerte en tete de fiche).
