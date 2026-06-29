@@ -97,6 +97,7 @@ export async function PATCH(
     for (const key of allowed) {
       if (key in body) update[key] = body[key] || null
     }
+    if (typeof update.email === "string") update.email = update.email.trim().toLowerCase() || null
 
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: "Rien à mettre à jour" }, { status: 400 })
