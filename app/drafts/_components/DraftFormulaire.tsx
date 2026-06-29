@@ -222,10 +222,12 @@ type PlaceSuggestion = {
 //   - 404 si le brouillon n'existe pas (affichage géré dans le composant)
 //   - 409 si le brouillon a été transformé en offre (affichage géré)
 type DraftFormulaireProps = {
-  initialSlug?: string;
-};
+    initialSlug?: string;
+    revisionMode?: boolean;
+    commandeSlug?: string;
+  };
 
-export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
+export default function DraftFormulaire({ initialSlug, revisionMode = false, commandeSlug }: DraftFormulaireProps) {
   const router = useRouter();
 
   const [formType, setFormType]       = useState<FormType>("Offre");
@@ -297,6 +299,9 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
   const [servicePrices, setServicePrices]     = useState<Record<string, string>>(initialServicePrices);
 
   const [undoSnapshot, setUndoSnapshot]     = useState<QuoteLine[] | null>(null);
+  // Mode révision : qté d'origine des lignes héritées de la commande (id → qty).
+  // Sert à brider la qté (baisse autorisée, hausse interdite → passer par le picker).
+  const [inheritedQty, setInheritedQty]     = useState<Map<string, number>>(new Map());
   const [draftSavedAt, setDraftSavedAt]     = useState("");
   const [draggedLineId, setDraggedLineId]   = useState<string | null>(null);
   const [justAddedLineId, setJustAddedLineId] = useState<string | null>(null);
@@ -350,7 +355,7 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
   // En mode création (pas de initialSlug), on saute direct à "ready".
   const [initialLoadStatus, setInitialLoadStatus] = useState<
     "loading" | "ready" | "not_found" | "transformed" | "error"
-  >(initialSlug ? "loading" : "ready");
+  >((initialSlug || (revisionMode && commandeSlug)) ? "loading" : "ready");
   const [initialLoadError, setInitialLoadError] = useState<string>("");
   const [transformedInfo, setTransformedInfo]   = useState<{
     transformed_at: string;
@@ -802,9 +807,32 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
       }
 
       // ─── POST (création) ou PUT (mise à jour) ───
-      const isCreate = currentSlug === null;
-      const url = isCreate ? "/api/drafts" : `/api/drafts/${currentSlug}`;
-      const method = isCreate ? "POST" : "PUT";
+      // Mode révision : on ne sauve pas un brouillon, on POST la révision
+        // de la commande. Court-circuit total du flux drafts.
+        // UNIQUEMENT sur save explicite (clic bouton) : jamais un auto-save,
+        // beforeunload ou save-avant-aperçu ne doit créer une version + décrément.
+        if (revisionMode && commandeSlug && !silent) {
+          const res = await fetch(`/api/offres/${commandeSlug}/reviser`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: snap, commercial }),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            alert(json.error || `Erreur ${res.status} lors de la révision`);
+            setSaveStatus("error");
+            return false;
+          }
+          setSaveStatus("saved");
+          setLastSavedAt(new Date());
+          alert(`Révision enregistrée (V${json.version_num}).`);
+          router.push(`/dashboard/${commandeSlug}`);
+          return true;
+        }
+
+        const isCreate = currentSlug === null;
+        const url = isCreate ? "/api/drafts" : `/api/drafts/${currentSlug}`;
+        const method = isCreate ? "POST" : "PUT";
 
       const res = await fetch(url, {
         method,
@@ -964,7 +992,7 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
 
   useEffect(() => {
     // Titre de la page : "Brouillon DRA-001 — Offre" ou "Nouveau brouillon — Offre"
-    const numLabel = currentSlug && offerNumber ? `Brouillon ${offerNumber}` : "Nouveau brouillon";
+    const numLabel = revisionMode ? `Révision ${offerNumber}` : currentSlug && offerNumber ? `Brouillon ${offerNumber}` : "Nouveau brouillon";
     document.title = `Jardin-Confort | ${numLabel} — ${formType}`;
   }, [formType, offerNumber, currentSlug]);
 
@@ -1092,16 +1120,119 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
           setInitialLoadStatus("ready");
         }
       } catch (err) {
-        if (cancelled) return;
-        setInitialLoadError(String(err));
-        setInitialLoadStatus("error");
-      }
-    })();
+          if (cancelled) return;
+          setInitialLoadError(String(err));
+          setInitialLoadStatus("error");
+        }
+      })();
 
-    return () => { cancelled = true; };
-    // initialSlug ne change jamais après le mount (passé en prop depuis la route)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSlug]);
+      return () => { cancelled = true; };
+    }, [initialSlug]);
+
+    // ─── Hydratation MODE RÉVISION (commande validée) ───
+    // Source = GET /api/offres/[slug] (réponse { offre: {...} }), data au
+    // même format que draft.data. Pas de notion transformed_at ici.
+    // On marque les lignes d'origine pour brider la qté (Set d'ids hérités).
+    useEffect(() => {
+      if (!revisionMode || !commandeSlug) return;
+
+      let cancelled = false;
+
+      (async () => {
+        try {
+          const res = await fetch(`/api/offres/${commandeSlug}`);
+          if (cancelled) return;
+
+          if (res.status === 404) {
+            setInitialLoadStatus("not_found");
+            return;
+          }
+          if (!res.ok) {
+            const json = await res.json().catch(() => ({}));
+            setInitialLoadError(json.error || `Erreur ${res.status}`);
+            setInitialLoadStatus("error");
+            return;
+          }
+
+          const json = await res.json();
+          const o = json.offre;
+          if (!o) {
+            setInitialLoadStatus("not_found");
+            return;
+          }
+
+          const data = o.data || {};
+
+          // Document
+          if (data.formType) setFormType(data.formType);
+          if (data.clientType) setClientType(data.clientType);
+          if (data.paymentMode) setPaymentMode(data.paymentMode);
+          if (data.deliveryMode !== undefined) setDeliveryMode(data.deliveryMode || "");
+          if (data.offerStatus) setOfferStatus(data.offerStatus);
+          if (data.date) setDate(data.date);
+          if (data.commercial) setCommercial(data.commercial);
+          setOfferNumber(o.numero_affiche || data.offerNumber || "");
+          if (data.reference !== undefined) setReference(data.reference || "");
+
+          // Client facturation
+          if (data.societe !== undefined) setSociete(data.societe || "");
+          if (data.nom !== undefined) setNom(data.nom || "");
+          if (data.prenom !== undefined) setPrenom(data.prenom || "");
+          if (data.complement_nom !== undefined) setComplementNom(data.complement_nom || "");
+          if (data.rue !== undefined) setRue(data.rue || "");
+          if (data.rue2 !== undefined) setRue2(data.rue2 || "");
+          if (data.numero !== undefined) setNumero(data.numero || "");
+          if (data.npa !== undefined) setNpa(data.npa || "");
+          if (data.ville !== undefined) setVille(data.ville || "");
+          if (data.telephone1 !== undefined) setTelephone1(data.telephone1 || "");
+          if (data.telephone2 !== undefined) setTelephone2(data.telephone2 || "");
+          if (data.email !== undefined) setEmail(data.email || "");
+
+          // Livraison
+          if (data.livrDiff !== undefined) setLivrDiff(!!data.livrDiff);
+          if (data.livrSociete !== undefined) setLivrSociete(data.livrSociete || "");
+          if (data.livrNom !== undefined) setLivrNom(data.livrNom || "");
+          if (data.livrPrenom !== undefined) setLivrPrenom(data.livrPrenom || "");
+          if (data.livr_complement_nom !== undefined) setLivrComplementNom(data.livr_complement_nom || "");
+          if (data.livrRue !== undefined) setLivrRue(data.livrRue || "");
+          if (data.livrRue2 !== undefined) setLivrRue2(data.livrRue2 || "");
+          if (data.livrNumero !== undefined) setLivrNumero(data.livrNumero || "");
+          if (data.livrNpa !== undefined) setLivrNpa(data.livrNpa || "");
+          if (data.livrVille !== undefined) setLivrVille(data.livrVille || "");
+          if (data.livrTel !== undefined) setLivrTel(data.livrTel || "");
+
+          // Lignes + remises + services
+          if (Array.isArray(data.lines)) {
+            setLines(cloneLines(data.lines));
+            // Marque les ids hérités de la commande → bridage qté (Patch bridage)
+            setInheritedQty(new Map(data.lines.map((l: { id: string; qty: number }) => [l.id, l.qty])));
+          }
+          if (data.discount !== undefined) setDiscount(String(data.discount ?? "0"));
+          if (data.discountPercent !== undefined) setDiscountPercent(String(data.discountPercent ?? "0"));
+          if (data.enabledServices) setEnabledServices({ ...initialEnabledServices, ...data.enabledServices });
+          if (data.servicePrices) setServicePrices({ ...initialServicePrices, ...data.servicePrices });
+
+          // Notes + métadonnées
+          if (data.remarks !== undefined) setRemarks(data.remarks || "");
+          if (data.notesInternes !== undefined) setNotesInternes(data.notesInternes || "");
+          if (Array.isArray(data.ambianceImages)) setAmbianceImages(data.ambianceImages);
+          if (data.leadTime) setLeadTime(data.leadTime);
+          if (data.validiteDuree) setValiditeDuree(data.validiteDuree);
+          if (data.accesLivraison !== undefined) setAccesLivraison(data.accesLivraison || "");
+          if (data.manualRounding !== undefined) setRoundingStr(data.manualRounding || "");
+
+          if (o.updated_at) setLastSavedAt(new Date(o.updated_at));
+          setSaveStatus("saved");
+          setInitialLoadStatus("ready");
+        } catch (err) {
+          if (cancelled) return;
+          setInitialLoadError(String(err));
+          setInitialLoadStatus("error");
+        }
+      })();
+
+      return () => { cancelled = true; };
+    }, [revisionMode, commandeSlug]);
 
   // ────────────────────────────────────────────────────────────────────
   // GESTION DU MODE BROUILLON (Session 3)
@@ -1156,8 +1287,11 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
       // que setInterval voit toujours les dernières valeurs si on relance l'effet
       // sur changement de dépendance. Ici on dépend uniquement de isDirty et
       // isSaving pour relancer le timer, ce qui suffit.
-      if (initialLoadStatus !== "ready") return;
-      if (!isDirty || isSaving) return;
+      if (revisionMode) return; // En révision, JAMAIS d'auto-save : un décrément
+                                  // stock + une version archivée ne doivent suivre
+                                  // qu'un clic explicite « Enregistrer », pas un timer.
+        if (initialLoadStatus !== "ready") return;
+        if (!isDirty || isSaving) return;
       if (!nom.trim() || !email.trim() || !commercial.trim()) return;
       saveDraft({ silent: true });
     }, 2 * 60 * 1000); // 2 minutes
@@ -1312,10 +1446,12 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
           <div>
             <div className="jc-eyebrow">Jardin-Confort · Brouillon</div>
             <h1 className="jc-title">
-              {currentSlug && offerNumber
-                ? `Brouillon ${offerNumber} — ${formType}`
-                : `Nouveau brouillon — ${formType}`}
-            </h1>
+                {revisionMode
+                  ? `Révision ${offerNumber} — ${formType}`
+                  : currentSlug && offerNumber
+                  ? `Brouillon ${offerNumber} — ${formType}`
+                  : `Nouveau brouillon — ${formType}`}
+              </h1>
           </div>
         </div>
         <div className="jc-toolbar">
@@ -1401,10 +1537,11 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
               initialLoadStatus === "transformed" ? "Brouillon transformé en offre — modification interdite" :
               initialLoadStatus === "not_found"   ? "Brouillon introuvable" :
               initialLoadStatus === "error"       ? "Erreur de chargement" :
-              "Enregistrer le brouillon dans Supabase"
+                revisionMode ? "Enregistrer la révision de la commande" :
+                "Enregistrer le brouillon dans Supabase"
             }
           >
-            {isSaving ? "⏳ Enregistrement…" : currentSlug ? "💾 Enregistrer" : "💾 Créer le brouillon"}
+            {isSaving ? "⏳ Enregistrement…" : revisionMode ? "💾 Enregistrer la révision" : currentSlug ? "💾 Enregistrer" : "💾 Créer le brouillon"}
           </button>
           {/* ── Bouton "Transformer en offre" ──
               Visible uniquement en mode édition (currentSlug !== null), pas en
@@ -1463,8 +1600,13 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
           <button onClick={() => window.location.reload()}>🔄 Réessayer</button>
         </div>
       )}
-      {initialLoadStatus === "transformed" && transformedInfo && (
-        <div className="jc-url-banner screenOnly" style={{ background: "rgba(245,158,11,0.12)", borderColor: "rgba(245,158,11,0.3)" }}>
+      {revisionMode && commandeSlug && (
+          <div className="jc-url-banner screenOnly" style={{ background: "rgba(245,158,11,0.12)", borderColor: "rgba(245,158,11,0.3)" }}>
+            🔄 <strong>Révision de commande {offerNumber || commandeSlug}</strong> — tu modifies une commande validée. Les retraits et baisses de quantité partent en attente de remise en stock ; pour ajouter des pièces, utilise le picker (stock temps réel). Une nouvelle version sera archivée à l&apos;enregistrement.
+          </div>
+        )}
+        {initialLoadStatus === "transformed" && transformedInfo && (
+          <div className="jc-url-banner screenOnly" style={{ background: "rgba(245,158,11,0.12)", borderColor: "rgba(245,158,11,0.3)" }}>
           <span>
             ⚠ Ce brouillon a été transformé en offre le{" "}
             {new Date(transformedInfo.transformed_at).toLocaleString("fr-CH")}.
@@ -2292,7 +2434,16 @@ export default function DraftFormulaire({ initialSlug }: DraftFormulaireProps) {
                             </div>
                           </td>
                           <td style={{ paddingRight: 16 }}>
-                            <input className="jc-qty-input no-spin" type="number" min="1" value={line.qty} onChange={(e) => updateLine(line.id, { qty: Math.max(1, parseInt(e.target.value || "1", 10)) })} onFocus={(e) => e.currentTarget.select()} />
+                            <input className="jc-qty-input no-spin" type="number" min="1" max={revisionMode && inheritedQty.has(line.id) ? inheritedQty.get(line.id) : undefined} value={line.qty} onChange={(e) => {
+                              const raw = Math.max(1, parseInt(e.target.value || "1", 10));
+                              const cap = revisionMode && inheritedQty.has(line.id) ? (inheritedQty.get(line.id) as number) : Infinity;
+                              if (raw > cap) {
+                                alert(`Impossible d'augmenter la quantité d'une ligne existante (quantité d'origine : ${cap}).\n\nPour augmenter la quantité d'un article Shopify déjà sur la commande, ajoutez une nouvelle ligne avec le même article, comme d'habitude.\n\nC'est volontaire : la ligne d'origine conserve l'information de stock du jour de la commande. La nouvelle ligne, elle, repart du stock temps réel — chacune dit ainsi la vérité de son moment.`);
+                                updateLine(line.id, { qty: cap });
+                                return;
+                              }
+                              updateLine(line.id, { qty: raw });
+                            }} onFocus={(e) => e.currentTarget.select()} />
                           </td>
                           <td style={{ paddingLeft: 12 }}>
                             <input

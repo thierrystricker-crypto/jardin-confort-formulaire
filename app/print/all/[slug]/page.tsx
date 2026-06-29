@@ -64,6 +64,11 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
   const [dateDocument, setDateDocument] = useState<string>("");
   const [typeDocument, setTypeDocument] = useState<string>("Commande");
   const [printedAt, setPrintedAt] = useState("");
+  // ─── Chantier revision-commandes : states ───
+  type RevisionRetrait = { sku: string; title: string; qty: number; date: string };
+  const [articlesRetires, setArticlesRetires] = useState<RevisionRetrait[]>([]);
+  const [revisionCount, setRevisionCount] = useState(0);
+  const [idsOrigine, setIdsOrigine] = useState<string[]>([]);
   const barcodesRendered = useRef(false);
 
   // ─── Mount côté client uniquement (évite erreur hydratation #418) ───
@@ -93,6 +98,32 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               ambianceImages: offreData.ambianceImages || [],
             });
           }
+          // Revisions : marqueur version + articles retires (commande only).
+            if (json.offre?.type_document === "Commande") {
+              try {
+                const rRes = await fetch(`/api/revisions?commande_slug=${encodeURIComponent(slug)}`);
+                if (rRes.ok) {
+                  const rJson = await rRes.json();
+                  const revs = (rJson.revisions || []) as {
+                    created_at: string;
+                    diff?: { retraits?: { sku: string; title: string; qty: number }[] };
+                  }[];
+                  const cumul: { sku: string; title: string; qty: number; date: string }[] = [];
+                  for (const rev of revs) {
+                    for (const ret of rev.diff?.retraits || []) {
+                      if ((ret.qty || 0) > 0) {
+                        cumul.push({ sku: ret.sku || "", title: ret.title || "", qty: ret.qty, date: rev.created_at });
+                      }
+                    }
+                  }
+                  setArticlesRetires(cumul);
+                  setRevisionCount(rJson.count || 0);
+                  setIdsOrigine(Array.isArray(rJson.idsOrigine) ? rJson.idsOrigine : []);
+                }
+              } catch {
+                // marqueur non bloquant
+              }
+            }
         }
       } catch (e) {
         console.error("Erreur chargement commande:", e);
@@ -193,7 +224,35 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
   ];
 
   const validationUrl = `https://offres.jardin-confort.ch/offre/${offreSlug || numeroAffiche.toLowerCase().replace(/\s+/g, "-")}`;
-
+// ─── Chantier revision-commandes : socle (fiche de travail + marqueur) ───
+  const isLigneAjoutee = (lineId?: string): boolean =>
+    revisionCount >= 1 && !!lineId && !idsOrigine.includes(lineId);
+  // Date de l'etat du stock par ligne (format JJ.MM.AA) :
+  // - hors commande -> date du jour ; origine -> date commande ; ajoutee -> date de l'id
+  const dateStockLigne = (line: QuoteLine): string => {
+    const fmt = (ms: number) =>
+      new Date(ms).toLocaleDateString("fr-CH", {
+        day: "2-digit", month: "2-digit", year: "2-digit",
+      });
+    if (typeDocument !== "Commande") return printedAt.split(" ")[0];
+    if (isLigneAjoutee(line.id)) {
+      const ms = parseInt((line.id || "").replace(/\D/g, ""), 10);
+      if (!isNaN(ms)) return fmt(ms);
+    }
+    if (dateDocument) {
+      const t = Date.parse(dateDocument);
+      if (!isNaN(t)) return fmt(t);
+    }
+    return printedAt.split(" ")[0];
+  };
+  const nbAjouts = data.lines.filter(
+    (l) => l.type !== "comment" && l.type !== "media" && isLigneAjoutee(l.id)
+  ).length;
+  const nbRetraits = articlesRetires.length;
+  const showAlerteRevision = nbRetraits > 0 || nbAjouts > 0;
+  const showVersionMarker = typeDocument === "Commande" && revisionCount >= 1;
+  const versionVivante = revisionCount + 1;
+  const versionSuffix = showVersionMarker ? ` \u00B7 V${versionVivante}` : "";
   // Variables fiche de travail
   const livrSocieteFT = data.livrDiff ? data.livrSociete : data.societe;
   const livrNomFT     = data.livrDiff ? data.livrNom     : data.nom;
@@ -333,6 +392,49 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .ft-table thead th.ft-th-right { text-align: right; }
         .ft-table tbody tr td { padding: 5px 4px; border-bottom: 1px solid #d1d5db; vertical-align: middle; font-size: 11.5px; }
         .ft-table tbody tr.ft-row-product:nth-child(even) td { background: ${LIGHT}; }
+        .ft-table tbody tr.ft-row-ajoutee td { background: #e9f7ef !important; }
+        .ft-item-ajoutee-badge {
+          display: block;
+          width: fit-content;
+          margin-top: 3px;
+          background: #1e7e45;
+          color: white;
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          padding: 1px 6px;
+          border-radius: 3px;
+        }
+          .ft-alerte-revision {
+          display: flex; align-items: center; gap: 10px;
+          margin: 3mm 0 2mm; padding: 7px 12px;
+          background: #fef2f2; border: 2px solid #dc2626; border-radius: 6px;
+          color: #7f1d1d; font-size: 11.5px; font-weight: 700;
+          page-break-after: avoid;
+        }
+        .ft-alerte-revision-icon {
+          flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+          width: 18px; height: 18px; border-radius: 50%;
+          background: #dc2626; color: white; font-weight: 900; font-size: 12px;
+        }
+        .ft-retires-block {
+          margin-top: 5mm; border: 2px solid #b91c1c; border-radius: 6px;
+          padding: 9px 12px; background: #fdf0f0;
+        }
+        .ft-retires-head { page-break-inside: avoid; page-break-after: avoid; }
+        .ft-retires-title {
+          display: inline-block; background: #b91c1c; color: white;
+          padding: 3px 10px; border-radius: 3px; font-size: 11px;
+          font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px;
+        }
+        .ft-retires-intro { font-size: 10px; color: #7f1d1d; margin-bottom: 8px; }
+        .ft-retire-item {
+          display: flex; justify-content: space-between; gap: 12px;
+          padding: 3px 0; border-top: 1px dashed #e7b3b3; page-break-inside: avoid;
+        }
+        .ft-retire-text { text-decoration: line-through; color: #7f1d1d; font-size: 11px; }
+        .ft-retire-date { white-space: nowrap; font-size: 10px; color: #9a3a3a; }
         .ft-td-img { width: 56px; vertical-align: middle; text-align: center; }
         .ft-td-img img { max-width: 50px; max-height: 50px; object-fit: contain; }
         .ft-td-img-placeholder { width: 50px; height: 50px; margin: 0 auto; border: 1px dashed #d1d5db; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #9ca3af; }
@@ -692,7 +794,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       `}</style>
 
       <div className="printall-info">
-        🖨 Jeu complet — {numeroAffiche} · 5 pages
+        🖨 Jeu complet — {numeroAffiche}{versionSuffix} · 5 pages
       </div>
       <button className="print-btn-all" onClick={() => window.print()}>
         🖨 Imprimer
@@ -703,9 +805,20 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       {/* ═══════════════════════════════════════════════════════════════════ */}
       <div className="doc-wrap-all">
         <div className="ft-banner">
-          <span>📋 FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · ${numeroAffiche}` : ""}</span>
+          <span>📋 FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · ${numeroAffiche}${versionSuffix}` : ""}</span>
           <span className="ft-banner-printed">Imprimée le {printedAt}</span>
         </div>
+        {showAlerteRevision && (
+          <div className="ft-alerte-revision">
+            <span className="ft-alerte-revision-icon">!</span>
+            <span>
+              COMMANDE RÉVISÉE
+              {nbRetraits > 0 ? ` · ${nbRetraits} article${nbRetraits > 1 ? "s" : ""} retiré${nbRetraits > 1 ? "s" : ""}` : ""}
+              {nbAjouts > 0 ? ` · ${nbAjouts} article${nbAjouts > 1 ? "s" : ""} ajouté${nbAjouts > 1 ? "s" : ""}` : ""}
+              {" "}— voir le détail en bas de la fiche.
+            </span>
+          </div>
+        )}
 
         <div className="ft-header">
           <div className="ft-header-left">
@@ -715,7 +828,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
             <div className="ft-type">Fiche de travail</div>
             <table className="ft-meta-table">
               <tbody>
-                <tr><td className="ft-meta-label">{numeroLabel}</td><td><strong>{numeroAffiche}</strong></td></tr>
+                <tr><td className="ft-meta-label">{numeroLabel}</td><td><strong>{numeroAffiche}{versionSuffix}</strong></td></tr>
                 {data.reference && <tr><td className="ft-meta-label">Référence</td><td>{data.reference}</td></tr>}
                 <tr><td className="ft-meta-label">{dateLabel}</td><td>{formatDate(dateDocument)}</td></tr>
                 <tr><td className="ft-meta-label">Commercial</td><td>{data.commercial}</td></tr>
@@ -750,7 +863,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     : `${livrNomFT || ""} ${livrPrenomFT || ""}`.trim()}
                 </div>
                 <div className="ft-addr-client-hero-meta">
-                  📅 {formatDate(dateDocument)} · {numeroAffiche}
+                  📅 {formatDate(dateDocument)} · {numeroAffiche}{versionSuffix}
                 </div>
               </div>
 
@@ -868,7 +981,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
               const lineTotal = line.qty * line.unitPrice - (line.lineDiscount || 0);
               const isMultiQty = line.qty > 1;
               return (
-                <tr key={line.id} className="ft-row-product">
+                <tr key={line.id} className={`ft-row-product${isLigneAjoutee(line.id) ? " ft-row-ajoutee" : ""}`}>
                   <td className="ft-td-img">
                     {line.image ? <img src={line.image} alt="" /> : <div className="ft-td-img-placeholder">{isCustom ? "✏️" : "—"}</div>}
                   </td>
@@ -887,6 +1000,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                     <div className="ft-item-title">
                       {isCustom && <span className="ft-item-custom-badge">À la volée</span>}
                       {line.title}
+                      {isLigneAjoutee(line.id) && <span className="ft-item-ajoutee-badge">+ AJOUTÉ</span>}
                     </div>
                     {line.sku ? (
                       <>
@@ -915,7 +1029,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                   </td>
                   <td className="ft-td-stock">
                     {stockDisplay}
-                    <span className="ft-stock-date">au {printedAt.split(" ")[0]}</span>
+                    <span className="ft-stock-date">au {dateStockLigne(line)}</span>
                   </td>
                 </tr>
               );
@@ -991,6 +1105,30 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
             </table>
           </div>
         </div>
+        {articlesRetires.length > 0 && (
+          <div className="ft-retires-block">
+            <div className="ft-retires-head">
+              <div className="ft-retires-title">Articles retirés des révisions</div>
+              <div className="ft-retires-intro">
+                Articles retirés ou réduits lors des révisions successives de cette
+                commande (cumulatif). Ne pas préparer ces articles.
+              </div>
+            </div>
+            {articlesRetires.map((r, i) => {
+              const d = new Date(r.date).toLocaleDateString("fr-CH", {
+                day: "2-digit", month: "2-digit", year: "numeric",
+              });
+              return (
+                <div className="ft-retire-item" key={i}>
+                  <span className="ft-retire-text">
+                    {r.qty}&times; {r.title}{r.sku ? ` (${r.sku})` : ""}
+                  </span>
+                  <span className="ft-retire-date">retiré le {d}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
@@ -1047,7 +1185,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
 
           <div className="cc-header-right">
             <div className="cc-addr-window">
-              <div className="cc-addr-ref">{numeroAffiche || data.offerNumber}</div>
+              <div className="cc-addr-ref">{numeroAffiche || data.offerNumber}{versionSuffix}</div>
               {data.societe && <div className="cc-addr-line">{data.societe}</div>}
               <div className="cc-addr-name">{data.nom} {data.prenom}</div>
               {data.complement_nom && <div className="cc-addr-line">{data.complement_nom}</div>}
@@ -1445,7 +1583,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
 
           <div className="pg-order-info">
             <div className="pg-order-info-line">
-              <strong>N° de commande :</strong> {numeroAffiche || data.offerNumber}
+              <strong>N° de commande :</strong> {numeroAffiche || data.offerNumber}{versionSuffix}
             </div>
             <div className="pg-order-info-line">
               <strong>Date :</strong> {formatDate(data.date)}
@@ -1521,7 +1659,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
 
           <div className="bl-header-right">
             <div className="bl-addr-window">
-              <div className="bl-addr-ref">{numeroAffiche || data.offerNumber}</div>
+              <div className="bl-addr-ref">{numeroAffiche || data.offerNumber}{versionSuffix}</div>
               {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
               {(data as any).deliveryMode === "À l'emporter" ? (
                 <>
@@ -1741,7 +1879,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 <div className="fb-doc-subtitle">Fiche d&apos;archive — Classeur papier · Conservation interne</div>
               </div>
               <div className="fb-header-right">
-                <div className="fb-doc-num">{numeroAffiche}</div>
+                <div className="fb-doc-num">{numeroAffiche}{versionSuffix}</div>
                 <div className="fb-doc-date">{typeDocument === "Offre" ? "N° offre" : "N° commande"}</div>
                 <div className="fb-doc-date-big">{formatDate(dateDocument || data.date)}</div>
                 {data.reference && <div className="fb-doc-date" style={{fontStyle: "italic", marginTop: "2mm"}}>Réf. {data.reference}</div>}

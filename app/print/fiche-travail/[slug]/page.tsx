@@ -159,6 +159,21 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
     fields_changed: Record<string, { old: unknown; new: unknown }>;
   };
   const [corrections, setCorrections] = useState<CorrectionEntry[]>([]);
+  // --- Chantier revision-commandes (S4) : articles retires cumulatifs ---
+  // Reconstruits a l'affichage depuis tous les diff.retraits de commandes_revisions.
+  // Chaque retrait porte la date de la revision ou il a ete decide.
+  type RevisionRetrait = {
+    sku: string;
+    title: string;
+    qty: number;
+    date: string; // created_at de la revision
+  };
+  const [articlesRetires, setArticlesRetires] = useState<RevisionRetrait[]>([]);
+  // Version vivante de la commande (= nb revisions archivees + 1). 0 si jamais revisee.
+  const [revisionCount, setRevisionCount] = useState(0);
+  // ids des lignes presentes a l'origine (snapshot V1). Une ligne du data
+  // vivant dont l'id n'est PAS la-dedans = ligne ajoutee lors d'une revision.
+  const [idsOrigine, setIdsOrigine] = useState<string[]>([]);
   // ──────────────────────────────────────────────────────────────────
   const [printedAt] = useState(formatDateTime());
   const barcodesRendered = useRef(false);
@@ -200,12 +215,42 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
         const cRes = await fetch(`/api/corrections?entity_type=${entityType}&entity_slug=${encodeURIComponent(s)}`);
         if (cRes.ok) {
-          const cJson = await cRes.json();
-          setCorrections(cJson.corrections || []);
+            const cJson = await cRes.json();
+            setCorrections(cJson.corrections || []);
+          }
+
+          // Revisions (articles retires cumulatifs + version vivante).
+          // Uniquement pertinent pour une commande ; sur une offre la route
+          // renverra simplement une liste vide.
+          if (entityType === "commande") {
+            const rRes = await fetch(`/api/revisions?commande_slug=${encodeURIComponent(s)}`);
+            if (rRes.ok) {
+              const rJson = await rRes.json();
+              const revs = (rJson.revisions || []) as {
+                created_at: string;
+                diff?: { retraits?: { sku: string; title: string; qty: number }[] };
+              }[];
+              const cumul: RevisionRetrait[] = [];
+              for (const rev of revs) {
+                for (const ret of rev.diff?.retraits || []) {
+                  if ((ret.qty || 0) > 0) {
+                    cumul.push({
+                      sku: ret.sku || "",
+                      title: ret.title || "",
+                      qty: ret.qty,
+                      date: rev.created_at,
+                    });
+                  }
+                }
+              }
+              setArticlesRetires(cumul);
+              setRevisionCount(rJson.count || 0);
+              setIdsOrigine(Array.isArray(rJson.idsOrigine) ? rJson.idsOrigine : []);
+            }
+          }
+        } catch (e) {
+          console.error("Erreur chargement corrections:", e);
         }
-      } catch (e) {
-        console.error("Erreur chargement corrections:", e);
-      }
 
       setReady(true);
     }
@@ -313,6 +358,51 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
   // Libellé contextuel pour le numéro de document
   const numeroLabel = typeDocument === "Offre" ? "N° d'offre" : "N° de commande";
   const dateLabel = typeDocument === "Offre" ? "Date offre" : "Date commande";
+
+    // Une ligne est "ajoutee en revision" si la commande a ete revisee ET que
+    // son id n'etait pas present a l'origine (snapshot V1). Matching par id
+    // exact -> gere le cas de deux exemplaires du meme article (un d'origine,
+    // un ajoute) qui partagent sku + titre mais ont des id distincts.
+    const isLigneAjoutee = (lineId?: string): boolean =>
+      revisionCount >= 1 && !!lineId && !idsOrigine.includes(lineId);
+    // Date de l'etat du stock par ligne :
+    // - hors commande (stock dynamique) -> date du jour
+    // - commande, ligne d'origine -> date de la commande (fige a la conversion)
+    // - commande, ligne ajoutee en revision -> date extraite de l'id (fige a l'ajout)
+    const dateStockLigne = (line: QuoteLine): string => {
+      const jour = (s: string) => s.split(" ")[0];
+      if (typeDocument !== "Commande") return jour(printedAt);
+      if (isLigneAjoutee(line.id)) {
+        const ms = parseInt((line.id || "").replace(/\D/g, ""), 10);
+        if (!isNaN(ms)) {
+          return new Date(ms).toLocaleDateString("fr-CH", {
+            day: "2-digit", month: "2-digit", year: "2-digit",
+          });
+        }
+      }
+      if (dateDocument) {
+        const t = Date.parse(dateDocument);
+        if (!isNaN(t)) {
+          return new Date(t).toLocaleDateString("fr-CH", {
+            day: "2-digit", month: "2-digit", year: "2-digit",
+          });
+        }
+      }
+      return jour(printedAt);
+    };
+
+    // Compteur de lignes ajoutees (pour la bande d'alerte en tete de fiche).
+    const nbAjouts = data.lines.filter(
+      (l) => l.type !== "comment" && l.type !== "media" && isLigneAjoutee(l.id)
+    ).length;
+    const nbRetraits = articlesRetires.length;
+    const showAlerteRevision = nbRetraits > 0 || nbAjouts > 0;
+
+    // Marqueur de version vivante (chantier revision-commandes).
+    // " . Vn" uniquement sur une COMMANDE deja revisee. Vivante = count + 1.
+    const showVersionMarker = typeDocument === "Commande" && revisionCount >= 1;
+    const versionVivante = revisionCount + 1;
+    const versionSuffix = showVersionMarker ? ` \u00B7 V${versionVivante}` : "";
 
   return (
     <>
@@ -574,6 +664,23 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
           font-size: 11.5px;
         }
         .doc-table tbody tr.row-product:nth-child(even) td { background: ${LIGHT}; }
+          /* Ligne ajoutee lors d'une revision : fond vert leger sur toute la
+             ligne. Place APRES le zebrage pour primer sur le nth-child(even). */
+          .doc-table tbody tr.row-ajoutee td { background: #e9f7ef !important; }
+          .item-ajoutee-badge {
+            display: block;
+            width: fit-content;
+            margin-top: 3px;
+            background: #1e7e45;
+            color: white;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            padding: 1px 6px;
+            border-radius: 3px;
+            vertical-align: middle;
+          } }
 
         .td-img { width: 56px; vertical-align: middle; text-align: center; }
         .td-img img { max-width: 50px; max-height: 50px; object-fit: contain; }
@@ -889,7 +996,80 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .doc-correction-item {
           page-break-inside: avoid;
         }
-        .doc-corrections-title {
+        .doc-alerte-revision {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 4mm 0 2mm;
+            padding: 8px 14px;
+            background: #fef2f2;
+            border: 2px solid #dc2626;
+            border-radius: 6px;
+            color: #7f1d1d;
+            font-size: 12px;
+            font-weight: 700;
+            page-break-after: avoid;
+          }
+          .doc-alerte-revision-icon {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #dc2626;
+            color: white;
+            font-weight: 900;
+            font-size: 13px;
+          }
+          .doc-retires-block {
+            margin-top: 6mm;
+            border: 2px solid #b91c1c;
+            border-radius: 6px;
+            padding: 10px 14px;
+            background: #fdf0f0;
+          }
+          .doc-retires-head {
+            page-break-inside: avoid;
+            page-break-after: avoid;
+          }
+          .doc-retires-title {
+            display: inline-block;
+            background: #b91c1c;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+          }
+          .doc-retires-intro {
+            font-size: 10px;
+            color: #7f1d1d;
+            margin-bottom: 8px;
+          }
+          .doc-retire-item {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 3px 0;
+            border-top: 1px dashed #e7b3b3;
+            page-break-inside: avoid;
+          }
+          .doc-retire-text {
+            text-decoration: line-through;
+            color: #7f1d1d;
+            font-size: 11px;
+          }
+          .doc-retire-date {
+            white-space: nowrap;
+            font-size: 10px;
+            color: #9a3a3a;
+          }
+          .doc-corrections-title {
           display: inline-block;
           background: #dc2626;
           color: white;
@@ -977,9 +1157,21 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
         {/* BANDEAU */}
         <div className="doc-banner">
-          <span>📋 FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · ${numeroAffiche}` : ""}</span>
+          <span>📋 FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · ${numeroAffiche}${versionSuffix}` : ""}</span>
           <span className="doc-banner-printed">Imprimée le {printedAt}</span>
         </div>
+
+{showAlerteRevision && (
+          <div className="doc-alerte-revision">
+            <span className="doc-alerte-revision-icon">!</span>
+            <span>
+              COMMANDE RÉVISÉE
+              {nbRetraits > 0 ? ` \u00B7 ${nbRetraits} article${nbRetraits > 1 ? "s" : ""} retiré${nbRetraits > 1 ? "s" : ""}` : ""}
+              {nbAjouts > 0 ? ` \u00B7 ${nbAjouts} article${nbAjouts > 1 ? "s" : ""} ajouté${nbAjouts > 1 ? "s" : ""}` : ""}
+              {" "}&mdash; voir le détail en bas de la fiche (lignes vertes ajoutées, bloc rouge retirés).
+            </span>
+          </div>
+        )}
 
         {/* HEADER 3 colonnes */}
         <div className="doc-header">
@@ -992,7 +1184,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               <tbody>
                 <tr>
                   <td className="doc-meta-label">{numeroLabel}</td>
-                  <td><strong>{numeroAffiche}</strong></td>
+                  <td><strong>{numeroAffiche}{versionSuffix}</strong></td>
                 </tr>
                 {data.reference && (
                   <tr><td className="doc-meta-label">Référence</td><td>{data.reference}</td></tr>
@@ -1035,7 +1227,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                     : `${livrNom || ""} ${livrPrenom || ""}`.trim()}
                 </div>
                 <div className="doc-addr-client-hero-meta">
-                  📅 {formatDate(dateDocument)} · {numeroAffiche}
+                  📅 {formatDate(dateDocument)} · {numeroAffiche}{versionSuffix}
                 </div>
               </div>
 
@@ -1173,8 +1365,8 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
               const isMultiQty = line.qty > 1;
 
               return (
-                <tr key={line.id} className="row-product">
-                  <td className="td-img">
+                  <tr key={line.id} className={`row-product${isLigneAjoutee(line.id) ? " row-ajoutee" : ""}`}>
+                    <td className="td-img">
                     {line.image ? (
                       <img src={line.image} alt="" />
                     ) : (
@@ -1199,6 +1391,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                     <div className="item-title">
                       {isCustom && <span className="item-custom-badge">À la volée</span>}
                       {line.title}
+                      {isLigneAjoutee(line.id) && <span className="item-ajoutee-badge">+ AJOUTÉ</span>}
                     </div>
                     {line.sku ? (
                       <>
@@ -1234,7 +1427,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
                   <td className="td-stock">
                     {stockDisplay}
-                    <span className="stock-date">au {printedAt.split(" ")[0]}</span>
+                    <span className="stock-date">au {dateStockLigne(line)}</span>
                   </td>
                 </tr>
               );
@@ -1380,6 +1573,32 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
             commercial qui tournera la page pour voir le détail. Contraire
             au pattern "tout ou rien" qui risquerait de masquer la
             notification entière sur une page suivante non lue. */}
+        {articlesRetires.length > 0 && (
+          <div className="doc-retires-block">
+            <div className="doc-retires-head">
+              <div className="doc-retires-title">Articles retirés des révisions</div>
+              <div className="doc-retires-intro">
+                Articles retirés ou réduits lors des révisions successives de cette
+                commande (cumulatif). Ne pas préparer ces articles.
+              </div>
+            </div>
+            {articlesRetires.map((r, i) => {
+              const d = new Date(r.date).toLocaleDateString("fr-CH", {
+                day: "2-digit", month: "2-digit", year: "numeric",
+              });
+              return (
+                <div className="doc-retire-item" key={i}>
+                  <span className="doc-retire-text">
+                    {r.qty}&times; {r.title}
+                    {r.sku ? ` (${r.sku})` : ""}
+                  </span>
+                  <span className="doc-retire-date">retiré le {d}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {corrections.length > 0 && (
           <div className="doc-corrections-block">
             <div className="doc-corrections-head">

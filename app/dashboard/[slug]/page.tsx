@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import CorrectionDrawer from "@/components/CorrectionDrawer";
 import CorrectionsHistoryBlock from "@/components/CorrectionsHistoryBlock";
+import RevisionsHistoryBlock from "@/components/RevisionsHistoryBlock";
 import StockMovementsBlock from "@/components/StockMovementsBlock";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
@@ -1371,6 +1372,15 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                 >
                   ✏️ Corriger
                 </button>
+                {offre.type_document === "Commande" && (
+                  <a
+                  href={`/dashboard/${offre.slug}/reviser`}
+                    className="rounded-xl border border-amber-500/30 bg-amber-500/15 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/20"
+                    title="Réviser la commande (prix, quantité, articles) avec piste d'audit"
+                  >
+                    🔄 Réviser
+                  </a>
+                )}
                 {isOffre&&(
                   <>
                     <button type="button" onClick={convertirEnCommande} disabled={converting}
@@ -1447,6 +1457,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
             </section>
 
 <CorrectionsHistoryBlock entityType={offre.type_document === "Commande" ? "commande" : "offre"} entitySlug={slug} />
+{offre.type_document === "Commande" && <RevisionsHistoryBlock commandeSlug={slug} />}
 
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
               <div className="mb-3 flex items-start justify-between gap-3 flex-wrap">
