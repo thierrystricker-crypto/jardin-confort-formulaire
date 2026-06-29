@@ -675,3 +675,43 @@ restent SANS marqueur (non touchés).
 | S3 Dashboard remises | ✅ |
 | S4 Documents + dashboard | ✅ validé runtime |
 | S5 Merge prod | ⬜ à faire |
+
+---
+
+## ✅ Session 5 — Tests Preview + fix date stock par ligne (29.06.2026)
+
+Branche `feature/revision-commandes`, commits `6403c59` → `de8327e`. Tests Preview Vercel validés, prêt pour merge prod.
+
+### Tests Preview Vercel — tous validés
+Déploiement preview du commit testé via `/api/revisions?commande_slug=...` (route inexistante avant S4 → confirme que le bon code est déployé).
+- **B — commande NON révisée** (`cmd-80723-exz55`) : vierge partout (pas de bloc/bande/marqueur). ✅
+- **C — offre** (`dev-2026-422-2ada0`) : vierge (garde-fou `type_document === "Commande"` tient). ✅ (offre sans articles, test à reprendre idéalement avec articles)
+- **A — commande révisée** (`cmd-80666-l8i6x`) : tout s'affiche comme en local (V7, badges, retraits, historique). ✅
+- **D — révision fraîche** sur `cmd-80666` (preview) : ajout tapis Lafuma + retrait chaise Rouille → commande passe à V8, ajout en vert + retrait dans bloc rouge. Ajout ET retrait fonctionnent. ✅
+
+### ⚠️ FAUSSE ALERTE stock figé — résolue (à retenir)
+Suspicion initiale : les anciennes lignes affichaient le stock du jour (« 7 pces ») → cru à une réécriture du stock figé par la révision.
+**Diagnostic** : SQL sur snapshots `commandes_revisions` → la chaise `shopify-1782435127128` avait `stock_avant="7"` DÉJÀ en V6 (avant la révision test) ET en V7. Donc 7 est sa valeur FIGÉE légitime, pas une réécriture. Confirmé par l'historique Shopify (stock réel ~7 sur la période). `stockFrozen`/`stockRefreshedAt` = null.
+**Leçon** : un stock figé qui vaut la même valeur qu'aujourd'hui n'est PAS un bug — toujours vérifier via les snapshots avant de conclure. AUCUN bug de réécriture.
+
+### Fix date stock par ligne (vrai problème, corrigé)
+Problème réel : la cellule stock affichait `au {printedAt}` = **date du jour codée en dur**, trompeur pour un stock figé de commande. Code PRÉEXISTANT à la S4 (pas une régression).
+**Solution** : l'`id` de ligne (`shopify-<ms>` / `custom-<ms>`) contient un timestamp = date de figeage de la ligne. Helper `dateStockLigne(line)` :
+- hors commande (offre/brouillon, stock dynamique) → date du jour (`printedAt`)
+- commande, ligne d'origine (id ∈ idsOrigine) → date de la commande (`dateDocument`, figée à la conversion offre→commande)
+- commande, ligne ajoutée en révision (id ∉ idsOrigine) → date extraite de l'id (figée à l'ajout)
+Format harmonisé **JJ.MM.AA** (2 chiffres) sur les 2 templates.
+Appliqué : `app/print/fiche-travail/[slug]` (helper ligne ~372, JSX ligne ~1422) et `app/print/all/[slug]` section ft (helper après socle ~229, JSX `ft-stock-date`).
+Validé runtime cmd-80666 : tapis origine « au 13.06.26 », chaises ajoutées « au 26.06.26 », tapis ajouté « au 29.06.26 ».
+
+### Reste à faire
+- Merge prod (`--no-ff`, préserver historique) + smoke test prod (commande révisée + non révisée + offre) + cleanup branche.
+- Vraie révision `CMD-80695` à faire depuis la PROD après merge (jamais comme cobaye de test — la preview écrit dans la vraie base + décrémente vrai stock Shopify).
+
+### Statut
+| Session | Statut |
+|---|---|
+| S1-S4 | ✅ |
+| S5 tests Preview | ✅ validés |
+| S5 fix date stock | ✅ corrigé |
+| S5 merge prod | ⬜ à faire |
