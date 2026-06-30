@@ -58,6 +58,21 @@ function fmtMoney(v: number|null|undefined) {
 function nomClient(o: OffreRecord) {
   return [o.client_prenom, o.client_nom].filter(Boolean).join(" ") || "—"
 }
+// Normalise une chaîne : minuscules + suppression des accents.
+// "Château" → "chateau", "CHATEAU" → "chateau" → match croisé garanti.
+function normalize(s: string|null|undefined): string {
+  return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+}
+// Score de pertinence d'un texte vis-à-vis du terme recherché (déjà normalisé).
+// Plus le score est BAS, plus c'est pertinent (0 = match exact, 4 = pas de match).
+function matchScore(haystack: string, needleNorm: string): number {
+  const h = normalize(haystack)
+  if (!needleNorm) return 4
+  if (h === needleNorm) return 0          // égalité parfaite
+  if (h.startsWith(needleNorm)) return 1  // commence par
+  if (h.includes(needleNorm)) return 2    // contient
+  return 4                                 // pas de match
+}
 function nomClientDraft(d: DraftRecord) {
   return [d.client_prenom, d.client_nom].filter(Boolean).join(" ") || "—"
 }
@@ -290,13 +305,37 @@ export default function DashboardPage() {
     localStorage.setItem("dashboard-drafts-collapsed", String(draftsCollapsed))
   },[draftsCollapsed])
 
-  // Filtrage des brouillons (commercial global + filtre transformés)
+  // Filtrage des brouillons (commercial global + filtre transformés + recherche)
   const filteredDrafts = useMemo(()=>{
     let list = drafts
     if (commercial !== "all") list = list.filter(d => d.commercial === commercial)
     if (hideTransformedDrafts) list = list.filter(d => !d.archived)
-    return list  // déjà trié updated_at DESC côté API
-  },[drafts,commercial,hideTransformedDrafts])
+    const qNorm = normalize(search.trim())
+    if (qNorm) {
+      const nomD = (d:DraftRecord)=>[d.client_prenom,d.client_nom].filter(Boolean).join(" ")
+      list = list.filter(d =>
+        normalize(nomD(d)).includes(qNorm)||normalize(d.numero_affiche).includes(qNorm)||
+        normalize(d.client_email).includes(qNorm)||normalize(d.client_societe).includes(qNorm)||
+        normalize(d.commercial).includes(qNorm)||normalize(d.reference).includes(qNorm)
+      )
+      // Tri par pertinence (meilleur match en tête), départage updated_at DESC
+      list = [...list].sort((a,b)=>{
+        const sa = Math.min(
+          matchScore(nomD(a),qNorm), matchScore(a.client_societe||"",qNorm),
+          matchScore(a.reference||"",qNorm), matchScore(a.numero_affiche||"",qNorm),
+          matchScore(a.client_email||"",qNorm),
+        )
+        const sb = Math.min(
+          matchScore(nomD(b),qNorm), matchScore(b.client_societe||"",qNorm),
+          matchScore(b.reference||"",qNorm), matchScore(b.numero_affiche||"",qNorm),
+          matchScore(b.client_email||"",qNorm),
+        )
+        if (sa!==sb) return sa-sb
+        return (b.updated_at||"").localeCompare(a.updated_at||"")
+      })
+    }
+    return list  // sans recherche : déjà trié updated_at DESC côté API
+  },[drafts,commercial,hideTransformedDrafts,search])
 
   const draftsActifs = useMemo(()=>{
     const scope = commercial==="all" ? drafts : drafts.filter(d=>d.commercial===commercial)
@@ -334,15 +373,32 @@ export default function DashboardPage() {
     else if(quickFilter==="prob_faible") list=list.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="faible")
     else if(quickFilter==="prob_neutre") list=list.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&(!o.probabilite||o.probabilite==="neutre"))
     if(commercial!=="all") list=list.filter(o=>o.commercial===commercial)
-    if(search.trim()){
-      const q=search.toLowerCase()
+    const qNorm = normalize(search.trim())
+    if(qNorm){
       list=list.filter(o=>
-        nomClient(o).toLowerCase().includes(q)||(o.numero_affiche||"").toLowerCase().includes(q)||
-        (o.client_email||"").toLowerCase().includes(q)||(o.client_ville||"").toLowerCase().includes(q)||
-        (o.commercial||"").toLowerCase().includes(q)||
-        (o.reference||"").toLowerCase().includes(q))
+        normalize(nomClient(o)).includes(qNorm)||normalize(o.numero_affiche).includes(qNorm)||
+        normalize(o.client_email).includes(qNorm)||normalize(o.client_ville).includes(qNorm)||
+        normalize(o.client_societe).includes(qNorm)||
+        normalize(o.commercial).includes(qNorm)||
+        normalize(o.reference).includes(qNorm))
+    }
+    // Quand une recherche est active, on classe par pertinence AVANT le tri colonne.
+    // Le meilleur match (nom > société > référence > numéro > email > ville) remonte en tête.
+    function bestScore(o:OffreRecord): number {
+      return Math.min(
+        matchScore(nomClient(o), qNorm),
+        matchScore(o.client_societe||"", qNorm),
+        matchScore(o.reference||"", qNorm),
+        matchScore(o.numero_affiche||"", qNorm),
+        matchScore(o.client_email||"", qNorm),
+        matchScore(o.client_ville||"", qNorm),
+      )
     }
     return [...list].sort((a,b)=>{
+      if(qNorm){
+        const sa=bestScore(a), sb=bestScore(b)
+        if(sa!==sb) return sa-sb  // pertinence d'abord (0 = meilleur)
+      }
       let av:string|number="",bv:string|number=""
       if(sortKey==="numero"){av=a.id;bv=b.id}
       else if(sortKey==="date"){av=a.date_document||"";bv=b.date_document||""}
