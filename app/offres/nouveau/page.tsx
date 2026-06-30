@@ -844,6 +844,7 @@ const [savedSlug, setSavedSlug]           = useState("");
       if (p.npa) setNpa(p.npa);
       if (p.ville) setVille(p.ville);
       if (p.commercial) setCommercial(p.commercial);
+      if (p.rue) setAdresseChoisie(true);
     } catch { /* ignore */ }
   }, []);
 
