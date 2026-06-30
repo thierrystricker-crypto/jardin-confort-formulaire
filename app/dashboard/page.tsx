@@ -63,15 +63,30 @@ function nomClient(o: OffreRecord) {
 function normalize(s: string|null|undefined): string {
   return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 }
-// Score de pertinence d'un texte vis-à-vis du terme recherché (déjà normalisé).
-// Plus le score est BAS, plus c'est pertinent (0 = match exact, 4 = pas de match).
-function matchScore(haystack: string, needleNorm: string): number {
-  const h = normalize(haystack)
-  if (!needleNorm) return 4
-  if (h === needleNorm) return 0          // égalité parfaite
-  if (h.startsWith(needleNorm)) return 1  // commence par
-  if (h.includes(needleNorm)) return 2    // contient
-  return 4                                 // pas de match
+// Découpe un terme normalisé en mots non vides.
+function tokenize(needleNorm: string): string[] {
+  return needleNorm.split(/\s+/).filter(Boolean)
+}
+// Un ensemble de champs matche-t-il TOUS les mots recherchés ?
+// Chaque mot doit apparaître dans au moins un des champs (ordre libre).
+function matchesAllWords(fields: (string|null|undefined)[], words: string[]): boolean {
+  if (words.length === 0) return false
+  const blob = fields.map(normalize).join(" ")
+  return words.every(w => blob.includes(w))
+}
+// Score de pertinence (BAS = meilleur). Combine match exact de la chaîne
+// complète sur le nom, puis nombre de mots trouvés dans le nom.
+function relevanceScore(nameField: string, allFields: (string|null|undefined)[], needleNorm: string, words: string[]): number {
+  const name = normalize(nameField)
+  if (needleNorm && name === needleNorm) return 0          // nom = terme exact
+  if (needleNorm && name.startsWith(needleNorm)) return 1  // nom commence par le terme entier
+  if (needleNorm && name.includes(needleNorm)) return 2    // nom contient le terme entier
+  // sinon : compter combien de mots tombent dans le nom (plus il y en a, mieux c'est)
+  const hitsInName = words.filter(w => name.includes(w)).length
+  if (hitsInName === words.length) return 3   // tous les mots dans le nom (ordre différent)
+  if (hitsInName > 0) return 4                // certains mots dans le nom
+  // aucun mot dans le nom mais match ailleurs (email, ville…) → score faible
+  return matchesAllWords(allFields, words) ? 5 : 9
 }
 function nomClientDraft(d: DraftRecord) {
   return [d.client_prenom, d.client_nom].filter(Boolean).join(" ") || "—"
@@ -311,25 +326,15 @@ export default function DashboardPage() {
     if (commercial !== "all") list = list.filter(d => d.commercial === commercial)
     if (hideTransformedDrafts) list = list.filter(d => !d.archived)
     const qNorm = normalize(search.trim())
+    const qWords = tokenize(qNorm)
     if (qNorm) {
       const nomD = (d:DraftRecord)=>[d.client_prenom,d.client_nom].filter(Boolean).join(" ")
-      list = list.filter(d =>
-        normalize(nomD(d)).includes(qNorm)||normalize(d.numero_affiche).includes(qNorm)||
-        normalize(d.client_email).includes(qNorm)||normalize(d.client_societe).includes(qNorm)||
-        normalize(d.commercial).includes(qNorm)||normalize(d.reference).includes(qNorm)
-      )
+      const fieldsOf = (d:DraftRecord) => [nomD(d), d.numero_affiche, d.client_email, d.client_societe, d.commercial, d.reference]
+      list = list.filter(d => matchesAllWords(fieldsOf(d), qWords))
       // Tri par pertinence (meilleur match en tête), départage updated_at DESC
       list = [...list].sort((a,b)=>{
-        const sa = Math.min(
-          matchScore(nomD(a),qNorm), matchScore(a.client_societe||"",qNorm),
-          matchScore(a.reference||"",qNorm), matchScore(a.numero_affiche||"",qNorm),
-          matchScore(a.client_email||"",qNorm),
-        )
-        const sb = Math.min(
-          matchScore(nomD(b),qNorm), matchScore(b.client_societe||"",qNorm),
-          matchScore(b.reference||"",qNorm), matchScore(b.numero_affiche||"",qNorm),
-          matchScore(b.client_email||"",qNorm),
-        )
+        const sa = relevanceScore(nomD(a), fieldsOf(a), qNorm, qWords)
+        const sb = relevanceScore(nomD(b), fieldsOf(b), qNorm, qWords)
         if (sa!==sb) return sa-sb
         return (b.updated_at||"").localeCompare(a.updated_at||"")
       })
@@ -374,25 +379,15 @@ export default function DashboardPage() {
     else if(quickFilter==="prob_neutre") list=list.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&(!o.probabilite||o.probabilite==="neutre"))
     if(commercial!=="all") list=list.filter(o=>o.commercial===commercial)
     const qNorm = normalize(search.trim())
+    const qWords = tokenize(qNorm)
+    const fieldsOf = (o:OffreRecord) => [nomClient(o), o.numero_affiche, o.client_email, o.client_ville, o.client_societe, o.commercial, o.reference]
     if(qNorm){
-      list=list.filter(o=>
-        normalize(nomClient(o)).includes(qNorm)||normalize(o.numero_affiche).includes(qNorm)||
-        normalize(o.client_email).includes(qNorm)||normalize(o.client_ville).includes(qNorm)||
-        normalize(o.client_societe).includes(qNorm)||
-        normalize(o.commercial).includes(qNorm)||
-        normalize(o.reference).includes(qNorm))
+      // Chaque mot recherché doit matcher au moins un champ (ordre libre)
+      list=list.filter(o => matchesAllWords(fieldsOf(o), qWords))
     }
     // Quand une recherche est active, on classe par pertinence AVANT le tri colonne.
-    // Le meilleur match (nom > société > référence > numéro > email > ville) remonte en tête.
     function bestScore(o:OffreRecord): number {
-      return Math.min(
-        matchScore(nomClient(o), qNorm),
-        matchScore(o.client_societe||"", qNorm),
-        matchScore(o.reference||"", qNorm),
-        matchScore(o.numero_affiche||"", qNorm),
-        matchScore(o.client_email||"", qNorm),
-        matchScore(o.client_ville||"", qNorm),
-      )
+      return relevanceScore(nomClient(o), fieldsOf(o), qNorm, qWords)
     }
     return [...list].sort((a,b)=>{
       if(qNorm){
