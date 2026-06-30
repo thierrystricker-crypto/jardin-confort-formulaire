@@ -2630,3 +2630,98 @@ PR #25 : 4 commits (modal client dropdown + conservation numero + numero fantome
 1. **Trier les ~90 documents déjà en base** sans numéro (beaucoup sont des abandons ou des « A CONFIRMER » volontaires — pas tous à corriger).
 2. **Corriger l'adresse de Fiona Rice** : commande `cmd-80643-e4g8u`, « Route de Baumaroche » sans le « 16B » (fiche client ID 19631 a « Rte de Baumaroche 16B »).
 3. **Supprimer les branches mergées** après stabilité : `feature/alerte-numero-rue`, `fix/autocomplete-numero-rue`, `fix/autocomplete-client`.
+
+---
+
+## Session du 01.07.2026 — Recherche insensible accents/casse + multi-mots + tri pertinence
+
+> Date : 2026-07-01
+> Statut : ✅ Terminé et déployé en production
+> Branche : `feature/recherche-unaccent` (3 commits), mergée via PR sur main
+> Prod : https://offres.jardin-confort.ch
+
+### 🎯 Problème
+
+Les recherches étaient sensibles à la casse ET aux accents : « château de la rive » ne
+trouvait pas « CHATEAU DE LA RIVE ». Pire cas métier : client au téléphone, le commercial
+tape un nom et obtient plein de résultats parasites sans le bon client en tête.
+
+Trois surfaces concernées :
+1. Recherche clients (`/dashboard/clients`) — **côté serveur** (API + Supabase)
+2. Recherche dashboard offres/commandes (`/dashboard`) — **côté front** (filtre JS)
+3. Recherche brouillons (même page) — **n'était pas filtrée du tout** par la barre de recherche
+
+### 📐 Cause racine
+
+`ilike` (Postgres) gère la casse mais **pas** les accents : `â` ≠ `a`. Donc « château » ne
+matchait jamais « CHATEAU » sur le champ nom (il matchait parfois via l'email sans accent,
+d'où le résultat « noyé » en milieu de liste). Côté dashboard, le filtre front faisait un
+simple `.toLowerCase().includes()` sans normalisation, et la section brouillons ignorait
+totalement la variable `search`.
+
+### ✅ Solution
+
+**Côté clients (SQL)** — nouvelle RPC `search_clients_relevance(search_term, max_results)` :
+- `unaccent` + `lower` des deux côtés (insensible accents + casse)
+- multi-mots : chaque mot doit matcher au moins un champ, ordre libre (« château rive » trouve)
+- téléphone intégré au matching (digits extraits, match si ≥ 3 chiffres)
+- tri par pertinence : nom exact (0) > commence par (1) > contient terme entier (2) >
+  tous les mots dans le nom (3) > match ailleurs (5), puis `updated_at DESC`
+- wrapper `jc_unaccent` créé (IMMUTABLE) car `unaccent` ne l'est pas par défaut → permet
+  un futur index si besoin
+
+`app/api/clients/route.ts` : les 3 branches de recherche (chiffres / 2-mots / 1-mot) +
+l'appel séparé `search_clients_by_phone` remplacés par **un seul appel** à la RPC.
+`searchByDocumentNumber` et le mode `document` restent intacts.
+
+**Côté dashboard (front)** — `app/dashboard/page.tsx` :
+- helpers `normalize` (NFD + suppression diacritiques), `tokenize`, `matchesAllWords`,
+  `relevanceScore`
+- recherche table principale : accents + multi-mots + tri pertinence avant le tri colonne
+- recherche brouillons (`filteredDrafts`) : ajoutée (n'existait pas) avec même logique +
+  départage `updated_at DESC`
+
+### 🐛 Pièges rencontrés
+
+- **Incident plateforme Supabase pendant la session** : faussait TOUTES les mesures de perf
+  (CREATE FUNCTION à 7 puis 15 s, « Failed to fetch (api.supabase.com) »). On a failli
+  sur-optimiser (colonne générée + index trigram) en croyant à une lenteur de la RPC.
+  Une fois l'incident terminé (vérifié via la notif Supabase), la même RPC répondait en 2 s.
+  **Leçon : avant de conclure à un problème de code/perf, vérifier status.supabase.com.**
+- **`unaccent` pas IMMUTABLE** → impossible à mettre dans une colonne générée ou un index
+  sans wrapper. D'où `jc_unaccent`.
+- **`RETURNS SETOF clients` + colonnes calculées** : impossible de faire `SELECT *` dans le
+  CTE final (blob/score/fullname s'ajoutent aux colonnes de la table). Solution : garder la
+  ligne entière typée via `c AS row_client` puis `SELECT (row_client).*`.
+- **Wifi tombé** au moment du push (« Could not resolve host: github.com ») — rien à voir
+  avec le code, juste réseau.
+
+### 📊 Perf
+
+~2 s sur 18 900 clients **sans index** (scan unaccent complet). Acceptable au volume actuel.
+La colonne générée `search_blob` + index trigram (`pg_trgm`) ont été **volontairement
+écartés** — à garder en réserve si la recherche ralentit avec la croissance de la base.
+
+### 🔧 Dette / reste à faire
+
+- Anciennes RPC `search_clients_unaccent` et `search_clients_unaccent_2terms` restent en
+  base, **inertes** (plus appelées). À supprimer dans un futur commit de ménage.
+- Recherche **mono-chaîne** côté clients via la RPC, **multi-mots** côté dashboard et clients :
+  cohérent. Si besoin futur, l'index trigram est l'optimisation toute prête.
+- Supprimer la branche après stabilité :
+```powershell
+  git branch -d feature/recherche-unaccent
+  git push origin --delete feature/recherche-unaccent
+```
+
+### 🚦 Commits
+6f303b5  feat(clients): recherche insensible aux accents et a la casse via RPC unaccent
+
+e2cccd0  feat(dashboard): recherche insensible aux accents + tri pertinence sur offres et brouillons
+
+237afb9  feat(clients): recherche unifiee multi-mots + telephone + tri pertinence via RPC SQL
+
+### 📦 Fichiers SQL
+
+- `docs/sql/005-search-clients-unaccent.sql` (1ère version, RPC simples — superseded)
+- `docs/sql/006-search-clients-relevance.sql` (RPC finale + wrapper `jc_unaccent`)
