@@ -58,6 +58,36 @@ function fmtMoney(v: number|null|undefined) {
 function nomClient(o: OffreRecord) {
   return [o.client_prenom, o.client_nom].filter(Boolean).join(" ") || "—"
 }
+// Normalise une chaîne : minuscules + suppression des accents.
+// "Château" → "chateau", "CHATEAU" → "chateau" → match croisé garanti.
+function normalize(s: string|null|undefined): string {
+  return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+}
+// Découpe un terme normalisé en mots non vides.
+function tokenize(needleNorm: string): string[] {
+  return needleNorm.split(/\s+/).filter(Boolean)
+}
+// Un ensemble de champs matche-t-il TOUS les mots recherchés ?
+// Chaque mot doit apparaître dans au moins un des champs (ordre libre).
+function matchesAllWords(fields: (string|null|undefined)[], words: string[]): boolean {
+  if (words.length === 0) return false
+  const blob = fields.map(normalize).join(" ")
+  return words.every(w => blob.includes(w))
+}
+// Score de pertinence (BAS = meilleur). Combine match exact de la chaîne
+// complète sur le nom, puis nombre de mots trouvés dans le nom.
+function relevanceScore(nameField: string, allFields: (string|null|undefined)[], needleNorm: string, words: string[]): number {
+  const name = normalize(nameField)
+  if (needleNorm && name === needleNorm) return 0          // nom = terme exact
+  if (needleNorm && name.startsWith(needleNorm)) return 1  // nom commence par le terme entier
+  if (needleNorm && name.includes(needleNorm)) return 2    // nom contient le terme entier
+  // sinon : compter combien de mots tombent dans le nom (plus il y en a, mieux c'est)
+  const hitsInName = words.filter(w => name.includes(w)).length
+  if (hitsInName === words.length) return 3   // tous les mots dans le nom (ordre différent)
+  if (hitsInName > 0) return 4                // certains mots dans le nom
+  // aucun mot dans le nom mais match ailleurs (email, ville…) → score faible
+  return matchesAllWords(allFields, words) ? 5 : 9
+}
 function nomClientDraft(d: DraftRecord) {
   return [d.client_prenom, d.client_nom].filter(Boolean).join(" ") || "—"
 }
@@ -290,13 +320,27 @@ export default function DashboardPage() {
     localStorage.setItem("dashboard-drafts-collapsed", String(draftsCollapsed))
   },[draftsCollapsed])
 
-  // Filtrage des brouillons (commercial global + filtre transformés)
+  // Filtrage des brouillons (commercial global + filtre transformés + recherche)
   const filteredDrafts = useMemo(()=>{
     let list = drafts
     if (commercial !== "all") list = list.filter(d => d.commercial === commercial)
     if (hideTransformedDrafts) list = list.filter(d => !d.archived)
-    return list  // déjà trié updated_at DESC côté API
-  },[drafts,commercial,hideTransformedDrafts])
+    const qNorm = normalize(search.trim())
+    const qWords = tokenize(qNorm)
+    if (qNorm) {
+      const nomD = (d:DraftRecord)=>[d.client_prenom,d.client_nom].filter(Boolean).join(" ")
+      const fieldsOf = (d:DraftRecord) => [nomD(d), d.numero_affiche, d.client_email, d.client_societe, d.commercial, d.reference]
+      list = list.filter(d => matchesAllWords(fieldsOf(d), qWords))
+      // Tri par pertinence (meilleur match en tête), départage updated_at DESC
+      list = [...list].sort((a,b)=>{
+        const sa = relevanceScore(nomD(a), fieldsOf(a), qNorm, qWords)
+        const sb = relevanceScore(nomD(b), fieldsOf(b), qNorm, qWords)
+        if (sa!==sb) return sa-sb
+        return (b.updated_at||"").localeCompare(a.updated_at||"")
+      })
+    }
+    return list  // sans recherche : déjà trié updated_at DESC côté API
+  },[drafts,commercial,hideTransformedDrafts,search])
 
   const draftsActifs = useMemo(()=>{
     const scope = commercial==="all" ? drafts : drafts.filter(d=>d.commercial===commercial)
@@ -334,15 +378,22 @@ export default function DashboardPage() {
     else if(quickFilter==="prob_faible") list=list.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&o.probabilite==="faible")
     else if(quickFilter==="prob_neutre") list=list.filter(o=>o.type_document==="Offre"&&!["Acceptée","Convertie","Abandonnée","Refusée"].includes(o.statut)&&(!o.probabilite||o.probabilite==="neutre"))
     if(commercial!=="all") list=list.filter(o=>o.commercial===commercial)
-    if(search.trim()){
-      const q=search.toLowerCase()
-      list=list.filter(o=>
-        nomClient(o).toLowerCase().includes(q)||(o.numero_affiche||"").toLowerCase().includes(q)||
-        (o.client_email||"").toLowerCase().includes(q)||(o.client_ville||"").toLowerCase().includes(q)||
-        (o.commercial||"").toLowerCase().includes(q)||
-        (o.reference||"").toLowerCase().includes(q))
+    const qNorm = normalize(search.trim())
+    const qWords = tokenize(qNorm)
+    const fieldsOf = (o:OffreRecord) => [nomClient(o), o.numero_affiche, o.client_email, o.client_ville, o.client_societe, o.commercial, o.reference]
+    if(qNorm){
+      // Chaque mot recherché doit matcher au moins un champ (ordre libre)
+      list=list.filter(o => matchesAllWords(fieldsOf(o), qWords))
+    }
+    // Quand une recherche est active, on classe par pertinence AVANT le tri colonne.
+    function bestScore(o:OffreRecord): number {
+      return relevanceScore(nomClient(o), fieldsOf(o), qNorm, qWords)
     }
     return [...list].sort((a,b)=>{
+      if(qNorm){
+        const sa=bestScore(a), sb=bestScore(b)
+        if(sa!==sb) return sa-sb  // pertinence d'abord (0 = meilleur)
+      }
       let av:string|number="",bv:string|number=""
       if(sortKey==="numero"){av=a.id;bv=b.id}
       else if(sortKey==="date"){av=a.date_document||"";bv=b.date_document||""}
