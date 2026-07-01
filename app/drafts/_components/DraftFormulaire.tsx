@@ -1281,23 +1281,26 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   //
   // L'interval tourne en permanence ; les checks se font à chaque tick. On évite
   // de re-créer l'interval à chaque dépendance pour ne pas casser le timer.
+  // Ref qui pointe toujours vers la DERNIÃˆRE version de la logique d'auto-save.
+  // Sans Ã§a, le setInterval capture un saveDraft/makeSnapshot pÃ©rimÃ© (closure
+  // figÃ©e) et peut Ã©craser le brouillon avec un snapshot obsolÃ¨te (ex: lignes
+  // ajoutÃ©es aprÃ¨s le dernier passage de l'effet â†’ perdues). Mise Ã  jour Ã 
+  // chaque render pour toujours voir le state frais.
+  const autosaveFnRef = useRef<() => void>(() => {});
+  autosaveFnRef.current = () => {
+    if (revisionMode) return; // En rÃ©vision, JAMAIS d'auto-save.
+    if (initialLoadStatus !== "ready") return;
+    if (!isDirty || isSaving) return;
+    if (!nom.trim() || !email.trim() || !commercial.trim()) return;
+    saveDraft({ silent: true });
+  };
+
   useEffect(() => {
     const interval = setInterval(() => {
-      // On lit le state via les closures actuelles — c'est OK car React garantit
-      // que setInterval voit toujours les dernières valeurs si on relance l'effet
-      // sur changement de dépendance. Ici on dépend uniquement de isDirty et
-      // isSaving pour relancer le timer, ce qui suffit.
-      if (revisionMode) return; // En révision, JAMAIS d'auto-save : un décrément
-                                  // stock + une version archivée ne doivent suivre
-                                  // qu'un clic explicite « Enregistrer », pas un timer.
-        if (initialLoadStatus !== "ready") return;
-        if (!isDirty || isSaving) return;
-      if (!nom.trim() || !email.trim() || !commercial.trim()) return;
-      saveDraft({ silent: true });
+      autosaveFnRef.current();
     }, 2 * 60 * 1000); // 2 minutes
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDirty, isSaving, nom, email, commercial, initialLoadStatus]);
+  }, []);
 
   // ── Tick toutes les 10s pour rafraîchir "💾 Enregistré il y a Xs" ──
   // Sinon le texte resterait figé entre deux saves.
