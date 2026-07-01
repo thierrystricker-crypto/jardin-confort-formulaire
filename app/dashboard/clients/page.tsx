@@ -641,10 +641,17 @@ export default function ClientsPage() {
               📥 Importer CSV
             </button>
             <ShopifySyncButton onDone={() => fetchClients(search)} />
-            <button onClick={() => setShowNew(v => !v)}
-              className="inline-flex items-center rounded-xl bg-[#2B8AD1] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2478b8]">
-              + Nouveau client
-            </button>
+            {showNew ? (
+              <button onClick={handleNewClient} disabled={saving}
+                className="inline-flex items-center rounded-xl bg-[#2B8AD1] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2478b8] disabled:opacity-50">
+                {saving ? "Enregistrement…" : "💾 Enregistrer"}
+              </button>
+            ) : (
+              <button onClick={() => setShowNew(true)}
+                className="inline-flex items-center rounded-xl bg-[#2B8AD1] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2478b8]">
+                + Nouveau client
+              </button>
+            )}
           </div>
         </div>
 
