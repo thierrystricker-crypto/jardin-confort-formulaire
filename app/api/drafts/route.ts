@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { computeTotals } from "@/lib/jc-print-types";
+import { randomBytes } from "crypto";
 
 function makeSlug(numero: string, withToken = false): string {
   const base = numero.toLowerCase()
@@ -16,7 +17,7 @@ function makeSlug(numero: string, withToken = false): string {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
   if (!withToken) return base;
-  const token = Math.random().toString(36).slice(2, 7); // ex: "x7k2m"
+  const token = randomBytes(12).toString("hex"); // 24 caractères hex, ~96 bits
   return `${base}-${token}`;
 }
 
