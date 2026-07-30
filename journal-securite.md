@@ -104,44 +104,55 @@ le code.
 
 ---
 
-## 🟡 Couche 2 — Durcir les tokens de slug (PRÊTE À EXÉCUTER)
+## ✅ Couche 2 — Durcir les tokens de slug (TERMINÉE, 30.07.2026)
 
-**But :** remplacer le token faible par un token cryptographique. **Forward-only** :
-n'affecte QUE les nouveaux documents. Aucun slug existant n'est régénéré →
-**aucun ancien lien cassé**.
+**But :** remplacer le token faible (`Math.random()` / `md5(random())`, 5 car.)
+par un token cryptographique. **Forward-only** : n'affecte QUE les nouveaux
+documents. Aucun slug existant n'est régénéré → **aucun ancien lien cassé**.
 
-**Fichier :** `app/api/offres/save/route.ts`
+⚠️ **Il y avait TROIS générateurs de token**, pas un (piège : découverts en
+testant un brouillon `dra-699-8jnlh` dont le token était encore faible) :
 
-**1. Ajouter l'import en haut du fichier :**
-```ts
-import { randomBytes } from "crypto";
-```
+1. **`app/api/offres/save/route.ts`** — offres/commandes directes (`DEV-`/`CMD-`).
+   `makeSlug()` local. Corrigé.
+2. **`app/api/drafts/route.ts`** — brouillons (`dra-`). Sa PROPRE copie de
+   `makeSlug()`. Corrigé.
+3. **Fonction SQL `transformer_draft`** (Supabase) — slug de l'offre lors de la
+   transformation brouillon → offre. Token généré côté base. Corrigé par migration.
 
-**2. Dans `makeSlug()`, remplacer :**
+**Correctif code (fichiers 1 et 2)** — ajouter `import { randomBytes } from "crypto";`
+puis remplacer :
 ```ts
   const token = Math.random().toString(36).slice(2, 7); // ex: "x7k2m"
 ```
-**par :**
+par :
 ```ts
   const token = randomBytes(12).toString("hex"); // 24 car. hex, ~96 bits
 ```
 
-**Test :** `npx tsc --noEmit` ; créer une nouvelle offre ET une nouvelle commande,
-vérifier que le slug se termine par un token hex de 24 caractères ; ouvrir le
-lien public du nouveau document ; confirmer qu'un ANCIEN lien résout toujours.
+**Correctif base (générateur 3)** — migration `transformer_draft_token_crypto`
+appliquée en prod le 30.07.2026. Étape 4 de la fonction :
+```sql
+-- avant : v_token := substring(md5(random()::text || clock_timestamp()::text), 1, 5);
+v_token := replace(gen_random_uuid()::text, '-', '');  -- 32 car. hex, CSPRNG
+```
 
-**Git :**
+**Git (code) :**
 ```
 npx tsc --noEmit
-git add app/api/offres/save/route.ts
-git commit -m "Couche 2 : token de slug cryptographique (forward-only)"
+git add app/api/offres/save/route.ts app/api/drafts/route.ts journal-securite.md
+git commit -m "Couche 2 : token de slug cryptographique (offres + brouillons, forward-only)"
 git push origin main
 ```
 
 > Note : le `base` du slug reste le numéro séquentiel, mais le token porte
-> désormais ~96 bits d'entropie réelle → énumération infaisable. Découpler
+> désormais ~96–128 bits d'entropie réelle → énumération infaisable. Découpler
 > totalement l'URL publique du numéro séquentiel est possible plus tard, non
 > nécessaire.
+>
+> ⚠️ Leçon : chercher **tous** les générateurs avant de conclure. Grep
+> `Math.random`, `toString(36)`, `md5(random`, et inspecter les fonctions SQL
+> (`transformer_draft`, `next_dev_numero`, `next_cmd_numero`).
 
 ---
 
