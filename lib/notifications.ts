@@ -3,7 +3,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase";
 
-type NotificationType = "commande_validee" | "commande_convertie_manuelle" | "commande_directe" | "offre_abandonnee";
+type NotificationType = "commande_validee" | "commande_convertie_manuelle" | "commande_directe" | "offre_abandonnee" | "stock_erreur";
 
 type CreateNotificationInput = {
   type: NotificationType;
@@ -25,6 +25,7 @@ const DEFAULT_TITRES: Record<NotificationType, string> = {
   commande_convertie_manuelle: "🔄 Commande créée par conversion manuelle",
   commande_directe: "📋 Nouvelle commande créée directement",
   offre_abandonnee: "❌ Offre marquée comme abandonnée",
+  stock_erreur: "⚠️ Erreur de sortie de stock Shopify",
 };
 
 /**
