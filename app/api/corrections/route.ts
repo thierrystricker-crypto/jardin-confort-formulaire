@@ -262,6 +262,8 @@ export async function POST(request: NextRequest) {
           process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch";
         const regenRes = await fetch(`${APP_URL}/api/offres/${entity.slug}/pdf`, {
           method: "POST",
+          // "x-jc-interne" : authentifie l'appel interne auprès du verrou proxy.ts
+          headers: { "x-jc-interne": process.env.DASHBOARD_SESSION_SECRET || "" },
         });
         const regenJson = await regenRes.json();
 

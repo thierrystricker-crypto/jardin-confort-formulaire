@@ -14,6 +14,11 @@ const MAKE_WEBHOOK = process.env.MAKE_WEBHOOK_VALIDATION_URL ||
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ||
   "https://offres.jardin-confort.ch";
 
+// En-tête d'authentification pour les appels internes serveur→serveur.
+// Sans lui, le verrou proxy.ts (déployé 30.07.2026) rejette ces appels en 401
+// → plus de sortie de stock Shopify ni de fiche de travail initiale.
+const EN_TETE_INTERNE = { "x-jc-interne": process.env.DASHBOARD_SESSION_SECRET || "" };
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -302,9 +307,9 @@ export async function POST(
     after(async () => {
       // ─── ÉTAPE 1 : PDFs sans dépendance stock (en parallèle) ───
       await Promise.allSettled([
-        fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" })
+        fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST", headers: EN_TETE_INTERNE })
           .catch(err => console.error("[after] PDF offre err:", err)),
-        fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST" })
+        fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST", headers: EN_TETE_INTERNE })
           .catch(err => console.error("[after] QR paiement err:", err)),
       ])
 
@@ -313,7 +318,7 @@ export async function POST(
       try {
         await fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...EN_TETE_INTERNE },
           body: JSON.stringify({ mode: "initial" }),
         })
       } catch (err) {
@@ -325,7 +330,7 @@ export async function POST(
       try {
         await fetch(`${BASE_URL}/api/stock-movements/process`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...EN_TETE_INTERNE },
           body: JSON.stringify({ offre_slug: cmdSlug, reason: "commande_validee" }),
         })
       } catch (err) {
@@ -339,7 +344,7 @@ export async function POST(
     // Timeout 25s par sécurité.
     try {
       await Promise.race([
-        fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST" }),
+        fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST", headers: EN_TETE_INTERNE }),
         new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000)),
       ])
     } catch (err) {

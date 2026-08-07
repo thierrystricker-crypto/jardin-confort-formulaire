@@ -106,7 +106,11 @@ export async function POST(
 
     fetch(`${baseUrl}/api/offres/${offre_slug}/pdf`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // "x-jc-interne" : authentifie l'appel interne auprès du verrou proxy.ts
+      headers: {
+        "Content-Type": "application/json",
+        "x-jc-interne": process.env.DASHBOARD_SESSION_SECRET || "",
+      },
     }).catch((err) => {
       // Best-effort : on log mais on ne fait pas échouer la transformation
       console.error("PDF offre génération error (non bloquant):", err);

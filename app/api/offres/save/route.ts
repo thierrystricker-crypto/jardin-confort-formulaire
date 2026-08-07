@@ -9,6 +9,11 @@ import { computeTotals } from "@/lib/jc-print-types";
 import { createNotification } from "@/lib/notifications";
 import { randomBytes } from "crypto";
 
+// En-tête d'authentification pour les appels internes serveur→serveur.
+// Sans lui, le verrou proxy.ts (déployé 30.07.2026) rejette ces appels en 401
+// → plus de sortie de stock Shopify ni de fiche de travail initiale.
+const EN_TETE_INTERNE = { "x-jc-interne": process.env.DASHBOARD_SESSION_SECRET || "" };
+
 function makeSlug(numero: string, withToken = false): string {
   const base = numero.toLowerCase()
     .replace(/\s+/g, "-")
@@ -168,7 +173,7 @@ export async function POST(request: NextRequest) {
         await Promise.race([
           fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...EN_TETE_INTERNE },
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000)),
         ])
@@ -184,7 +189,7 @@ export async function POST(request: NextRequest) {
           try {
             await fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", ...EN_TETE_INTERNE },
               body: JSON.stringify({ mode: "initial" }),
             })
           } catch (err) {
@@ -196,7 +201,7 @@ export async function POST(request: NextRequest) {
           try {
             await fetch(`${baseUrl}/api/stock-movements/process`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", ...EN_TETE_INTERNE },
               body: JSON.stringify({ offre_slug: slug, reason: "commande_directe" }),
             })
           } catch (err) {
@@ -208,7 +213,7 @@ export async function POST(request: NextRequest) {
       // Pour une offre : juste fire-and-forget du PDF, pas de stock à gérer
       fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...EN_TETE_INTERNE },
       }).catch(err => console.error("PDF offre err:", err))
     }
 
