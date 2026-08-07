@@ -18,7 +18,11 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confor
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
 
 async function generatePdfFromPrintPage(slug: string, fileName: string): Promise<{ buffer: ArrayBuffer | null; error?: string }> {
-  const printUrl = `${APP_URL}/print/fiche-travail/${slug}`
+  // jc_token : la page /print/fiche-travail est derrière le verrou proxy.ts
+  // depuis le 30.07.2026. pdf.co (service externe, sans cookie) doit présenter
+  // ce jeton en query pour que le proxy le laisse rendre la page.
+  const jcToken = encodeURIComponent(process.env.DASHBOARD_SESSION_SECRET || "")
+  const printUrl = `${APP_URL}/print/fiche-travail/${slug}?jc_token=${jcToken}`
 
   const pdfcoRes = await fetch("https://api.pdf.co/v1/pdf/convert/from/url", {
     method: "POST",

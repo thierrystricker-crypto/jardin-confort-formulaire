@@ -73,6 +73,27 @@ export function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // ── Appels internes serveur→serveur (fix du 07.08.2026) ──
+  // Les routes valider/save/transformer/corrections s'appellent elles-mêmes en
+  // HTTP (génération PDF, fiche de travail, sortie de stock Shopify). Ces
+  // requêtes ne portent pas le cookie navigateur → depuis le déploiement du
+  // verrou (30.07), elles étaient rejetées en 401 : plus aucune décrémentation
+  // Shopify ni fiche de travail initiale. Elles s'identifient désormais via un
+  // en-tête secret (même valeur que le secret de session, env Vercel).
+  const enTeteInterne = req.headers.get("x-jc-interne");
+  if (secret && enTeteInterne && enTeteInterne === secret) {
+    return NextResponse.next();
+  }
+
+  // pdf.co doit pouvoir rendre les pages /print internes (fiche de travail)
+  // pour générer les PDFs. Jeton passé en query par fiche-travail-pdf/route.ts.
+  if (secret && pathname.startsWith("/print/")) {
+    const jcToken = req.nextUrl.searchParams.get("jc_token");
+    if (jcToken && jcToken === secret) {
+      return NextResponse.next();
+    }
+  }
+
   // Non authentifié → API : 401 JSON ; page : redirection vers /acces
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 401 });
