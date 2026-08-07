@@ -250,7 +250,11 @@ export async function POST(request: NextRequest) {
     if (failed > 0) {
       const nomComplet = [offre.client_prenom, offre.client_nom].filter(Boolean).join(" ")
       await createNotification({
-        type: "commande_validee",  // on réutilise le type, le titre fait la distinction
+        // Type dédié "stock_erreur" (08.08.2026). Avant : réutilisation de
+        // "commande_validee", ce qui affichait le badge vert « Commande validée
+        // online » sur une alerte de bug (confusion équipe) ET polluait le
+        // healthcheck Make (qui filtre sur type=commande_validee).
+        type: "stock_erreur",
         offre_slug: offre.slug,
         numero_affiche: offre.numero_affiche,
         type_document: "Commande",

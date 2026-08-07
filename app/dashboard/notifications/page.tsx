@@ -66,6 +66,8 @@ function getTypeStyle(type: string) {
       return { color: "text-sky-300", bg: "bg-sky-500/15", border: "border-sky-500/30", icon: "📋", label: "Commande directe" };
     case "offre_abandonnee":
       return { color: "text-rose-300", bg: "bg-rose-500/15", border: "border-rose-500/30", icon: "❌", label: "Offre abandonnée" };
+    case "stock_erreur":
+      return { color: "text-amber-300", bg: "bg-amber-500/15", border: "border-amber-500/30", icon: "⚠️", label: "Erreur sortie de stock" };
     default:
       return { color: "text-zinc-300", bg: "bg-white/5", border: "border-white/10", icon: "🔔", label: type };
   }

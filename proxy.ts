@@ -40,6 +40,12 @@ function estRoutePublique(pathname: string, method: string): boolean {
   if (pathname === "/api/revisions" && method === "GET") return true;
   if (pathname === "/api/corrections" && method === "GET") return true;
 
+  // Heartbeat Make : Make poste ici en fin de scénario pour signaler qu'il
+  // tourne (service externe, pas de cookie possible). Bloqué par erreur depuis
+  // le déploiement du verrou (30.07) → bandeau « Make n'a pas ping depuis 9 j ».
+  // Le GET reste interne (consommé par le dashboard, qui a le cookie).
+  if (pathname === "/api/make-health" && method === "POST") return true;
+
   // /api/offres/[slug] :
   //   • GET (racine)   → lecture de l'offre par le client         → PUBLIC
   //   • /valider       → validation de l'offre par le client      → PUBLIC
