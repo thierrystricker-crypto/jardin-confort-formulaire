@@ -1,0 +1,2124 @@
+﻿
+app\api\brand-logos\upload\route.ts:20:function slugify(s: string): 
+string {
+app\api\brand-logos\upload\route.ts:53:    const baseSlug = mode === 
+"library" ? slugify(name) : `tmp-${Date.now()}`;
+app\api\brand-logos\upload\route.ts:56:        ? 
+`library/${baseSlug}.${ext}`
+app\api\brand-logos\upload\route.ts:57:        : 
+`ephemeral/${baseSlug}-${Math.random().toString(36).slice(2, 
+8)}.${ext}`;
+app\api\brand-logos\upload\route.ts:65:        upsert: mode === 
+"library", // en library on remplace si même slug
+app\api\brand-logos\upload\route.ts:95:            slug: baseSlug,
+app\api\brand-logos\upload\route.ts:99:          { onConflict: 
+"slug" }
+app\api\brand-logos\route.ts:47:    // Match sur name, slug, et 
+chaque search_term — tous normalisés
+app\api\brand-logos\route.ts:50:      normalizeSearchTerm(logo.slug),
+app\api\clients\import\route.ts:16:  numero_rue?: string
+app\api\clients\review-emails\route.ts:67:        numero_client,
+app\api\clients\[id]\factures\merge-pdf\route.ts:25:      
+.select("numero_client, nom, prenom, societe")
+app\api\clients\[id]\factures\merge-pdf\route.ts:36:      
+.select("id, numero_facture, date_facture, pdf_url")
+app\api\clients\[id]\factures\merge-pdf\route.ts:40:      
+.order("numero_facture", { ascending: false })
+app\api\clients\[id]\factures\merge-pdf\route.ts:53:    const 
+errors: { numero: string; reason: string }[] = []
+app\api\clients\[id]\factures\merge-pdf\route.ts:59:          
+errors.push({ numero: facture.numero_facture, reason: `HTTP 
+${pdfResponse.status}` })
+app\api\clients\[id]\factures\merge-pdf\route.ts:67:        
+errors.push({ numero: facture.numero_facture, reason: (e as 
+Error).message })
+app\api\clients\[id]\factures\merge-pdf\route.ts:85:    const 
+fileName = 
+`factures-${client.numero_client}-${nomClient}-${dateStr}.pdf`
+app\api\clients\[id]\factures\upload\route.ts:13:    const 
+numeroFacture = formData.get("numero_facture") as string
+app\api\clients\[id]\factures\upload\route.ts:18:    const fileName 
+= `facture_${numeroFacture}_${id}_${Date.now()}.pdf`
+app\api\clients\[id]\factures\route.ts:12:    .select("id, 
+numero_facture, date_facture, montant, pdf_url, match_confiance, 
+created_at")
+app\api\clients\[id]\factures\route.ts:14:    
+.order("numero_facture", { ascending: false })
+app\api\clients\[id]\factures\route.ts:26:  const { numero_facture, 
+date_facture, montant, pdf_url } = body
+app\api\clients\[id]\factures\route.ts:28:  if 
+(!numero_facture?.trim()) return NextResponse.json({ error: "Numéro 
+requis" }, { status: 400 })
+app\api\clients\[id]\factures\route.ts:34:      numero_facture: 
+numero_facture.trim(),
+app\api\clients\[id]\verify-email\route.ts:41:      .select("id, 
+numero_client, email, email_status, email_source, email_verified_at")
+app\api\clients\[id]\verify-email\route.ts:81:      .select("id, 
+numero_client, email, email_status, email_source, email_verified_at")
+app\api\clients\[id]\route.ts:28:        .select("id, slug, 
+numero_affiche, type_document, statut, date_document, total_ttc, 
+commercial, payment_mode")
+app\api\clients\[id]\route.ts:36:        .select("id, slug, 
+numero_affiche, type_document, statut, date_document, total_ttc, 
+commercial, payment_mode")
+app\api\clients\[id]\route.ts:92:    const allowed = ["nom","prenom",
+"societe","email","tel1","tel2","rue","rue2","numero_rue","npa","vill
+e","pays","notes",
+app\api\clients\route.ts:10:  numero_client: string | null
+app\api\clients\route.ts:45:  client_numero_client: string | null
+app\api\clients\route.ts:51:  numero_affiche?: string | null
+app\api\clients\route.ts:52:  numero_offre?: string | null
+app\api\clients\route.ts:53:  numero_commande?: string | null
+app\api\clients\route.ts:64:  const num = o.numero_affiche || 
+o.numero_commande || o.numero_offre || ""
+app\api\clients\route.ts:95:  const numField = table === 
+"factures_winbiz" ? "numero_facture" : "shopify_order_name"
+app\api\clients\route.ts:140: * Stratégie offres : 3 voies de match 
+(numero_client + email ilike + nom+npa).
+app\api\clients\route.ts:155:    const num = (c.numero_client || 
+"").trim()
+app\api\clients\route.ts:181:    return 
+`${clientId}::${o.numero_affiche || 
+""}::${o.type_document}::${o.statut}`
+app\api\clients\route.ts:184:  // 1a — Match par numero_client 
+(chunks de 200, parallèle)
+app\api\clients\route.ts:185:  const numerosClient = 
+Array.from(numClientToIds.keys())
+app\api\clients\route.ts:187:    chunk(numerosClient, 200).map(async 
+(batch, idx) => {
+app\api\clients\route.ts:191:        .select("client_numero_client, 
+client_email, client_nom, client_npa, type_document, statut, 
+numero_affiche, numero_offre, numero_commande, date_document")
+app\api\clients\route.ts:192:        .in("client_numero_client", 
+batch)
+app\api\clients\route.ts:195:        
+console.error(`[enrichWithCounts] Batch numero_client ${idx} 
+FAILED:`, error.message)
+app\api\clients\route.ts:199:        const num = 
+(o.client_numero_client || "").trim()
+app\api\clients\route.ts:220:        .select("client_numero_client, 
+client_email, client_nom, client_npa, type_document, statut")
+app\api\clients\route.ts:256:          
+.select("client_numero_client, client_email, client_nom, client_npa, 
+type_document, statut")
+app\api\clients\route.ts:328:      .select("client_numero_client, 
+client_email")
+app\api\clients\route.ts:329:      .or(`numero_offre.ilike.%${digits}
+%,numero_affiche.ilike.%DEV%${digits}%`)
+app\api\clients\route.ts:340:      .select("client_numero_client, 
+client_email")
+app\api\clients\route.ts:341:      .or(`numero_commande.ilike.%${digi
+ts}%,numero_affiche.ilike.%CMD%${digits}%`)
+app\api\clients\route.ts:360:      .select("client_id, 
+numero_facture")
+app\api\clients\route.ts:361:      .ilike("numero_facture", 
+`%${digitsOnly}%`)
+app\api\clients\route.ts:384:  offres: Array<{ client_numero_client: 
+string | null; client_email: string | null }>,
+app\api\clients\route.ts:387:  const numeros = Array.from(new Set(
+app\api\clients\route.ts:388:    offres.map(o => 
+(o.client_numero_client || "").trim()).filter(n => n.length > 0)
+app\api\clients\route.ts:395:  if (numeros.length > 0) {
+app\api\clients\route.ts:396:    
+filters.push(`numero_client.in.(${numeros.map(n => 
+`"${n}"`).join(",")})`)
+app\api\clients\route.ts:490:    const { nom, prenom, societe, 
+email, tel1, tel2, rue, rue2, numero_rue, npa, ville, pays, notes, 
+source, complement_nom, livr_complement_nom } = body
+app\api\clients\route.ts:507:        numero_rue: numero_rue?.trim() 
+|| null,
+app\api\corrections\route.ts:60:  entity_slug: string;
+app\api\corrections\route.ts:83:    if (!body.entity_slug || typeof 
+body.entity_slug !== "string") {
+app\api\corrections\route.ts:85:        { error: "entity_slug requis 
+(string)" },
+app\api\corrections\route.ts:130:      .select("id, slug, 
+numero_offre, numero_commande, type_document, data")
+app\api\corrections\route.ts:131:      .eq("slug", body.entity_slug)
+app\api\corrections\route.ts:136:        { error: `Entité 
+introuvable : ${body.entity_slug}` },
+app\api\corrections\route.ts:155:    const entityNumero =
+app\api\corrections\route.ts:157:        ? entity.numero_commande || 
+entity.numero_offre || body.entity_slug
+app\api\corrections\route.ts:158:        : entity.numero_offre || 
+body.entity_slug;
+app\api\corrections\route.ts:207:        entity_slug: entity.slug,
+app\api\corrections\route.ts:208:        entity_numero: entityNumero,
+app\api\corrections\route.ts:263:        const regenRes = await 
+fetch(`${APP_URL}/api/offres/${entity.slug}/pdf`, {
+app\api\corrections\route.ts:318:    const entitySlug = 
+searchParams.get("entity_slug");
+app\api\corrections\route.ts:327:    if (!entityId && !entitySlug) {
+app\api\corrections\route.ts:329:        { error: "entity_id ou 
+entity_slug requis" },
+app\api\corrections\route.ts:342:    } else if (entitySlug) {
+app\api\corrections\route.ts:343:      query = 
+query.eq("entity_slug", entitySlug);
+app\api\drafts\[slug]\transformer\route.ts:1:// 
+app/api/drafts/[slug]/transformer/route.ts
+app\api\drafts\[slug]\transformer\route.ts:13://    refus 409 si 
+déjà transformé, refus 404 si slug introuvable.
+app\api\drafts\[slug]\transformer\route.ts:27:  { params }: { 
+params: Promise<{ slug: string }> }
+app\api\drafts\[slug]\transformer\route.ts:30:    const { slug } = 
+await params;
+app\api\drafts\[slug]\transformer\route.ts:32:    if (!slug) {
+app\api\drafts\[slug]\transformer\route.ts:34:        { error: "Slug 
+manquant" },
+app\api\drafts\[slug]\transformer\route.ts:42:    // → retour JSONB 
+{ offre_slug, offre_numero }
+app\api\drafts\[slug]\transformer\route.ts:45:      { p_slug: slug }
+app\api\drafts\[slug]\transformer\route.ts:51:    //   P0002 → 
+ALREADY_TRANSFORMED:<offre_slug>
+app\api\drafts\[slug]\transformer\route.ts:64:      // 409 — déjà 
+transformé (extraction du slug de l'offre existante depuis le 
+message)
+app\api\drafts\[slug]\transformer\route.ts:67:        const 
+existingOffreSlug = match?.[1] || null;
+app\api\drafts\[slug]\transformer\route.ts:72:            
+existingOffreSlug,
+app\api\drafts\[slug]\transformer\route.ts:85:    if (!result || 
+!(result as { offre_slug?: string }).offre_slug) {
+app\api\drafts\[slug]\transformer\route.ts:93:    const { 
+offre_slug, offre_numero } = result as {
+app\api\drafts\[slug]\transformer\route.ts:94:      offre_slug: 
+string;
+app\api\drafts\[slug]\transformer\route.ts:95:      offre_numero: 
+string;
+app\api\drafts\[slug]\transformer\route.ts:107:    
+fetch(`${baseUrl}/api/offres/${offre_slug}/pdf`, {
+app\api\drafts\[slug]\transformer\route.ts:119:      offreSlug: 
+offre_slug,
+app\api\drafts\[slug]\transformer\route.ts:120:      offreNumero: 
+offre_numero,
+app\api\drafts\[slug]\transformer\route.ts:121:      dashboardUrl: 
+`/dashboard/${offre_slug}`,
+app\api\drafts\[slug]\route.ts:1:// app/api/drafts/[slug]/route.ts
+app\api\drafts\[slug]\route.ts:12:// GET /api/drafts/[slug] — 
+récupérer un brouillon complet
+app\api\drafts\[slug]\route.ts:14:// Renvoie : { draft: { id, slug, 
+... toutes colonnes, data } }
+app\api\drafts\[slug]\route.ts:15:// 404 si slug introuvable.
+app\api\drafts\[slug]\route.ts:19:  { params }: { params: Promise<{ 
+slug: string }> }
+app\api\drafts\[slug]\route.ts:22:    const { slug } = await params;
+app\api\drafts\[slug]\route.ts:27:      .eq("slug", slug)
+app\api\drafts\[slug]\route.ts:61:// PUT /api/drafts/[slug] — mettre 
+à jour un brouillon
+app\api\drafts\[slug]\route.ts:65:// 404 si slug introuvable.
+app\api\drafts\[slug]\route.ts:69://   id, slug, numero_draft, 
+numero_affiche, type_document,
+app\api\drafts\[slug]\route.ts:70://   created_at, updated_at, 
+transformed_at, transformed_into_offre_slug, archived
+app\api\drafts\[slug]\route.ts:77:  { params }: { params: Promise<{ 
+slug: string }> }
+app\api\drafts\[slug]\route.ts:80:    const { slug } = await params;
+app\api\drafts\[slug]\route.ts:88:      .eq("slug", slug)
+app\api\drafts\[slug]\route.ts:122:      "copiedFromOffreSlug",
+app\api\drafts\[slug]\route.ts:123:      "copiedFromOffreNumero",
+app\api\drafts\[slug]\route.ts:124:      "copiedFromDraftSlug",
+app\api\drafts\[slug]\route.ts:125:      "copiedFromDraftNumero",
+app\api\drafts\[slug]\route.ts:151:    // Note : on N'INCLUT PAS 
+slug, numero_draft, numero_affiche, type_document,
+app\api\drafts\[slug]\route.ts:152:    // created_at, updated_at, 
+transformed_at, transformed_into_offre_slug, archived.
+app\api\drafts\[slug]\route.ts:173:      client_numero: data.numero 
+|| null,
+app\api\drafts\[slug]\route.ts:176:      client_numero_client: 
+data.numeroClient || null,
+app\api\drafts\[slug]\route.ts:186:      livr_numero: 
+data.livrNumero || null,
+app\api\drafts\[slug]\route.ts:205:      data: { ...data, 
+offerNumber: slug.toUpperCase().split("-").slice(0, 2).join("-") },
+app\api\drafts\[slug]\route.ts:209:    // offerNumber, on le 
+reconstruit depuis le slug (dra-001-x7k2m → DRA-001).
+app\api\drafts\[slug]\route.ts:220:      .eq("slug", slug)
+app\api\drafts\[slug]\route.ts:242:// DELETE /api/drafts/[slug] — 
+supprimer un brouillon
+app\api\drafts\[slug]\route.ts:245:// 404 si slug introuvable.
+app\api\drafts\[slug]\route.ts:254:  { params }: { params: Promise<{ 
+slug: string }> }
+app\api\drafts\[slug]\route.ts:257:    const { slug } = await params;
+app\api\drafts\[slug]\route.ts:262:      .select("id, slug, 
+numero_affiche, transformed_at")
+app\api\drafts\[slug]\route.ts:263:      .eq("slug", slug)
+app\api\drafts\[slug]\route.ts:295:      .eq("slug", slug);
+app\api\drafts\[slug]\route.ts:308:        slug: existing.slug,
+app\api\drafts\[slug]\route.ts:309:        numero_affiche: 
+existing.numero_affiche,
+app\api\drafts\route.ts:12:function makeSlug(numero: string, 
+withToken = false): string {
+app\api\drafts\route.ts:13:  const base = numero.toLowerCase()
+app\api\drafts\route.ts:19:  const token = 
+Math.random().toString(36).slice(2, 7); // ex: "x7k2m"
+app\api\drafts\route.ts:29:    const { data: draNum, error: rpcError 
+} = await supabaseAdmin.rpc("next_dra_numero");
+app\api\drafts\route.ts:31:      console.error("RPC next_dra_numero 
+error:", rpcError);
+app\api\drafts\route.ts:37:    const numeroAffiche = draNum as 
+string;          // "DRA-001"
+app\api\drafts\route.ts:38:    const numeroDraft = 
+parseInt(numeroAffiche.replace("DRA-", ""), 10); // 1
+app\api\drafts\route.ts:39:    const slug = makeSlug(numeroAffiche, 
+true);      // "dra-001-x7k2m"
+app\api\drafts\route.ts:63:      slug,
+app\api\drafts\route.ts:64:      numero_draft: numeroDraft,
+app\api\drafts\route.ts:65:      numero_affiche: numeroAffiche,
+app\api\drafts\route.ts:85:      client_numero: data.numero || null,
+app\api\drafts\route.ts:88:      client_numero_client: 
+data.numeroClient || null,
+app\api\drafts\route.ts:98:      livr_numero: data.livrNumero || 
+null,
+app\api\drafts\route.ts:118:      data: { ...data, offerNumber: 
+numeroAffiche },
+app\api\drafts\route.ts:125:      .select("id, slug, numero_affiche, 
+created_at, updated_at")
+app\api\drafts\route.ts:141:      slug: result.slug,
+app\api\drafts\route.ts:142:      numeroAffiche: 
+result.numero_affiche,
+app\api\drafts\route.ts:143:      dashboardUrl: 
+`/dashboard/draft/${result.slug}`,
+app\api\drafts\route.ts:144:      editUrl: 
+`/drafts/${result.slug}/editer`,
+app\api\drafts\route.ts:162:// Pour le détail complet d'un 
+brouillon, utiliser GET /api/drafts/[slug].
+app\api\drafts\route.ts:175:        "id, slug, numero_draft, 
+numero_affiche, reference, " +
+app\api\drafts\route.ts:179:        "transformed_at, 
+transformed_into_offre_slug, archived"
+app\api\make-health\route.ts:11://          run_id: 'xxx', 
+offre_slug: 'cmd-80520-abc', numero_affiche: 'CMD-80520' }
+app\api\make-health\route.ts:19:      offre_slug,
+app\api\make-health\route.ts:20:      numero_affiche,
+app\api\make-health\route.ts:31:        offre_slug: offre_slug || 
+null,
+app\api\make-health\route.ts:32:        numero_affiche: 
+numero_affiche || null,
+app\api\make-health\route.ts:61:      .select("created_at, event, 
+scenario_name, run_id, numero_affiche")
+app\api\make-health\route.ts:74:      .select("created_at, 
+numero_affiche, offre_slug")
+app\api\make-health\route.ts:126:        last_validation_numero: 
+lastCommande?.numero_affiche || null,
+app\api\make-health\route.ts:128:        message: `Make n'a pas ping 
+depuis la commande ${lastCommande?.numero_affiche || "(inconnu)"} 
+(il y a ${gap} min)`,
+app\api\make-health\route.ts:141:      last_validation_numero: 
+lastCommande?.numero_affiche || null,
+app\api\make-health\route.ts:143:      message: `Make a traité 
+${lastCommande?.numero_affiche || "la commande"} en 
+${pingGapMinutes} min`,
+app\api\offres\save\route.ts:11:function makeSlug(numero: string, 
+withToken = false): string {
+app\api\offres\save\route.ts:12:  const base = numero.toLowerCase()
+app\api\offres\save\route.ts:18:  const token = 
+Math.random().toString(36).slice(2, 7); // ex: "x7k2m"
+app\api\offres\save\route.ts:37:    let numeroOffre: string | null = 
+null;
+app\api\offres\save\route.ts:38:    let numeroCommande: string | 
+null = null;
+app\api\offres\save\route.ts:39:    let slug: string;
+app\api\offres\save\route.ts:40:    let numeroAffiche: string;
+app\api\offres\save\route.ts:46:        numeroCommande = 
+data.offerNumber;
+app\api\offres\save\route.ts:48:        numeroOffre = 
+data.offerNumber;
+app\api\offres\save\route.ts:50:      numeroAffiche = 
+data.offerNumber;
+app\api\offres\save\route.ts:51:      slug = 
+makeSlug(data.offerNumber);
+app\api\offres\save\route.ts:56:        const { data: cmdNum, error 
+} = await supabaseAdmin.rpc("next_cmd_numero");
+app\api\offres\save\route.ts:58:        numeroCommande = cmdNum as 
+string;
+app\api\offres\save\route.ts:59:        numeroAffiche = 
+numeroCommande;
+app\api\offres\save\route.ts:60:        slug = 
+makeSlug(numeroCommande, true);
+app\api\offres\save\route.ts:63:        const { data: devNum, error 
+} = await supabaseAdmin.rpc("next_dev_numero", { annee });
+app\api\offres\save\route.ts:65:        numeroOffre = devNum as 
+string;
+app\api\offres\save\route.ts:66:        numeroAffiche = numeroOffre;
+app\api\offres\save\route.ts:67:        slug = makeSlug(numeroOffre, 
+true);
+app\api\offres\save\route.ts:72:      slug,
+app\api\offres\save\route.ts:74:      numero_offre: numeroOffre,
+app\api\offres\save\route.ts:75:      numero_commande: 
+numeroCommande,
+app\api\offres\save\route.ts:93:      client_numero: data.numero || 
+null,
+app\api\offres\save\route.ts:103:      livr_numero: data.livrNumero 
+|| null,
+app\api\offres\save\route.ts:115:      data: { ...data, offerNumber: 
+numeroAffiche },
+app\api\offres\save\route.ts:120:      .upsert(row, { onConflict: 
+"slug" })
+app\api\offres\save\route.ts:121:      .select("id, slug, 
+created_at, updated_at")
+app\api\offres\save\route.ts:134:        offre_slug: slug,
+app\api\offres\save\route.ts:135:        numero_affiche: 
+numeroAffiche,
+app\api\offres\save\route.ts:143:        titre: `📋 Nouvelle 
+commande directe ${numeroAffiche}`,
+app\api\offres\save\route.ts:168:          
+fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
+app\api\offres\save\route.ts:184:            await 
+fetch(`${baseUrl}/api/offres/${slug}/fiche-travail-pdf`, {
+app\api\offres\save\route.ts:199:              body: 
+JSON.stringify({ offre_slug: slug, reason: "commande_directe" }),
+app\api\offres\save\route.ts:208:      
+fetch(`${baseUrl}/api/offres/${slug}/pdf`, {
+app\api\offres\save\route.ts:217:      slug,
+app\api\offres\save\route.ts:218:      numeroAffiche,
+app\api\offres\save\route.ts:219:      numeroOffre,
+app\api\offres\save\route.ts:220:      numeroCommande,
+app\api\offres\save\route.ts:221:      publicUrl: 
+`${baseUrl}/offre/${slug}`,
+app\api\offres\save\route.ts:222:      printUrl: 
+`${baseUrl}/print/offre/${slug}`,
+app\api\offres\save\route.ts:223:      dashboardUrl: 
+`${baseUrl}/dashboard/${slug}`,
+app\api\offres\save\route.ts:224:      pdfUrl: `${process.env.NEXT_PU
+BLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/${slug.startsWith("c
+md") ? "commandes" : "offres"}/${slug}.pdf`,
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:1:// 
+app/api/offres/[slug]/fiche-travail-pdf/route.ts
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:6://     Stocke à 
+fiches-travail/{slug}_initial.pdf et met à jour 
+fiche_travail_initial_url.
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:9://     Stocke à 
+fiches-travail/{slug}.pdf et met à jour fiche_travail_pdf_url.
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:20:async function 
+generatePdfFromPrintPage(slug: string, fileName: string): Promise<{ 
+buffer: ArrayBuffer | null; error?: string }> {
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:21:  const printUrl 
+= `${APP_URL}/print/fiche-travail/${slug}`
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:57:  { params }: { 
+params: Promise<{ slug: string }> }
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:60:    const { slug 
+} = await params
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:78:      
+.select("id, slug, numero_affiche, type_document, 
+fiche_travail_initial_url")
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:79:      
+.eq("slug", slug)
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:92:        slug,
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:99:      ? 
+`fiche-travail-${slug}-initial.pdf`
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:100:      : 
+`fiche-travail-${slug}.pdf`
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:102:    const { 
+buffer: pdfBuffer, error: pdfError } = await 
+generatePdfFromPrintPage(slug, fileName)
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:110:      ? 
+`fiches-travail/${slug}_initial.pdf`
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:111:      : 
+`fiches-travail/${slug}.pdf`
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:139:      
+.eq("slug", slug)
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:144:      slug,
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:157:  { params }: { 
+params: Promise<{ slug: string }> }
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:159:  const { slug 
+} = await params
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:163:    
+.select("fiche_travail_pdf_url, fiche_travail_initial_url, 
+fiche_travail_initial_at, numero_affiche")
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:164:    .eq("slug", 
+slug)
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:175:    slug,
+app\api\offres\[slug]\notes\route.ts:1:// 
+app/api/offres/[slug]/notes/route.ts
+app\api\offres\[slug]\notes\route.ts:9:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\notes\route.ts:12:    const { slug } = await 
+params
+app\api\offres\[slug]\notes\route.ts:27:      .eq("slug", slug)
+app\api\offres\[slug]\pdf\route.ts:1:// 
+app/api/offres/[slug]/pdf/route.ts
+app\api\offres\[slug]\pdf\route.ts:14:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\pdf\route.ts:17:    const { slug } = await 
+params
+app\api\offres\[slug]\pdf\route.ts:26:      .select("id, slug, 
+numero_affiche, type_document")
+app\api\offres\[slug]\pdf\route.ts:27:      .eq("slug", slug)
+app\api\offres\[slug]\pdf\route.ts:41:    const printUrl = 
+`${APP_URL}/print/offre/${slug}${isOffre ? "?nostock=1" : ""}`
+app\api\offres\[slug]\pdf\route.ts:52:        name: `${slug}.pdf`,
+app\api\offres\[slug]\pdf\route.ts:81:    const storagePath = 
+`${folder}/${slug}.pdf`
+app\api\offres\[slug]\pdf\route.ts:103:      .eq("slug", slug)
+app\api\offres\[slug]\pdf\route.ts:108:      slug,
+app\api\offres\[slug]\pdf\route.ts:120:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\pdf\route.ts:122:  const { slug } = await 
+params
+app\api\offres\[slug]\pdf\route.ts:126:    .select("pdf_url, 
+numero_affiche")
+app\api\offres\[slug]\pdf\route.ts:127:    .eq("slug", slug)
+app\api\offres\[slug]\pdf\route.ts:134:  return NextResponse.json({ 
+pdf_url: data.pdf_url || null, slug })
+app\api\offres\[slug]\probabilite\route.ts:1:// 
+app/api/offres/[slug]/probabilite/route.ts
+app\api\offres\[slug]\probabilite\route.ts:7:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\probabilite\route.ts:9:  const { slug } = 
+await params
+app\api\offres\[slug]\probabilite\route.ts:17:    .eq("slug", slug)
+app\api\offres\[slug]\qr\route.ts:1:// 
+app/api/offres/[slug]/qr/route.ts
+app\api\offres\[slug]\qr\route.ts:16:function buildReference(numero: 
+string): string {
+app\api\offres\[slug]\qr\route.ts:18:  return 
+numero.replace(/[^A-Z0-9]/g, "").slice(0, 27)
+app\api\offres\[slug]\qr\route.ts:37:  const rue = 
+[offre.client_rue, (d.numero as string) || 
+""].filter(Boolean).join(" ")
+app\api\offres\[slug]\qr\route.ts:41:  const numero = 
+offre.numero_affiche as string
+app\api\offres\[slug]\qr\route.ts:110:    <p>${numero}</p>
+app\api\offres\[slug]\qr\route.ts:117:    <tr><td class="lbl">N° 
+${isCommande ? "de commande" : "d'offre"}</td><td>${numero}</td></tr>
+app\api\offres\[slug]\qr\route.ts:140:  Merci de mentionner la 
+référence <strong>${numero}</strong> lors de votre paiement.<br/>
+app\api\offres\[slug]\qr\route.ts:190:  const udNumber = ((d.numero 
+as string) || "1").slice(0, 16)
+app\api\offres\[slug]\qr\route.ts:193:  const reference = 
+buildReference((offre.numero_affiche as string) || "")
+app\api\offres\[slug]\qr\route.ts:197:    docName: 
+`qr_${offre.slug}.pdf`,
+app\api\offres\[slug]\qr\route.ts:215:    unstructuredMessage: 
+(isAcompte ? `Acompte 50% - ${offre.numero_affiche}` : `Paiement 
+${offre.numero_affiche}`).slice(0, 140),
+app\api\offres\[slug]\qr\route.ts:245:async function 
+storeQrPdf(slug: string, pdfData: ArrayBuffer | Buffer): 
+Promise<string> {
+app\api\offres\[slug]\qr\route.ts:247:  const storagePath = 
+`qr/${slug}_qr.pdf`
+app\api\offres\[slug]\qr\route.ts:252:  await 
+supabaseAdmin.from("offres").update({ qr_url: qrUrl }).eq("slug", 
+slug)
+app\api\offres\[slug]\qr\route.ts:258:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\qr\route.ts:261:    const { slug } = await 
+params
+app\api\offres\[slug]\qr\route.ts:267:      
+.from("offres").select("*").eq("slug", slug).single()
+app\api\offres\[slug]\qr\route.ts:278:    const qrUrl = await 
+storeQrPdf(slug, qrPdfBuffer)
+app\api\offres\[slug]\qr\route.ts:280:    return NextResponse.json({ 
+success: true, qr_url: qrUrl, montant, isAcompte, slug })
+app\api\offres\[slug]\qr\route.ts:289:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\qr\route.ts:291:  const { slug } = await params
+app\api\offres\[slug]\qr\route.ts:293:    
+.from("offres").select("qr_url").eq("slug", slug).single()
+app\api\offres\[slug]\qr\route.ts:296:    slug
+app\api\offres\[slug]\relance\route.ts:1:// 
+app/api/offres/[slug]/relance/route.ts
+app\api\offres\[slug]\relance\route.ts:9:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\relance\route.ts:12:    const { slug } = await 
+params
+app\api\offres\[slug]\relance\route.ts:23:      .eq("slug", slug)
+app\api\offres\[slug]\relance\route.ts:41:      .eq("slug", slug)
+app\api\offres\[slug]\reviser\route.ts:1:// 
+app/api/offres/[slug]/reviser/route.ts
+app\api\offres\[slug]\reviser\route.ts:2:// POST 
+/api/offres/[slug]/reviser
+app\api\offres\[slug]\reviser\route.ts:11:// NE crée PAS de nouvelle 
+ligne offres. La commande garde son slug et son numéro.
+app\api\offres\[slug]\reviser\route.ts:25:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\reviser\route.ts:28:    const { slug } = await 
+params;
+app\api\offres\[slug]\reviser\route.ts:42:      .select("slug, 
+type_document, numero_affiche, data, statut")
+app\api\offres\[slug]\reviser\route.ts:43:      .eq("slug", slug)
+app\api\offres\[slug]\reviser\route.ts:82:        p_slug: slug,
+app\api\offres\[slug]\reviser\route.ts:108:        
+offre.numero_affiche || slug
+app\api\offres\[slug]\reviser\route.ts:125:            
+.eq("offre_slug", slug)
+app\api\offres\[slug]\reviser\route.ts:135:              offre_slug: 
+slug,
+app\api\offres\[slug]\reviser\route.ts:136:              
+numero_affiche: offre.numero_affiche,
+app\api\offres\[slug]\statut\route.ts:1:// 
+app/api/offres/[slug]/statut/route.ts
+app\api\offres\[slug]\statut\route.ts:9:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\statut\route.ts:12:    const { slug } = await 
+params
+app\api\offres\[slug]\statut\route.ts:28:      
+.from("offres").update(update).eq("slug", slug)
+app\api\offres\[slug]\valider\route.ts:1:// 
+app/api/offres/[slug]/valider/route.ts
+app\api\offres\[slug]\valider\route.ts:2:// POST 
+/api/offres/[slug]/valider
+app\api\offres\[slug]\valider\route.ts:19:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\valider\route.ts:22:    const { slug } = await 
+params;
+app\api\offres\[slug]\valider\route.ts:34:      .eq("slug", slug)
+app\api\offres\[slug]\valider\route.ts:42:    if (["Acceptée", 
+"Convertie", "Commande"].includes(offre.statut) || 
+offre.numero_commande) {
+app\api\offres\[slug]\valider\route.ts:43:      const 
+existingCmdSlug = offre.numero_commande
+app\api\offres\[slug]\valider\route.ts:44:        ? 
+offre.numero_commande.toLowerCase().replace(/[^a-z0-9-]/g, "-")
+app\api\offres\[slug]\valider\route.ts:49:        cmdSlug: 
+existingCmdSlug,
+app\api\offres\[slug]\valider\route.ts:57:      .eq("slug", slug)
+app\api\offres\[slug]\valider\route.ts:66:      
+.rpc("next_cmd_numero");
+app\api\offres\[slug]\valider\route.ts:72:    const numeroCommande = 
+cmdNum as string;
+app\api\offres\[slug]\valider\route.ts:73:    const token = 
+Math.random().toString(36).slice(2, 7);
+app\api\offres\[slug]\valider\route.ts:74:    const cmdSlug = 
+numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" + 
+token;
+app\api\offres\[slug]\valider\route.ts:77:    // ⚠️ On enregistre 
+numero_commande au niveau colonne (pas seulement dans data)
+app\api\offres\[slug]\valider\route.ts:78:    // pour que 
+/api/offres/[slug] GET puisse retrouver la commande liée et
+app\api\offres\[slug]\valider\route.ts:84:        numero_commande: 
+numeroCommande,  // ✅ Lien explicite vers la CMD
+app\api\offres\[slug]\valider\route.ts:93:      .eq("slug", slug);
+app\api\offres\[slug]\valider\route.ts:96:    const offreNumero = 
+offre.numero_offre || offre.numero_affiche
+app\api\offres\[slug]\valider\route.ts:106:      const refreshRes = 
+await fetch(`${BASE_URL}/api/offres/${slug}`, { cache: "no-store" });
+app\api\offres\[slug]\valider\route.ts:122:      slug: cmdSlug,
+app\api\offres\[slug]\valider\route.ts:124:      numero_offre: 
+offre.numero_offre,
+app\api\offres\[slug]\valider\route.ts:125:      numero_commande: 
+numeroCommande,
+app\api\offres\[slug]\valider\route.ts:126:      offre_origine: 
+offreNumero,
+app\api\offres\[slug]\valider\route.ts:142:      client_numero: 
+offre.client_numero,
+app\api\offres\[slug]\valider\route.ts:151:      livr_numero: 
+offre.livr_numero,
+app\api\offres\[slug]\valider\route.ts:166:        offerNumber: 
+numeroCommande,
+app\api\offres\[slug]\valider\route.ts:188:      offre_slug: cmdSlug,
+app\api\offres\[slug]\valider\route.ts:189:      numero_affiche: 
+numeroCommande,
+app\api\offres\[slug]\valider\route.ts:198:        ? `🔄 Commande 
+${numeroCommande} créée (conversion manuelle)`
+app\api\offres\[slug]\valider\route.ts:199:        : `🎉 Commande 
+${numeroCommande} validée online`,
+app\api\offres\[slug]\valider\route.ts:208:      numero_offre: 
+offre.numero_affiche,
+app\api\offres\[slug]\valider\route.ts:209:      numero_commande: 
+numeroCommande,
+app\api\offres\[slug]\valider\route.ts:210:      offre_slug: slug,
+app\api\offres\[slug]\valider\route.ts:211:      commande_slug: 
+cmdSlug,
+app\api\offres\[slug]\valider\route.ts:242:      url_offre: 
+`${BASE_URL}/offre/${slug}`,
+app\api\offres\[slug]\valider\route.ts:243:      url_commande: 
+`${BASE_URL}/offre/${cmdSlug}`,
+app\api\offres\[slug]\valider\route.ts:244:      url_confirmation: 
+`${BASE_URL}/offre/${cmdSlug}/confirmation`,
+app\api\offres\[slug]\valider\route.ts:245:      url_print_offre: 
+`${BASE_URL}/print/offre/${slug}`,
+app\api\offres\[slug]\valider\route.ts:246:      url_print_commande: 
+`${BASE_URL}/print/offre/${cmdSlug}`,
+app\api\offres\[slug]\valider\route.ts:247:      url_pdf_commande: `$
+{process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/
+commandes/${cmdSlug}.pdf`,
+app\api\offres\[slug]\valider\route.ts:248:      url_qr_paiement: `${
+process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs/q
+r/${cmdSlug}_qr.pdf`,
+app\api\offres\[slug]\valider\route.ts:249:      
+url_fiche_travail_initiale: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/
+storage/v1/object/public/pdfs/fiches-travail/${cmdSlug}_initial.pdf`,
+app\api\offres\[slug]\valider\route.ts:252:      url_fiche_travail: `
+${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/pdfs
+/fiches-travail/${cmdSlug}_initial.pdf`,
+app\api\offres\[slug]\valider\route.ts:305:        
+fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST" })
+app\api\offres\[slug]\valider\route.ts:307:        
+fetch(`${BASE_URL}/api/offres/${cmdSlug}/qr`, { method: "POST" })
+app\api\offres\[slug]\valider\route.ts:314:        await 
+fetch(`${BASE_URL}/api/offres/${cmdSlug}/fiche-travail-pdf`, {
+app\api\offres\[slug]\valider\route.ts:329:          body: 
+JSON.stringify({ offre_slug: cmdSlug, reason: "commande_validee" }),
+app\api\offres\[slug]\valider\route.ts:342:        
+fetch(`${BASE_URL}/api/offres/${cmdSlug}/pdf`, { method: "POST" }),
+app\api\offres\[slug]\valider\route.ts:351:      numeroCommande,
+app\api\offres\[slug]\valider\route.ts:352:      cmdSlug,
+app\api\offres\[slug]\valider\route.ts:353:      confirmationUrl: 
+`${BASE_URL}/offre/${cmdSlug}/confirmation`,
+app\api\offres\[slug]\route.ts:1:// app/api/offres/[slug]/route.ts
+app\api\offres\[slug]\route.ts:3:// GET /api/offres/[slug]
+app\api\offres\[slug]\route.ts:4:// GET 
+/api/offres/[slug]?snapshot=true  → retourne le snapshot figé
+app\api\offres\[slug]\route.ts:15:  { params }: { params: Promise<{ 
+slug: string }> }
+app\api\offres\[slug]\route.ts:18:    const { slug } = await params;
+app\api\offres\[slug]\route.ts:25:      .eq("slug", slug)
+app\api\offres\[slug]\route.ts:37:      let numeroClient = null
+app\api\offres\[slug]\route.ts:42:          .select("numero_client")
+app\api\offres\[slug]\route.ts:45:        if (clientData) 
+numeroClient = clientData.numero_client
+app\api\offres\[slug]\route.ts:53:          numero_client: 
+numeroClient,
+app\api\offres\[slug]\route.ts:75:    } else if (isOffreConvertie && 
+offre.numero_commande) {
+app\api\offres\[slug]\route.ts:80:        .eq("numero_commande", 
+offre.numero_commande)
+app\api\offres\[slug]\route.ts:110:    let numeroClient = null
+app\api\offres\[slug]\route.ts:115:        .select("numero_client")
+app\api\offres\[slug]\route.ts:118:      if (clientData) 
+numeroClient = clientData.numero_client
+app\api\offres\[slug]\route.ts:134:        numero_client: 
+numeroClient,
+app\api\offres\[slug]\route.ts:144:// PATCH /api/offres/[slug] — 
+mettre à jour le statut ou créer un snapshot
+app\api\offres\[slug]\route.ts:147:  { params }: { params: Promise<{ 
+slug: string }> }
+app\api\offres\[slug]\route.ts:150:    const { slug } = await params;
+app\api\offres\[slug]\route.ts:158:        .eq("slug", slug);
+app\api\offres\[slug]\route.ts:170:        .eq("slug", slug)
+app\api\offres\[slug]\route.ts:188:        .eq("slug", slug);
+app\api\revisions\route.ts:45:  const commandeSlug = 
+searchParams.get("commande_slug");
+app\api\revisions\route.ts:47:  if (!commandeSlug || typeof 
+commandeSlug !== "string") {
+app\api\revisions\route.ts:49:      { error: "commande_slug requis 
+(string)" },
+app\api\revisions\route.ts:57:    .eq("commande_slug", commandeSlug)
+app\api\revisions\route.ts:79:    .eq("commande_slug", commandeSlug)
+app\api\stock-movements\process\route.ts:2:// POST { offre_slug } → 
+traite tous les articles de la commande et fait les sorties Shopify
+app\api\stock-movements\process\route.ts:26:    const offre_slug: 
+string = body.offre_slug
+app\api\stock-movements\process\route.ts:29:    if (!offre_slug) {
+app\api\stock-movements\process\route.ts:30:      return 
+NextResponse.json({ error: "offre_slug requis" }, { status: 400 })
+app\api\stock-movements\process\route.ts:36:      .select("slug, 
+type_document, numero_affiche, data, client_nom, client_prenom")
+app\api\stock-movements\process\route.ts:37:      .eq("slug", 
+offre_slug)
+app\api\stock-movements\process\route.ts:86:    const ledgerUri = 
+(numeroAffiche: string | null) =>
+app\api\stock-movements\process\route.ts:87:      
+`gid://offres-jardin-confort/StockMovement/${numeroAffiche || 
+offre_slug}`
+app\api\stock-movements\process\route.ts:99:        
+.eq("offre_slug", offre_slug)
+app\api\stock-movements\process\route.ts:114:          offre_slug,
+app\api\stock-movements\process\route.ts:115:          
+numero_affiche: offre.numero_affiche,
+app\api\stock-movements\process\route.ts:144:        
+.eq("offre_slug", offre_slug)
+app\api\stock-movements\process\route.ts:159:          offre_slug,
+app\api\stock-movements\process\route.ts:160:          
+numero_affiche: offre.numero_affiche,
+app\api\stock-movements\process\route.ts:199:          
+ledgerUri(offre.numero_affiche),
+app\api\stock-movements\process\route.ts:254:        offre_slug: 
+offre.slug,
+app\api\stock-movements\process\route.ts:255:        numero_affiche: 
+offre.numero_affiche,
+app\api\stock-movements\process\route.ts:259:        titre: `⚠️ 
+Sortie stock partielle pour ${offre.numero_affiche}`,
+app\api\stock-movements\route.ts:2:// GET 
+/api/stock-movements?offre_slug=xxx     → mouvements d'une commande
+app\api\stock-movements\route.ts:12:    const offreSlug = 
+url.searchParams.get("offre_slug")
+app\api\stock-movements\route.ts:22:    if (offreSlug) query = 
+query.eq("offre_slug", offreSlug)
+app\dashboard\brand-logos\page.tsx:86:      
+l.slug.toLowerCase().includes(f) ||
+app\dashboard\brand-logos\page.tsx:163:            placeholder="🔍 
+Filtrer par nom, slug ou terme de recherche..."
+app\dashboard\brand-logos\page.tsx:183:                <div 
+className="bl-logo-slug">{logo.slug}</div>
+app\dashboard\brand-logos\page.tsx:477:        .bl-logo-slug {
+app\dashboard\clients\review-emails\page.tsx:24:  numero_client: 
+string
+app\dashboard\clients\review-emails\page.tsx:239:                    
+      {c.numero_client}
+app\dashboard\clients\[id]\page.tsx:14:  numero_client: string
+app\dashboard\clients\[id]\page.tsx:27:  numero_rue: string | null
+app\dashboard\clients\[id]\page.tsx:48:  slug: string
+app\dashboard\clients\[id]\page.tsx:49:  numero_affiche: string
+app\dashboard\clients\[id]\page.tsx:60:  numero_facture: string
+app\dashboard\clients\[id]\page.tsx:420:  const [newFacture, 
+setNewFacture] = useState({ numero_facture: "", date_facture: "", 
+montant: "" })
+app\dashboard\clients\[id]\page.tsx:457:        [client.rue, 
+client.numero_rue].filter(Boolean).join(" "),
+app\dashboard\clients\[id]\page.tsx:502:    if (!client || 
+!newFacture.numero_facture.trim()) { setAddFactureError("Numéro 
+requis"); return }
+app\dashboard\clients\[id]\page.tsx:509:        
+formData.append("numero_facture", newFacture.numero_facture.trim())
+app\dashboard\clients\[id]\page.tsx:524:          numero_facture: 
+newFacture.numero_facture.trim(),
+app\dashboard\clients\[id]\page.tsx:533:      setNewFacture({ 
+numero_facture: "", date_facture: "", montant: "" })
+app\dashboard\clients\[id]\page.tsx:569:              rue: 
+client.rue || "", numero: client.numero_rue || "",
+app\dashboard\clients\[id]\page.tsx:582:                <span 
+className="font-mono text-sm font-semibold 
+text-[#2B8AD1]">{client.numero_client}</span>
+app\dashboard\clients\[id]\page.tsx:721:                      <input 
+type="text" value={(form.numero_rue as string) || ""}
+app\dashboard\clients\[id]\page.tsx:723:                        
+onChange={e => setForm(p => ({ ...p, numero_rue: e.target.value }))}
+app\dashboard\clients\[id]\page.tsx:821:                    {/* Rue 
+livraison (avec n° dedans car pas de colonne livr_numero_rue en 
+base) */}
+app\dashboard\clients\[id]\page.tsx:880:                    ["Rue", 
+[client.rue, client.numero_rue].filter(Boolean).join(" ")],
+app\dashboard\clients\[id]\page.tsx:994:                    rue: 
+client.rue || "", numero: client.numero_rue || "",
+app\dashboard\clients\[id]\page.tsx:1020:                        
+onClick={() => window.location.href = `/dashboard/${o.slug}`}>
+app\dashboard\clients\[id]\page.tsx:1021:                        <td 
+className="px-4 py-3 font-semibold 
+text-zinc-100">{o.numero_affiche}</td>
+app\dashboard\clients\[id]\page.tsx:1031:                            
+<Link href={`/dashboard/${o.slug}`}
+app\dashboard\clients\[id]\page.tsx:1035:                            
+<a href={`${APP_URL}/offre/${o.slug}`} target="_blank" rel="noopener 
+noreferrer"
+app\dashboard\clients\[id]\page.tsx:1105:                  <input 
+type="text" value={newFacture.numero_facture}
+app\dashboard\clients\[id]\page.tsx:1106:                    
+onChange={e => setNewFacture(p => ({...p, numero_facture: 
+e.target.value}))}
+app\dashboard\clients\[id]\page.tsx:1184:                  
+{factures.sort((a, b) => (b.numero_facture > a.numero_facture ? 1 : 
+-1)).map((f, idx) => (
+app\dashboard\clients\[id]\page.tsx:1187:                      <td 
+className="px-4 py-3 font-mono text-xs font-semibold 
+text-[#2B8AD1]">#{f.numero_facture}</td>
+app\dashboard\clients\page.tsx:10:  numero_client: string
+app\dashboard\clients\page.tsx:19:  numero_rue: string | null
+app\dashboard\clients\page.tsx:460:        numero_rue: streetNum || 
+p.numero_rue,
+app\dashboard\clients\page.tsx:478:    rue:"", rue2:"", 
+numero_rue:"", npa:"", ville:"", notes:""
+app\dashboard\clients\page.tsx:603:      setNewClient({ nom:"", 
+prenom:"", societe:"", complement_nom:"", email:"", tel1:"", 
+tel2:"", rue:"", rue2:"", numero_rue:"", npa:"", ville:"", notes:"" 
+})
+app\dashboard\clients\page.tsx:933:                  <input 
+type="text" value={newClient.numero_rue}
+app\dashboard\clients\page.tsx:934:                    onChange={e 
+=> setNewClient(p => ({...p, numero_rue: e.target.value}))}
+app\dashboard\clients\page.tsx:1083:                            
+<span className="font-mono text-xs font-semibold 
+text-[#2B8AD1]">{c.numero_client}</span>
+app\dashboard\clients\page.tsx:1098:                            
+const ligne1 = [c.rue, c.numero_rue].filter(Boolean).join(" ")
+app\dashboard\clients\page.tsx:1126:                              
+rue: c.rue||"", numero: c.numero_rue||"", npa: c.npa||"", ville: 
+c.ville||"",
+app\dashboard\draft\[slug]\page.tsx:2:// 
+app/dashboard/draft/[slug]/page.tsx
+app\dashboard\draft\[slug]\page.tsx:13:  slug: string;
+app\dashboard\draft\[slug]\page.tsx:14:  numero_draft: number;
+app\dashboard\draft\[slug]\page.tsx:15:  numero_affiche: string;
+app\dashboard\draft\[slug]\page.tsx:35:  client_numero: string | 
+null;
+app\dashboard\draft\[slug]\page.tsx:38:  client_numero_client: 
+string | null;
+app\dashboard\draft\[slug]\page.tsx:47:  livr_numero: string | null;
+app\dashboard\draft\[slug]\page.tsx:68:  
+transformed_into_offre_slug: string | null;
+app\dashboard\draft\[slug]\page.tsx:107:  params: Promise<{ slug: 
+string }>;
+app\dashboard\draft\[slug]\page.tsx:112:  const [slug, setSlug] = 
+useState("");
+app\dashboard\draft\[slug]\page.tsx:120:      const { slug: s } = 
+await params;
+app\dashboard\draft\[slug]\page.tsx:121:      setSlug(s);
+app\dashboard\draft\[slug]\page.tsx:144:      // Traçabilité Session 
+8 : on injecte le slug + numéro du brouillon source
+app\dashboard\draft\[slug]\page.tsx:145:      // dans 
+data.copiedFromDraftSlug / copiedFromDraftNumero. Le brouillon
+app\dashboard\draft\[slug]\page.tsx:148:      // PRÉSERVE 
+copiedFromOffreSlug — c'est l'info d'origine ultime, la plus
+app\dashboard\draft\[slug]\page.tsx:152:        copiedFromDraftSlug: 
+draft.slug,
+app\dashboard\draft\[slug]\page.tsx:153:        
+copiedFromDraftNumero: draft.numero_affiche,
+app\dashboard\draft\[slug]\page.tsx:180:      `Supprimer 
+définitivement le brouillon ${draft.numero_affiche} ?\n\n` +
+app\dashboard\draft\[slug]\page.tsx:187:      const res = await 
+fetch(`/api/drafts/${slug}`, { method: "DELETE" });
+app\dashboard\draft\[slug]\page.tsx:221:            Aucun brouillon 
+trouvé pour le slug{" "}
+app\dashboard\draft\[slug]\page.tsx:222:            <code 
+className="text-zinc-300">{slug}</code>. Il a peut-être été
+app\dashboard\draft\[slug]\page.tsx:270:  const urlPrint = 
+`/print/draft/${draft.slug}`;
+app\dashboard\draft\[slug]\page.tsx:316:              
+{draft.transformed_into_offre_slug && (
+app\dashboard\draft\[slug]\page.tsx:318:                  
+href={`/dashboard/${draft.transformed_into_offre_slug}`}
+app\dashboard\draft\[slug]\page.tsx:358:                      
+{draft.numero_affiche}
+app\dashboard\draft\[slug]\page.tsx:406:                      
+href={`/drafts/${draft.slug}/editer`}
+app\dashboard\draft\[slug]\page.tsx:463:                        
+[draft.client_rue, draft.client_numero]
+app\dashboard\draft\[slug]\page.tsx:534:                        
+[draft.livr_rue, draft.livr_numero]
+app\dashboard\draft\[slug]\page.tsx:697:            slug: draft.slug,
+app\dashboard\draft\[slug]\page.tsx:698:            numero_affiche: 
+draft.numero_affiche,
+app\dashboard\notifications\page.tsx:11:  offre_slug: string | null;
+app\dashboard\notifications\page.tsx:12:  numero_affiche: string | 
+null;
+app\dashboard\notifications\page.tsx:33:  last_validation_numero?: 
+string;
+app\dashboard\notifications\page.tsx:264:                        
+{n.numero_affiche && (
+app\dashboard\notifications\page.tsx:265:                          
+<span className="text-sm font-bold 
+text-zinc-100">{n.numero_affiche}</span>
+app\dashboard\notifications\page.tsx:275:                        
+{n.titre || `Commande ${n.numero_affiche}`}
+app\dashboard\notifications\page.tsx:301:                      
+{n.offre_slug && (
+app\dashboard\notifications\page.tsx:302:                        
+<Link href={`/dashboard/${n.offre_slug}`}
+app\dashboard\stock-movements\page.tsx:10:  offre_slug: string;
+app\dashboard\stock-movements\page.tsx:11:  numero_affiche: string | 
+null;
+app\dashboard\stock-movements\page.tsx:176:                        
+<Link href={`/dashboard/${m.offre_slug}`}
+app\dashboard\stock-movements\page.tsx:178:                          
+{m.numero_affiche || m.offre_slug}
+app\dashboard\stock-remises\page.tsx:15:  commande_slug: string;
+app\dashboard\stock-remises\page.tsx:16:  numero_affiche: string | 
+null;
+app\dashboard\stock-remises\page.tsx:164:                    <Link 
+href={`/dashboard/${r.commande_slug}`} className="text-sky-300 
+hover:underline">
+app\dashboard\stock-remises\page.tsx:165:                      
+{r.numero_affiche || r.commande_slug}
+app\dashboard\[slug]\reviser\page.tsx:1:// 
+app/dashboard/[slug]/reviser/page.tsx
+app\dashboard\[slug]\reviser\page.tsx:3:// Monte DraftFormulaire en 
+mode révision (revisionMode + commandeSlug).
+app\dashboard\[slug]\reviser\page.tsx:4:// Le formulaire hydrate 
+depuis la commande et sauvegarde via /api/offres/[slug]/reviser.
+app\dashboard\[slug]\reviser\page.tsx:11:  params: Promise<{ slug: 
+string }>;
+app\dashboard\[slug]\reviser\page.tsx:13:  const { slug } = await 
+params;
+app\dashboard\[slug]\reviser\page.tsx:14:  return <DraftFormulaire 
+revisionMode commandeSlug={slug} />;
+app\dashboard\[slug]\page.tsx:2:// app/dashboard/[slug]/page.tsx
+app\dashboard\[slug]\page.tsx:16:  id: number; slug: string; 
+type_document: TypeDocument
+app\dashboard\[slug]\page.tsx:17:  numero_offre: string|null; 
+numero_commande: string|null; offre_origine: string|null
+app\dashboard\[slug]\page.tsx:18:  numero_affiche: string; statut: 
+OffreStatut; date_document: string|null
+app\dashboard\[slug]\page.tsx:152:export default function 
+DashboardDetailPage({ params }: { params: Promise<{ slug: string }> 
+}) {
+app\dashboard\[slug]\page.tsx:155:  const [slug,setSlug]=useState("")
+app\dashboard\[slug]\page.tsx:177:  const [offreOrigineSlug, 
+setOffreOrigineSlug] = useState<string|null>(null)
+app\dashboard\[slug]\page.tsx:178:  const [commandeIssue, 
+setCommandeIssue] = useState<{slug: string; numero: 
+string}|null>(null)
+app\dashboard\[slug]\page.tsx:184:  async function 
+pollPdf(slugToCheck: string) {
+app\dashboard\[slug]\page.tsx:188:        const res = await 
+fetch(`/api/offres/${slugToCheck}`)
+app\dashboard\[slug]\page.tsx:201:      const {slug:s}=await params
+app\dashboard\[slug]\page.tsx:202:      setSlug(s)
+app\dashboard\[slug]\page.tsx:238:              const found = 
+(oJson.offres || []).find((x: {numero_affiche?: string; slug?: 
+string}) =>
+app\dashboard\[slug]\page.tsx:239:                x.numero_affiche 
+=== o.offre_origine
+app\dashboard\[slug]\page.tsx:241:              if (found?.slug) 
+setOffreOrigineSlug(found.slug)
+app\dashboard\[slug]\page.tsx:252:              const found = 
+list.find((x: {type_document?: string; offre_origine?: string; 
+slug?: string; numero_affiche?: string}) =>
+app\dashboard\[slug]\page.tsx:253:                x.type_document 
+=== "Commande" && x.offre_origine === o.numero_affiche
+app\dashboard\[slug]\page.tsx:255:              if (found?.slug && 
+found?.numero_affiche) {
+app\dashboard\[slug]\page.tsx:256:                setCommandeIssue({ 
+slug: found.slug, numero: found.numero_affiche })
+app\dashboard\[slug]\page.tsx:285:    if(!slug) return
+app\dashboard\[slug]\page.tsx:288:      const res=await 
+fetch(`/api/offres/${slug}/pdf`,{method:"POST"})
+app\dashboard\[slug]\page.tsx:296:    if(!slug) return
+app\dashboard\[slug]\page.tsx:299:      const res=await 
+fetch(`/api/offres/${slug}/qr`,{method:"POST"})
+app\dashboard\[slug]\page.tsx:307:    if(!slug) return
+app\dashboard\[slug]\page.tsx:325:      const res = await 
+fetch(`/api/offres/${slug}/fiche-travail-pdf`, {
+app\dashboard\[slug]\page.tsx:355:      await 
+fetch(`/api/offres/${slug}/probabilite`, {
+app\dashboard\[slug]\page.tsx:366:    if(!slug) return
+app\dashboard\[slug]\page.tsx:369:      const res=await 
+fetch(`/api/offres/${slug}/relance`,{method:"POST"})
+app\dashboard\[slug]\page.tsx:386:  //   3. Redirection vers 
+/drafts/[slug]/editer (nouvel onglet) en mode édition
+app\dashboard\[slug]\page.tsx:392:  //   - Traçabilité 
+copiedFromOffreSlug persistée directement en base
+app\dashboard\[slug]\page.tsx:394:  // Trace : 
+data.copiedFromOffreSlug + data.copiedFromOffreNumero permettent
+app\dashboard\[slug]\page.tsx:424:      copiedFromOffreSlug: 
+offre.slug,
+app\dashboard\[slug]\page.tsx:425:      copiedFromOffreNumero: 
+offre.numero_affiche,
+app\dashboard\[slug]\page.tsx:432:      fromDraftSlug: undefined,    
+     // ← marqueur transformation Session 5
+app\dashboard\[slug]\page.tsx:433:      copiedFromDraftSlug: 
+undefined,   // ← marqueur copie brouillon→brouillon
+app\dashboard\[slug]\page.tsx:451:        numero: (offreData.numero 
+as string) || "",
+app\dashboard\[slug]\page.tsx:462:        rue: "", numero: "", rue2: 
+"", npa: "", ville: "",
+app\dashboard\[slug]\page.tsx:465:        livrRue: "", livrNumero: 
+"", livrRue2: "",
+app\dashboard\[slug]\page.tsx:493:      const res=await 
+fetch(`/api/offres/${slug}/notes`,{
+app\dashboard\[slug]\page.tsx:509:      const res=await 
+fetch(`/api/offres/${slug}/statut`,{
+app\dashboard\[slug]\page.tsx:545:          [offre.client_rue, 
+(data.numero as string) || ""].filter(Boolean).join(" ") || null,
+app\dashboard\[slug]\page.tsx:553:          [(data.livrRue as 
+string) || "", (data.livrNumero as string) || 
+""].filter(Boolean).join(" ") || null,
+app\dashboard\[slug]\page.tsx:570:      const res = await 
+fetch(`/api/offres/${slug}/valider`, {
+app\dashboard\[slug]\page.tsx:581:      if (res.ok && json.cmdSlug) {
+app\dashboard\[slug]\page.tsx:582:        window.location.href = 
+`/dashboard/${json.cmdSlug}`
+app\dashboard\[slug]\page.tsx:596:    const 
+pdfUrl=`${APP_URL}/print/offre/${offre.slug}`
+app\dashboard\[slug]\page.tsx:597:    const 
+validationUrl=`${APP_URL}/offre/${offre.slug}`
+app\dashboard\[slug]\page.tsx:624:  <div style="font-size:20px;font-w
+eight:bold;color:#0a1551;">${offre.type_document} 
+${offre.numero_affiche}</div>
+app\dashboard\[slug]\page.tsx:686:    const 
+pdfUrl=`${APP_URL}/print/offre/${offre.slug}`
+app\dashboard\[slug]\page.tsx:687:    const 
+validationUrl=`${APP_URL}/offre/${offre.slug}`
+app\dashboard\[slug]\page.tsx:717:  <div style="font-size:20px;font-w
+eight:bold;color:#0a1551;">${offre.type_document} 
+${offre.numero_affiche}</div>
+app\dashboard\[slug]\page.tsx:782:    const 
+commandeUrl=`${APP_URL}/print/offre/${offre.slug}`
+app\dashboard\[slug]\page.tsx:785:      offre.client_rue && 
+`${offre.client_rue}${(offre.data as Record<string,unknown>)?.numero 
+? " " + ((offre.data as Record<string,unknown>).numero as string) : 
+""}`,
+app\dashboard\[slug]\page.tsx:816:  <div 
+style="font-size:20px;font-weight:bold;color:#0a1551;">Commande 
+${offre.numero_affiche}</div>
+app\dashboard\[slug]\page.tsx:849:      ["Commande", 
+offre.numero_affiche],
+app\dashboard\[slug]\page.tsx:884:    const 
+commandeUrl=`${APP_URL}/print/offre/${offre.slug}`
+app\dashboard\[slug]\page.tsx:914:  <div 
+style="font-size:20px;font-weight:bold;color:#0a1551;">Commande 
+${offre.numero_affiche}</div>
+app\dashboard\[slug]\page.tsx:947:      ["Commande", 
+offre.numero_affiche],
+app\dashboard\[slug]\page.tsx:981:        ? `Confirmation de votre 
+commande Jardin-Confort ${offre?.numero_affiche || ""}`
+app\dashboard\[slug]\page.tsx:982:        : `Votre offre 
+Jardin-Confort ${offre?.numero_affiche || ""}`)
+app\dashboard\[slug]\page.tsx:984:        ? `Rappel acompte — 
+Commande Jardin-Confort ${offre?.numero_affiche || ""}`
+app\dashboard\[slug]\page.tsx:985:        : `Suivi de votre offre 
+Jardin-Confort ${offre?.numero_affiche || ""}`)
+app\dashboard\[slug]\page.tsx:1000:  const 
+urlPublique=`${APP_URL}/offre/${offre.slug}`
+app\dashboard\[slug]\page.tsx:1001:  const 
+urlPrint=`${APP_URL}/print/offre/${offre.slug}`
+app\dashboard\[slug]\page.tsx:1038:                        
+window.location.href = 
+`mailto:${offre.client_email}?subject=${encodeURIComponent(`Suivi 
+offre 
+${offre.numero_affiche}`)}&body=${encodeURIComponent(mailRelance)}`
+app\dashboard\[slug]\page.tsx:1069:                    <h1 
+className="mt-1 text-3xl font-semibold">{offre.numero_affiche}</h1>
+app\dashboard\[slug]\page.tsx:1085:                        <a 
+href={`/dashboard/${commandeIssue.slug}`}
+app\dashboard\[slug]\page.tsx:1086:                          
+title={`Voir la commande générée ${commandeIssue.numero}`}
+app\dashboard\[slug]\page.tsx:1089:                          <span 
+className="font-bold">{commandeIssue.numero}</span>
+app\dashboard\[slug]\page.tsx:1127:                      <a 
+href={`${APP_URL}/print/bulletin-livraison/${offre.slug}`} 
+target="_blank" rel="noopener noreferrer"
+app\dashboard\[slug]\page.tsx:1132:                      <a 
+href={`${APP_URL}/print/page-garde-colis/${offre.slug}`} 
+target="_blank" rel="noopener noreferrer"
+app\dashboard\[slug]\page.tsx:1137:                      <a 
+href={`${APP_URL}/print/fiche-bleue/${offre.slug}`} target="_blank" 
+rel="noopener noreferrer"
+app\dashboard\[slug]\page.tsx:1142:                      <a 
+href={`${APP_URL}/print/all/${offre.slug}`} target="_blank" 
+rel="noopener noreferrer"
+app\dashboard\[slug]\page.tsx:1272:                    
+["Rue",[offre.client_rue,(d.numero as 
+string)||""].filter(Boolean).join(" ")],
+app\dashboard\[slug]\page.tsx:1316:            {isCommandeReelle && 
+<StockMovementsBlock slug={slug} />}
+app\dashboard\[slug]\page.tsx:1377:                  
+href={`/dashboard/${offre.slug}/reviser`}
+app\dashboard\[slug]\page.tsx:1411:                      window.locat
+ion.href=`mailto:${offre.client_email}?subject=${encodeURIComponent(`
+Suivi offre 
+${offre.numero_affiche}`)}&body=${encodeURIComponent(mailRelance)}`
+app\dashboard\[slug]\page.tsx:1459:<CorrectionsHistoryBlock 
+entityType={offre.type_document === "Commande" ? "commande" : 
+"offre"} entitySlug={slug} />
+app\dashboard\[slug]\page.tsx:1460:{offre.type_document === 
+"Commande" && <RevisionsHistoryBlock commandeSlug={slug} />}
+app\dashboard\[slug]\page.tsx:1656:                numero: 
+((offre.data as Record<string,unknown>)?.numero as string) || "",
+app\dashboard\[slug]\page.tsx:1686:          entitySlug={slug}
+app\dashboard\[slug]\page.tsx:1687:          
+entityNumero={offre.numero_affiche}
+app\dashboard\page.tsx:14:  slug: string
+app\dashboard\page.tsx:15:  numero_draft: number
+app\dashboard\page.tsx:16:  numero_affiche: string
+app\dashboard\page.tsx:28:  transformed_into_offre_slug: string|null
+app\dashboard\page.tsx:34:  id: number; slug: string; type_document: 
+TypeDocument
+app\dashboard\page.tsx:35:  numero_offre: string|null; 
+numero_commande: string|null; offre_origine: string|null
+app\dashboard\page.tsx:36:  numero_affiche: string; statut: 
+OffreStatut; date_document: string|null
+app\dashboard\page.tsx:94:function offreNumeroFromSlug(slug: 
+string|null): string|null {
+app\dashboard\page.tsx:95:  // Slug format : "dev-2026-050-cd94b" → 
+"DEV-2026-050"
+app\dashboard\page.tsx:97:  if (!slug) return null
+app\dashboard\page.tsx:98:  const parts = slug.split("-")
+app\dashboard\page.tsx:139:type SortKey = "date"|"client"|"montant"|"
+statut"|"commercial"|"jours"|"numero"|"probabilite"
+app\dashboard\page.tsx:332:      const fieldsOf = (d:DraftRecord) => 
+[nomD(d), d.numero_affiche, d.client_email, d.client_societe, 
+d.commercial, d.reference]
+app\dashboard\page.tsx:383:    const fieldsOf = (o:OffreRecord) => 
+[nomClient(o), o.numero_affiche, o.client_email, o.client_ville, 
+o.client_societe, o.commercial, o.reference]
+app\dashboard\page.tsx:398:      
+if(sortKey==="numero"){av=a.id;bv=b.id}
+app\dashboard\page.tsx:559:                    <SortTh label="Réf." 
+k="numero" cur={sortKey} dir={sortDir} onSort={handleSort}/>
+app\dashboard\page.tsx:585:                      <tr key={o.id} 
+onClick={()=>window.location.href=`/dashboard/${o.slug}`}
+app\dashboard\page.tsx:588:                          <div 
+className="font-semibold text-zinc-100">{o.numero_affiche}</div>
+app\dashboard\page.tsx:595:                          
+{o.statut==="Convertie" && o.numero_commande && (
+app\dashboard\page.tsx:596:                            <div 
+className="text-xs text-emerald-400 mt-0.5">→ 
+{o.numero_commande}</div>
+app\dashboard\page.tsx:644:                            <Link 
+href={`/dashboard/${o.slug}`} className="rounded-lg border 
+border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 
+transition hover:bg-[#40454b]">Voir</Link>
+app\dashboard\page.tsx:645:                            <a 
+href={`/offre/${o.slug}`} target="_blank" rel="noopener noreferrer" 
+className="rounded-lg border border-white/10 bg-[#34383d] px-3 
+py-1.5 text-xs text-zinc-100 transition 
+hover:bg-[#40454b]">Client</a>
+app\dashboard\page.tsx:647:                              <a 
+href={`mailto:${o.client_email}?subject=${encodeURIComponent(`Suivi 
+offre ${o.numero_affiche}`)}`}
+app\dashboard\page.tsx:737:                          <tr key={d.id} 
+onClick={()=>window.location.href=`/dashboard/draft/${d.slug}`}
+app\dashboard\page.tsx:740:                              <div 
+className={`font-semibold ${isTransformed?"text-zinc-400":"text-amber
+-200"}`}>{d.numero_affiche}</div>
+app\dashboard\page.tsx:746:                              
+{isTransformed && d.transformed_into_offre_slug && (
+app\dashboard\page.tsx:748:                                  → 
+{offreNumeroFromSlug(d.transformed_into_offre_slug) || "Transformé"}
+app\dashboard\page.tsx:769:                                <Link 
+href={`/dashboard/draft/${d.slug}`}
+app\dashboard\page.tsx:772:                                  <Link 
+href={`/drafts/${d.slug}/editer`}
+app\dashboard\page.tsx:775:                                
+{isTransformed && d.transformed_into_offre_slug && (
+app\dashboard\page.tsx:776:                                  <Link 
+href={`/dashboard/${d.transformed_into_offre_slug}`}
+app\drafts\nouveau\page.tsx:5:// pour éviter la duplication avec 
+/drafts/[slug]/editer/page.tsx.
+app\drafts\nouveau\page.tsx:8:// l'URL vers /drafts/[slug]/editer 
+via router.replace() — sans remount.
+app\drafts\[slug]\editer\page.tsx:1:// 
+app/drafts/[slug]/editer/page.tsx
+app\drafts\[slug]\editer\page.tsx:4:// La logique de chargement (GET 
+/api/drafts/[slug]) est dans DraftFormulaire
+app\drafts\[slug]\editer\page.tsx:5:// via l'effet déclenché par 
+initialSlug. Cette page se contente d'extraire
+app\drafts\[slug]\editer\page.tsx:6:// le slug de la route et de le 
+passer en prop.
+app\drafts\[slug]\editer\page.tsx:14:  params: Promise<{ slug: 
+string }>;
+app\drafts\[slug]\editer\page.tsx:18:  const { slug } = await params;
+app\drafts\[slug]\editer\page.tsx:19:  return <DraftFormulaire 
+initialSlug={slug} />;
+app\drafts\_components\DraftFormulaire.tsx:8:import { manqueNumero, 
+adresseLivraisonEffective } from "@/lib/adresse-utils";
+app\drafts\_components\DraftFormulaire.tsx:72:  numero: string;
+app\drafts\_components\DraftFormulaire.tsx:86:  livrNumero: string;
+app\drafts\_components\DraftFormulaire.tsx:213://   - 
+app/drafts/[slug]/editer/page.tsx → <DraftFormulaire 
+initialSlug={slug} />
+app\drafts\_components\DraftFormulaire.tsx:219:// Mode édition 
+(initialSlug fourni) :
+app\drafts\_components\DraftFormulaire.tsx:220://   - au montage, 
+fetch GET /api/drafts/[slug] pour hydrater le state
+app\drafts\_components\DraftFormulaire.tsx:221://   - tous les saves 
+= PUT /api/drafts/[slug]
+app\drafts\_components\DraftFormulaire.tsx:225:    initialSlug?: 
+string;
+app\drafts\_components\DraftFormulaire.tsx:227:    commandeSlug?: 
+string;
+app\drafts\_components\DraftFormulaire.tsx:230:export default 
+function DraftFormulaire({ initialSlug, revisionMode = false, 
+commandeSlug }: DraftFormulaireProps) {
+app\drafts\_components\DraftFormulaire.tsx:249:  const [numero, 
+setNumero]           = useState("");
+app\drafts\_components\DraftFormulaire.tsx:266:  const [livrNumero, 
+setLivrNumero]   = useState("");
+app\drafts\_components\DraftFormulaire.tsx:322:  // currentSlug : 
+null tant que le brouillon n'a pas été persisté en base.
+app\drafts\_components\DraftFormulaire.tsx:324:  //   Les saves 
+ultérieurs feront un PUT /api/drafts/[slug].
+app\drafts\_components\DraftFormulaire.tsx:341:  const [currentSlug, 
+setCurrentSlug]       = useState<string | null>(initialSlug ?? null);
+app\drafts\_components\DraftFormulaire.tsx:351:  //   "not_found"   
+: 404 — slug invalide ou brouillon supprimé
+app\drafts\_components\DraftFormulaire.tsx:355:  // En mode création 
+(pas de initialSlug), on saute direct à "ready".
+app\drafts\_components\DraftFormulaire.tsx:358:  >((initialSlug || 
+(revisionMode && commandeSlug)) ? "loading" : "ready");
+app\drafts\_components\DraftFormulaire.tsx:362:    
+transformed_into_offre_slug: string | null;
+app\drafts\_components\DraftFormulaire.tsx:378:    id: number; 
+numero_client: string; nom: string; prenom: string | null;
+app\drafts\_components\DraftFormulaire.tsx:380:    rue: string | 
+null; rue2: string | null; numero_rue: string | null;
+app\drafts\_components\DraftFormulaire.tsx:414:    const rueComplete 
+= [c.rue, c.numero_rue].filter(Boolean).join(" ")
+app\drafts\_components\DraftFormulaire.tsx:416:    setNumero("")
+app\drafts\_components\DraftFormulaire.tsx:521:      if 
+(details.houseNumber) setNumero(details.houseNumber);
+app\drafts\_components\DraftFormulaire.tsx:552:      if 
+(details.houseNumber) setLivrNumero(details.houseNumber);
+app\drafts\_components\DraftFormulaire.tsx:716:    return { 
+formType, clientType, paymentMode, deliveryMode, offerStatus, date, 
+commercial, offerNumber, reference, societe, nom, prenom, 
+complement_nom: complementNom, rue, rue2, numero, npa, ville, 
+telephone1, telephone2, email, livrDiff, livrSociete, livrNom, 
+livrPrenom, livr_complement_nom: livrComplementNom, livrTel, 
+livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: 
+cloneLines(lines), discount, discountPercent, remarks, 
+notesInternes, leadTime, validiteDuree, accesLivraison, 
+manualRounding: roundingStr, enabledServices: { ...enabledServices 
+}, servicePrices: { ...servicePrices } };
+app\drafts\_components\DraftFormulaire.tsx:734:  //   - succès : 
+currentSlug mis à jour (si POST), lastSavedAt = now, isDirty = false,
+app\drafts\_components\DraftFormulaire.tsx:735:  //     saveStatus = 
+"saved", router.replace vers /drafts/[slug]/editer si POST
+app\drafts\_components\DraftFormulaire.tsx:800:              
+numero_rue: numero.trim() || null,
+app\drafts\_components\DraftFormulaire.tsx:814:        if 
+(revisionMode && commandeSlug && !silent) {
+app\drafts\_components\DraftFormulaire.tsx:815:          const res = 
+await fetch(`/api/offres/${commandeSlug}/reviser`, {
+app\drafts\_components\DraftFormulaire.tsx:829:          
+router.push(`/dashboard/${commandeSlug}`);
+app\drafts\_components\DraftFormulaire.tsx:833:        const 
+isCreate = currentSlug === null;
+app\drafts\_components\DraftFormulaire.tsx:834:        const url = 
+isCreate ? "/api/drafts" : `/api/drafts/${currentSlug}`;
+app\drafts\_components\DraftFormulaire.tsx:846:        // Première 
+sauvegarde : on récupère le slug et le numéro DRA-XXX
+app\drafts\_components\DraftFormulaire.tsx:847:        const newSlug 
+= json.slug as string;
+app\drafts\_components\DraftFormulaire.tsx:848:        const 
+newNumero = json.numeroAffiche as string;
+app\drafts\_components\DraftFormulaire.tsx:849:        
+setCurrentSlug(newSlug);
+app\drafts\_components\DraftFormulaire.tsx:850:        
+setOfferNumber(newNumero);
+app\drafts\_components\DraftFormulaire.tsx:852:        
+router.replace(`/drafts/${newSlug}/editer`);
+app\drafts\_components\DraftFormulaire.tsx:854:        // Mise à 
+jour : numero_affiche déjà connu, rien à faire
+app\drafts\_components\DraftFormulaire.tsx:873:  // Ouvre 
+/print/draft/[slug] (filigrane "BROUILLON — DRA-XXX", sans bloc
+app\drafts\_components\DraftFormulaire.tsx:875:  // directement via 
+GET /api/drafts/[slug], donc on doit avoir un slug
+app\drafts\_components\DraftFormulaire.tsx:879:  // puis on relit le 
+slug depuis l'URL (saveDraft remplace l'URL par
+app\drafts\_components\DraftFormulaire.tsx:880:  // 
+/drafts/[slug]/editer après création) car la closure React ne voit
+app\drafts\_components\DraftFormulaire.tsx:881:  // pas 
+immédiatement la nouvelle valeur de currentSlug après setState.
+app\drafts\_components\DraftFormulaire.tsx:883:    let slug = 
+currentSlug;
+app\drafts\_components\DraftFormulaire.tsx:884:    if (!slug) {
+app\drafts\_components\DraftFormulaire.tsx:888:      slug = 
+match?.[1] ?? null;
+app\drafts\_components\DraftFormulaire.tsx:889:      if (!slug) {
+app\drafts\_components\DraftFormulaire.tsx:891:          "Le 
+brouillon a été sauvegardé mais le slug n'a pas pu être récupéré. " +
+app\drafts\_components\DraftFormulaire.tsx:897:    
+window.open(`/print/draft/${slug}`, "_blank");
+app\drafts\_components\DraftFormulaire.tsx:905:  // Si on est déjà 
+en mode édition (currentSlug !== null), on remet aussi à null
+app\drafts\_components\DraftFormulaire.tsx:910:    setReference(""); 
+setSociete(""); setNom(""); setPrenom(""); setComplementNom(""); 
+setRue(""); setRue2(""); setNumero(""); setNpa(""); setVille("");
+app\drafts\_components\DraftFormulaire.tsx:913:    setLivrTel(""); 
+setLivrRue(""); setLivrRue2(""); setLivrNumero(""); setLivrNpa(""); 
+setLivrVille("");
+app\drafts\_components\DraftFormulaire.tsx:920:    if (currentSlug 
+!== null) {
+app\drafts\_components\DraftFormulaire.tsx:921:      
+setCurrentSlug(null);
+app\drafts\_components\DraftFormulaire.tsx:939:  //    et la 
+redirection vers /dashboard/[offre-slug]
+app\drafts\_components\DraftFormulaire.tsx:942:    if (!currentSlug) 
+return; // sécurité : le bouton est censé être caché en mode création
+app\drafts\_components\DraftFormulaire.tsx:970:    const livrEff = 
+adresseLivraisonEffective({ livrDiff, rue, numero, livrRue, 
+livrNumero });
+app\drafts\_components\DraftFormulaire.tsx:971:    const 
+factSansNumero = manqueNumero(rue, numero);
+app\drafts\_components\DraftFormulaire.tsx:972:    const 
+livrSansNumero = manqueNumero(livrEff.rue, livrEff.numero);
+app\drafts\_components\DraftFormulaire.tsx:973:    if 
+(factSansNumero || livrSansNumero) {
+app\drafts\_components\DraftFormulaire.tsx:995:    const numLabel = 
+revisionMode ? `Révision ${offerNumber}` : currentSlug && 
+offerNumber ? `Brouillon ${offerNumber}` : "Nouveau brouillon";
+app\drafts\_components\DraftFormulaire.tsx:997:  }, [formType, 
+offerNumber, currentSlug]);
+app\drafts\_components\DraftFormulaire.tsx:1003:  // Si initialSlug 
+est fourni, on fetch le brouillon depuis l'API au mount.
+app\drafts\_components\DraftFormulaire.tsx:1014:    if 
+(!initialSlug) return;
+app\drafts\_components\DraftFormulaire.tsx:1020:        const res = 
+await fetch(`/api/drafts/${initialSlug}`);
+app\drafts\_components\DraftFormulaire.tsx:1045:            
+transformed_into_offre_slug: d.transformed_into_offre_slug,
+app\drafts\_components\DraftFormulaire.tsx:1067:        
+setOfferNumber(d.numero_affiche || data.offerNumber || "");
+app\drafts\_components\DraftFormulaire.tsx:1077:        if 
+(data.numero !== undefined) setNumero(data.numero || "");
+app\drafts\_components\DraftFormulaire.tsx:1093:        if 
+(data.livrNumero !== undefined) setLivrNumero(data.livrNumero || "");
+app\drafts\_components\DraftFormulaire.tsx:1130:    }, 
+[initialSlug]);
+app\drafts\_components\DraftFormulaire.tsx:1133:    // Source = GET 
+/api/offres/[slug] (réponse { offre: {...} }), data au
+app\drafts\_components\DraftFormulaire.tsx:1137:      if 
+(!revisionMode || !commandeSlug) return;
+app\drafts\_components\DraftFormulaire.tsx:1143:          const res 
+= await fetch(`/api/offres/${commandeSlug}`);
+app\drafts\_components\DraftFormulaire.tsx:1174:          
+setOfferNumber(o.numero_affiche || data.offerNumber || "");
+app\drafts\_components\DraftFormulaire.tsx:1184:          if 
+(data.numero !== undefined) setNumero(data.numero || "");
+app\drafts\_components\DraftFormulaire.tsx:1199:          if 
+(data.livrNumero !== undefined) setLivrNumero(data.livrNumero || "");
+app\drafts\_components\DraftFormulaire.tsx:1235:    }, 
+[revisionMode, commandeSlug]);
+app\drafts\_components\DraftFormulaire.tsx:1256:    societe, nom, 
+prenom, complementNom, rue, rue2, numero, npa, ville,
+app\drafts\_components\DraftFormulaire.tsx:1259:    livrTel, 
+livrRue, livrRue2, livrNumero, livrNpa, livrVille,
+app\drafts\_components\DraftFormulaire.tsx:1374:          if 
+(p.numero) setNumero(p.numero)
+app\drafts\_components\DraftFormulaire.tsx:1377:          if 
+(p.lines) setLines(p.lines.map((l: QuoteLine) => ({...l, 
+id:`copy-${Date.now()}-${Math.random()}`})))
+app\drafts\_components\DraftFormulaire.tsx:1404:      if (p.numero) 
+setNumero(p.numero);
+app\drafts\_components\DraftFormulaire.tsx:1455:                  : 
+currentSlug && offerNumber
+app\drafts\_components\DraftFormulaire.tsx:1471:              - Mode 
+création (currentSlug === null) : bouton CACHÉ — on est déjà
+app\drafts\_components\DraftFormulaire.tsx:1477:          
+{currentSlug !== null && (
+app\drafts\_components\DraftFormulaire.tsx:1548:            
+{isSaving ? "⏳ Enregistrement…" : revisionMode ? "💾 Enregistrer la 
+révision" : currentSlug ? "💾 Enregistrer" : "💾 Créer le brouillon"}
+app\drafts\_components\DraftFormulaire.tsx:1551:              
+Visible uniquement en mode édition (currentSlug !== null), pas en
+app\drafts\_components\DraftFormulaire.tsx:1554:          
+{currentSlug !== null && (
+app\drafts\_components\DraftFormulaire.tsx:1560:                  
+transformedInfo?.transformed_into_offre_slug
+app\drafts\_components\DraftFormulaire.tsx:1561:                    
+? `Déjà transformé en ${transformedInfo.transformed_into_offre_slug.t
+oUpperCase().split("-").slice(0, 3).join("-")}`
+app\drafts\_components\DraftFormulaire.tsx:1584:            
+title={currentSlug ? "Aperçu du brouillon (filigrane BROUILLON — 
+Session 7)" : "Enregistrez d'abord le brouillon pour voir l'aperçu"}
+app\drafts\_components\DraftFormulaire.tsx:1592:          <span>⏳ 
+Chargement du brouillon {initialSlug}…</span>
+app\drafts\_components\DraftFormulaire.tsx:1597:          <span>❌ 
+Brouillon <code>{initialSlug}</code> introuvable. Il a peut-être été 
+supprimé ou le lien est invalide.</span>
+app\drafts\_components\DraftFormulaire.tsx:1607:      {revisionMode 
+&& commandeSlug && (
+app\drafts\_components\DraftFormulaire.tsx:1609:            🔄 
+<strong>Révision de commande {offerNumber || commandeSlug}</strong> 
+— tu modifies une commande validée. Les retraits et baisses de 
+quantité partent en attente de remise en stock ; pour ajouter des 
+pièces, utilise le picker (stock temps réel). Une nouvelle version 
+sera archivée à l&apos;enregistrement.
+app\drafts\_components\DraftFormulaire.tsx:1619:          
+{transformedInfo.transformed_into_offre_slug && (
+app\drafts\_components\DraftFormulaire.tsx:1621:              
+href={`/dashboard/${transformedInfo.transformed_into_offre_slug}`}
+app\drafts\_components\DraftFormulaire.tsx:1740:              
+onClick={() => { setNom(""); setPrenom(""); setSociete(""); 
+setEmail(""); setTelephone1(""); setTelephone2(""); setRue(""); 
+setRue2(""); setNumero(""); setNpa(""); setVille(""); 
+setSelectedClientId(null); setClientSuggestions([]); }}>
+app\drafts\_components\DraftFormulaire.tsx:1805:              
+{manqueNumero(rue, numero) && (
+app\drafts\_components\DraftFormulaire.tsx:1813:              <input 
+autoComplete="new-password" value={numero} onChange={(e) => 
+setNumero(e.target.value)} placeholder="12" />
+app\drafts\_components\DraftFormulaire.tsx:1960:                  
+setLivrNumero(""); setLivrNpa(""); setLivrVille(""); setLivrRue2("");
+app\drafts\_components\DraftFormulaire.tsx:1973:                    
+setLivrTel(telephone1); setLivrRue(rue); setLivrNumero(numero);
+app\drafts\_components\DraftFormulaire.tsx:2012:                  
+{manqueNumero(livrRue, livrNumero) && (
+app\drafts\_components\DraftFormulaire.tsx:2020:                  
+<input value={livrNumero} onChange={(e) => 
+setLivrNumero(e.target.value)} placeholder="12" />
+app\drafts\_components\DraftFormulaire.tsx:2948:                    
+id: `amb-${Date.now()}-${Math.random()}`,
+app\drafts\_components\DraftFormulaire.tsx:2965:                    
+id: `amb-${Date.now()}-${Math.random()}`,
+app\drafts\_components\DraftFormulaire.tsx:3040:          La modal 
+gère elle-même l'appel à l'API et la redirection vers 
+/dashboard/[slug]. */}
+app\drafts\_components\DraftFormulaire.tsx:3041:      
+{showTransformModal && currentSlug && (
+app\drafts\_components\DraftFormulaire.tsx:3046:            slug: 
+currentSlug,
+app\drafts\_components\DraftFormulaire.tsx:3047:            
+numero_affiche: offerNumber || "DRA-???",
+app\offre\[slug]\confirmation\page.tsx:2:// 
+app/offre/[slug]/confirmation/page.tsx
+app\offre\[slug]\confirmation\page.tsx:20:  slug: string;
+app\offre\[slug]\confirmation\page.tsx:21:  numero_affiche: string;
+app\offre\[slug]\confirmation\page.tsx:22:  numero_commande: string;
+app\offre\[slug]\confirmation\page.tsx:114:export default function 
+ConfirmationPage({ params }: { params: Promise<{ slug: string }> }) {
+app\offre\[slug]\confirmation\page.tsx:117:  const [slug, setSlug] = 
+useState("");
+app\offre\[slug]\confirmation\page.tsx:133:      const { slug: s } = 
+await params;
+app\offre\[slug]\confirmation\page.tsx:134:      setSlug(s);
+app\offre\[slug]\confirmation\page.tsx:154:    if (!slug || pdfUrl 
+|| !cmd) return;
+app\offre\[slug]\confirmation\page.tsx:166:        const res = await 
+fetch(`/api/offres/${slug}`);
+app\offre\[slug]\confirmation\page.tsx:186:  }, [slug, pdfUrl, cmd]);
+app\offre\[slug]\confirmation\page.tsx:195:      
+fetch(`/api/offres/${slug}/qr`, { method: "POST" }).catch(() => {});
+app\offre\[slug]\confirmation\page.tsx:204:          const res = 
+await fetch(`/api/offres/${slug}/qr`);
+app\offre\[slug]\confirmation\page.tsx:219:  }, [slug, qrUrl, 
+qrDownloading]);
+app\offre\[slug]\confirmation\page.tsx:254:          Commandes / 
+<span style={{ color: C.text }}>{cmd.numero_commande}</span>
+app\offre\[slug]\confirmation\page.tsx:361:                ["Numéro 
+de commande", cmd.numero_commande],
+app\offre\[slug]\confirmation\page.tsx:468:            <CopyCard 
+label="Référence" value={cmd.numero_commande} />
+app\offre\[slug]\valider\page.tsx:2:// 
+app/offre/[slug]/valider/page.tsx
+app\offre\[slug]\valider\page.tsx:20:  slug: string;
+app\offre\[slug]\valider\page.tsx:22:  numero_affiche: string;
+app\offre\[slug]\valider\page.tsx:49:export default function 
+ValiderOffrePage({ params }: { params: Promise<{ slug: string }> }) {
+app\offre\[slug]\valider\page.tsx:52:  const [slug, setSlug] = 
+useState("");
+app\offre\[slug]\valider\page.tsx:69:      const { slug: s } = await 
+params;
+app\offre\[slug]\valider\page.tsx:70:      setSlug(s);
+app\offre\[slug]\valider\page.tsx:153:      const res = await 
+fetch(`/api/offres/${slug}/valider`, {
+app\offre\[slug]\valider\page.tsx:166:      // Redirection vers la 
+page de confirmation avec le nouveau slug CMD
+app\offre\[slug]\valider\page.tsx:168:        window.location.href = 
+`/offre/${json.cmdSlug}/confirmation`;
+app\offre\[slug]\valider\page.tsx:214:          <a 
+href={`/offre/${slug}`} 
+style={{fontSize:13,color:C.grey,textDecoration:"none"}}>
+app\offre\[slug]\valider\page.tsx:224:          Offres clients / 
+<span style={{color:C.text}}>{offre.numero_affiche}</span>
+app\offre\[slug]\valider\page.tsx:238:              
+<div><strong>Référence :</strong> {offre.numero_affiche}</div>
+app\offre\[slug]\valider\page.tsx:244:              <a 
+href={`/offre/${slug}`}
+app\offre\[slug]\valider\page.tsx:249:              <a 
+href={`/print/offre/${slug}`} target="_blank" rel="noopener 
+noreferrer"
+app\offre\[slug]\valider\page.tsx:271:                    
+["Référence", offre.numero_affiche],
+app\offre\[slug]\page.tsx:2:// app/offre/[slug]/page.tsx
+app\offre\[slug]\page.tsx:54:  slug: string;
+app\offre\[slug]\page.tsx:56:  numero_affiche: string;
+app\offre\[slug]\page.tsx:84:    rue?: string; numero?: string; 
+npa?: string; ville?: string;
+app\offre\[slug]\page.tsx:88:    livrTel?: string; livrRue?: string; 
+livrNumero?: string;
+app\offre\[slug]\page.tsx:223:export default function OffrePage({ 
+params }: { params: Promise<{ slug: string }> }) {
+app\offre\[slug]\page.tsx:229:  const [slug, setSlug] = useState("");
+app\offre\[slug]\page.tsx:252:      const { slug: s } = await params;
+app\offre\[slug]\page.tsx:253:      setSlug(s);
+app\offre\[slug]\page.tsx:264:              const rRes = await 
+fetch(`/api/revisions?commande_slug=${encodeURIComponent(o.slug)}`);
+app\offre\[slug]\page.tsx:284:    if (!offre || !["Acceptée", 
+"Convertie"].includes(offre.statut) || qrUrl || !slug) return;
+app\offre\[slug]\page.tsx:291:        const res = await 
+fetch(`/api/offres/${slug}`);
+app\offre\[slug]\page.tsx:304:  }, [offre, qrUrl, slug]);
+app\offre\[slug]\page.tsx:308:    if (!offre || !["Acceptée", 
+"Convertie"].includes(offre.statut) || pdfUrl || !slug) return;
+app\offre\[slug]\page.tsx:314:        const res = await 
+fetch(`/api/offres/${slug}`);
+app\offre\[slug]\page.tsx:327:  }, [offre, pdfUrl, slug]);
+app\offre\[slug]\page.tsx:349:      fetch(`/api/offres/${slug}/qr`, 
+{ method: "POST" }).catch(() => {});
+app\offre\[slug]\page.tsx:356:          const res = await 
+fetch(`/api/offres/${slug}`);
+app\offre\[slug]\page.tsx:451:    const res = await 
+fetch(`/api/offres/${slug}/valider`, {
+app\offre\[slug]\page.tsx:458:    if (res.status === 409 && 
+json.cmdSlug) {
+app\offre\[slug]\page.tsx:460:      setTimeout(() => { 
+window.location.href = `/offre/${json.cmdSlug}/confirmation`; }, 
+800);
+app\offre\[slug]\page.tsx:466:    setTimeout(() => { 
+window.location.href = `/offre/${json.cmdSlug}/confirmation`; }, 
+1400);
+app\offre\[slug]\page.tsx:526:    [d.rue, 
+d.numero].filter(Boolean).join(" ") || null,
+app\offre\[slug]\page.tsx:537:         [d.livrRue, 
+d.livrNumero].filter(Boolean).join(" ") || null,
+app\offre\[slug]\page.tsx:650:          Offres 
+clients{offre.type_document === "Commande" && versionVivante >= 2 ? 
+` (V${versionVivante})` : ""} / <span style={{ color: C.text, 
+fontWeight: 600 }}>{offre.numero_affiche}</span>
+app\offre\[slug]\page.tsx:656:              ? `Votre commande 
+${offre.numero_affiche}`
+app\offre\[slug]\page.tsx:672:                <div><strong style={{ 
+fontWeight: 700 }}>Référence : </strong>{offre.numero_affiche}</div>
+app\offre\[slug]\page.tsx:702:                <a 
+href={`/print/offre/${slug}`} target="_blank" rel="noopener 
+noreferrer"
+app\offre\[slug]\page.tsx:768:                  <a 
+href={`/offre/${slug}/confirmation`}
+app\offre\[slug]\page.tsx:842:                    ["Référence", 
+offre.numero_affiche],
+app\offre\[slug]\page.tsx:1096:                    <a 
+href={`mailto:info@jardin-confort.ch?subject=Réactivation offre 
+${offre.numero_affiche}&body=Bonjour, je souhaite réactiver l'offre 
+${offre.numero_affiche}.`}
+app\offre\[slug]\page.tsx:1112:                  <br/>Le numéro de 
+commande est <strong>{offre.numero_affiche}</strong>.
+app\offre\[slug]\page.tsx:1121:                    <a 
+href={`mailto:info@jardin-confort.ch?subject=Commande 
+${offre.numero_affiche}`}
+app\offres\nouveau\MediaLinePicker.tsx:45:  function 
+handleSelectChange(slug: string) {
+app\offres\nouveau\MediaLinePicker.tsx:46:    if (!slug) {
+app\offres\nouveau\MediaLinePicker.tsx:56:    const logo = 
+logos.find((l) => l.slug === slug);
+app\offres\nouveau\MediaLinePicker.tsx:110:  // Slug du logo 
+actuellement sélectionné (si depuis bibliothèque)
+app\offres\nouveau\MediaLinePicker.tsx:111:  const currentSlug = 
+line.source === "library"
+app\offres\nouveau\MediaLinePicker.tsx:112:    ? logos.find((l) => 
+l.image_url === line.image_url)?.slug ?? ""
+app\offres\nouveau\MediaLinePicker.tsx:142:        
+value={currentSlug}
+app\offres\nouveau\MediaLinePicker.tsx:151:          <option 
+key={logo.id} value={logo.slug}>
+app\offres\nouveau\page.tsx:5:import { manqueNumero } from 
+"@/lib/adresse-utils";
+app\offres\nouveau\page.tsx:66:  numero: string;
+app\offres\nouveau\page.tsx:80:  livrNumero: string;
+app\offres\nouveau\page.tsx:219:  const [numero, setNumero]          
+ = useState("");
+app\offres\nouveau\page.tsx:236:  const [livrNumero, setLivrNumero]  
+ = useState("");
+app\offres\nouveau\page.tsx:289:const [savedSlug, setSavedSlug]      
+     = useState("");
+app\offres\nouveau\page.tsx:296:    id: number; numero_client: 
+string; nom: string; prenom: string | null;
+app\offres\nouveau\page.tsx:298:    rue: string | null; rue2: string 
+| null; numero_rue: string | null;
+app\offres\nouveau\page.tsx:332:    const rueComplete = [c.rue, 
+c.numero_rue].filter(Boolean).join(" ")
+app\offres\nouveau\page.tsx:334:    setNumero("")
+app\offres\nouveau\page.tsx:441:      if (details.houseNumber) 
+setNumero(details.houseNumber);
+app\offres\nouveau\page.tsx:472:      if (details.houseNumber) 
+setLivrNumero(details.houseNumber);
+app\offres\nouveau\page.tsx:634:    return { formType, clientType, 
+paymentMode, deliveryMode, offerStatus, date, commercial, 
+offerNumber, reference, societe, nom, prenom, complement_nom: 
+complementNom, rue, rue2, numero, npa, ville, telephone1, 
+telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, 
+livr_complement_nom: livrComplementNom, livrTel, livrRue, livrRue2, 
+livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, 
+discountPercent, remarks, notesInternes, leadTime, validiteDuree, 
+accesLivraison, manualRounding: roundingStr, enabledServices: { 
+...enabledServices }, servicePrices: { ...servicePrices } };
+app\offres\nouveau\page.tsx:671:              numero_rue: 
+numero.trim() || null,
+app\offres\nouveau\page.tsx:689:      if (json.numeroAffiche) {
+app\offres\nouveau\page.tsx:690:        
+setOfferNumber(json.numeroAffiche);
+app\offres\nouveau\page.tsx:692:        const snapWithNum = { 
+...snap, offerNumber: json.numeroAffiche };
+app\offres\nouveau\page.tsx:702:      if (json.slug) {
+app\offres\nouveau\page.tsx:703:        setSavedSlug(json.slug)
+app\offres\nouveau\page.tsx:704:        
+window.open(`/dashboard/${json.slug}`, "_blank")
+app\offres\nouveau\page.tsx:705:        
+fetch(`/api/offres/${json.slug}/pdf`, { method: "POST" }).catch(() 
+=> {})
+app\offres\nouveau\page.tsx:740:    setRue(s.rue); setRue2((s as 
+any).rue2 || ""); setNumero(s.numero); setNpa(s.npa); 
+setVille(s.ville);
+app\offres\nouveau\page.tsx:746:    setLivrNumero(s.livrNumero || 
+""); setLivrNpa(s.livrNpa || ""); setLivrVille(s.livrVille || "");
+app\offres\nouveau\page.tsx:758:    setReference(""); 
+setSociete(""); setNom(""); setPrenom(""); setComplementNom(""); 
+setRue(""); setRue2(""); setNumero(""); setNpa(""); setVille("");
+app\offres\nouveau\page.tsx:761:    setLivrTel(""); setLivrRue(""); 
+setLivrRue2(""); setLivrNumero(""); setLivrNpa(""); setLivrVille("");
+app\offres\nouveau\page.tsx:813:          if (p.numero) 
+setNumero(p.numero)
+app\offres\nouveau\page.tsx:816:          if (p.lines) 
+setLines(p.lines.map((l: QuoteLine) => ({...l, 
+id:`copy-${Date.now()}-${Math.random()}`})))
+app\offres\nouveau\page.tsx:843:      if (p.numero) 
+setNumero(p.numero);
+app\offres\nouveau\page.tsx:931:           <a 
+className="jc-url-banner-link" href={`/dashboard/${savedSlug}`} 
+target="_blank" rel="noopener noreferrer">
+app\offres\nouveau\page.tsx:1050:              onClick={() => { 
+setNom(""); setPrenom(""); setSociete(""); setEmail(""); 
+setTelephone1(""); setTelephone2(""); setRue(""); setRue2(""); 
+setNumero(""); setNpa(""); setVille(""); setSelectedClientId(null); 
+setClientSuggestions([]); }}>
+app\offres\nouveau\page.tsx:1108:              {manqueNumero(rue, 
+numero) && (
+app\offres\nouveau\page.tsx:1123:              <input 
+autoComplete="new-password" value={numero} onChange={(e) => 
+setNumero(e.target.value)} placeholder="12" />
+app\offres\nouveau\page.tsx:1270:                  
+setLivrNumero(""); setLivrNpa(""); setLivrVille(""); setLivrRue2("");
+app\offres\nouveau\page.tsx:1283:                    
+setLivrTel(telephone1); setLivrRue(rue); setLivrNumero(numero);
+app\offres\nouveau\page.tsx:1315:                  
+{manqueNumero(livrRue, livrNumero) && (
+app\offres\nouveau\page.tsx:1330:                  <input 
+value={livrNumero} onChange={(e) => setLivrNumero(e.target.value)} 
+placeholder="12" />
+app\offres\nouveau\page.tsx:2232:                    id: 
+`amb-${Date.now()}-${Math.random()}`,
+app\offres\nouveau\page.tsx:2249:                    id: 
+`amb-${Date.now()}-${Math.random()}`,
+app\print\all\[slug]\page.tsx:3://  app/print/all/[slug]/page.tsx
+app\print\all\[slug]\page.tsx:14://    - 
+app/print/fiche-travail/[slug]/page.tsx       (préfixe .ft-)
+app\print\all\[slug]\page.tsx:15://    - 
+app/print/offre/[slug]/page.tsx               (préfixe .cc-)
+app\print\all\[slug]\page.tsx:16://    - 
+app/print/page-garde-colis/[slug]/page.tsx    (préfixe .pg-)
+app\print\all\[slug]\page.tsx:17://    - 
+app/print/bulletin-livraison/[slug]/page.tsx  (préfixe .bl-)
+app\print\all\[slug]\page.tsx:40:  societe: "", nom: "", prenom: "", 
+rue: "", numero: "", npa: "", ville: "",
+app\print\all\[slug]\page.tsx:43:  livrTel: "", livrRue: "", 
+livrNumero: "", livrNpa: "", livrVille: "",
+app\print\all\[slug]\page.tsx:58:export default function 
+PrintAllPage({ params }: { params: Promise<{ slug: string }> }) {
+app\print\all\[slug]\page.tsx:62:  const [numeroAffiche, 
+setNumeroAffiche] = useState("");
+app\print\all\[slug]\page.tsx:63:  const [offreSlug, setOffreSlug] = 
+useState("");
+app\print\all\[slug]\page.tsx:83:      const { slug } = await params;
+app\print\all\[slug]\page.tsx:85:        const res = await 
+fetch(`/api/offres/${slug}?snapshot=false`);
+app\print\all\[slug]\page.tsx:90:            
+setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber 
+|| slug);
+app\print\all\[slug]\page.tsx:91:            setOffreSlug(slug);
+app\print\all\[slug]\page.tsx:97:              customerNumber: 
+json.offre?.numero_client || "",
+app\print\all\[slug]\page.tsx:104:                const rRes = await 
+fetch(`/api/revisions?commande_slug=${encodeURIComponent(slug)}`);
+app\print\all\[slug]\page.tsx:139:    if (data.lines.length === 0 && 
+!numeroAffiche) return;
+app\print\all\[slug]\page.tsx:171:      if (qrcode && numeroAffiche) 
+{
+app\print\all\[slug]\page.tsx:175:          
+qr.addData(numeroAffiche); qr.make();
+app\print\all\[slug]\page.tsx:191:  }, [ready, data.lines, data.nom, 
+data.societe, numeroAffiche]);
+app\print\all\[slug]\page.tsx:226:  const validationUrl = 
+`https://offres.jardin-confort.ch/offre/${offreSlug || 
+numeroAffiche.toLowerCase().replace(/\s+/g, "-")}`;
+app\print\all\[slug]\page.tsx:262:  const livrNumeroFT  = 
+data.livrDiff ? data.livrNumero  : data.numero;
+app\print\all\[slug]\page.tsx:269:  const numeroLabel = typeDocument 
+=== "Offre" ? "N° d'offre" : "N° de commande";
+app\print\all\[slug]\page.tsx:279:  const pgNumero  = showLivrDiffPG 
+? data.livrNumero  : data.numero;
+app\print\all\[slug]\page.tsx:499:        /* ═══ Reproduit 
+fidèlement app/print/offre/[slug]/page.tsx ═══════════ */
+app\print\all\[slug]\page.tsx:572:        /* ═══ Reproduit 
+fidèlement app/print/page-garde-colis/[slug]/page.tsx ═ */
+app\print\all\[slug]\page.tsx:618:        /* ═══ Reproduit 
+fidèlement app/print/bulletin-livraison/[slug]/page.tsx*/
+app\print\all\[slug]\page.tsx:797:        🖨 Jeu complet — 
+{numeroAffiche}{versionSuffix} · 5 pages
+app\print\all\[slug]\page.tsx:808:          <span>📋 FICHE DE 
+TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · 
+${numeroAffiche}${versionSuffix}` : ""}</span>
+app\print\all\[slug]\page.tsx:831:                <tr><td className="
+ft-meta-label">{numeroLabel}</td><td><strong>{numeroAffiche}{versionS
+uffix}</strong></td></tr>
+app\print\all\[slug]\page.tsx:866:                  📅 
+{formatDate(dateDocument)} · {numeroAffiche}{versionSuffix}
+app\print\all\[slug]\page.tsx:887:                  {livrRueFT && 
+<div className="ft-addr-line">{livrRueFT} {livrNumeroFT}</div>}
+app\print\all\[slug]\page.tsx:1054:                {data.rue && 
+<div>{data.rue} {data.numero}</div>}
+app\print\all\[slug]\page.tsx:1136:      {/* ═══ Reproduit 
+fidèlement app/print/offre/[slug]/page.tsx ═════════ */}
+app\print\all\[slug]\page.tsx:1150:                  
+<td>{numeroAffiche || data.offerNumber}</td>
+app\print\all\[slug]\page.tsx:1188:              <div 
+className="cc-addr-ref">{numeroAffiche || 
+data.offerNumber}{versionSuffix}</div>
+app\print\all\[slug]\page.tsx:1192:              {data.rue && <div 
+className="cc-addr-line">{data.rue} {data.numero}</div>}
+app\print\all\[slug]\page.tsx:1211:                  {data.rue && 
+<div>{data.rue} {data.numero}</div>}
+app\print\all\[slug]\page.tsx:1244:                      
+{data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
+app\print\all\[slug]\page.tsx:1253:                      {data.rue 
+&& <div>{data.rue} {data.numero}</div>}
+app\print\all\[slug]\page.tsx:1541:                  Images 
+d&apos;illustration — {numeroAffiche || data.offerNumber}
+app\print\all\[slug]\page.tsx:1562:      {/* ═══ Reproduit 
+fidèlement app/print/page-garde-colis/[slug]/... ══ */}
+app\print\all\[slug]\page.tsx:1577:              {pgRue && <div 
+className="pg-client-addr-line">{pgRue} {pgNumero}</div>}
+app\print\all\[slug]\page.tsx:1586:              <strong>N° de 
+commande :</strong> {numeroAffiche || 
+data.offerNumber}{versionSuffix}
+app\print\all\[slug]\page.tsx:1616:      {/* ═══ Reproduit 
+fidèlement app/print/bulletin-livraison/[slug]/... ═ */}
+app\print\all\[slug]\page.tsx:1630:                  
+<td>{numeroAffiche || data.offerNumber}</td>
+app\print\all\[slug]\page.tsx:1662:              <div 
+className="bl-addr-ref">{numeroAffiche || 
+data.offerNumber}{versionSuffix}</div>
+app\print\all\[slug]\page.tsx:1686:                  {data.livrRue 
+&& <div className="bl-addr-line">{data.livrRue} 
+{data.livrNumero}</div>}
+app\print\all\[slug]\page.tsx:1695:                  {data.rue && 
+<div className="bl-addr-line">{data.rue} {data.numero}</div>}
+app\print\all\[slug]\page.tsx:1716:                  {data.rue && 
+<div>{data.rue} {data.numero}</div>}
+app\print\all\[slug]\page.tsx:1749:                      
+{data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
+app\print\all\[slug]\page.tsx:1758:                      {data.rue 
+&& <div>{data.rue} {data.numero}</div>}
+app\print\all\[slug]\page.tsx:1866:          <div 
+className="fb-watermark">ARCHIVE · {numeroAffiche}</div>
+app\print\all\[slug]\page.tsx:1882:                <div 
+className="fb-doc-num">{numeroAffiche}{versionSuffix}</div>
+app\print\all\[slug]\page.tsx:1915:                      
+{data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
+app\print\all\[slug]\page.tsx:1943:                  {data.rue && 
+<div>{data.rue} {data.numero}</div>}
+app\print\bulletin-livraison\[slug]\page.tsx:3://  
+app/print/bulletin-livraison/[slug]/page.tsx
+app\print\bulletin-livraison\[slug]\page.tsx:24:  societe: "", nom: 
+"", prenom: "", rue: "", numero: "", npa: "", ville: "",
+app\print\bulletin-livraison\[slug]\page.tsx:27:  livrTel: "", 
+livrRue: "", livrNumero: "", livrNpa: "", livrVille: "",
+app\print\bulletin-livraison\[slug]\page.tsx:34:export default 
+function PrintBulletinLivraisonSlug({ params }: { params: Promise<{ 
+slug: string }> }) {
+app\print\bulletin-livraison\[slug]\page.tsx:37:  const 
+[numeroAffiche, setNumeroAffiche] = useState("");
+app\print\bulletin-livraison\[slug]\page.tsx:41:      const { slug } 
+= await params;
+app\print\bulletin-livraison\[slug]\page.tsx:43:        const res = 
+await fetch(`/api/offres/${slug}?snapshot=false`);
+app\print\bulletin-livraison\[slug]\page.tsx:48:            
+setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber 
+|| slug);
+app\print\bulletin-livraison\[slug]\page.tsx:52:              
+customerNumber: json.offre?.numero_client || "",
+app\print\bulletin-livraison\[slug]\page.tsx:177:                  
+<td>{numeroAffiche || data.offerNumber}</td>
+app\print\bulletin-livraison\[slug]\page.tsx:205:              <div 
+className="doc-addr-ref">{numeroAffiche || data.offerNumber}</div>
+app\print\bulletin-livraison\[slug]\page.tsx:229:                  
+{data.livrRue && <div className="doc-addr-line">{data.livrRue} 
+{data.livrNumero}</div>}
+app\print\bulletin-livraison\[slug]\page.tsx:238:                  
+{data.rue && <div className="doc-addr-line">{data.rue} 
+{data.numero}</div>}
+app\print\bulletin-livraison\[slug]\page.tsx:259:                  
+{data.rue && <div>{data.rue} {data.numero}</div>}
+app\print\bulletin-livraison\[slug]\page.tsx:291:                    
+  {data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
+app\print\bulletin-livraison\[slug]\page.tsx:300:                    
+  {data.rue && <div>{data.rue} {data.numero}</div>}
+app\print\draft\[slug]\page.tsx:3://  app/print/draft/[slug]/page.tsx
+app\print\draft\[slug]\page.tsx:6://  Copié et adapté depuis 
+/print/offre/[slug]/page.tsx (2026-05-15).
+app\print\draft\[slug]\page.tsx:8://   - Fetch depuis 
+/api/drafts/[slug] (table drafts, pas offres)
+app\print\draft\[slug]\page.tsx:39:  societe: "", nom: "", prenom: 
+"", rue: "", numero: "", npa: "", ville: "",
+app\print\draft\[slug]\page.tsx:42:  livrTel: "", livrRue: "", 
+livrNumero: "", livrNpa: "", livrVille: "",
+app\print\draft\[slug]\page.tsx:52:function 
+buildWatermarkDataUri(numero: string): string {
+app\print\draft\[slug]\page.tsx:53:  const safeNum = (numero || 
+"BROUILLON").replace(/[<>&"']/g, "");
+app\print\draft\[slug]\page.tsx:64:export default function 
+PrintDraftSlug({ params }: { params: Promise<{ slug: string }> }) {
+app\print\draft\[slug]\page.tsx:67:  const [numeroAffiche, 
+setNumeroAffiche] = useState("");
+app\print\draft\[slug]\page.tsx:68:  const [draftSlug, setDraftSlug] 
+= useState("");
+app\print\draft\[slug]\page.tsx:73:      const { slug } = await 
+params;
+app\print\draft\[slug]\page.tsx:74:      setDraftSlug(slug);
+app\print\draft\[slug]\page.tsx:76:        const res = await 
+fetch(`/api/drafts/${slug}`);
+app\print\draft\[slug]\page.tsx:87:            
+setNumeroAffiche(draft?.numero_affiche || slug);
+app\print\draft\[slug]\page.tsx:91:              customerNumber: 
+draft?.client_numero_client || "",
+app\print\draft\[slug]\page.tsx:116:        <p>Aucun brouillon 
+trouvé pour <code>{draftSlug}</code>.</p>
+app\print\draft\[slug]\page.tsx:151:  const watermarkUrl = 
+buildWatermarkDataUri(numeroAffiche);
+app\print\draft\[slug]\page.tsx:332:          
+href={`/dashboard/draft/${draftSlug}`}
+app\print\draft\[slug]\page.tsx:359:                  
+<td>{numeroAffiche}</td>
+app\print\draft\[slug]\page.tsx:391:              <div 
+className="doc-addr-ref">{numeroAffiche}</div>
+app\print\draft\[slug]\page.tsx:395:              {data.rue && <div 
+className="doc-addr-line">{data.rue} {data.numero}</div>}
+app\print\draft\[slug]\page.tsx:414:                  {data.rue && 
+<div>{data.rue} {data.numero}</div>}
+app\print\draft\[slug]\page.tsx:446:                      
+{data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
+app\print\draft\[slug]\page.tsx:455:                      {data.rue 
+&& <div>{data.rue} {data.numero}</div>}
+app\print\draft\[slug]\page.tsx:654:                  Images 
+d&apos;illustration — {numeroAffiche}
+app\print\fiche-bleue\[slug]\page.tsx:3://  
+app/print/fiche-bleue/[slug]/page.tsx
+app\print\fiche-bleue\[slug]\page.tsx:12://  Génère via 
+/print/fiche-bleue/{slug}
+app\print\fiche-bleue\[slug]\page.tsx:32:  societe: "", nom: "", 
+prenom: "", rue: "", numero: "", npa: "", ville: "",
+app\print\fiche-bleue\[slug]\page.tsx:35:  livrTel: "", livrRue: "", 
+livrNumero: "", livrNpa: "", livrVille: "",
+app\print\fiche-bleue\[slug]\page.tsx:43:export default function 
+PrintFicheBleueSlug({ params }: { params: Promise<{ slug: string }> 
+}) {
+app\print\fiche-bleue\[slug]\page.tsx:46:  const [numeroAffiche, 
+setNumeroAffiche] = useState("");
+app\print\fiche-bleue\[slug]\page.tsx:52:      const { slug } = 
+await params;
+app\print\fiche-bleue\[slug]\page.tsx:54:        const res = await 
+fetch(`/api/offres/${slug}?snapshot=false`);
+app\print\fiche-bleue\[slug]\page.tsx:59:            
+setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber 
+|| slug);
+app\print\fiche-bleue\[slug]\page.tsx:65:              
+customerNumber: json.offre?.numero_client || "",
+app\print\fiche-bleue\[slug]\page.tsx:91:  const numeroLabel = 
+typeDocument === "Offre" ? "N° offre" : "N° commande";
+app\print\fiche-bleue\[slug]\page.tsx:535:        <div 
+className="fb-watermark">ARCHIVE · {numeroAffiche}</div>
+app\print\fiche-bleue\[slug]\page.tsx:552:              <div 
+className="fb-doc-num">{numeroAffiche}</div>
+app\print\fiche-bleue\[slug]\page.tsx:553:              <div 
+className="fb-doc-date">{numeroLabel}</div>
+app\print\fiche-bleue\[slug]\page.tsx:592:                    
+{data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
+app\print\fiche-bleue\[slug]\page.tsx:621:                {data.rue 
+&& <div>{data.rue} {data.numero}</div>}
+app\print\fiche-travail\[slug]\page.tsx:3://  
+app/print/fiche-travail/[slug]/page.tsx
+app\print\fiche-travail\[slug]\page.tsx:5://  v3 : utilise les 
+colonnes Supabase (numero_affiche, date_document)
+app\print\fiche-travail\[slug]\page.tsx:56:  rue: string; numero: 
+string; npa: string; ville: string;
+app\print\fiche-travail\[slug]\page.tsx:60:  livrTel: string; 
+livrRue: string; livrNumero: string; livrNpa: string; livrVille: 
+string;
+app\print\fiche-travail\[slug]\page.tsx:76:  societe: "", nom: "", 
+prenom: "", rue: "", numero: "", npa: "", ville: "",
+app\print\fiche-travail\[slug]\page.tsx:79:  livrTel: "", livrRue: 
+"", livrNumero: "", livrNpa: "", livrVille: "",
+app\print\fiche-travail\[slug]\page.tsx:145:export default function 
+PrintFicheTravail({ params }: { params: Promise<{ slug: string }> }) 
+{
+app\print\fiche-travail\[slug]\page.tsx:149:  const [numeroAffiche, 
+setNumeroAffiche] = useState("");
+app\print\fiche-travail\[slug]\page.tsx:183:      const { slug } = 
+await params;
+app\print\fiche-travail\[slug]\page.tsx:185:        const res = 
+await fetch(`/api/offres/${slug}?snapshot=false`);
+app\print\fiche-travail\[slug]\page.tsx:191:            
+setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber 
+|| slug);
+app\print\fiche-travail\[slug]\page.tsx:208:      // → On re-fetch 
+le slug et on lit directement la réponse.
+app\print\fiche-travail\[slug]\page.tsx:210:        const { slug: s 
+} = await params;
+app\print\fiche-travail\[slug]\page.tsx:216:        const cRes = 
+await fetch(`/api/corrections?entity_type=${entityType}&entity_slug=$
+{encodeURIComponent(s)}`);
+app\print\fiche-travail\[slug]\page.tsx:226:            const rRes = 
+await fetch(`/api/revisions?commande_slug=${encodeURIComponent(s)}`);
+app\print\fiche-travail\[slug]\page.tsx:263:    if 
+(data.lines.length === 0 && !numeroAffiche) return;
+app\print\fiche-travail\[slug]\page.tsx:302:      if (qrcode && 
+numeroAffiche) {
+app\print\fiche-travail\[slug]\page.tsx:306:          
+qr.addData(numeroAffiche);
+app\print\fiche-travail\[slug]\page.tsx:328:  }, [ready, data.lines, 
+data.nom, data.societe, numeroAffiche]);
+app\print\fiche-travail\[slug]\page.tsx:338:  const livrNumero   = 
+data.livrDiff ? data.livrNumero   : data.numero;
+app\print\fiche-travail\[slug]\page.tsx:359:  const numeroLabel = 
+typeDocument === "Offre" ? "N° d'offre" : "N° de commande";
+app\print\fiche-travail\[slug]\page.tsx:1160:          <span>📋 
+FICHE DE TRAVAIL — USAGE INTERNE{numeroAffiche ? ` · 
+${numeroAffiche}${versionSuffix}` : ""}</span>
+app\print\fiche-travail\[slug]\page.tsx:1186:                  <td 
+className="doc-meta-label">{numeroLabel}</td>
+app\print\fiche-travail\[slug]\page.tsx:1187:                  
+<td><strong>{numeroAffiche}{versionSuffix}</strong></td>
+app\print\fiche-travail\[slug]\page.tsx:1230:                  📅 
+{formatDate(dateDocument)} · {numeroAffiche}{versionSuffix}
+app\print\fiche-travail\[slug]\page.tsx:1257:                  
+{livrRue && <div className="doc-addr-line">{livrRue} 
+{livrNumero}</div>}
+app\print\fiche-travail\[slug]\page.tsx:1455:                
+{data.rue && <div>{data.rue} {data.numero}</div>}
+app\print\fiche-travail\[slug]\page.tsx:1631:                numero: 
+"N°",
+app\print\fiche-travail\[slug]\page.tsx:1644:                
+livrNumero: "N° livraison",
+app\print\offre\[slug]\page.tsx:3://  app/print/offre/[slug]/page.tsx
+app\print\offre\[slug]\page.tsx:4://  Template d'impression — OFFRE 
+avec slug Supabase
+app\print\offre\[slug]\page.tsx:24:  societe: "", nom: "", prenom: 
+"", rue: "", numero: "", npa: "", ville: "",
+app\print\offre\[slug]\page.tsx:27:  livrTel: "", livrRue: "", 
+livrNumero: "", livrNpa: "", livrVille: "",
+app\print\offre\[slug]\page.tsx:34:export default function 
+PrintOffreSlug({ params }: { params: Promise<{ slug: string }> }) {
+app\print\offre\[slug]\page.tsx:38:  const [numeroAffiche, 
+setNumeroAffiche] = useState("");
+app\print\offre\[slug]\page.tsx:39:  const [offreSlug, setOffreSlug] 
+= useState("");
+app\print\offre\[slug]\page.tsx:47:      const { slug } = await 
+params;
+app\print\offre\[slug]\page.tsx:49:        const res = await 
+fetch(`/api/offres/${slug}?snapshot=false`);
+app\print\offre\[slug]\page.tsx:54:            
+setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber 
+|| slug);
+app\print\offre\[slug]\page.tsx:55:            setOffreSlug(slug);
+app\print\offre\[slug]\page.tsx:60:                  const rRes = 
+await 
+fetch(`/api/revisions?commande_slug=${encodeURIComponent(slug)}`);
+app\print\offre\[slug]\page.tsx:72:              customerNumber: 
+json.offre?.numero_client || "",
+app\print\offre\[slug]\page.tsx:86:        const { slug: s } = await 
+params;
+app\print\offre\[slug]\page.tsx:87:        const cRes = await fetch(`
+/api/corrections?entity_type=offre&entity_slug=${encodeURIComponent(s
+)}`);
+app\print\offre\[slug]\page.tsx:123:  const validationUrl = 
+`https://offres.jardin-confort.ch/offre/${offreSlug || 
+numeroAffiche.toLowerCase().replace(/\s+/g, "-")}`;
+app\print\offre\[slug]\page.tsx:267:                  
+<td>{numeroAffiche || data.offerNumber}</td>
+app\print\offre\[slug]\page.tsx:299:              <div 
+className="doc-addr-ref">{numeroAffiche || 
+data.offerNumber}{versionVivante >= 2 ? ` \u00B7 V${versionVivante}` 
+: ""}</div>
+app\print\offre\[slug]\page.tsx:303:              {data.rue && <div 
+className="doc-addr-line">{data.rue} {data.numero}</div>}
+app\print\offre\[slug]\page.tsx:322:                  {data.rue && 
+<div>{data.rue} {data.numero}</div>}
+app\print\offre\[slug]\page.tsx:354:                      
+{data.livrRue && <div>{data.livrRue} {data.livrNumero}</div>}
+app\print\offre\[slug]\page.tsx:363:                      {data.rue 
+&& <div>{data.rue} {data.numero}</div>}
+app\print\offre\[slug]\page.tsx:695:                  Images 
+d&apos;illustration — {numeroAffiche || data.offerNumber}
+app\print\offre\page.tsx:28:  societe: "", nom: "", prenom: "", rue: 
+"", numero: "", npa: "", ville: "",
+app\print\offre\page.tsx:31:  livrTel: "", livrRue: "", livrNumero: 
+"", livrNpa: "", livrVille: "",
+app\print\offre\page.tsx:384:              {data.rue && <div 
+className="doc-addr-line">{data.rue} {data.numero}</div>}
+app\print\offre\page.tsx:404:                  {data.rue && 
+<div>{data.rue} {data.numero}</div>}
+app\print\offre\page.tsx:438:                      {data.livrRue && 
+<div>{data.livrRue} {data.livrNumero}</div>}
+app\print\offre\page.tsx:447:                      {data.rue && 
+<div>{data.rue} {data.numero}</div>}
+app\print\page-garde-client\[id]\page.tsx:5://  (sans commande). 
+Identique au design /print/page-garde-colis/[slug],
+app\print\page-garde-client\[id]\page.tsx:18:  numero_client: string
+app\print\page-garde-client\[id]\page.tsx:25:  numero_rue: string | 
+null
+app\print\page-garde-client\[id]\page.tsx:80:  const addrNumero      
+  = useLivraison ? ""                          : (client.numero_rue 
+|| "");
+app\print\page-garde-client\[id]\page.tsx:233:            {addrRue 
+&& <div className="client-addr-line">{addrRue} {addrNumero}</div>}
+app\print\page-garde-client\[id]\page.tsx:244:          Adresse 
+{useLivraison ? "de livraison" : "de facturation"} · Client 
+{client.numero_client}
+app\print\page-garde-colis\[slug]\page.tsx:3://  
+app/print/page-garde-colis/[slug]/page.tsx
+app\print\page-garde-colis\[slug]\page.tsx:24:  societe: "", nom: 
+"", prenom: "", rue: "", numero: "", npa: "", ville: "",
+app\print\page-garde-colis\[slug]\page.tsx:27:  livrTel: "", 
+livrRue: "", livrNumero: "", livrNpa: "", livrVille: "",
+app\print\page-garde-colis\[slug]\page.tsx:34:export default 
+function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
+slug: string }> }) {
+app\print\page-garde-colis\[slug]\page.tsx:37:  const 
+[numeroAffiche, setNumeroAffiche] = useState("");
+app\print\page-garde-colis\[slug]\page.tsx:41:      const { slug } = 
+await params;
+app\print\page-garde-colis\[slug]\page.tsx:43:        const res = 
+await fetch(`/api/offres/${slug}?snapshot=false`);
+app\print\page-garde-colis\[slug]\page.tsx:48:            
+setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber 
+|| slug);
+app\print\page-garde-colis\[slug]\page.tsx:52:              
+customerNumber: json.offre?.numero_client || "",
+app\print\page-garde-colis\[slug]\page.tsx:73:  const addrNumero = 
+showLivrDiff ? data.livrNumero : data.numero;
+app\print\page-garde-colis\[slug]\page.tsx:203:            {addrRue 
+&& <div className="client-addr-line">{addrRue} {addrNumero}</div>}
+app\print\page-garde-colis\[slug]\page.tsx:214:            
+<strong>N° de commande :</strong> {numeroAffiche || data.offerNumber}
+lib\adresse-utils.ts:5:// COLLÉ dans le champ `rue` (ex: "Rte de 
+Baumaroche 16B") et `numero` vide.
+lib\adresse-utils.ts:6:// Donc on ne peut PAS se contenter de tester 
+si `numero` est rempli : il faut
+lib\adresse-utils.ts:7:// vérifier si un numéro existe QUELQUE PART 
+dans (rue + numero) combinés.
+lib\adresse-utils.ts:15: * plausible), que ce soit dans `rue` ou 
+dans `numero`.
+lib\adresse-utils.ts:18: *   aUnNumero("Rte de Baumaroche 16B", "")  
+ → true  (numéro dans rue, WinBiz)
+lib\adresse-utils.ts:19: *   aUnNumero("Route de Lavaux", "425")     
+ → true  (champs séparés)
+lib\adresse-utils.ts:20: *   aUnNumero("Route de Baumaroche", "")    
+ → false (aucun numéro → alerte)
+lib\adresse-utils.ts:21: *   aUnNumero("", "")                       
+ → false (mais voir adresseEstRenseignee)
+lib\adresse-utils.ts:23:export function aUnNumero(rue?: string | 
+null, numero?: string | null): boolean {
+lib\adresse-utils.ts:24:  const combine = `${rue || ""} ${numero || 
+""}`;
+lib\adresse-utils.ts:40:export function manqueNumero(rue?: string | 
+null, numero?: string | null): boolean {
+lib\adresse-utils.ts:41:  return adresseEstRenseignee(rue) && 
+!aUnNumero(rue, numero);
+lib\adresse-utils.ts:46: * - Si livrDiff = true  → adresse de 
+livraison propre (livrRue / livrNumero)
+lib\adresse-utils.ts:47: * - Si livrDiff = false → héritée de la 
+facturation (rue / numero)
+lib\adresse-utils.ts:49: * Renvoie { rue, numero } de l'adresse 
+effectivement utilisée pour livrer.
+lib\adresse-utils.ts:54:  numero?: string | null;
+lib\adresse-utils.ts:56:  livrNumero?: string | null;
+lib\adresse-utils.ts:57:}): { rue: string; numero: string } {
+lib\adresse-utils.ts:59:    return { rue: params.livrRue || "", 
+numero: params.livrNumero || "" };
+lib\adresse-utils.ts:61:  return { rue: params.rue || "", numero: 
+params.numero || "" };
+lib\corrections-config.ts:32:  "numero",
+lib\corrections-config.ts:47:  "livrNumero",
+lib\corrections-config.ts:98:  numero: "client_numero",
+lib\corrections-config.ts:112:  livrNumero: "livr_numero",
+lib\dashboard-utils.ts:4:  id: number; slug: string; type_document: 
+string
+lib\jc-print-types.ts:57:  numero: string;
+lib\jc-print-types.ts:73:  livrNumero: string;
+lib\media-line-types.ts:37:  slug: string;
+lib\notifications.ts:10:  offre_slug?: string | null;
+lib\notifications.ts:11:  numero_affiche?: string | null;
+lib\notifications.ts:49:        offre_slug: input.offre_slug || null,
+lib\notifications.ts:50:        numero_affiche: input.numero_affiche 
+|| null,
+lib\shopify-refresh-stock.ts:5://   - app/api/offres/[slug]/route.ts 
+ (offres en cours → stock live)
+lib\shopify-refresh-stock.ts:6://   - app/api/drafts/[slug]/route.ts 
+ (brouillons → stock live)
+lib\shopify-stock.ts:6:import { createHash, randomUUID } from 
+"crypto"
+lib\supabase.ts:22:  slug: string;
+lib\supabase.ts:24:  numero: string;
+
+

@@ -91,6 +91,24 @@ export function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // ── Accès Claude (serveur jardi-mail-mcp, 13.08.2026) ──
+  // Secret DÉDIÉ à portée LIMITÉE : il n'autorise QUE la création de brouillons
+  // (POST /api/drafts). Un brouillon est inerte tant qu'un humain ne le
+  // transforme pas en offre. Même compromis, ce secret ne donne accès à rien
+  // d'autre — révocable indépendamment du secret de session (env Vercel
+  // CLAUDE_DRAFT_SECRET, présent aussi dans le projet Vercel jardi-mail-mcp).
+  const secretClaude = process.env.CLAUDE_DRAFT_SECRET;
+  const enTeteClaude = req.headers.get("x-jc-claude");
+  if (
+    secretClaude &&
+    enTeteClaude &&
+    enTeteClaude === secretClaude &&
+    pathname === "/api/drafts" &&
+    method === "POST"
+  ) {
+    return NextResponse.next();
+  }
+
   // pdf.co doit pouvoir rendre les pages /print internes (fiche de travail)
   // pour générer les PDFs. Jeton passé en query par fiche-travail-pdf/route.ts.
   if (secret && pathname.startsWith("/print/")) {
