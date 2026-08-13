@@ -30,6 +30,32 @@ const URL_MCP =
 
 const MODELE = process.env.CLAUDE_CHAT_MODEL ?? "claude-sonnet-5";
 
+// Date courante (fuseau suisse) — injectée dans un second bloc système placé
+// APRÈS le bloc mis en cache : les règles restent en cache (préfixe stable),
+// seule cette petite phrase change d'un jour à l'autre.
+function blocDate(): string {
+  const maintenant = new Date();
+  const longue = new Intl.DateTimeFormat("fr-CH", {
+    timeZone: "Europe/Zurich",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(maintenant);
+  const courte = new Intl.DateTimeFormat("fr-CH", {
+    timeZone: "Europe/Zurich",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(maintenant);
+  return (
+    "Nous sommes le " + longue + " (" + courte + ", fuseau Europe/Zurich). " +
+    "Quand une période est donnée sans année (« juillet », « cette semaine »), " +
+    "utiliser l'année en cours ; pour un mois pas encore passé cette année, " +
+    "comprendre l'occurrence la plus récente. Préciser l'année retenue dans la réponse."
+  );
+}
+
 const REGLES_JARDI = `Tu es Claude, l'assistant INTERNE de Jardin-Confort SA (Lutry), intégré au dashboard des offres (offres.jardin-confort.ch). Tes utilisateurs sont Thierry et l'équipe du magasin — jamais des clients. Langue de travail : français (suisse), ton informel mais professionnel, réponses concises.
 
 Tu disposes des outils du serveur \`jardi-mail\` : messagerie Infomaniak en LECTURE SEULE (\`mail_lister\`, \`mail_lire\`, \`mail_chercher\`, \`mail_pieces_jointes\`, \`mail_dossiers\`, \`pj_chercher\`), brouillons (\`mail_creer_brouillon\`, \`offre_draft_creer\`), clients (\`client_chercher\`, \`client_dossier\`), commandes (\`commande_chercher\`, \`commande_ouvrir\`), produits (\`produit_chercher\`) et statistiques (\`stats_ventes\`).
@@ -207,6 +233,7 @@ export async function POST(req: NextRequest) {
           text: REGLES_JARDI,
           cache_control: { type: "ephemeral" },
         },
+        { type: "text", text: blocDate() },
       ],
       messages,
       mcp_servers: [
