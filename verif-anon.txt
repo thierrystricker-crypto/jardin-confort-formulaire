@@ -1,0 +1,91 @@
+﻿
+app\api\brand-logos\upload\route.ts:61:    const { error: uploadErr } 
+= await supabase.storage
+app\api\brand-logos\upload\route.ts:73:    const { data: pub } = 
+supabase.storage.from(BUCKET).getPublicUrl(path);
+app\api\brand-logos\upload\route.ts:142:    await 
+supabase.storage.from(BUCKET).remove([path]);
+app\api\brand-logos\upload\route.ts:145:  const { error: delErr } = 
+await supabase.from("brand_logos").delete().eq("id", id);
+app\api\stats\summary\route.ts:62:  const { data, error } = await 
+supabase.rpc("stats_commandes_periode", {
+node_modules\@supabase\postgrest-js\src\PostgrestClient.ts:259:   * 
+const { data, error } = await supabase.rpc('hello_world')
+node_modules\@supabase\postgrest-js\src\PostgrestClient.ts:280:   * 
+const { data, error } = await supabase.rpc('echo', { say: '👋' })
+node_modules\@supabase\postgrest-js\src\PostgrestClient.ts:305:   * 
+const { data, error } = await supabase.rpc('add_one_each', { arr: [1, 
+2, 3] })
+node_modules\@supabase\postgrest-js\src\PostgrestClient.ts:369:   * 
+const { data, error } = await supabase.rpc('hello_world', undefined, 
+{ get: true })
+node_modules\@supabase\storage-js\src\packages\StorageAnalyticsClient.
+ts:258:   * const catalog = 
+supabase.storage.analytics.from('analytics-data')
+node_modules\@supabase\storage-js\src\packages\StorageAnalyticsClient.
+ts:295:   * const catalog = 
+supabase.storage.analytics.from('analytics-data')
+node_modules\@supabase\storage-js\src\packages\StorageAnalyticsClient.
+ts:310:   * const catalog = 
+supabase.storage.analytics.from('analytics-data')
+node_modules\@supabase\storage-js\src\packages\StorageAnalyticsClient.
+ts:324:   * const catalog = 
+supabase.storage.analytics.from('analytics-data')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:56: * const bucket = supabase.storage.vectors.from('embeddings-prod')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:117:   * const bucket = 
+supabase.storage.vectors.from('embeddings-prod')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:253:   * const bucket = 
+supabase.storage.vectors.from('embeddings-prod')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:281:   * const bucket = 
+supabase.storage.vectors.from('embeddings-prod')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:315:   * const bucket = 
+supabase.storage.vectors.from('embeddings-prod')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:341:   * const bucket = 
+supabase.storage.vectors.from('embeddings-prod')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:365:   * const bucket = 
+supabase.storage.vectors.from('embeddings-prod')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:388:   * const index = supabase.storage.vectors.from('embeddings-prod
+').index('documents-openai')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:439:   * const index = supabase.storage.vectors.from('embeddings-prod
+').index('documents-openai')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:469:   * const index = supabase.storage.vectors.from('embeddings-prod
+').index('documents-openai')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:504:   * const index = supabase.storage.vectors.from('embeddings-prod
+').index('documents-openai')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:534:   * const index = supabase.storage.vectors.from('embeddings-prod
+').index('documents-openai')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:566:   * const index = supabase.storage.vectors.from('embeddings-prod
+').index('documents-openai')
+node_modules\@supabase\storage-js\src\packages\StorageVectorsClient.ts
+:601:   * const index = supabase.storage.vectors.from('embeddings-prod
+').index('documents-openai')
+node_modules\@supabase\storage-js\src\packages\VectorBucketApi.ts:15: 
+* Use {@link StorageVectorsClient} via `supabase.storage.vectors` 
+instead.
+node_modules\@supabase\storage-js\src\packages\VectorDataApi.ts:20: * 
+Use {@link VectorIndexScope} via 
+`supabase.storage.vectors.from('bucket').index('idx')` instead.
+node_modules\@supabase\storage-js\src\packages\VectorIndexApi.ts:34: 
+* Use {@link VectorBucketScope} via 
+`supabase.storage.vectors.from('bucket')` instead.
+node_modules\@supabase\storage-js\src\StorageClient.ts:43:   * const 
+avatars = supabase.storage.from('avatars')
+node_modules\@supabase\supabase-js\src\index.ts:43: * const { data, 
+error } = await supabase.from('profiles').select('*')
+node_modules\@supabase\supabase-js\src\SupabaseClient.ts:276:   * 
+const { data } = await supabase.from('profiles').select('*')
+
+

@@ -1,0 +1,250 @@
+﻿
+app\api\brand-logos\upload\route.ts:53:    const baseSlug = mode === 
+"library" ? slugify(name) : `tmp-${Date.now()}`;
+app\api\brand-logos\upload\route.ts:57:        : 
+`ephemeral/${baseSlug}-${Math.random().toString(36).slice(2, 
+8)}.${ext}`;
+app\api\brand-logos\upload\route.ts:95:            slug: baseSlug,
+app\api\corrections\route.ts:60:  entity_slug: string;
+app\api\corrections\route.ts:207:        entity_slug: entity.slug,
+app\api\corrections\route.ts:318:    const entitySlug = 
+searchParams.get("entity_slug");
+app\api\drafts\[slug]\transformer\route.ts:27:  { params }: { 
+params: Promise<{ slug: string }> }
+app\api\drafts\[slug]\transformer\route.ts:45:      { p_slug: slug }
+app\api\drafts\[slug]\transformer\route.ts:67:        const 
+existingOffreSlug = match?.[1] || null;
+app\api\drafts\[slug]\transformer\route.ts:94:      offre_slug: 
+string;
+app\api\drafts\[slug]\transformer\route.ts:119:      offreSlug: 
+offre_slug,
+app\api\drafts\[slug]\route.ts:19:  { params }: { params: Promise<{ 
+slug: string }> }
+app\api\drafts\[slug]\route.ts:77:  { params }: { params: Promise<{ 
+slug: string }> }
+app\api\drafts\[slug]\route.ts:254:  { params }: { params: Promise<{ 
+slug: string }> }
+app\api\drafts\[slug]\route.ts:308:        slug: existing.slug,
+app\api\drafts\route.ts:19:  const token = 
+Math.random().toString(36).slice(2, 7); // ex: "x7k2m"
+app\api\drafts\route.ts:39:    const slug = makeSlug(numeroAffiche, 
+true);      // "dra-001-x7k2m"
+app\api\drafts\route.ts:141:      slug: result.slug,
+app\api\make-health\route.ts:11://          run_id: 'xxx', 
+offre_slug: 'cmd-80520-abc', numero_affiche: 'CMD-80520' }
+app\api\make-health\route.ts:31:        offre_slug: offre_slug || 
+null,
+app\api\make-health\route.ts:97:    const minutesSinceLastCommande = 
+Math.floor(
+app\api\make-health\route.ts:133:    const pingGapMinutes = 
+Math.floor(
+app\api\offres\save\route.ts:18:  const token = 
+Math.random().toString(36).slice(2, 7); // ex: "x7k2m"
+app\api\offres\save\route.ts:39:    let slug: string;
+app\api\offres\save\route.ts:51:      slug = 
+makeSlug(data.offerNumber);
+app\api\offres\save\route.ts:60:        slug = 
+makeSlug(numeroCommande, true);
+app\api\offres\save\route.ts:67:        slug = makeSlug(numeroOffre, 
+true);
+app\api\offres\save\route.ts:134:        offre_slug: slug,
+app\api\offres\save\route.ts:199:              body: 
+JSON.stringify({ offre_slug: slug, reason: "commande_directe" }),
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:20:async function 
+generatePdfFromPrintPage(slug: string, fileName: string): Promise<{ 
+buffer: ArrayBuffer | null; error?: string }> {
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:57:  { params }: { 
+params: Promise<{ slug: string }> }
+app\api\offres\[slug]\fiche-travail-pdf\route.ts:157:  { params }: { 
+params: Promise<{ slug: string }> }
+app\api\offres\[slug]\notes\route.ts:9:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\pdf\route.ts:14:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\pdf\route.ts:120:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\probabilite\route.ts:7:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\qr\route.ts:245:async function 
+storeQrPdf(slug: string, pdfData: ArrayBuffer | Buffer): 
+Promise<string> {
+app\api\offres\[slug]\qr\route.ts:258:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\qr\route.ts:289:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\relance\route.ts:9:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\reviser\route.ts:25:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\reviser\route.ts:82:        p_slug: slug,
+app\api\offres\[slug]\reviser\route.ts:135:              offre_slug: 
+slug,
+app\api\offres\[slug]\statut\route.ts:9:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\valider\route.ts:19:  { params }: { params: 
+Promise<{ slug: string }> }
+app\api\offres\[slug]\valider\route.ts:43:      const 
+existingCmdSlug = offre.numero_commande
+app\api\offres\[slug]\valider\route.ts:49:        cmdSlug: 
+existingCmdSlug,
+app\api\offres\[slug]\valider\route.ts:73:    const token = 
+Math.random().toString(36).slice(2, 7);
+app\api\offres\[slug]\valider\route.ts:74:    const cmdSlug = 
+numeroCommande.toLowerCase().replace(/[^a-z0-9-]/g, "-") + "-" + 
+token;
+app\api\offres\[slug]\valider\route.ts:122:      slug: cmdSlug,
+app\api\offres\[slug]\valider\route.ts:188:      offre_slug: cmdSlug,
+app\api\offres\[slug]\valider\route.ts:210:      offre_slug: slug,
+app\api\offres\[slug]\valider\route.ts:211:      commande_slug: 
+cmdSlug,
+app\api\offres\[slug]\valider\route.ts:329:          body: 
+JSON.stringify({ offre_slug: cmdSlug, reason: "commande_validee" }),
+app\api\offres\[slug]\route.ts:15:  { params }: { params: Promise<{ 
+slug: string }> }
+app\api\offres\[slug]\route.ts:147:  { params }: { params: Promise<{ 
+slug: string }> }
+app\api\revisions\route.ts:45:  const commandeSlug = 
+searchParams.get("commande_slug");
+app\api\stock-movements\process\route.ts:26:    const offre_slug: 
+string = body.offre_slug
+app\api\stock-movements\process\route.ts:254:        offre_slug: 
+offre.slug,
+app\api\stock-movements\route.ts:12:    const offreSlug = 
+url.searchParams.get("offre_slug")
+app\dashboard\clients\[id]\page.tsx:48:  slug: string
+app\dashboard\draft\[slug]\page.tsx:13:  slug: string;
+app\dashboard\draft\[slug]\page.tsx:68:  
+transformed_into_offre_slug: string | null;
+app\dashboard\draft\[slug]\page.tsx:107:  params: Promise<{ slug: 
+string }>;
+app\dashboard\draft\[slug]\page.tsx:120:      const { slug: s } = 
+await params;
+app\dashboard\draft\[slug]\page.tsx:152:        copiedFromDraftSlug: 
+draft.slug,
+app\dashboard\draft\[slug]\page.tsx:697:            slug: draft.slug,
+app\dashboard\notifications\page.tsx:11:  offre_slug: string | null;
+app\dashboard\notifications\page.tsx:47:  const min = 
+Math.floor(diff / 60000);
+app\dashboard\notifications\page.tsx:50:  const h = Math.floor(min / 
+60);
+app\dashboard\notifications\page.tsx:52:  const d = Math.floor(h / 
+24);
+app\dashboard\stock-movements\page.tsx:10:  offre_slug: string;
+app\dashboard\stock-movements\page.tsx:37:  const min = 
+Math.floor(diff / 60000);
+app\dashboard\stock-movements\page.tsx:40:  const h = Math.floor(min 
+/ 60);
+app\dashboard\stock-movements\page.tsx:42:  const d = Math.floor(h / 
+24);
+app\dashboard\stock-remises\page.tsx:15:  commande_slug: string;
+app\dashboard\[slug]\reviser\page.tsx:11:  params: Promise<{ slug: 
+string }>;
+app\dashboard\[slug]\page.tsx:16:  id: number; slug: string; 
+type_document: TypeDocument
+app\dashboard\[slug]\page.tsx:47:  return Math.floor((Date.now()-new 
+Date(baseDate).getTime())/86400000)
+app\dashboard\[slug]\page.tsx:152:export default function 
+DashboardDetailPage({ params }: { params: Promise<{ slug: string }> 
+}) {
+app\dashboard\[slug]\page.tsx:178:  const [commandeIssue, 
+setCommandeIssue] = useState<{slug: string; numero: 
+string}|null>(null)
+app\dashboard\[slug]\page.tsx:201:      const {slug:s}=await params
+app\dashboard\[slug]\page.tsx:256:                setCommandeIssue({ 
+slug: found.slug, numero: found.numero_affiche })
+app\dashboard\[slug]\page.tsx:424:      copiedFromOffreSlug: 
+offre.slug,
+app\dashboard\[slug]\page.tsx:432:      fromDraftSlug: undefined,    
+     // ← marqueur transformation Session 5
+app\dashboard\[slug]\page.tsx:433:      copiedFromDraftSlug: 
+undefined,   // ← marqueur copie brouillon→brouillon
+app\dashboard\page.tsx:14:  slug: string
+app\dashboard\page.tsx:28:  transformed_into_offre_slug: string|null
+app\dashboard\page.tsx:34:  id: number; slug: string; type_document: 
+TypeDocument
+app\dashboard\page.tsx:94:function offreNumeroFromSlug(slug: 
+string|null): string|null {
+app\dashboard\page.tsx:106:  return Math.floor((Date.now()-new 
+Date(o.date_document).getTime())/86400000)
+app\dashboard\page.tsx:111:  return Math.floor((Date.now()-new 
+Date(o.date_derniere_relance).getTime())/86400000)
+app\drafts\[slug]\editer\page.tsx:14:  params: Promise<{ slug: 
+string }>;
+app\drafts\_components\DraftFormulaire.tsx:362:    
+transformed_into_offre_slug: string | null;
+app\drafts\_components\DraftFormulaire.tsx:833:        const 
+isCreate = currentSlug === null;
+app\drafts\_components\DraftFormulaire.tsx:847:        const newSlug 
+= json.slug as string;
+app\drafts\_components\DraftFormulaire.tsx:883:    let slug = 
+currentSlug;
+app\drafts\_components\DraftFormulaire.tsx:888:      slug = 
+match?.[1] ?? null;
+app\drafts\_components\DraftFormulaire.tsx:1045:            
+transformed_into_offre_slug: d.transformed_into_offre_slug,
+app\drafts\_components\DraftFormulaire.tsx:1334:    const elapsed = 
+Math.floor((Date.now() - lastSavedAt.getTime()) / 1000);
+app\drafts\_components\DraftFormulaire.tsx:1337:    const min = 
+Math.floor(elapsed / 60);
+app\drafts\_components\DraftFormulaire.tsx:1339:    const h = 
+Math.floor(min / 60);
+app\drafts\_components\DraftFormulaire.tsx:1471:              - Mode 
+création (currentSlug === null) : bouton CACHÉ — on est déjà
+app\drafts\_components\DraftFormulaire.tsx:3046:            slug: 
+currentSlug,
+app\offre\[slug]\confirmation\page.tsx:20:  slug: string;
+app\offre\[slug]\confirmation\page.tsx:114:export default function 
+ConfirmationPage({ params }: { params: Promise<{ slug: string }> }) {
+app\offre\[slug]\confirmation\page.tsx:133:      const { slug: s } = 
+await params;
+app\offre\[slug]\valider\page.tsx:20:  slug: string;
+app\offre\[slug]\valider\page.tsx:49:export default function 
+ValiderOffrePage({ params }: { params: Promise<{ slug: string }> }) {
+app\offre\[slug]\valider\page.tsx:69:      const { slug: s } = await 
+params;
+app\offre\[slug]\page.tsx:54:  slug: string;
+app\offre\[slug]\page.tsx:223:export default function OffrePage({ 
+params }: { params: Promise<{ slug: string }> }) {
+app\offre\[slug]\page.tsx:252:      const { slug: s } = await params;
+app\offres\nouveau\MediaLinePicker.tsx:45:  function 
+handleSelectChange(slug: string) {
+app\offres\nouveau\MediaLinePicker.tsx:56:    const logo = 
+logos.find((l) => l.slug === slug);
+app\offres\nouveau\MediaLinePicker.tsx:111:  const currentSlug = 
+line.source === "library"
+app\print\all\[slug]\page.tsx:58:export default function 
+PrintAllPage({ params }: { params: Promise<{ slug: string }> }) {
+app\print\bulletin-livraison\[slug]\page.tsx:34:export default 
+function PrintBulletinLivraisonSlug({ params }: { params: Promise<{ 
+slug: string }> }) {
+app\print\draft\[slug]\page.tsx:64:export default function 
+PrintDraftSlug({ params }: { params: Promise<{ slug: string }> }) {
+app\print\fiche-bleue\[slug]\page.tsx:43:export default function 
+PrintFicheBleueSlug({ params }: { params: Promise<{ slug: string }> 
+}) {
+app\print\fiche-travail\[slug]\page.tsx:145:export default function 
+PrintFicheTravail({ params }: { params: Promise<{ slug: string }> }) 
+{
+app\print\fiche-travail\[slug]\page.tsx:210:        const { slug: s 
+} = await params;
+app\print\offre\[slug]\page.tsx:34:export default function 
+PrintOffreSlug({ params }: { params: Promise<{ slug: string }> }) {
+app\print\offre\[slug]\page.tsx:86:        const { slug: s } = await 
+params;
+app\print\page-garde-colis\[slug]\page.tsx:34:export default 
+function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
+slug: string }> }) {
+lib\dashboard-utils.ts:4:  id: number; slug: string; type_document: 
+string
+lib\dashboard-utils.ts:24:  return Math.floor((Date.now()-new 
+Date(o.date_document).getTime())/86400000)
+lib\media-line-types.ts:37:  slug: string;
+lib\notifications.ts:49:        offre_slug: input.offre_slug || null,
+lib\shopify-stock.ts:6:import { createHash, randomUUID } from 
+"crypto"
+lib\shopify-stock.ts:234:  // Sinon on utilise un randomUUID (cas 
+manuel).
+lib\shopify-stock.ts:237:    : randomUUID()
+lib\supabase.ts:22:  slug: string;
+
+
