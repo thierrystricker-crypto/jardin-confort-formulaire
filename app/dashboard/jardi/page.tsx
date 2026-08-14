@@ -32,6 +32,31 @@ type EvenementStream = {
   error?: { message?: string };
 };
 
+// ── Dictée vocale (Web Speech API, Chrome/Edge) ─────────────────────────────
+// Types minimaux : l'API n'est pas dans les définitions TypeScript standard.
+type ResultatVocal = { isFinal: boolean; 0: { transcript: string } };
+type EvenementVocal = { results: ArrayLike<ResultatVocal> };
+type ReconnaissanceVocale = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start: () => void;
+  stop: () => void;
+  onresult: ((e: EvenementVocal) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+};
+type FenetreAvecVocal = {
+  SpeechRecognition?: new () => ReconnaissanceVocale;
+  webkitSpeechRecognition?: new () => ReconnaissanceVocale;
+};
+
+function constructeurVocal(): (new () => ReconnaissanceVocale) | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as FenetreAvecVocal;
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
 // ── Rendu markdown minimal ───────────────────────────────────────────────────
 // Liens [texte](url), URLs nues, **gras**, `code`. Les retours à la ligne sont
 // préservés par white-space: pre-wrap. Aucun lien n'est fabriqué ni modifié :
@@ -273,6 +298,10 @@ export default function PageChatClaude() {
   const [convId, setConvId] = useState<string | null>(null);
   const [panneauOuvert, setPanneauOuvert] = useState(true);
   const [copieIndex, setCopieIndex] = useState<number | null>(null);
+  const [dicteeDispo, setDicteeDispo] = useState(false);
+  const [dicteeActive, setDicteeActive] = useState(false);
+  const vocalRef = useRef<ReconnaissanceVocale | null>(null);
+  const baseSaisieRef = useRef("");
   const finRef = useRef<HTMLDivElement>(null);
   const zoneRef = useRef<HTMLTextAreaElement>(null);
   const convIdRef = useRef<string | null>(null);
@@ -300,7 +329,39 @@ export default function PageChatClaude() {
     if (typeof window !== "undefined" && window.innerWidth < 700) {
       setPanneauOuvert(false);
     }
+    // Dictée : bouton affiché seulement si le navigateur la supporte (Chrome/Edge)
+    setDicteeDispo(constructeurVocal() !== null);
   }, [chargerListe]);
+
+  // ── Dictée vocale ──────────────────────────────────────────────────────────
+  const basculerDictee = () => {
+    if (dicteeActive) {
+      vocalRef.current?.stop();
+      return;
+    }
+    const Ctor = constructeurVocal();
+    if (!Ctor) return;
+    const rec = new Ctor();
+    rec.lang = "fr-CH";
+    rec.continuous = true;
+    rec.interimResults = true;
+    baseSaisieRef.current = saisie.trim() ? saisie.trimEnd() + " " : "";
+    rec.onresult = (e) => {
+      let definitif = "";
+      let provisoire = "";
+      for (let j = 0; j < e.results.length; j++) {
+        const r = e.results[j];
+        if (r.isFinal) definitif += r[0].transcript;
+        else provisoire += r[0].transcript;
+      }
+      setSaisie(baseSaisieRef.current + definitif + provisoire);
+    };
+    rec.onend = () => setDicteeActive(false);
+    rec.onerror = () => setDicteeActive(false);
+    vocalRef.current = rec;
+    rec.start();
+    setDicteeActive(true);
+  };
 
   // Sauvegarde automatique à la fin de chaque réponse (enCours true → false).
   useEffect(() => {
@@ -382,6 +443,7 @@ export default function PageChatClaude() {
   const envoyer = async (texteForce?: string) => {
     const texte = (texteForce ?? saisie).trim();
     if (!texte || enCours) return;
+    if (dicteeActive) vocalRef.current?.stop();
     setSaisie("");
 
     // Historique envoyé au serveur (les erreurs affichées n'en font pas partie ;
@@ -790,6 +852,27 @@ export default function PageChatClaude() {
                 color: "#ededed",
               }}
             />
+            {dicteeDispo && (
+              <button
+                onClick={basculerDictee}
+                title={dicteeActive ? "Arrêter la dictée" : "Dicter au micro"}
+                style={{
+                  padding: "10px 12px",
+                  fontSize: 16,
+                  lineHeight: 1,
+                  background: dicteeActive ? "rgba(244,63,94,0.15)" : "#2a2d31",
+                  color: dicteeActive ? "#f87171" : "#a1a1aa",
+                  border: dicteeActive
+                    ? "1px solid rgba(244,63,94,0.4)"
+                    : "1px solid rgba(255,255,255,0.15)",
+                  borderRadius: 10,
+                  cursor: "pointer",
+                  animation: dicteeActive ? "jcClignote 1.2s ease-in-out infinite" : "none",
+                }}
+              >
+                {dicteeActive ? "⏹" : "🎤"}
+              </button>
+            )}
             <button
               onClick={() => envoyer()}
               disabled={enCours || !saisie.trim()}
