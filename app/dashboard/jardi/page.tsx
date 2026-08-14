@@ -1,4 +1,4 @@
-// app/dashboard/claude/page.tsx
+// app/dashboard/jardi/page.tsx
 // ─────────────────────────────────────────────────────────────────────────────
 // Chat Claude intégré au dashboard (13.08.2026). Usage interne uniquement.
 //
@@ -446,7 +446,7 @@ export default function PageChatClaude() {
           const morceau = evt.delta.text;
           majDernier((m) => ({ ...m, content: m.content + morceau }));
         } else if (evt.type === "error") {
-          const msg = evt.error?.message ?? "Erreur du service Claude.";
+          const msg = evt.error?.message ?? "Erreur du service Jardi.";
           majDernier((m) => ({
             ...m,
             content: m.content ? m.content + "\n\n⚠️ " + msg : "⚠️ " + msg,
@@ -644,11 +644,11 @@ export default function PageChatClaude() {
               </Link>
             </div>
             <h1 style={{ fontSize: 20, fontWeight: 800, color: "#f4f4f5", marginTop: 8, marginBottom: 2 }}>
-              💬 Claude
+              💬 Jardi
             </h1>
             <p style={{ color: "#a1a1aa", fontSize: 13, margin: 0 }}>
               Mails, clients, commandes, statistiques — usage interne. Lecture seule :
-              Claude ne peut rien envoyer, uniquement déposer des brouillons à relire
+              Jardi ne peut rien envoyer, uniquement déposer des brouillons à relire
               dans Thunderbird.
             </p>
           </div>
@@ -737,7 +737,7 @@ export default function PageChatClaude() {
                         <PointsAnimes />
                         {m.outils && m.outils.length
                           ? `consulte ${m.outils[m.outils.length - 1]}…`
-                          : "Claude réfléchit…"}
+                          : "Jardi réfléchit…"}
                       </span>
                     ))}
                   {m.role === "assistant" &&
@@ -775,7 +775,7 @@ export default function PageChatClaude() {
               onChange={(e) => setSaisie(e.target.value)}
               onKeyDown={surTouche}
               rows={2}
-              placeholder="Écris à Claude… (Entrée pour envoyer, Maj+Entrée pour une nouvelle ligne)"
+              placeholder="Écris à Jardi… (Entrée pour envoyer, Maj+Entrée pour une nouvelle ligne)"
               disabled={enCours}
               style={{
                 flex: 1,
