@@ -67,15 +67,19 @@ function renduInline(texte: string): React.ReactNode[] {
         suite = url[url.length - 1] + suite;
         url = url.slice(0, -1);
       }
+      // URL très longue (pièces jointes signées, etc.) : affichage tronqué,
+      // le lien lui-même reste complet.
+      const affichage = url.length > 60 ? url.slice(0, 57) + "…" : url;
       noeuds.push(
         <a
           key={`u${cle++}`}
           href={url}
           target="_blank"
           rel="noopener noreferrer"
+          title={url}
           style={{ color: "#7dd3fc", textDecoration: "underline", wordBreak: "break-all" }}
         >
-          {url}
+          {affichage}
         </a>
       );
       if (suite) noeuds.push(suite);
