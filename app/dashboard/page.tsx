@@ -449,6 +449,7 @@ export default function DashboardPage() {
             <div className="flex gap-3 flex-wrap">
               <Link href="/drafts/nouveau" target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-2xl bg-[#2B8AD1] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#2478b8]">+ Nouvelle offre (brouillon)</Link>
               <NotificationsButton/>
+              <Link href="/dashboard/claude" target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-2xl border border-sky-500/30 bg-sky-500/15 px-4 py-3 text-sm text-sky-300 transition hover:bg-sky-500/25">💬 Claude</Link>
               <Link href="/dashboard/clients" className="inline-flex items-center rounded-2xl border border-white/10 bg-[#2a2d31] px-4 py-3 text-sm text-zinc-300 transition hover:bg-[#34383d]">👥 Clients</Link>
               <Link href="/dashboard/stock-movements" className="inline-flex items-center rounded-2xl border border-purple-500/30 bg-purple-500/15 px-4 py-3 text-sm text-purple-300 transition hover:bg-purple-500/20">📦 Mouvements de stock</Link>
                 <Link href="/dashboard/stock-remises" className="inline-flex items-center gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/15 px-4 py-3 text-sm text-amber-300 transition hover:bg-amber-500/20">📦 Remise en stock{remisesCount > 0 && (<span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-amber-500 px-1.5 text-xs font-bold text-black">{remisesCount}</span>)}</Link>

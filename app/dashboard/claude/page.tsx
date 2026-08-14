@@ -4,17 +4,26 @@
 //
 // Composant client : fil de messages, streaming SSE depuis /api/claude/chat,
 // rendu markdown minimal (liens cliquables tels quels — règles Jardi —, gras,
-// code inline). La page est protégée par proxy.ts comme le reste du dashboard.
+// code inline), historique des conversations (Supabase via
+// /api/claude/conversations, 14.08.2026) dans une barre latérale.
+// La page est protégée par proxy.ts comme le reste du dashboard.
 // ─────────────────────────────────────────────────────────────────────────────
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type React from "react";
 
 type MessageChat = { role: "user" | "assistant"; content: string };
 type MessageAffiche = MessageChat & { outils?: string[]; erreur?: boolean };
+
+type ConvResume = {
+  id: string;
+  titre: string;
+  auteur: string | null;
+  updated_at: string;
+};
 
 type EvenementStream = {
   type: string;
@@ -94,6 +103,15 @@ function renduInline(texte: string): React.ReactNode[] {
   return noeuds;
 }
 
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleString("fr-CH", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 const EXEMPLES = [
   "mails Fermob de cette semaine",
   "dernier mail Dedon",
@@ -105,13 +123,108 @@ export default function PageChatClaude() {
   const [messages, setMessages] = useState<MessageAffiche[]>([]);
   const [saisie, setSaisie] = useState("");
   const [enCours, setEnCours] = useState(false);
+  const [conversations, setConversations] = useState<ConvResume[]>([]);
+  const [convId, setConvId] = useState<string | null>(null);
+  const [panneauOuvert, setPanneauOuvert] = useState(true);
   const finRef = useRef<HTMLDivElement>(null);
   const zoneRef = useRef<HTMLTextAreaElement>(null);
+  const convIdRef = useRef<string | null>(null);
+  convIdRef.current = convId;
 
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
+  // ── Historique ─────────────────────────────────────────────────────────────
+  const chargerListe = useCallback(async () => {
+    try {
+      const res = await fetch("/api/claude/conversations");
+      if (!res.ok) return;
+      const json = (await res.json()) as { conversations?: ConvResume[] };
+      setConversations(json.conversations ?? []);
+    } catch {
+      /* liste indisponible — sans gravité */
+    }
+  }, []);
+
+  useEffect(() => {
+    chargerListe();
+    // Sur petit écran, replier l'historique par défaut
+    if (typeof window !== "undefined" && window.innerWidth < 700) {
+      setPanneauOuvert(false);
+    }
+  }, [chargerListe]);
+
+  // Sauvegarde automatique à la fin de chaque réponse (enCours true → false).
+  useEffect(() => {
+    if (enCours) return;
+    const utiles = messages.filter(
+      (m) => !m.erreur && (m.content || (m.outils && m.outils.length))
+    );
+    if (utiles.length < 2 || utiles[utiles.length - 1].role !== "assistant") return;
+    (async () => {
+      try {
+        const auteur =
+          (typeof window !== "undefined" && localStorage.getItem("corrections-author")) || undefined;
+        const res = await fetch("/api/claude/conversations", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id: convIdRef.current ?? undefined,
+            auteur,
+            messages: utiles.map(({ role, content, outils }) => ({
+              role,
+              content,
+              ...(outils && outils.length ? { outils } : {}),
+            })),
+          }),
+        });
+        const json = (await res.json().catch(() => null)) as { id?: string } | null;
+        if (res.ok && json?.id) {
+          if (!convIdRef.current) setConvId(json.id);
+          chargerListe();
+        }
+      } catch {
+        /* sauvegarde silencieuse */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enCours]);
+
+  const ouvrirConversation = async (id: string) => {
+    if (enCours) return;
+    try {
+      const res = await fetch(`/api/claude/conversations?id=${encodeURIComponent(id)}`);
+      if (!res.ok) return;
+      const json = (await res.json()) as { conversation?: { messages?: MessageAffiche[] } };
+      setMessages(Array.isArray(json.conversation?.messages) ? json.conversation.messages : []);
+      setConvId(id);
+      if (typeof window !== "undefined" && window.innerWidth < 700) setPanneauOuvert(false);
+    } catch {
+      /* ignoré */
+    }
+  };
+
+  const nouvelleConversation = () => {
+    if (enCours) return;
+    setMessages([]);
+    setConvId(null);
+    zoneRef.current?.focus();
+  };
+
+  const supprimerConversation = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Supprimer cette conversation ?")) return;
+    try {
+      await fetch(`/api/claude/conversations?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    } catch {
+      /* ignoré */
+    }
+    if (convIdRef.current === id) nouvelleConversation();
+    chargerListe();
+  };
+
+  // ── Envoi et streaming ─────────────────────────────────────────────────────
   // Met à jour le dernier message (celui de l'assistant en cours de streaming).
   const majDernier = (fn: (m: MessageAffiche) => MessageAffiche) => {
     setMessages((prec) =>
@@ -243,146 +356,250 @@ export default function PageChatClaude() {
     // Fond sombre forcé, comme le dashboard principal (bg-[#1f2125]) — ne
     // dépend pas du thème clair/sombre du navigateur.
     <div style={{ background: "#1f2125", minHeight: "100dvh", color: "#ededed" }}>
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100dvh",
-        maxWidth: 860,
-        margin: "0 auto",
-        padding: "16px 16px 12px",
-      }}
-    >
-      {/* En-tête */}
-      <div style={{ flexShrink: 0, paddingBottom: 10, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-        <Link
-          href="/dashboard"
-          style={{ color: "#7dd3fc", fontSize: 13, textDecoration: "none" }}
-        >
-          ← Retour au dashboard
-        </Link>
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: "#f4f4f5", marginTop: 8, marginBottom: 2 }}>
-          💬 Claude
-        </h1>
-        <p style={{ color: "#a1a1aa", fontSize: 13, margin: 0 }}>
-          Mails, clients, commandes, statistiques — usage interne. Lecture seule :
-          Claude ne peut rien envoyer, uniquement déposer des brouillons à relire
-          dans Thunderbird.
-        </p>
-      </div>
-
-      {/* Fil de messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px 4px" }}>
-        {messages.length === 0 && (
-          <div style={{ color: "#a1a1aa", fontSize: 14, marginTop: 24 }}>
-            <p style={{ marginBottom: 12 }}>Quelques exemples pour démarrer :</p>
-            {EXEMPLES.map((ex) => (
-              <button
-                key={ex}
-                onClick={() => envoyer(ex)}
-                style={{
-                  display: "block",
-                  marginBottom: 8,
-                  padding: "8px 12px",
-                  fontSize: 13,
-                  color: "#7dd3fc",
-                  background: "rgba(56,189,248,0.08)",
-                  border: "1px solid rgba(56,189,248,0.25)",
-                  borderRadius: 8,
-                  cursor: "pointer",
-                  textAlign: "left",
-                }}
-              >
-                {ex}
-              </button>
-            ))}
+      <div style={{ display: "flex", height: "100dvh", maxWidth: 1150, margin: "0 auto" }}>
+        {/* Barre latérale — historique des conversations */}
+        {panneauOuvert && (
+          <div
+            style={{
+              width: 250,
+              flexShrink: 0,
+              borderRight: "1px solid rgba(255,255,255,0.08)",
+              display: "flex",
+              flexDirection: "column",
+              padding: "14px 10px",
+            }}
+          >
+            <button
+              onClick={nouvelleConversation}
+              style={{
+                padding: "9px 12px",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#fff",
+                background: "#2B8AD1",
+                border: "none",
+                borderRadius: 10,
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              + Nouvelle conversation
+            </button>
+            <div style={{ flex: 1, overflowY: "auto", marginTop: 10 }}>
+              {conversations.map((c) => (
+                <div
+                  key={c.id}
+                  onClick={() => ouvrirConversation(c.id)}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    background: convId === c.id ? "#2a2d31" : "transparent",
+                    marginBottom: 2,
+                    position: "relative",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "#e4e4e7",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      paddingRight: 18,
+                    }}
+                  >
+                    {c.titre}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#71717a" }}>
+                    {fmtDate(c.updated_at)}
+                    {c.auteur ? ` · ${c.auteur}` : ""}
+                  </div>
+                  <button
+                    onClick={(e) => supprimerConversation(c.id, e)}
+                    title="Supprimer"
+                    style={{
+                      position: "absolute",
+                      right: 6,
+                      top: 8,
+                      background: "none",
+                      border: "none",
+                      color: "#71717a",
+                      cursor: "pointer",
+                      fontSize: 12,
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {conversations.length === 0 && (
+                <div style={{ fontSize: 12, color: "#71717a", padding: 8 }}>
+                  Aucune conversation enregistrée.
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            style={{
-              display: "flex",
-              justifyContent: m.role === "user" ? "flex-end" : "flex-start",
-              marginBottom: 12,
-            }}
-          >
-            <div
-              style={{
-                maxWidth: "85%",
-                padding: "10px 14px",
-                borderRadius: 14,
-                fontSize: 14,
-                lineHeight: 1.55,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                background: m.role === "user" ? "#2B8AD1" : m.erreur ? "rgba(244,63,94,0.12)" : "#2a2d31",
-                color: m.role === "user" ? "#fff" : m.erreur ? "#fda4af" : "#e4e4e7",
-                border: m.erreur
-                  ? "1px solid rgba(244,63,94,0.35)"
-                  : m.role === "assistant"
-                  ? "1px solid rgba(255,255,255,0.06)"
-                  : "none",
-              }}
-            >
-              {m.outils && m.outils.length > 0 && (
-                <div style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic", marginBottom: m.content ? 6 : 0 }}>
-                  🔧 {m.outils.join(" · ")}
-                </div>
-              )}
-              {m.role === "assistant" ? renduInline(m.content) : m.content}
-              {m.role === "assistant" &&
-                enCours &&
-                i === messages.length - 1 &&
-                !m.erreur && <span style={{ color: "#9ca3af" }}> ▍</span>}
-            </div>
-          </div>
-        ))}
-        <div ref={finRef} />
-      </div>
-
-      {/* Zone de saisie */}
-      <div style={{ flexShrink: 0, display: "flex", gap: 8, alignItems: "flex-end" }}>
-        <textarea
-          ref={zoneRef}
-          value={saisie}
-          onChange={(e) => setSaisie(e.target.value)}
-          onKeyDown={surTouche}
-          rows={2}
-          placeholder="Écris à Claude… (Entrée pour envoyer, Maj+Entrée pour une nouvelle ligne)"
-          disabled={enCours}
+        {/* Colonne principale */}
+        <div
           style={{
             flex: 1,
-            resize: "none",
-            padding: "10px 12px",
-            fontSize: 14,
-            fontFamily: "inherit",
-            border: "1px solid rgba(255,255,255,0.15)",
-            borderRadius: 10,
-            outline: "none",
-            background: enCours ? "#26292d" : "#2a2d31",
-            color: "#ededed",
-          }}
-        />
-        <button
-          onClick={() => envoyer()}
-          disabled={enCours || !saisie.trim()}
-          style={{
-            padding: "10px 18px",
-            fontSize: 14,
-            fontWeight: 600,
-            color: "#fff",
-            background: enCours || !saisie.trim() ? "#3f4348" : "#2B8AD1",
-            border: "none",
-            borderRadius: 10,
-            cursor: enCours || !saisie.trim() ? "default" : "pointer",
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            padding: "16px 16px 12px",
           }}
         >
-          {enCours ? "…" : "Envoyer"}
-        </button>
+          {/* En-tête */}
+          <div style={{ flexShrink: 0, paddingBottom: 10, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button
+                onClick={() => setPanneauOuvert((o) => !o)}
+                title="Historique des conversations"
+                style={{
+                  background: "none",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  borderRadius: 8,
+                  color: "#a1a1aa",
+                  cursor: "pointer",
+                  padding: "2px 9px",
+                  fontSize: 14,
+                }}
+              >
+                ☰
+              </button>
+              <Link
+                href="/dashboard"
+                style={{ color: "#7dd3fc", fontSize: 13, textDecoration: "none" }}
+              >
+                ← Retour au dashboard
+              </Link>
+            </div>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: "#f4f4f5", marginTop: 8, marginBottom: 2 }}>
+              💬 Claude
+            </h1>
+            <p style={{ color: "#a1a1aa", fontSize: 13, margin: 0 }}>
+              Mails, clients, commandes, statistiques — usage interne. Lecture seule :
+              Claude ne peut rien envoyer, uniquement déposer des brouillons à relire
+              dans Thunderbird.
+            </p>
+          </div>
+
+          {/* Fil de messages */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "16px 4px" }}>
+            {messages.length === 0 && (
+              <div style={{ color: "#a1a1aa", fontSize: 14, marginTop: 24 }}>
+                <p style={{ marginBottom: 12 }}>Quelques exemples pour démarrer :</p>
+                {EXEMPLES.map((ex) => (
+                  <button
+                    key={ex}
+                    onClick={() => envoyer(ex)}
+                    style={{
+                      display: "block",
+                      marginBottom: 8,
+                      padding: "8px 12px",
+                      fontSize: 13,
+                      color: "#7dd3fc",
+                      background: "rgba(56,189,248,0.08)",
+                      border: "1px solid rgba(56,189,248,0.25)",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    {ex}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {messages.map((m, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  justifyContent: m.role === "user" ? "flex-end" : "flex-start",
+                  marginBottom: 12,
+                }}
+              >
+                <div
+                  style={{
+                    maxWidth: "85%",
+                    padding: "10px 14px",
+                    borderRadius: 14,
+                    fontSize: 14,
+                    lineHeight: 1.55,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    background: m.role === "user" ? "#2B8AD1" : m.erreur ? "rgba(244,63,94,0.12)" : "#2a2d31",
+                    color: m.role === "user" ? "#fff" : m.erreur ? "#fda4af" : "#e4e4e7",
+                    border: m.erreur
+                      ? "1px solid rgba(244,63,94,0.35)"
+                      : m.role === "assistant"
+                      ? "1px solid rgba(255,255,255,0.06)"
+                      : "none",
+                  }}
+                >
+                  {m.outils && m.outils.length > 0 && (
+                    <div style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic", marginBottom: m.content ? 6 : 0 }}>
+                      🔧 {m.outils.join(" · ")}
+                    </div>
+                  )}
+                  {m.role === "assistant" ? renduInline(m.content) : m.content}
+                  {m.role === "assistant" &&
+                    enCours &&
+                    i === messages.length - 1 &&
+                    !m.erreur && <span style={{ color: "#9ca3af" }}> ▍</span>}
+                </div>
+              </div>
+            ))}
+            <div ref={finRef} />
+          </div>
+
+          {/* Zone de saisie */}
+          <div style={{ flexShrink: 0, display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <textarea
+              ref={zoneRef}
+              value={saisie}
+              onChange={(e) => setSaisie(e.target.value)}
+              onKeyDown={surTouche}
+              rows={2}
+              placeholder="Écris à Claude… (Entrée pour envoyer, Maj+Entrée pour une nouvelle ligne)"
+              disabled={enCours}
+              style={{
+                flex: 1,
+                resize: "none",
+                padding: "10px 12px",
+                fontSize: 14,
+                fontFamily: "inherit",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 10,
+                outline: "none",
+                background: enCours ? "#26292d" : "#2a2d31",
+                color: "#ededed",
+              }}
+            />
+            <button
+              onClick={() => envoyer()}
+              disabled={enCours || !saisie.trim()}
+              style={{
+                padding: "10px 18px",
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#fff",
+                background: enCours || !saisie.trim() ? "#3f4348" : "#2B8AD1",
+                border: "none",
+                borderRadius: 10,
+                cursor: enCours || !saisie.trim() ? "default" : "pointer",
+              }}
+            >
+              {enCours ? "…" : "Envoyer"}
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
     </div>
   );
 }
