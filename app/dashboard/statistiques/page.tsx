@@ -375,6 +375,11 @@ export default function StatistiquesPage() {
   const [tabConseillers, setTabConseillers] = useState(false);
   const [tabMarques, setTabMarques] = useState(false);
 
+  // Rattrapage manuel de l'import Shopify
+  const [syncEnCours, setSyncEnCours] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [rechargement, setRechargement] = useState(0);
+
   // Ancre = aujourd'hui reculé de `decalage` périodes
   const ancre = useMemo(() => {
     const d = new Date();
@@ -408,7 +413,37 @@ export default function StatistiquesPage() {
       .catch(e => { if (!annule && e?.name !== "AbortError") setErreur(String(e)); })
       .finally(() => { if (!annule) setChargement(false); });
     return () => { annule = true; ctrl.abort(); };
-  }, [source, periode, ancre, prorata]);
+  }, [source, periode, ancre, prorata, rechargement]);
+
+  // Lance un rattrapage de l'import Shopify, puis recharge les chiffres.
+  const lancerSync = useCallback(async () => {
+    setSyncEnCours(true);
+    setSyncMessage("Import en cours — cela peut prendre une à deux minutes…");
+    try {
+      const r = await fetch("/api/shopify/sync-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ syncType: "manual" }),
+      });
+      const j = await r.json();
+      if (!r.ok || j?.success === false) {
+        setSyncMessage(`Échec de l'import : ${j?.error || r.status}`);
+        return;
+      }
+      const reste = j.hasMore
+        ? " Il reste des commandes à traiter : relance pour continuer (la reprise est automatique)."
+        : "";
+      setSyncMessage(
+        `${j.ordersInserted ?? 0} commande(s) ajoutée(s), ${j.ordersUpdated ?? 0} mise(s) à jour` +
+        ` en ${Math.round((j.durationMs ?? 0) / 1000)} s.${reste}`
+      );
+      setRechargement(n => n + 1);
+    } catch (e) {
+      setSyncMessage(`Échec de l'import : ${String(e)}`);
+    } finally {
+      setSyncEnCours(false);
+    }
+  }, []);
 
   const ref = donnees ? donnees.totaux[compare] : null;
   const libelleRef = donnees
@@ -521,8 +556,22 @@ export default function StatistiquesPage() {
         {/* ─── Avertissements de fraîcheur / périmètre ─── */}
         {retardShopify && source !== "app" && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-            ⚠ Dernière commande Shopify importée le <strong>{dateCH(retardShopify.date)}</strong> ({retardShopify.jours} jours de retard).
-            Les périodes récentes sont donc incomplètes côté Shopify — relancer la synchronisation avant de conclure.
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                ⚠ Dernière commande Shopify importée le <strong>{dateCH(retardShopify.date)}</strong> ({retardShopify.jours} jours de retard).
+                Les périodes récentes sont donc incomplètes côté Shopify.
+              </span>
+              <button type="button" onClick={lancerSync} disabled={syncEnCours}
+                className="shrink-0 rounded-lg border border-amber-500/40 bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-100 transition hover:bg-amber-500/30 disabled:opacity-50">
+                {syncEnCours ? "Import en cours…" : "Synchroniser maintenant"}
+              </button>
+            </div>
+            {syncMessage && <div className="mt-2 text-xs text-amber-200/80">{syncMessage}</div>}
+          </div>
+        )}
+        {!retardShopify && syncMessage && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            {syncMessage}
           </div>
         )}
         {source !== "shopify" && donnees?.meta?.app_premiere_commande && bornesRef &&

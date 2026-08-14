@@ -36,6 +36,12 @@ function estRoutePublique(pathname: string, method: string): boolean {
   // API de connexion au verrou
   if (pathname === "/api/acces") return true;
 
+  // Tâches planifiées Vercel (/api/cron/*) : appelées par l'infrastructure
+  // Vercel, sans navigateur donc sans cookie. Elles ne sont PAS ouvertes pour
+  // autant — chacune vérifie elle-même l'en-tête `Authorization: Bearer
+  // $CRON_SECRET` que Vercel joint automatiquement, et refuse tout le reste.
+  if (pathname.startsWith("/api/cron/")) return true;
+
   // API lues par les pages clients (lecture seule)
   if (pathname === "/api/revisions" && method === "GET") return true;
   if (pathname === "/api/corrections" && method === "GET") return true;

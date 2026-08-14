@@ -1,29 +1,41 @@
 // app/api/shopify/sync-orders/route.ts
-// POST — Synchronise les commandes Shopify dans Supabase
-// Compatible Vercel Hobby : sync chunked, à relancer plusieurs fois
+// POST — Synchronise les commandes Shopify dans Supabase.
+//
+// Par défaut : mode incrémental (seulement ce qui a changé depuis la
+// dernière passe) avec reprise automatique si une passe précédente a été
+// interrompue — l'état vit dans la table shopify_sync_etat.
+//
+// Corps optionnel :
+//   { "mode": "backfill" }          → rejoue tout l'historique depuis 2021
+//   { "forcerRedemarrage": true }   → ignore le curseur mémorisé
+//   { "maxOrders": 2000 }
+//
+// GET — état du sync (dernier passage, retard, reprise en attente).
 
 import { NextRequest, NextResponse } from "next/server"
 import { syncShopifyOrders } from "@/lib/shopify-orders"
 
-export const maxDuration = 60 // Vercel Hobby max
+export const maxDuration = 300 // Vercel Pro
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))
     const syncType = body.syncType === "cron" ? "cron" : (body.syncType === "initial" ? "initial" : "manual")
-    const startCursor = body.startCursor || null
-    const maxOrders = typeof body.maxOrders === "number" ? body.maxOrders : 500
+    const mode = body.mode === "backfill" ? "backfill" : (body.mode === "incremental" ? "incremental" : undefined)
+    const maxOrders = typeof body.maxOrders === "number" ? body.maxOrders : 2000
 
-    console.log(`[shopify-sync] Démarrage sync chunk type=${syncType} cursor=${startCursor ? "..." + startCursor.slice(-10) : "DÉBUT"} maxOrders=${maxOrders}`)
+    console.log(`[shopify-sync] Démarrage type=${syncType} mode=${mode ?? "(état mémorisé)"} maxOrders=${maxOrders}`)
 
     const result = await syncShopifyOrders({
       syncType,
-      startCursor,
+      mode,
+      forcerRedemarrage: body.forcerRedemarrage === true,
+      startCursor: body.startCursor || null,
       maxOrders,
-      timeoutMs: 50000, // Stop à 50s pour laisser marge avant 60s Vercel
+      timeoutMs: 260000, // marge sous les 300 s
     })
 
-    console.log(`[shopify-sync] Chunk terminé en ${result.durationMs}ms : ${result.ordersInserted} insérées, ${result.ordersUpdated} mises à jour, ${result.clientsCreated} clients créés. hasMore=${result.hasMore}`)
+    console.log(`[shopify-sync] Terminé en ${result.durationMs}ms : ${result.ordersInserted} insérées, ${result.ordersUpdated} mises à jour, ${result.clientsCreated} clients créés. hasMore=${result.hasMore}`)
 
     return NextResponse.json({
       success: true,
@@ -41,21 +53,36 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     const { supabaseAdmin } = await import("@/lib/supabase")
-    
-    const { data: lastSync } = await supabaseAdmin
-      .from("shopify_sync_log")
-      .select("*")
-      .order("started_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
 
-    const { count: totalOrders } = await supabaseAdmin
-      .from("commandes_shopify")
-      .select("*", { count: "exact", head: true })
+    const [{ data: lastSync }, { count: totalOrders }, { data: etat }, { data: derniere }] = await Promise.all([
+      supabaseAdmin
+        .from("shopify_sync_log")
+        .select("*")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("commandes_shopify")
+        .select("*", { count: "exact", head: true }),
+      supabaseAdmin
+        .from("shopify_sync_etat")
+        .select("*")
+        .eq("id", 1)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("commandes_shopify")
+        .select("created_at_shopify")
+        .order("created_at_shopify", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
 
     return NextResponse.json({
       lastSync,
+      etat,
       totalOrders: totalOrders || 0,
+      derniereCommande: derniere?.created_at_shopify ?? null,
+      repriseEnAttente: !!etat?.curseur,
     })
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })

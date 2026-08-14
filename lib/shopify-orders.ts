@@ -193,9 +193,12 @@ async function buildClientsCache(): Promise<ClientsCache> {
 
 // ─── GraphQL Query ───────────────────────────────────────
 
+// Tri par UPDATED_AT : c'est lui qui permet le mode incrémental
+// (« tout ce qui a bougé depuis la dernière passe »), et il fonctionne
+// aussi bien pour un backfill complet.
 const ORDERS_QUERY = `
-  query SyncOrders($first: Int!, $after: String) {
-    orders(first: $first, after: $after, sortKey: CREATED_AT, reverse: false) {
+  query SyncOrders($first: Int!, $after: String, $query: String) {
+    orders(first: $first, after: $after, query: $query, sortKey: UPDATED_AT, reverse: false) {
       edges {
         node {
           id
@@ -257,7 +260,8 @@ const ORDERS_QUERY = `
 
 async function fetchShopifyOrdersPage(
   cursor: string | null,
-  pageSize: number = 50
+  pageSize: number = 50,
+  searchQuery: string | null = null
 ): Promise<{ orders: ShopifyOrder[]; hasNextPage: boolean; endCursor: string | null }> {
   const token = await getAccessToken()
   const res = await fetch(
@@ -270,7 +274,7 @@ async function fetchShopifyOrdersPage(
       },
       body: JSON.stringify({
         query: ORDERS_QUERY,
-        variables: { first: pageSize, after: cursor },
+        variables: { first: pageSize, after: cursor, query: searchQuery },
       }),
     }
   )
@@ -423,6 +427,60 @@ function buildOrderPayload(order: ShopifyOrder, clientId: number | null) {
   }
 }
 
+// ─── État persistant du sync ─────────────────────────────
+// Sans cette mémoire, une passe interrompue par le timeout Vercel était
+// simplement perdue : le lancement suivant repartait de la première
+// commande de 2021 et ne rattrapait jamais le présent.
+
+type EtatSync = {
+  mode: "incremental" | "backfill"
+  curseur: string | null
+  depuis: string | null
+}
+
+async function lireEtat(): Promise<EtatSync> {
+  const { data } = await supabaseAdmin
+    .from("shopify_sync_etat")
+    .select("mode, curseur, depuis")
+    .eq("id", 1)
+    .maybeSingle()
+  return {
+    mode: (data?.mode === "backfill" ? "backfill" : "incremental"),
+    curseur: data?.curseur ?? null,
+    depuis: data?.depuis ?? null,
+  }
+}
+
+async function ecrireEtat(etat: Partial<EtatSync> & { dernier_message?: string }) {
+  await supabaseAdmin
+    .from("shopify_sync_etat")
+    .update({ ...etat, maj_le: new Date().toISOString() })
+    .eq("id", 1)
+}
+
+// Borne basse d'une passe incrémentale : la commande la plus récemment
+// modifiée en base, moins une marge. La marge couvre les commandes
+// modifiées pendant la passe précédente et l'imprécision des horloges ;
+// un doublon ne coûte rien (upsert), une commande manquée coûte cher.
+const MARGE_RECOUVREMENT_MS = 2 * 60 * 60 * 1000  // 2 h
+
+async function calculerDepuis(): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from("commandes_shopify")
+    .select("updated_at_shopify")
+    .order("updated_at_shopify", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const derniere = data?.updated_at_shopify
+  if (!derniere) return null  // base vide → backfill complet
+  // Shopify accepte l'ISO 8601 ; on retire les millisecondes, inutiles ici
+  // et source d'erreurs de parsing dans le langage de recherche.
+  return new Date(new Date(derniere).getTime() - MARGE_RECOUVREMENT_MS)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z")
+}
+
 // ─── Sync principal (BULK UPSERT + CACHE) ────────────────
 
 export async function syncShopifyOrders(options: {
@@ -431,6 +489,11 @@ export async function syncShopifyOrders(options: {
   maxOrders?: number
   pageSize?: number
   timeoutMs?: number
+  /** 'incremental' (défaut) : seulement ce qui a changé depuis la dernière
+   *  passe. 'backfill' : tout l'historique, pour une reconstruction. */
+  mode?: "incremental" | "backfill"
+  /** Ignore l'état mémorisé et repart de zéro dans le mode demandé. */
+  forcerRedemarrage?: boolean
 }): Promise<SyncResult> {
   const startTime = Date.now()
   const {
@@ -439,11 +502,35 @@ export async function syncShopifyOrders(options: {
     maxOrders = 500,           // On peut maintenant traiter 500 par chunk grâce au bulk
     pageSize = 50,
     timeoutMs = 50000,
+    mode: modeDemande,
+    forcerRedemarrage = false,
   } = options
+
+  // ─── Reprise : où en était-on ? ───
+  const etat = await lireEtat()
+  const mode: "incremental" | "backfill" = modeDemande ?? etat.mode
+
+  let curseurInitial: string | null = startCursor
+  let depuis: string | null = null
+
+  if (!startCursor && !forcerRedemarrage && etat.curseur && etat.mode === mode) {
+    // Une passe précédente a été coupée en route : on la termine.
+    curseurInitial = etat.curseur
+    depuis = etat.depuis
+    console.log(`[shopify-sync] Reprise d'une passe ${mode} interrompue (depuis=${depuis ?? "origine"})`)
+  } else if (mode === "incremental") {
+    depuis = await calculerDepuis()
+    console.log(`[shopify-sync] Nouvelle passe incrémentale depuis ${depuis ?? "l'origine (base vide)"}`)
+  } else {
+    console.log(`[shopify-sync] Backfill complet demandé`)
+  }
+
+  // Filtre Shopify : ne redemander que ce qui a bougé.
+  const searchQuery = depuis ? `updated_at:>='${depuis}'` : null
 
   // Log start (uniquement si premier appel)
   let logId: number | undefined
-  if (!startCursor) {
+  if (!curseurInitial) {
     const { data: logRow } = await supabaseAdmin
       .from("shopify_sync_log")
       .insert({ sync_type: syncType, status: "running" })
@@ -465,13 +552,16 @@ export async function syncShopifyOrders(options: {
     totalProcessed: 0,
   }
 
+  // Déclaré hors du try : en cas d'erreur, on veut encore savoir où on en
+  // était pour pouvoir reprendre là plutôt que tout recommencer.
+  let cursor: string | null = curseurInitial
+
   try {
     // 1. Construire le cache clients UNE FOIS au début
     const cacheStart = Date.now()
     const clientsCache = await buildClientsCache()
     console.log(`[shopify-sync] Cache construit en ${Date.now() - cacheStart}ms`)
 
-    let cursor: string | null = startCursor
     let processedInThisCall = 0
 
     // 2. Pour chaque page Shopify de 50 commandes
@@ -485,7 +575,7 @@ export async function syncShopifyOrders(options: {
       }
 
       const fetchStart = Date.now()
-      const { orders, hasNextPage, endCursor } = await fetchShopifyOrdersPage(cursor, pageSize)
+      const { orders, hasNextPage, endCursor } = await fetchShopifyOrdersPage(cursor, pageSize, searchQuery)
       console.log(`[shopify-sync] Page Shopify (${orders.length} commandes) fetched en ${Date.now() - fetchStart}ms`)
       result.ordersFetched += orders.length
 
@@ -631,6 +721,20 @@ export async function syncShopifyOrders(options: {
     result.durationMs = Date.now() - startTime
     result.totalProcessed = processedInThisCall
 
+    // ─── Mémoriser où l'on s'arrête ───
+    // hasMore → on note le curseur, la passe suivante reprendra ici.
+    // Terminé  → on efface le curseur ; la prochaine passe repartira du
+    //            dernier updated_at en base, et le backfill éventuel
+    //            bascule en incrémental une fois l'historique rattrapé.
+    await ecrireEtat({
+      mode: result.hasMore ? mode : "incremental",
+      curseur: result.hasMore ? result.nextCursor : null,
+      depuis: result.hasMore ? depuis : null,
+      dernier_message: result.hasMore
+        ? `Passe ${mode} interrompue après ${processedInThisCall} commande(s) — reprise au prochain passage`
+        : `${result.ordersInserted} ajoutée(s), ${result.ordersUpdated} mise(s) à jour en ${Math.round(result.durationMs / 1000)} s`,
+    })
+
     if (logId) {
       await supabaseAdmin
         .from("shopify_sync_log")
@@ -651,6 +755,14 @@ export async function syncShopifyOrders(options: {
     return result
   } catch (err) {
     result.durationMs = Date.now() - startTime
+    // On garde le curseur : la passe suivante reprendra où ça a cassé
+    // plutôt que de tout recommencer.
+    await ecrireEtat({
+      mode,
+      curseur: cursor,
+      depuis,
+      dernier_message: `Échec : ${(err as Error).message}`,
+    }).catch(() => {})
     if (logId) {
       await supabaseAdmin
         .from("shopify_sync_log")
