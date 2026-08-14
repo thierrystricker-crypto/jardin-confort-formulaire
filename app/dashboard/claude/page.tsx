@@ -112,6 +112,27 @@ function fmtDate(iso: string): string {
   });
 }
 
+// Indicateur d'activité — trois points orange qui pulsent (animation maison,
+// dans l'esprit de claude.ai sans reprendre la marque d'Anthropic).
+function PointsAnimes() {
+  return (
+    <span style={{ display: "inline-flex", gap: 3, alignItems: "center" }}>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#D97757",
+            animation: `jcPulse 1.2s ease-in-out ${i * 0.18}s infinite`,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
 const EXEMPLES = [
   "mails Fermob de cette semaine",
   "dernier mail Dedon",
@@ -356,6 +377,15 @@ export default function PageChatClaude() {
     // Fond sombre forcé, comme le dashboard principal (bg-[#1f2125]) — ne
     // dépend pas du thème clair/sombre du navigateur.
     <div style={{ background: "#1f2125", minHeight: "100dvh", color: "#ededed" }}>
+      <style>{`
+        @keyframes jcPulse {
+          0%, 80%, 100% { opacity: 0.25; transform: scale(0.85); }
+          40% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes jcClignote {
+          50% { opacity: 0; }
+        }
+      `}</style>
       <div style={{ display: "flex", height: "100dvh", maxWidth: 1150, margin: "0 auto" }}>
         {/* Barre latérale — historique des conversations */}
         {panneauOuvert && (
@@ -551,7 +581,29 @@ export default function PageChatClaude() {
                   {m.role === "assistant" &&
                     enCours &&
                     i === messages.length - 1 &&
-                    !m.erreur && <span style={{ color: "#9ca3af" }}> ▍</span>}
+                    !m.erreur &&
+                    (m.content ? (
+                      // Streaming en cours → curseur clignotant
+                      <span style={{ color: "#D97757", animation: "jcClignote 1s step-end infinite" }}>
+                        {" "}▍
+                      </span>
+                    ) : (
+                      // Rien encore reçu → Claude réfléchit / consulte un outil
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          color: "#a1a1aa",
+                          fontSize: 13,
+                        }}
+                      >
+                        <PointsAnimes />
+                        {m.outils && m.outils.length
+                          ? `consulte ${m.outils[m.outils.length - 1]}…`
+                          : "Claude réfléchit…"}
+                      </span>
+                    ))}
                 </div>
               </div>
             ))}
