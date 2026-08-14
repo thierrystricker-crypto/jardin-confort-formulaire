@@ -51,6 +51,21 @@ type LigneArticle = {
 };
 type LigneMarque = { marque: string; qty: number; valeur: number; nb_commandes: number; valeur_precedent: number };
 
+type PassageImport = {
+  id: number; sync_type: string; started_at: string; finished_at: string | null;
+  status: string; ajoutees: number; mises_a_jour: number; clients_crees: number;
+  duree_ms: number | null; reste_a_traiter: boolean;
+  errors: { shopifyId: string; message: string }[] | null;
+};
+type EtatImport = {
+  historique: PassageImport[];
+  derniereCommande: string | null;
+  repriseEnAttente: boolean;
+  bloqueDepuis: string | null;
+  totalOrders: number;
+  etat: { dernier_message: string | null; mode: string } | null;
+};
+
 type Donnees = {
   source: Source; periode: Periode; granularite: "day" | "week" | "month"; prorata: boolean;
   bornes: Record<"courant" | "precedent" | "an_dernier", Borne>;
@@ -78,6 +93,14 @@ function dateCH(iso: string) {
   if (!iso) return "—";
   const [a, m, j] = iso.slice(0, 10).split("-");
   return `${j}.${m}.${a}`;
+}
+function dateHeureCH(iso: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return new Intl.DateTimeFormat("fr-CH", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich",
+  }).format(d).replace(",", " ·");
 }
 function dateCourte(iso: string, pas: "day" | "week" | "month") {
   if (!iso) return "";
@@ -375,10 +398,12 @@ export default function StatistiquesPage() {
   const [tabConseillers, setTabConseillers] = useState(false);
   const [tabMarques, setTabMarques] = useState(false);
 
-  // Rattrapage manuel de l'import Shopify
+  // Rattrapage manuel + historique de l'import Shopify
   const [syncEnCours, setSyncEnCours] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [rechargement, setRechargement] = useState(0);
+  const [syncEtat, setSyncEtat] = useState<EtatImport | null>(null);
+  const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
 
   // Ancre = aujourd'hui reculé de `decalage` périodes
   const ancre = useMemo(() => {
@@ -414,6 +439,16 @@ export default function StatistiquesPage() {
       .finally(() => { if (!annule) setChargement(false); });
     return () => { annule = true; ctrl.abort(); };
   }, [source, periode, ancre, prorata, rechargement]);
+
+  // État et historique de l'import Shopify
+  const chargerEtatSync = useCallback(() => {
+    fetch("/api/shopify/sync-orders")
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (j && !j.error) setSyncEtat(j as EtatImport); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => { chargerEtatSync(); }, [chargerEtatSync, rechargement]);
 
   // Lance un rattrapage de l'import Shopify, puis recharge les chiffres.
   const lancerSync = useCallback(async () => {
@@ -850,6 +885,96 @@ export default function StatistiquesPage() {
             </div>
           )}
         </div>
+
+        {/* ─── Import Shopify : état et historique ─── */}
+        {syncEtat && (
+          <Carte
+            titre="Import des commandes Shopify"
+            sous={
+              syncEtat.derniereCommande
+                ? `Dernière commande importée : ${dateCH(syncEtat.derniereCommande)} · ${nfNb.format(syncEtat.totalOrders)} commandes en base`
+                : "Aucune commande importée"
+            }
+            actions={
+              <div className="flex gap-2">
+                <button type="button" onClick={lancerSync} disabled={syncEnCours}
+                  className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-200 transition hover:bg-[#40454b] disabled:opacity-50">
+                  {syncEnCours ? "Import en cours…" : "Synchroniser maintenant"}
+                </button>
+                <BoutonTableau actif={historiqueOuvert} onClick={() => setHistoriqueOuvert(v => !v)} />
+              </div>
+            }
+          >
+            {/* Ligne d'état */}
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              {syncEtat.bloqueDepuis ? (
+                <span className="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-amber-200">
+                  ⚠ Rattrapage en attente depuis {dateHeureCH(syncEtat.bloqueDepuis)}
+                </span>
+              ) : syncEtat.historique[0]?.status === "error" ? (
+                <span className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-rose-200">
+                  ⚠ Dernier passage en échec
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-emerald-200">
+                  ✓ Import à jour
+                </span>
+              )}
+              {syncEtat.etat?.dernier_message && (
+                <span className="text-zinc-400">{syncEtat.etat.dernier_message}</span>
+              )}
+            </div>
+
+            <p className="mt-3 text-xs text-zinc-500">
+              Passage automatique toutes les heures. En cas d&apos;échec, ou si le retard
+              n&apos;est pas comblé au bout de 6 heures, une alerte arrive dans le centre de
+              notifications — inutile de surveiller cette page.
+            </p>
+
+            {historiqueOuvert && (
+              <div className="mt-4 max-h-[360px] overflow-auto rounded-xl border border-white/10">
+                <table className="min-w-full text-sm">
+                  <thead className="sticky top-0 bg-[#22252a] text-left text-xs uppercase tracking-wide text-zinc-400">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Démarré</th>
+                      <th className="px-3 py-2 font-medium">Type</th>
+                      <th className="px-3 py-2 font-medium">État</th>
+                      <th className="px-3 py-2 text-right font-medium">Ajoutées</th>
+                      <th className="px-3 py-2 text-right font-medium">Mises à jour</th>
+                      <th className="px-3 py-2 text-right font-medium">Durée</th>
+                    </tr>
+                  </thead>
+                  <tbody className="tabular-nums">
+                    {syncEtat.historique.length === 0 ? (
+                      <tr><td colSpan={6} className="px-3 py-8 text-center text-zinc-500">Aucun passage enregistré.</td></tr>
+                    ) : syncEtat.historique.map(p => (
+                      <tr key={p.id} className="border-t border-white/5">
+                        <td className="px-3 py-2 text-zinc-300">{dateHeureCH(p.started_at)}</td>
+                        <td className="px-3 py-2 text-zinc-400">{p.sync_type}</td>
+                        <td className="px-3 py-2">
+                          <span className={
+                            p.status === "success" ? "text-emerald-300"
+                            : p.status === "error" ? "text-rose-300"
+                            : "text-amber-300"
+                          } title={p.errors ? p.errors.map(e => e.message).join(" · ") : undefined}>
+                            {p.status === "success" ? "✓ terminé"
+                              : p.status === "error" ? "✗ échec"
+                              : p.reste_a_traiter ? "⋯ interrompu" : "⋯ en cours"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right text-zinc-100">{nfNb.format(p.ajoutees)}</td>
+                        <td className="px-3 py-2 text-right text-zinc-400">{nfNb.format(p.mises_a_jour)}</td>
+                        <td className="px-3 py-2 text-right text-zinc-400">
+                          {p.duree_ms ? `${Math.round(p.duree_ms / 1000)} s` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Carte>
+        )}
 
         {chargement && !donnees && (
           <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-8 text-zinc-400">Chargement…</div>

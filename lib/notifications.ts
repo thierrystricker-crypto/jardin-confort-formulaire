@@ -3,7 +3,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase";
 
-type NotificationType = "commande_validee" | "commande_convertie_manuelle" | "commande_directe" | "offre_abandonnee" | "stock_erreur";
+type NotificationType = "commande_validee" | "commande_convertie_manuelle" | "commande_directe" | "offre_abandonnee" | "stock_erreur" | "shopify_sync_erreur";
 
 type CreateNotificationInput = {
   type: NotificationType;
@@ -26,7 +26,35 @@ const DEFAULT_TITRES: Record<NotificationType, string> = {
   commande_directe: "📋 Nouvelle commande créée directement",
   offre_abandonnee: "❌ Offre marquée comme abandonnée",
   stock_erreur: "⚠️ Erreur de sortie de stock Shopify",
+  shopify_sync_erreur: "⚠️ Import des commandes Shopify en défaut",
 };
+
+/**
+ * Crée une notification seulement s'il n'en existe pas déjà une du même type,
+ * non lue, dans la fenêtre indiquée. Évite qu'une tâche planifiée horaire
+ * n'empile 24 alertes identiques par jour tant que le problème dure.
+ */
+export async function createNotificationUnique(
+  input: CreateNotificationInput,
+  fenetreHeures = 12
+): Promise<boolean> {
+  try {
+    const depuis = new Date(Date.now() - fenetreHeures * 3600 * 1000).toISOString();
+    const { count } = await supabaseAdmin
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("type", input.type)
+      .eq("vue", false)
+      .gte("created_at", depuis);
+
+    if ((count || 0) > 0) return false;  // déjà signalé, on n'en rajoute pas
+    await createNotification(input);
+    return true;
+  } catch (err) {
+    console.error("createNotificationUnique exception:", err);
+    return false;
+  }
+}
 
 /**
  * Crée une notification dans la base. Non bloquant : si erreur, log et continue.

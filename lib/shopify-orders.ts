@@ -452,10 +452,26 @@ async function lireEtat(): Promise<EtatSync> {
 }
 
 async function ecrireEtat(etat: Partial<EtatSync> & { dernier_message?: string }) {
-  await supabaseAdmin
-    .from("shopify_sync_etat")
-    .update({ ...etat, maj_le: new Date().toISOString() })
-    .eq("id", 1)
+  // curseur_depuis : posé quand une passe laisse un curseur en attente alors
+  // qu'il n'y en avait pas, effacé dès qu'une passe va au bout. Un curseur
+  // qui traîne de passage en passage = l'import n'arrive pas à rattraper son
+  // retard : c'est exactement le symptôme qui est passé inaperçu trois mois.
+  const patch: Record<string, unknown> = { ...etat, maj_le: new Date().toISOString() }
+
+  if ("curseur" in etat) {
+    if (etat.curseur) {
+      const { data } = await supabaseAdmin
+        .from("shopify_sync_etat")
+        .select("curseur_depuis")
+        .eq("id", 1)
+        .maybeSingle()
+      if (!data?.curseur_depuis) patch.curseur_depuis = new Date().toISOString()
+    } else {
+      patch.curseur_depuis = null
+    }
+  }
+
+  await supabaseAdmin.from("shopify_sync_etat").update(patch).eq("id", 1)
 }
 
 // Borne basse d'une passe incrémentale : la commande la plus récemment

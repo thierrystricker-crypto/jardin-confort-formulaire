@@ -54,13 +54,11 @@ export async function GET() {
   try {
     const { supabaseAdmin } = await import("@/lib/supabase")
 
-    const [{ data: lastSync }, { count: totalOrders }, { data: etat }, { data: derniere }] = await Promise.all([
+    const [{ data: historique }, { count: totalOrders }, { data: etat }, { data: derniere }] = await Promise.all([
       supabaseAdmin
-        .from("shopify_sync_log")
+        .from("shopify_sync_historique")
         .select("*")
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .limit(15),
       supabaseAdmin
         .from("commandes_shopify")
         .select("*", { count: "exact", head: true }),
@@ -77,12 +75,15 @@ export async function GET() {
         .maybeSingle(),
     ])
 
+    const passages = historique || []
     return NextResponse.json({
-      lastSync,
+      historique: passages,
+      lastSync: passages[0] ?? null,
       etat,
       totalOrders: totalOrders || 0,
       derniereCommande: derniere?.created_at_shopify ?? null,
       repriseEnAttente: !!etat?.curseur,
+      bloqueDepuis: etat?.curseur_depuis ?? null,
     })
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
