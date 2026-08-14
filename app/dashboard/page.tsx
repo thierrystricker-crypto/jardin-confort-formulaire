@@ -303,6 +303,13 @@ export default function DashboardPage() {
       .catch(()=>{})
   },[])
 
+  // Recherche pré-remplie depuis l'URL (?recherche=…) — utilisé par les liens
+  // « Voir les dossiers » de la page Statistiques.
+  useEffect(()=>{
+    const q = new URLSearchParams(window.location.search).get("recherche")
+    if (q) setSearch(q)
+  },[])
+
   // Recherche par article : appel serveur débouncé (300 ms) sur le terme saisi.
   // Annulé proprement si l'utilisateur continue de taper.
   useEffect(()=>{
