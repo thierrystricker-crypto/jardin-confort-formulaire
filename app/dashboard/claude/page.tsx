@@ -45,7 +45,7 @@ function renduInline(texte: string): React.ReactNode[] {
           href={m[2]}
           target="_blank"
           rel="noopener noreferrer"
-          style={{ color: "#2b8ad1", textDecoration: "underline", wordBreak: "break-all" }}
+          style={{ color: "#7dd3fc", textDecoration: "underline", wordBreak: "break-all" }}
         >
           {m[1]}
         </a>
@@ -64,7 +64,7 @@ function renduInline(texte: string): React.ReactNode[] {
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          style={{ color: "#2b8ad1", textDecoration: "underline", wordBreak: "break-all" }}
+          style={{ color: "#7dd3fc", textDecoration: "underline", wordBreak: "break-all" }}
         >
           {url}
         </a>
@@ -79,7 +79,7 @@ function renduInline(texte: string): React.ReactNode[] {
           style={{
             fontFamily: "var(--font-geist-mono), monospace",
             fontSize: "0.92em",
-            background: "rgba(0,0,0,0.06)",
+            background: "rgba(255,255,255,0.12)",
             borderRadius: 4,
             padding: "1px 4px",
           }}
@@ -240,6 +240,9 @@ export default function PageChatClaude() {
   };
 
   return (
+    // Fond sombre forcé, comme le dashboard principal (bg-[#1f2125]) — ne
+    // dépend pas du thème clair/sombre du navigateur.
+    <div style={{ background: "#1f2125", minHeight: "100dvh", color: "#ededed" }}>
     <div
       style={{
         display: "flex",
@@ -251,17 +254,17 @@ export default function PageChatClaude() {
       }}
     >
       {/* En-tête */}
-      <div style={{ flexShrink: 0, paddingBottom: 10, borderBottom: "1px solid #e5e7eb" }}>
+      <div style={{ flexShrink: 0, paddingBottom: 10, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
         <Link
           href="/dashboard"
-          style={{ color: "#2b8ad1", fontSize: 13, textDecoration: "none" }}
+          style={{ color: "#7dd3fc", fontSize: 13, textDecoration: "none" }}
         >
           ← Retour au dashboard
         </Link>
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: "#111", marginTop: 8, marginBottom: 2 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 800, color: "#f4f4f5", marginTop: 8, marginBottom: 2 }}>
           💬 Claude
         </h1>
-        <p style={{ color: "#6b7280", fontSize: 13, margin: 0 }}>
+        <p style={{ color: "#a1a1aa", fontSize: 13, margin: 0 }}>
           Mails, clients, commandes, statistiques — usage interne. Lecture seule :
           Claude ne peut rien envoyer, uniquement déposer des brouillons à relire
           dans Thunderbird.
@@ -271,7 +274,7 @@ export default function PageChatClaude() {
       {/* Fil de messages */}
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 4px" }}>
         {messages.length === 0 && (
-          <div style={{ color: "#6b7280", fontSize: 14, marginTop: 24 }}>
+          <div style={{ color: "#a1a1aa", fontSize: 14, marginTop: 24 }}>
             <p style={{ marginBottom: 12 }}>Quelques exemples pour démarrer :</p>
             {EXEMPLES.map((ex) => (
               <button
@@ -282,9 +285,9 @@ export default function PageChatClaude() {
                   marginBottom: 8,
                   padding: "8px 12px",
                   fontSize: 13,
-                  color: "#2b8ad1",
-                  background: "#f0f7fc",
-                  border: "1px solid #d3e7f5",
+                  color: "#7dd3fc",
+                  background: "rgba(56,189,248,0.08)",
+                  border: "1px solid rgba(56,189,248,0.25)",
                   borderRadius: 8,
                   cursor: "pointer",
                   textAlign: "left",
@@ -314,13 +317,17 @@ export default function PageChatClaude() {
                 lineHeight: 1.55,
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
-                background: m.role === "user" ? "#2b8ad1" : m.erreur ? "#fef2f2" : "#f3f4f6",
-                color: m.role === "user" ? "#fff" : m.erreur ? "#b91c1c" : "#111",
-                border: m.erreur ? "1px solid #fecaca" : "none",
+                background: m.role === "user" ? "#2B8AD1" : m.erreur ? "rgba(244,63,94,0.12)" : "#2a2d31",
+                color: m.role === "user" ? "#fff" : m.erreur ? "#fda4af" : "#e4e4e7",
+                border: m.erreur
+                  ? "1px solid rgba(244,63,94,0.35)"
+                  : m.role === "assistant"
+                  ? "1px solid rgba(255,255,255,0.06)"
+                  : "none",
               }}
             >
               {m.outils && m.outils.length > 0 && (
-                <div style={{ fontSize: 12, color: "#6b7280", fontStyle: "italic", marginBottom: m.content ? 6 : 0 }}>
+                <div style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic", marginBottom: m.content ? 6 : 0 }}>
                   🔧 {m.outils.join(" · ")}
                 </div>
               )}
@@ -351,11 +358,11 @@ export default function PageChatClaude() {
             padding: "10px 12px",
             fontSize: 14,
             fontFamily: "inherit",
-            border: "1px solid #d1d5db",
+            border: "1px solid rgba(255,255,255,0.15)",
             borderRadius: 10,
             outline: "none",
-            background: enCours ? "#f9fafb" : "#fff",
-            color: "#111",
+            background: enCours ? "#26292d" : "#2a2d31",
+            color: "#ededed",
           }}
         />
         <button
@@ -366,7 +373,7 @@ export default function PageChatClaude() {
             fontSize: 14,
             fontWeight: 600,
             color: "#fff",
-            background: enCours || !saisie.trim() ? "#9ca3af" : "#2b8ad1",
+            background: enCours || !saisie.trim() ? "#3f4348" : "#2B8AD1",
             border: "none",
             borderRadius: 10,
             cursor: enCours || !saisie.trim() ? "default" : "pointer",
@@ -375,6 +382,7 @@ export default function PageChatClaude() {
           {enCours ? "…" : "Envoyer"}
         </button>
       </div>
+    </div>
     </div>
   );
 }

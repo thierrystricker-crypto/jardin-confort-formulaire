@@ -87,6 +87,9 @@ export default function StockRemisesPage() {
   }
 
   return (
+    // Fond sombre forcé (même bg que /dashboard) : la page ne dépend plus du
+    // thème clair/sombre du navigateur.
+    <main className="min-h-screen bg-[#1f2125]">
     <div className="mx-auto max-w-6xl px-4 py-8 text-zinc-100">
       <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
         <div>
@@ -210,5 +213,6 @@ export default function StockRemisesPage() {
         </div>
       )}
     </div>
+    </main>
   );
 }
