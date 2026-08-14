@@ -31,19 +31,20 @@ type DraftRecord = {
 }
 // ──────────────────────────────
 
+// Reflète exactement les colonnes de la vue offres_dashboard.
+// La vue ne renvoie plus que ce que ce tableau affiche réellement
+// (les notes, adresses et sous-totaux ne servaient à rien ici et
+// alourdissaient le chargement pour rien).
 type OffreRecord = {
   id: number; slug: string; type_document: TypeDocument
   numero_offre: string|null; numero_commande: string|null; offre_origine: string|null
   numero_affiche: string; statut: OffreStatut; date_document: string|null
   reference: string|null
-  commercial: string|null; payment_mode: string|null; delivery_mode: string|null
-  lead_time: string|null; client_societe: string|null; client_nom: string|null
-  client_prenom: string|null; client_email: string|null; client_tel1: string|null
-  client_rue: string|null; client_npa: string|null; client_ville: string|null
-  sous_total: number; remise_chf: number; services_total: number
-  tva_montant: number; total_ttc: number; nb_articles: number
-  remarques: string|null; notes_internes: string|null; note_commerciale: string|null
-  date_abandon: string|null; date_derniere_relance: string|null; nb_relances: number|null
+  commercial: string|null
+  client_societe: string|null; client_nom: string|null
+  client_prenom: string|null; client_email: string|null; client_ville: string|null
+  total_ttc: number; nb_articles: number
+  date_derniere_relance: string|null; nb_relances: number|null
   probabilite: string|null
   created_at: string; updated_at: string|null
 }
@@ -267,6 +268,17 @@ export default function DashboardPage() {
   const [draftsCollapsed,setDraftsCollapsed]=useState(false)
   // ──────────────────────────────
 
+  // ─── Recherche par article ───
+  // articleHits : { idOffre → "SKU · libellé | SKU · libellé" }
+  // Rempli par /api/dashboard/articles, qui interroge la table
+  // offres_articles (lignes extraites du JSON des offres par trigger).
+  // La recherche texte classique reste 100 % locale et instantanée ;
+  // celle-ci vient s'y ajouter, en léger différé.
+  const [articleHits,setArticleHits]=useState<Record<number,string>>({})
+  const [articleSearching,setArticleSearching]=useState(false)
+  const [searchArticles,setSearchArticles]=useState(true)
+  // ─────────────────────────────
+
   function loadOffres() {
     setLoading(true)
     fetch("/api/dashboard/offres")
@@ -280,13 +292,42 @@ export default function DashboardPage() {
   }
   useEffect(()=>{loadOffres();loadDrafts()},[])
 
-  // Compteur "à remettre en stock" pour le badge du lien Remise en stock
+  // Compteur "à remettre en stock" pour le badge du lien Remise en stock.
+  // countOnly=1 : trois COUNT(*) et rien d'autre. Sans ce paramètre,
+  // l'endpoint interrogeait Shopify une fois par article en attente
+  // (plusieurs secondes) pour un simple chiffre dans un badge.
   useEffect(()=>{
-    fetch("/api/stock-remises?status=a_remettre")
+    fetch("/api/stock-remises?countOnly=1")
       .then(r=>r.ok?r.json():null)
       .then(j=>{ if(j?.stats?.a_remettre!=null) setRemisesCount(j.stats.a_remettre) })
       .catch(()=>{})
   },[])
+
+  // Recherche par article : appel serveur débouncé (300 ms) sur le terme saisi.
+  // Annulé proprement si l'utilisateur continue de taper.
+  useEffect(()=>{
+    const q = search.trim()
+    if (!searchArticles || q.length < 2) { setArticleHits({}); setArticleSearching(false); return }
+    const ctrl = new AbortController()
+    const timer = setTimeout(()=>{
+      setArticleSearching(true)
+      fetch(`/api/dashboard/articles?q=${encodeURIComponent(q)}`, { signal: ctrl.signal })
+        .then(r=>r.ok?r.json():null)
+        .then(j=>{ setArticleHits(j?.hits || {}) })
+        .catch(()=>{ /* abort ou erreur réseau : on garde la recherche locale */ })
+        .finally(()=>setArticleSearching(false))
+    }, 300)
+    return ()=>{ clearTimeout(timer); ctrl.abort() }
+  },[search,searchArticles])
+
+  // Préférence "chercher aussi dans les articles"
+  useEffect(()=>{
+    const saved = localStorage.getItem("dashboard-search-articles")
+    if (saved !== null) setSearchArticles(saved === "true")
+  },[])
+  useEffect(()=>{
+    localStorage.setItem("dashboard-search-articles", String(searchArticles))
+  },[searchArticles])
 
   // Charger les préférences "masquer" depuis localStorage
   useEffect(()=>{
@@ -383,12 +424,17 @@ export default function DashboardPage() {
     const qWords = tokenize(qNorm)
     const fieldsOf = (o:OffreRecord) => [nomClient(o), o.numero_affiche, o.client_email, o.client_ville, o.client_societe, o.commercial, o.reference]
     if(qNorm){
-      // Chaque mot recherché doit matcher au moins un champ (ordre libre)
-      list=list.filter(o => matchesAllWords(fieldsOf(o), qWords))
+      // Chaque mot recherché doit matcher au moins un champ (ordre libre),
+      // OU le dossier contient un article correspondant au terme cherché.
+      list=list.filter(o => matchesAllWords(fieldsOf(o), qWords) || !!articleHits[o.id])
     }
     // Quand une recherche est active, on classe par pertinence AVANT le tri colonne.
+    // Un dossier trouvé uniquement par son contenu (article) passe après ceux
+    // trouvés par le nom du client, mais reste visible.
     function bestScore(o:OffreRecord): number {
-      return relevanceScore(nomClient(o), fieldsOf(o), qNorm, qWords)
+      const s = relevanceScore(nomClient(o), fieldsOf(o), qNorm, qWords)
+      if (s === 9 && articleHits[o.id]) return 6
+      return s
     }
     return [...list].sort((a,b)=>{
       if(qNorm){
@@ -411,7 +457,19 @@ export default function DashboardPage() {
       if(av>bv) return sortDir==="asc"?1:-1
       return 0
     })
-  },[offres,quickFilter,commercial,search,sortKey,sortDir,hideAbandoned,hideConverted])
+  },[offres,quickFilter,commercial,search,sortKey,sortDir,hideAbandoned,hideConverted,articleHits])
+
+  // Nombre de dossiers ramenés uniquement par la recherche article
+  const nbParArticle = useMemo(()=>{
+    const qWords = tokenize(normalize(search.trim()))
+    if (qWords.length === 0) return 0
+    return filtered.filter(o =>
+      articleHits[o.id] && !matchesAllWords(
+        [nomClient(o), o.numero_affiche, o.client_email, o.client_ville, o.client_societe, o.commercial, o.reference],
+        qWords
+      )
+    ).length
+  },[filtered,articleHits,search])
 
   const statsFiltered=useMemo(()=>computeStats(
     commercial==="all" ? offres : offres.filter(o=>o.commercial===commercial)
@@ -465,8 +523,15 @@ export default function DashboardPage() {
             <select value={quickFilter} onChange={e=>setQuickFilter(e.target.value as QuickFilter)} className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 text-sm text-zinc-100 outline-none">
               {quickFilters.map(f=><option key={f.value} value={f.value}>{f.label}</option>)}
             </select>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Recherche : client, référence, email, ville…"
-              className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"/>
+            <div className="relative w-full">
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Recherche : client, référence, email, ville, article (n° ou libellé)…"
+                className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 pr-28 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"/>
+              {articleSearching && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">
+                  📦 recherche…
+                </span>
+              )}
+            </div>
             <button onClick={()=>{setSearch("");setQuickFilter("all");setCommercial("all")}} className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2.5 text-sm text-zinc-100 transition hover:bg-[#40454b]">Reset</button>
           </div>
 
@@ -499,6 +564,16 @@ export default function DashboardPage() {
                   ({offres.filter(o=>o.type_document==="Offre"&&["Acceptée","Convertie"].includes(o.statut)).length} masquées)
                 </span>
               )}
+            </label>
+            <label className="inline-flex items-center gap-2 cursor-pointer text-sm text-zinc-400 hover:text-zinc-200"
+              title="Cherche aussi le terme saisi dans les articles des offres et commandes (n° d'article ou libellé)">
+              <input
+                type="checkbox"
+                checked={searchArticles}
+                onChange={e=>setSearchArticles(e.target.checked)}
+                className="rounded border-white/20"
+              />
+              <span>📦 Chercher aussi dans les articles</span>
             </label>
           </div>
 
@@ -554,7 +629,14 @@ export default function DashboardPage() {
 
         
         <div className="space-y-3">
-          <div className="text-sm text-zinc-400">{filtered.length} résultat(s)</div>
+          <div className="text-sm text-zinc-400">
+            {filtered.length} résultat(s)
+            {nbParArticle > 0 && (
+              <span className="ml-2 text-violet-300">
+                · dont {nbParArticle} trouvé{nbParArticle>1?"s":""} par article
+              </span>
+            )}
+          </div>
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#2a2d31]">
             <div className="overflow-x-auto">
               <table className="min-w-full border-collapse text-sm">
@@ -601,6 +683,12 @@ export default function DashboardPage() {
                           )}
                           {o.offre_origine && (
                             <div className="text-xs text-sky-400 mt-0.5">← {o.offre_origine}</div>
+                          )}
+                          {articleHits[o.id] && (
+                            <div className="text-xs text-violet-300 mt-1 max-w-[260px] truncate"
+                              title={articleHits[o.id].replace(/ \| /g, "\n")}>
+                              📦 {articleHits[o.id].replace(/\s*\n\s*/g, " ")}
+                            </div>
                           )}
                         </td>
                         <td className="px-4 py-4">

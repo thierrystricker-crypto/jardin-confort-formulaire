@@ -25,11 +25,38 @@ function shopifyInventoryLink(sku: string): string {
   return `https://admin.shopify.com/store/${SHOPIFY_STORE}/products/inventory?${params.toString()}`;
 }
 
+// Compteurs seuls — utilisés par le badge du dashboard.
+// Trois COUNT(*) et rien d'autre : aucun appel Shopify.
+async function getCounts() {
+  const [
+    { count: aRemettreCount },
+    { count: remisCount },
+    { count: ignoreCount },
+  ] = await Promise.all([
+    supabaseAdmin.from("stock_remises_attente").select("*", { count: "exact", head: true }).eq("status", "a_remettre"),
+    supabaseAdmin.from("stock_remises_attente").select("*", { count: "exact", head: true }).eq("status", "remis"),
+    supabaseAdmin.from("stock_remises_attente").select("*", { count: "exact", head: true }).eq("status", "ignore"),
+  ]);
+  return {
+    a_remettre: aRemettreCount || 0,
+    remis: remisCount || 0,
+    ignore: ignoreCount || 0,
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
     const status = url.searchParams.get("status"); // 'a_remettre' | 'remis' | 'ignore'
     const limit = Math.min(Number(url.searchParams.get("limit") || 200), 500);
+
+    // ?countOnly=1 → uniquement les compteurs.
+    // Le dashboard n'affiche qu'un badge chiffré : inutile d'interroger
+    // Shopify SKU par SKU (un aller-retour réseau par article en attente)
+    // juste pour afficher un nombre.
+    if (url.searchParams.get("countOnly") === "1") {
+      return NextResponse.json({ remises: [], stats: await getCounts() });
+    }
 
     let query = supabaseAdmin
       .from("stock_remises_attente")
@@ -76,23 +103,11 @@ export async function GET(request: NextRequest) {
     }));
 
     // Compteurs pour les KPIs
-    const [
-      { count: aRemettreCount },
-      { count: remisCount },
-      { count: ignoreCount },
-    ] = await Promise.all([
-      supabaseAdmin.from("stock_remises_attente").select("*", { count: "exact", head: true }).eq("status", "a_remettre"),
-      supabaseAdmin.from("stock_remises_attente").select("*", { count: "exact", head: true }).eq("status", "remis"),
-      supabaseAdmin.from("stock_remises_attente").select("*", { count: "exact", head: true }).eq("status", "ignore"),
-    ]);
+    const stats = await getCounts();
 
     return NextResponse.json({
       remises: enriched,
-      stats: {
-        a_remettre: aRemettreCount || 0,
-        remis: remisCount || 0,
-        ignore: ignoreCount || 0,
-      },
+      stats,
     });
   } catch (err) {
     console.error("Stock remises GET error:", err);
