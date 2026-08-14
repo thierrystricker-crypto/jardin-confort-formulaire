@@ -93,10 +93,11 @@ export default function StockRemisesPage() {
     <div className="mx-auto max-w-6xl px-4 py-8 text-zinc-100">
       <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold">Remise en stock</h1>
+          <h1 className="text-2xl font-semibold">Retours à remettre en stock (manuel)</h1>
           <p className="mt-1 text-sm text-zinc-400">
             Articles retirés d&apos;une commande révisée. L&apos;app ne remet jamais en stock automatiquement :
-            ouvre le lien Shopify pour réintégrer à la main, puis marque la ligne.
+            ouvre le lien Shopify pour réintégrer à la main, puis marque la ligne.{" "}
+            <Link href="/dashboard/stock-movements" className="text-sky-300 hover:underline">→ Sorties de stock automatiques</Link>
           </p>
         </div>
         <Link href="/dashboard" className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-200 transition hover:bg-[#40454b]">

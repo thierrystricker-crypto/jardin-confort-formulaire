@@ -88,11 +88,17 @@ export default function StockMovementsPage() {
 
         {/* HEADER */}
         <div className="flex flex-wrap items-center gap-3 justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">← Dashboard</Link>
-            <h1 className="text-2xl font-semibold flex items-center gap-3">
-              📦 Mouvements de stock Shopify
-            </h1>
+            <div>
+              <h1 className="text-2xl font-semibold flex items-center gap-3">
+                📦 Sorties de stock Shopify (automatiques)
+              </h1>
+              <p className="mt-1 text-sm text-zinc-400">
+                Décréments écrits par l&apos;app à la validation d&apos;une commande ou à l&apos;ajout d&apos;une révision. L&apos;app ne fait jamais d&apos;incrément.{" "}
+                <Link href="/dashboard/stock-remises" className="text-sky-300 hover:underline">→ Retours à remettre en stock</Link>
+              </p>
+            </div>
           </div>
         </div>
 
