@@ -201,6 +201,29 @@ function renduContenu(texte: string): React.ReactNode[] {
   return blocs;
 }
 
+// ── Copie sans mise en forme ────────────────────────────────────────────────
+// Markdown → texte brut : gras/code nettoyés, liens en « texte : url »,
+// tableaux en colonnes séparées par tabulations (collage propre dans
+// Excel / Sheets / mail, sans emporter les couleurs du thème sombre).
+function texteBrut(texte: string): string {
+  const sortie: string[] = [];
+  for (const ligne of texte.split("\n")) {
+    // Ligne séparatrice de tableau |---|---| → ignorée
+    if (/^\s*\|[\s:|-]+\|\s*$/.test(ligne) && ligne.includes("-")) continue;
+    // Ligne de tableau → cellules séparées par tabulations
+    if (/^\s*\|.*\|\s*$/.test(ligne)) {
+      sortie.push(decouperLigneTableau(ligne).join("\t"));
+      continue;
+    }
+    let l = ligne.replace(/^#{1,4}\s+/, "");
+    l = l.replace(/\[([^\]]+)\]\(([a-z][a-z0-9+.-]*:[^\s)]+)\)/g, "$1 : $2");
+    l = l.replace(/\*\*([^*\n]+)\*\*/g, "$1");
+    l = l.replace(/`([^`\n]+)`/g, "$1");
+    sortie.push(l);
+  }
+  return sortie.join("\n");
+}
+
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString("fr-CH", {
     day: "2-digit",
@@ -245,6 +268,7 @@ export default function PageChatClaude() {
   const [conversations, setConversations] = useState<ConvResume[]>([]);
   const [convId, setConvId] = useState<string | null>(null);
   const [panneauOuvert, setPanneauOuvert] = useState(true);
+  const [copieIndex, setCopieIndex] = useState<number | null>(null);
   const finRef = useRef<HTMLDivElement>(null);
   const zoneRef = useRef<HTMLTextAreaElement>(null);
   const convIdRef = useRef<string | null>(null);
@@ -461,6 +485,16 @@ export default function PageChatClaude() {
     } finally {
       setEnCours(false);
       zoneRef.current?.focus();
+    }
+  };
+
+  const copierMessage = async (i: number, contenu: string) => {
+    try {
+      await navigator.clipboard.writeText(texteBrut(contenu));
+      setCopieIndex(i);
+      setTimeout(() => setCopieIndex(null), 1500);
+    } catch {
+      /* presse-papiers indisponible */
     }
   };
 
@@ -702,6 +736,27 @@ export default function PageChatClaude() {
                           : "Claude réfléchit…"}
                       </span>
                     ))}
+                  {m.role === "assistant" &&
+                    m.content &&
+                    !m.erreur &&
+                    !(enCours && i === messages.length - 1) && (
+                      <div style={{ marginTop: 6, textAlign: "right" }}>
+                        <button
+                          onClick={() => copierMessage(i, m.content)}
+                          title="Copier le message (sans mise en forme)"
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: copieIndex === i ? "#4ade80" : "#71717a",
+                            cursor: "pointer",
+                            fontSize: 12,
+                            padding: 0,
+                          }}
+                        >
+                          {copieIndex === i ? "✓ copié" : "📋 copier"}
+                        </button>
+                      </div>
+                    )}
                 </div>
               </div>
             ))}
