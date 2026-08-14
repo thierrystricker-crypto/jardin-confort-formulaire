@@ -103,6 +103,104 @@ function renduInline(texte: string): React.ReactNode[] {
   return noeuds;
 }
 
+// ── Rendu par blocs : tableaux markdown + titres + texte ────────────────────
+// Les tableaux `| a | b |` (avec ligne séparatrice `|---|`) deviennent de
+// vrais <table> ; les lignes `## Titre` deviennent des titres ; le reste passe
+// par renduInline (les retours à la ligne restent gérés par pre-wrap).
+function decouperLigneTableau(l: string): string[] {
+  let t = l.trim();
+  if (t.startsWith("|")) t = t.slice(1);
+  if (t.endsWith("|")) t = t.slice(0, -1);
+  return t.split("|").map((c) => c.trim());
+}
+
+function renduContenu(texte: string): React.ReactNode[] {
+  const lignes = texte.split("\n");
+  const blocs: React.ReactNode[] = [];
+  let tampon: string[] = [];
+  let cle = 0;
+
+  const estLigneTableau = (l: string) => /^\s*\|.*\|\s*$/.test(l);
+  const estSeparateur = (l: string) =>
+    /^\s*\|[\s:|-]+\|\s*$/.test(l) && l.includes("-");
+
+  const viderTexte = () => {
+    if (tampon.length) {
+      blocs.push(<span key={`t${cle++}`}>{renduInline(tampon.join("\n"))}</span>);
+      tampon = [];
+    }
+  };
+
+  let i = 0;
+  while (i < lignes.length) {
+    const ligne = lignes[i];
+    const titre = ligne.match(/^(#{1,4})\s+(.*)$/);
+
+    if (
+      estLigneTableau(ligne) &&
+      i + 1 < lignes.length &&
+      estSeparateur(lignes[i + 1])
+    ) {
+      viderTexte();
+      const entete = decouperLigneTableau(ligne);
+      i += 2;
+      const corps: string[][] = [];
+      while (i < lignes.length && estLigneTableau(lignes[i])) {
+        corps.push(decouperLigneTableau(lignes[i]));
+        i++;
+      }
+      blocs.push(
+        <div key={`tab${cle++}`} style={{ overflowX: "auto", margin: "8px 0" }}>
+          <table style={{ borderCollapse: "collapse", fontSize: 13, whiteSpace: "normal", minWidth: "60%" }}>
+            <thead>
+              <tr>
+                {entete.map((c, j) => (
+                  <th
+                    key={j}
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 10px",
+                      borderBottom: "1px solid rgba(255,255,255,0.18)",
+                      color: "#a1a1aa",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {renduInline(c)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {corps.map((rangee, j) => (
+                <tr key={j} style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  {rangee.map((c, k) => (
+                    <td key={k} style={{ padding: "5px 10px", color: "#e4e4e7", verticalAlign: "top" }}>
+                      {renduInline(c)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    } else if (titre) {
+      viderTexte();
+      blocs.push(
+        <div key={`h${cle++}`} style={{ fontWeight: 700, fontSize: 15, color: "#f4f4f5", margin: "8px 0 2px" }}>
+          {renduInline(titre[2])}
+        </div>
+      );
+      i++;
+    } else {
+      tampon.push(ligne);
+      i++;
+    }
+  }
+  viderTexte();
+  return blocs;
+}
+
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString("fr-CH", {
     day: "2-digit",
@@ -577,7 +675,7 @@ export default function PageChatClaude() {
                       🔧 {m.outils.join(" · ")}
                     </div>
                   )}
-                  {m.role === "assistant" ? renduInline(m.content) : m.content}
+                  {m.role === "assistant" ? renduContenu(m.content) : m.content}
                   {m.role === "assistant" &&
                     enCours &&
                     i === messages.length - 1 &&
