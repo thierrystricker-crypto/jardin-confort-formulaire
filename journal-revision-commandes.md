@@ -715,3 +715,202 @@ Validé runtime cmd-80666 : tapis origine « au 13.06.26 », chaises ajoutées �
 | S5 tests Preview | ✅ validés |
 | S5 fix date stock | ✅ corrigé |
 | S5 merge prod | ⬜ à faire |
+
+---
+
+## ✅ Session 6 — Clôture du chantier + deux bugs de la RPC corrigés (14.08.2026)
+
+> Session de reprise. Objectif initial : « finir et merger la branche ».
+> Résultat : la branche était mergée depuis six semaines, mais deux défauts
+> silencieux de la RPC `reviser_commande` tournaient en production depuis autant.
+
+### 1. Le chantier était déjà clos — le journal ne l'avait jamais dit
+
+Ce journal s'arrêtait au 29.06 à 01:19 (commit `5b37c238`). Le dépôt continue
+quatre minutes plus tard :
+
+```
+2026-06-29 01:20  checkout: feature/revision-commandes -> main
+2026-06-29 01:21  checkout: main -> feature/revision-commandes
+2026-06-29 01:22  checkout: feature/revision-commandes -> main
+2026-06-29 01:23  commit (merge): merge: chantier revision-commandes (S1-S5)  -> 531255c1
+```
+
+Merge commit (donc `--no-ff`, historique préservé), poussé, branche supprimée en
+local **et** sur `origin`. Au 14.08 : `main` = `origin/main` = `053f8ab`, arbre de
+travail propre, aucun `reset` destructif depuis.
+
+Preuve par la production : **88 révisions sur 56 commandes**, la dernière le jour
+même. `CMD-80695` a bien été révisée (V2). Il n'y avait donc ni merge, ni cleanup,
+ni smoke test Preview à faire — six semaines de prod valaient mieux.
+
+**Leçon de méthode : le journal est la seule chose qui n'a pas été mise à jour
+dans la foulée du merge. Six semaines plus tard, il a fait croire à un chantier
+en cours et failli déclencher un smoke test Preview inutile — qui aurait écrit
+dans la vraie base et décrémenté du vrai stock.**
+
+### 2. Les points en suspens de la S5, vérifiés contre le code
+
+| Point | Verdict |
+|---|---|
+| Simplification du helper de diff (retirer la hausse de qté) | ✅ appliquée, commit `f1d7ddb9`. `revision-diff.ts` l. 188-199 ne traite que la baisse |
+| Fix auto-save `64bce48` | ✅ en place — et **il a survécu au refactor `f733c6fd`** du 01.07 qui a réécrit tout le bloc en `autosaveFnRef` |
+| Test Preview C — offre avec articles | ✅ clos **par lecture de code**, sans test : le garde-fou est `type_document === "Commande"`, évalué AVANT le fetch de `/api/revisions` (`print/offre/[slug]` l. 57, `print/all` l. 102). Le nombre d'articles n'entre jamais en jeu. Bulletin de livraison et page de garde colis ne contiennent aucun code de révision |
+| `is_shopify = true` après un retrait propre | ❌ **NON** — bug réel, voir §3 |
+| `traite_par` null si localStorage vide | ⚠️ confirmé et plus fréquent qu'annoncé : 24 lignes sur 40 traitées n'ont pas d'auteur |
+
+### 3. 🛑 Bug A — `is_shopify` n'était jamais écrit
+
+**Symptôme.** Sur les 51 retraits enregistrés depuis le fix `64bce48` :
+**0 à `true`, 51 à `false`**, dont au moins 41 manifestement Shopify (SKU
+renseigné ET `inventory_policy` non nul — champ qui ne peut venir que d'un
+variant Shopify). La seule ligne à `true` en base était l'`UPDATE` manuel de la S3.
+
+**Cause.** Ni `isShopifyLine` (correct), ni le TypeScript (`buildRetrait` calcule
+bien le flag et le transmet dans `p_retraits`). C'est la RPC déployée :
+son `INSERT INTO stock_remises_attente` listait 11 colonnes et **`is_shopify`
+n'en faisait pas partie**. La valeur était jetée en silence, la colonne retombait
+sur son `DEFAULT false`. Exactement le scénario « colonne ajoutée après coup »
+(elle l'avait été en S0, sur décision du point ouvert n°5).
+
+**Conséquence métier.** Sur `/dashboard/stock-remises`, tout article Shopify
+retiré s'affichait en violet « 📝 À la volée » : pas de stock live, pas de lien
+« Ouvrir Shopify ». Le responsable ne disposait pas de l'information nécessaire
+pour décider d'une remise en stock.
+
+**Cas d'école — `CMD-80848`** (Michel Gédéon, 29.07, deux révisions à 18 min) :
+- V1 retire un Glatz Socle granit 55 kg, **`DENY`**, 216 CHF, tag « Fin de série ».
+  Étiqueté « à la volée ». Stock Shopify aujourd'hui : **0** → invendable en ligne
+  pendant 16 jours alors que la pièce était physiquement disponible.
+- V2 retire un Kit de roues inox ajouté 18 min plus tôt. Stock Shopify : **−1**.
+
+À noter : la chaîne de décrément était **saine** sur cette commande (bonnes
+raisons, bonne version, aucun double décrément). Seule l'étiquette du registre
+de retour était fausse — mais c'est elle qui rendait le retour invisible.
+
+### 4. 🛑 Bug B — la révision effaçait cinq champs racine du `data`
+
+**Symptôme.** Le diff de la V1 de `CMD-80848` le consignait lui-même dans ses
+propres `enteteChanges` :
+
+```
+signataire       "Michel Gédéon"             -> ""
+date_signature   "29.07.2026"                -> ""
+date_validation  "2026-07-29T07:35:31.801Z"  -> ""
+stock_frozen_at  "2026-07-29T07:35:31.801Z"  -> ""
+fromDraftSlug    "dra-692-b6959"             -> ""
+```
+
+Corrélation totale : sur 360 commandes, 60 sans `signataire`, **dont exactement
+les 56 révisées**.
+
+**Cause.** Le snapshot du formulaire ne transporte pas ces clés (elles ne sont
+pas *vidées*, elles sont *absentes*), et la RPC écrivait `data = p_new_data`
+en bloc. Tout ce que le formulaire ne connaît pas disparaissait.
+
+**Gravité.** Le stock figé, lui, tenait : le gel dépend de
+`type_document === "Commande"`, pas du marqueur `stock_frozen_at`. En revanche
+`signataire` et `date_signature` **n'ont aucune colonne** dans `offres` — une
+commande révisée ne savait plus qui l'avait signée ni quand. Récupérable pour
+55 des 56 depuis `data_avant` de la V1.
+
+**Sur ce que contient `signataire`** : le nom du **client** quand il a signé en
+ligne, le nom du **commercial** en cas de conversion interne. L'auteur de la
+révision, lui, est stocké séparément dans `commandes_revisions.commercial` et
+n'a jamais été perdu.
+
+### 5. Le correctif — un seul `CREATE OR REPLACE`, aucun déploiement
+
+Les deux défauts étaient sur les deux écritures successives de la même RPC :
+
+1. `is_shopify` ajouté à la liste de colonnes de l'`INSERT`, avec
+   `COALESCE((v_retrait->>'is_shopify')::boolean, false)`.
+2. `data = v_offre.data || p_new_data` au lieu de `data = p_new_data`.
+
+Le `||` de jsonb est une fusion **de premier niveau** : `lines` et `_totals`
+restent intégralement remplacés par la version du formulaire, seules les clés
+racine absentes du snapshot survivent. Le vidage volontaire reste possible : le
+formulaire envoie `""` pour les champs qu'il gère, et `""` écrase bien.
+
+**Aucune branche, aucun patch applicatif, aucune preview Vercel, aucun stock en
+jeu.** Tout en SQL Editor. Rollback conservé (définition d'origine archivée).
+
+### 6. Le rattrapage — 55 commandes
+
+`UPDATE` restaurant les 5 champs depuis `data_avant` de la révision V1,
+**uniquement là où le champ était vide**, exécuté APRÈS le correctif (sinon la
+révision suivante réefface). Résultat : `56 / 1 / 1` — la seule non rattrapée est
+`CMD-80666`, le cobaye du chantier, dont le snapshot V1 avait été pris alors
+qu'elle était déjà passée par le bug d'auto-save.
+
+⚠️ **Effet de bord non anticipé** : un trigger sur `offres` a mis `updated_at` à
+jour sur les 55 lignes (`2026-08-14 22:10:52`) alors que l'`UPDATE` ne l'écrivait
+pas. Irréversible, sans impact fonctionnel, mais ces commandes remontent comme
+« modifiées ce soir » sur tout écran qui trie sur `updated_at`.
+
+### 7. Test de validation — `CMD-80666`, V8 (14.08, 22:24)
+
+Protocole : témoin `_temoin_fusion` posé en SQL (clé racine inconnue du
+formulaire), puis révision retirant **deux lignes et aucun ajout** — donc zéro
+écriture Shopify.
+
+| Contrôle | Attendu | Obtenu |
+|---|---|---|
+| Témoin après révision | présent | ✅ `2026-08-14-test` |
+| Retrait ligne Shopify (`LFM2952.9311`, DENY) | `is_shopify = true` | ✅ |
+| Retrait ligne à la volée (sans SKU) | `is_shopify = false` | ✅ |
+| `stock_movements` créés | 0 | ✅ 0 |
+| Colonnes dénormalisées | resynchronisées | ✅ 4 lignes → 2, `nb_articles` = 2 |
+| Visuel `/dashboard/stock-remises` | badge Shopify + 🔒 + stock live + lien | ✅ |
+
+### 8. Ce qui reste ouvert (reporté au backlog, pas traité ici)
+
+- **Le diff signale encore de faux changements d'en-tête.** Il est calculé en
+  TypeScript AVANT l'appel à la RPC, en comparant l'ancien `data` au snapshot du
+  formulaire : il continue donc d'annoncer `signataire -> ""` alors que la fusion
+  préserve la valeur. Le stockage est réparé, l'affichage ment dans l'autre sens.
+  Correctif = patch dans `lib/revision-diff.ts` (ignorer les clés absentes de
+  `afterData`) → celui-là passera par une branche et un déploiement.
+- **`variant_id` / `inventory_item_id` toujours `null`** : les lignes portent
+  `shopifyVariantId`, les helpers de `revision-diff.ts` cherchent `variantId` /
+  `variant_id`. Sans effet aujourd'hui (le dashboard retrouve l'article par SKU).
+- **PDF de commande non régénéré après révision.** La route `reviser` ne contient
+  aucune occurrence de `pdf`. Le fichier stocké reste celui de la validation ;
+  seules les pages d'impression live sont à jour et portent le `· Vn`.
+  **Décision prise le 14.08 : le PDF de la commande doit suivre la commande ;
+  c'est l'offre qui conserve la photo de l'état initial validé.** Voir doc projet 06.
+- **41 lignes historiques mal étiquetées** non requalifiées (choix assumé). Les
+  snapshots ne bougent pas, c'est rattrapable à tout moment. Dont 30 passées en
+  « ignoré » — possiblement écartées sur la foi d'une étiquette fausse.
+- **SKU contenant des espaces** (`350 01 609 715` au lieu de `35001609715`) :
+  même avec le bon flag, la recherche de stock live échouera sur ces lignes.
+- **`stock-movements` vs `stock-remises`** : deux URL et deux titres trop proches.
+  Confusion vécue pendant le test.
+
+### 9. Hors périmètre, découvert en chemin
+
+- **31 commandes sans fiche de travail initiale** (`CMD-80852` → `CMD-80883`),
+  séquelle du blackout proxy du 30.07 → 07.08. Le rejeu du 07.08 a recréé les
+  mouvements de stock mais pas les fiches. **Écarté volontairement** : le stock
+  figé J0 reste lisible dans `data.lines` (une commande ne rafraîchit jamais son
+  stock), donc une réimpression affiche la bonne photo. Le PDF archivé n'était
+  qu'une commodité.
+- **Le chemin de révision était immunisé contre le blackout proxy.** Pendant que
+  zéro `commande_validee` passait (30.07 → 06.08), des `revision_ajout_*` ont été
+  créés et complétés le 30.07 et le 05.08. Raison : la route `reviser` ne fait
+  aucun appel HTTP interne — elle insère ses mouvements et appelle
+  `findVariantBySKU` / `adjustInventory` directement. La décision « Option 1 » de
+  la S1, prise pour éviter un double décrément, a rendu la révision résiliente
+  par effet de bord.
+
+### Statut
+
+| Session | Statut |
+|---|---|
+| S1-S4 | ✅ |
+| S5 tests Preview + fix date stock | ✅ |
+| S5 merge prod | ✅ **fait le 29.06.2026** (`531255c1`) |
+| S6 clôture + correctifs RPC | ✅ 14.08.2026 |
+
+**Chantier clos.** Suites au backlog : patch du diff, régénération du PDF de
+commande, requalification des 41 lignes.

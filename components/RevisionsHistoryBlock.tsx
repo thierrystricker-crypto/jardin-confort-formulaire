@@ -12,6 +12,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { CLES_HORS_FORMULAIRE } from "@/lib/revision-diff";
 
 type LineChange = { sku: string; title: string; avant: number; apres: number };
 type LineItem = { sku: string; title: string; qty: number };
@@ -81,7 +82,21 @@ function normEntete(v: string): string {
 }
 
 // Retourne true si l'entree d'en-tete est un VRAI changement (apres re-norm).
+// Deux filtres :
+//  1. faux positifs d'ordre de cles JSON (servicePrices / enabledServices) ;
+//  2. bruit des diffs archives avant le 15.08.2026 : la RPC ecrasait le data en
+//     bloc, donc les cles jamais portees par le formulaire etaient enregistrees
+//     comme "valeur -> (vide)". On ne filtre QUE cette forme exacte sur ces cles :
+//     un vidage volontaire d'un champ du formulaire (manualRounding, numero)
+//     reste affiche.
 function isRealEnteteChange(c: EnteteChange): boolean {
+  if (
+    CLES_HORS_FORMULAIRE.has(c.champ) &&
+    (c.avant || "") !== "" &&
+    (c.apres || "") === ""
+  ) {
+    return false;
+  }
   return normEntete(c.avant) !== normEntete(c.apres);
 }
 

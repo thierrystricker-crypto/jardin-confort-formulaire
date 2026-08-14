@@ -26,6 +26,9 @@ export type RevisionLine = {
   variant_id?: string;
   inventory_item_id?: string;
   location_id?: string;
+  // Cle REELLEMENT portee par les lignes du data. Releve en base le 15.08.2026
+  // sur les 219 lignes des snapshots : 219 shopifyVariantId, 0 variantId/variant_id.
+  shopifyVariantId?: string;
 };
 
 // Un retrait à insérer dans stock_remises_attente
@@ -67,13 +70,21 @@ export type RevisionComputation = {
   hasChanges: boolean;
 };
 
-// Helpers d'accès tolérants aux 2 conventions de nommage
+// Helpers d'acces aux identifiants Shopify d'une ligne.
+// Releve en base le 15.08.2026 sur les 219 lignes des snapshots commandes_revisions :
+// seules 3 cles Shopify existent dans le data -- shopifyLocked, shopifyVariantId,
+// inventoryPolicy. AUCUNE cle d'inventory item ni de location, sous aucune orthographe.
 function getVariantId(l: RevisionLine): string | null {
-  return l.variantId || l.variant_id || null;
+  return l.shopifyVariantId || l.variantId || l.variant_id || null;
 }
+// Sans objet : la donnee n'est pas capturee au moment du retrait. Ce n'est PAS un
+// probleme de nommage -- la recuperer supposerait un appel Shopify ici. Conserve
+// pour ne pas changer la forme de Retrait ; renvoie donc toujours null.
 function getInventoryItemId(l: RevisionLine): string | null {
   return l.inventoryItemId || l.inventory_item_id || null;
 }
+// Idem. SHOPIFY_LOCATION_ID existe dans lib/shopify-stock, mais l'ecrire ici
+// serait inventer une donnee plutot que la restituer.
 function getLocationId(l: RevisionLine): string | null {
   return l.locationId || l.location_id || null;
 }
@@ -93,6 +104,22 @@ function isStockRelevant(l: RevisionLine): boolean {
 //  - _totals : dérivé des lignes/rabais, changerait mécaniquement (double comptage)
 //  - offerNumber / formType : immuables par nature (numéro + type de document)
 const ENTETE_IGNORE = new Set(["lines", "_totals", "offerNumber", "formType"]);
+
+// Cles racine du data que le snapshot du formulaire ne transporte JAMAIS.
+// Depuis la fusion RPC du 14.08.2026 (data = data || p_new_data) elles sont
+// preservees : les signaler comme « -> (vide) » est un faux positif.
+// Le diff neuf ne les produit plus (voir computeRevisionDiff). Cette liste sert a
+// filtrer les diffs DEJA archives, figes en base -- releve du 15.08.2026 :
+// 302 lignes de bruit sur 57 des 89 revisions.
+export const CLES_HORS_FORMULAIRE = new Set([
+  "signataire",
+  "date_signature",
+  "date_validation",
+  "stock_frozen_at",
+  "fromDraftSlug",
+  "copiedFromOffreSlug",
+  "copiedFromOffreNumero",
+]);
 
 // Normalise une valeur de champ en chaîne comparable (objets/tableaux → JSON stable).
 function normEntete(v: unknown): string {
@@ -230,7 +257,12 @@ export function computeRevisionDiff(
   // Comparaison des champs d'en-tête (tout sauf lines/_totals/immuables).
   // Une seule différence suffit à déclencher une révision.
   if (beforeData && afterData) {
-    const keys = new Set([...Object.keys(beforeData), ...Object.keys(afterData)]);
+    // On n'itere QUE sur les cles reellement transmises par le formulaire. Une cle
+    // absente de afterData est preservee par la fusion jsonb de la RPC (decision du
+    // 14.08.2026) : la comparer reviendrait a annoncer un vidage qui n'a pas lieu.
+    // Une cle PRESENTE mais vide ("") reste un vrai changement -- le formulaire
+    // envoie "" pour les champs qu'il gere.
+    const keys = new Set(Object.keys(afterData));
     for (const k of keys) {
       if (ENTETE_IGNORE.has(k)) continue;
       const av = normEntete(beforeData[k]);
