@@ -914,3 +914,281 @@ formulaire), puis révision retirant **deux lignes et aucun ajout** — donc zé
 
 **Chantier clos.** Suites au backlog : patch du diff, régénération du PDF de
 commande, requalification des 41 lignes.
+
+---
+
+## ✅ Session 7 — Chantier 1 bis : les quatre suites de la révision (15.08.2026)
+
+> Traite d'un coup P2-20, P2-19, P3-37 et P3-38. Ordre imposé au cadrage : le
+> point stock d'abord, parce que c'est le seul qui touche à de la marchandise.
+> Deux écritures SQL en production, un merge applicatif (`13d49bd`).
+
+### 1. P2-20 — Requalification de `stock_remises_attente`
+
+**Méthode retenue, différente de celle annoncée en S6.** La S6 identifiait les
+lignes fautives par une heuristique (SKU renseigné ET `inventory_policy` non nul)
+→ 41 lignes. Le cadrage a préféré le critère authentique : croiser chaque ligne
+avec son snapshot `commandes_revisions` (`commande_slug` + `version_num`, matching
+par SKU trimé) et rejouer sur la ligne du snapshot **la définition exacte de
+`isShopifyLine()`** (`lib/jc-print-types.ts:227`) :
+
+```
+type ∉ {comment, media}  ET  sku non vide  ET  (shopifyLocked === true OU id LIKE 'shopify-%')
+```
+
+Les 52 lignes antérieures au 14.08 trouvent **toutes** leur correspondance dans un
+snapshot — aucune zone d'ombre.
+
+**Le compte réel est 43, pas 41.**
+
+| Statut | À requalifier | Restent « à la volée » (correct) |
+|---|---|---|
+| `a_remettre` | 10 | 1 |
+| `ignore` | 23 | 7 |
+| `remis` | 10 (+1 déjà à `true`) | 0 |
+| **Total** | **43** | **8** |
+
+Les 2 lignes d'écart sont des lignes Shopify verrouillées **sans**
+`inventoryPolicy` (antérieures à la feature garde-fou) : l'heuristique les ratait,
+le snapshot les attrape. **Leçon : ne pas déduire un attribut d'un autre attribut
+quand la source de vérité existe. `inventory_policy` était un proxy de
+`isShopifyLine`, pas son équivalent.**
+
+### 2. 🟢 La crainte des articles restés hors vente ne s'est pas vérifiée
+
+C'est le résultat le plus important de la session. Sur les **30 lignes passées en
+`ignore`** — celles qu'on soupçonnait d'avoir été écartées sur la foi d'une
+étiquette fausse :
+
+- 22 sont `CONTINUE`, 1 sans policy, 7 sont des lignes à la volée ;
+- **ZÉRO `DENY`.**
+
+`CONTINUE` = « continue selling when out of stock » actif : l'article reste
+vendable en ligne même à stock 0. **Aucun de ces 30 articles n'a été rendu
+invendable.** Les deux seules lignes `DENY` du registre historique sont l'une en
+`a_remettre` (le Glatz Socle granit du cas `CMD-80848`, donc toujours visible et
+en attente de décision) et l'autre déjà `remis`.
+
+Ce qui a été perdu est le **confort de décision** — pas de stock live, pas de lien
+back-office — pas de la marchandise immobilisée. La conséquence redoutée en S6
+n'a pas eu lieu.
+
+**À noter dans la liste** : 11 des 30 lignes (`CMD-80863`, `CMD-80869` — Manutti
+et Glatz, quantités notables) ont été ignorées en bloc le 08.08 à 00:24 par
+« Claude — rattrapage verrou proxy ». Ce ne sont pas des décisions marchandise,
+ce sont des lignes neutralisées pendant le nettoyage du blackout. Signalées à
+l'utilisateur pour vérification physique en dépôt, **hors périmètre de ce
+chantier — il les traite à la main.**
+
+### 3. L'`UPDATE` — 43 lignes
+
+Aucun trigger sur `stock_remises_attente` (vérifié avant écriture) : pas d'effet
+de bord `updated_at` comme sur `offres` en S6. `UPDATE` idempotent (filtre
+`is_shopify = false`), relancé à vide ensuite.
+
+Rollback archivé avant exécution :
+
+```sql
+update stock_remises_attente set is_shopify = false where id in (
+3,4,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,23,25,28,29,30,31,33,34,35,36,37,
+38,39,40,41,42,43,44,45,46,48,49,51,52,53);
+```
+
+Contrôle après écriture sur **toute** la table : `is_shopify` conforme au snapshot
+sur les 54 lignes, **zéro écart restant**.
+
+**Rappel de sûreté qui a rendu l'opération anodine** : `stock_remises_attente`
+n'écrit jamais dans Shopify (décision doc 06 §3). `is_shopify` n'est qu'un
+attribut d'affichage. Cet `UPDATE` ne pouvait provoquer aucun mouvement de stock —
+c'est ce qui a permis de l'exécuter sans branche ni preview.
+
+**Conséquence immédiate, non déployée** : `/dashboard/stock-remises` interroge
+désormais Shopify pour 45 SKU au lieu d'un seul. Le fan-out non borné de P1-4
+devient réel **par le seul effet de cette requalification**, sans une ligne de
+code changée.
+
+### 4. 🛑 Découverte — le rattrapage du 14.08 avait manqué deux champs
+
+La S6 avait identifié **5** clés racine effacées par `data = p_new_data`. Le
+relevé des `enteteChanges` archivés en montre **7** :
+
+| Champ | Occurrences « → vide » | Restauré le 14.08 ? |
+|---|---|---|
+| signataire, date_signature, date_validation, stock_frozen_at, fromDraftSlug | 55 chacun | ✅ |
+| **copiedFromOffreSlug** | 12 | ❌ |
+| **copiedFromOffreNumero** | 12 | ❌ |
+
+Vérification en base : les 12 commandes avaient toujours ces clés **absentes** de
+leur `data`. La traçabilité amont (doc 03 §1) était cassée sur `CMD-80579`,
+`80595`, `80629`, `80738`, `80765`, `80775`, `80780`, `80802`, `80834`, `80875`,
+`80878`, `80889`.
+
+Backfill depuis `data_avant` de la V1, idempotent, `where` excluant les lignes
+déjà remplies : **12 commandes restaurées**, `reste_a_backfiller = 0` à la
+relance. `CMD-80595` et `CMD-80629` pointent vers une **commande** et non une
+offre — c'est légitime, la duplication depuis une commande est prévue.
+
+Ces 12 lignes portaient déjà l'horodatage `updated_at` du backfill du 14.08 à
+22:10:52, donc aucune nouvelle pollution de tri.
+
+**Leçon : un rattrapage se dimensionne sur les données, pas sur les symptômes
+qu'on a remarqués.** Les 5 champs étaient ceux vus dans le diff d'UNE commande ;
+un `group by champ` sur les 89 diffs en donnait 7.
+
+### 5. P2-19 — Le diff qui signalait de faux changements
+
+**Cause exacte, lue dans le code.** `computeRevisionDiff` (`revision-diff.ts`
+l. 233) itérait sur l'**union** des clés de `beforeData` et `afterData`, puis
+comparait `normEntete(beforeData[k])` à `normEntete(afterData[k])`. Or
+`normEntete(undefined)` renvoie `""` (l. 99) : **une clé absente était
+indiscernable d'une clé vidée.**
+
+**Correctif** — n'itérer que sur les clés réellement transmises :
+
+```ts
+const keys = new Set(Object.keys(afterData));
+```
+
+Une clé nouvelle reste signalée. Une clé vidée volontairement (`""`) reste
+signalée. Seule l'absence est ignorée — exactement aligné sur ce que fait la RPC
+depuis la fusion du 14.08.
+
+**Changement de comportement à connaître** : sur les 89 révisions archivées, **6
+n'avaient QUE ce bruit**. Une révision de ce type reçoit désormais
+`Aucun changement détecté` (400) au lieu de créer une version. C'est correct —
+rien ne change réellement — mais ce n'est pas qu'un correctif d'affichage.
+
+### 6. Le sort des diffs déjà archivés — filtre à l'affichage
+
+**57 révisions sur 89 portent du bruit, 302 lignes au total.** Leur `diff` est
+figé en base ; le correctif ci-dessus ne les touche pas.
+
+Filtrage à l'affichage dans `RevisionsHistoryBlock`, sur le modèle du filtre
+existant pour `servicePrices` / `enabledServices`.
+
+**⚠️ Le piège évité, à retenir.** Filtrer sur « `apres` est vide » aurait été
+faux : trois entrées archivées ont légitimement `avant ≠ "" → apres = ""` sur
+`manualRounding`, `numero` et `_temoin_fusion` — des vidages réels. Le filtre
+porte donc sur une **liste blanche des 7 clés que le formulaire ne transporte
+jamais**, exportée depuis `revision-diff.ts` (`CLES_HORS_FORMULAIRE`, source
+unique, contre P3-5) et importée par le composant. Condition complète :
+`champ ∈ liste` ET `avant ≠ ""` ET `apres === ""`.
+
+### 7. P3-37 — L'entrée du backlog était inexacte
+
+Relevé de **toutes** les clés Shopify présentes dans les 219 lignes des
+snapshots :
+
+| Clé | Occurrences |
+|---|---|
+| `shopifyLocked` | 227 |
+| `shopifyVariantId` | 219 |
+| `inventoryPolicy` | 218 |
+
+**Aucune clé d'inventory item, aucune clé de location, sous aucune orthographe.**
+
+Donc : `getVariantId` est réparable (ajout de `shopifyVariantId` en tête), mais
+`getInventoryItemId` et `getLocationId` **n'ont rien à lire**. Ce n'est pas un
+problème de nommage, c'est une donnée jamais capturée à la source — la récupérer
+supposerait un appel Shopify au moment du retrait, hors périmètre. Les deux
+helpers sont conservés tels quels avec un commentaire expliquant pourquoi.
+`inventory_item_id` et `location_id` resteront `null`, **par construction**.
+
+### 8. P3-38 — Deux registres, deux titres
+
+| Page | Avant | Après |
+|---|---|---|
+| `/dashboard/stock-movements` | `📦 Mouvements de stock Shopify` | `📦 Sorties de stock Shopify (automatiques)` + sous-titre |
+| `/dashboard/stock-remises` | `Remise en stock` | `Retours à remettre en stock (manuel)` |
+
+Renvoi croisé ajouté sous chaque titre. Emoji existant conservé, aucun nouveau
+caractère exotique introduit (piège doc 04 §4, Turbopack).
+
+### 9. Tests Preview — branche `fix/revision-diff-et-registres-stock`, commit `3f625df`
+
+**Test B — filtre d'affichage, lecture seule.** `cmd-80765-bgfe1` : la base stocke
+**14** entrées d'en-tête pour sa V1, l'écran en affiche **7**. Filtrées : les 7
+clés hors formulaire, dont `signataire = "Isabelle Schirmer"`. Affichées : les 7
+`livr*` avec `livrDiff: false → true`, l'ajout réel d'une adresse de livraison.
+Ni sur-filtration, ni sous-filtration.
+
+**Test A — révision réelle.** `cmd-80666-l8i6x`, retrait seul (donc zéro écriture
+Shopify) + vidage volontaire de `leadTime`. Témoin `_temoin_fusion` posé en SQL
+avant, retiré après — **nécessaire, car aucune des 7 clés n'existait sur cette
+commande : sans témoin le test aurait été aveugle.**
+
+Diff V9 stocké, intégral :
+```
+retraits      : 1× Fermob Luxembourg Chaise / Rouille 09 (410109)
+enteteChanges : leadTime "25-30 jours" -> ""
+ajouts, qtyChanges, prixChanges, remiseChanges : vides
+```
+
+| Contrôle | Attendu | Obtenu |
+|---|---|---|
+| Une seule entrée d'en-tête, le vidage volontaire | oui | ✅ |
+| `_temoin_fusion` dans le diff | absent | ✅ absent |
+| `_temoin_fusion` dans `data` après révision | préservé | ✅ |
+| Nouvelle remise, `is_shopify` | true | ✅ |
+| Nouvelle remise, **`variant_id`** | renseigné | ✅ `gid://shopify/ProductVariant/34756328194183` |
+| `inventory_item_id` / `location_id` | null (par construction) | ✅ null |
+| `stock_movements` créés | 0 | ✅ 0 |
+| Colonnes dénormalisées | resynchronisées | ✅ 2 lignes → 1, 414.00 → 193.50 |
+
+La ligne 56 est la **première du registre à porter un `variant_id`** depuis la
+création de la table. Comparaison directe avec la ligne 55 (même commande, V8,
+la veille) : `variant_id = null`.
+
+### 10. Merge — `13d49bd`
+
+`main` `053f8ab` → `13d49bd`, merge `--no-ff`, 5 fichiers, branche supprimée en
+local et sur `origin`.
+
+### 11. Deux incidents de méthode, tous deux sur git
+
+**a. Le journal de la S6 n'avait jamais été committé.** Écrit le 14.08, il
+dormait dans l'arbre de travail. `git status` n'était donc pas propre au moment du
+`checkout -b`, et le `git add -A` l'a embarqué dans le commit de code `3f625df`
+(5 fichiers au lieu de 4, +201 lignes de doc). Sans dégât — la doc avait vocation
+à rejoindre `main` — mais **c'est la deuxième fois d'affilée que ce journal rate
+son train.**
+
+**b. Le merge est resté à moitié fait pendant plusieurs minutes.** L'éditeur du
+message de merge (vim) n'a pas rendu la main ; git n'a donc pas créé le commit.
+Les commandes suivantes ont été lancées quand même : `git push` a répondu
+« Everything up-to-date » et `git branch -d` a supprimé la branche **en local et
+sur `origin`**, avec l'avertissement *« merged to refs/remotes/... but not yet
+merged to HEAD »* — l'indice décisif.
+
+Diagnostic par lecture directe de `.git/` : `MERGE_HEAD = 3f625df`,
+`MERGE_MODE = no-ff`, index déjà fusionné, `main` encore à `053f8ab`. Le merge
+était **en cours**, pas perdu. Terminé par `git commit --no-edit`, qui reprend le
+message par défaut sans ouvrir d'éditeur.
+
+**Trois règles à en tirer :**
+- **Le warning « merged to <remote-ref> but not yet merged to HEAD » signifie que
+  le merge n'a PAS eu lieu.** Ne jamais l'ignorer.
+- **Un merge non committé se rattrape par `git commit --no-edit`**, jamais par
+  `git merge --abort`, qui lui jetterait le travail.
+- **Sous Windows, régler l'éditeur avant d'en avoir besoin** :
+  `git config --global core.editor notepad`.
+
+Scorie assumée : le message du commit `13d49bd` contient les lignes de commentaire
+`#` du template de merge. Cosmétique ; le corriger imposerait un `--amend` plus un
+force-push sur `main` déjà déployée — échange refusé.
+
+### 12. Statut et suites
+
+| Entrée | État |
+|---|---|
+| P2-20 requalification des lignes historiques | ✅ 43 lignes, 15.08 |
+| P2-19 diff + filtre d'affichage | ✅ `13d49bd` |
+| P3-37 clés variant | ✅ `variant_id` renseigné ; les 2 autres colonnes documentées comme sans objet |
+| P3-38 titres des registres | ✅ |
+| Backfill `copiedFrom*` (hors backlog, découvert ici) | ✅ 12 commandes |
+
+**Reste ouvert, inchangé :** P2-2 (régénération du PDF de commande après
+révision), P2-21 (`traite_par` vide sur 60 % des lignes traitées), P3-39
+(normalisation des SKU à la saisie — 3 lignes du registre en portent la trace),
+P1-4 (fan-out Shopify de `/api/stock-remises`, **devenu réel**), P1-23 (contrôle
+de cohérence périodique).
