@@ -6,10 +6,15 @@
 
 import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, createNotificationUnique } from "@/lib/notifications";
 
-const MAKE_WEBHOOK = process.env.MAKE_WEBHOOK_VALIDATION_URL ||
-  "https://hook.eu1.make.com/tqqhnrzkcwfhybguktd75drtmqv9ah49";
+// Webhook Make : l'URL ET la cle viennent UNIQUEMENT de l'environnement.
+// Plus aucun repli en dur. La cle a vecu ici en clair : elle est donc dans
+// l'historique Git, et c'est la ROTATION cote Make qui la neutralise, pas ce
+// deplacement. Variables Vercel : MAKE_WEBHOOK_VALIDATION_URL et
+// MAKE_VALIDATION_API_KEY (Production + Preview + Development).
+const MAKE_WEBHOOK = process.env.MAKE_WEBHOOK_VALIDATION_URL || "";
+const MAKE_API_KEY = process.env.MAKE_VALIDATION_API_KEY || "";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ||
   "https://offres.jardin-confort.ch";
@@ -271,17 +276,56 @@ export async function POST(
     // Pour ne pas envoyer un email automatique au client lors d'une conversion manuelle.
     // Le client peut toujours recevoir un mail manuel via le brouillon dans le dashboard.
     if (!internal) {
-      try {
-        await fetch(MAKE_WEBHOOK, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-make-apikey": "jc_validation_2026_K9mP4xT7qL2vN8aR5wF1",
-          },
-          body: JSON.stringify(webhookPayload),
+      if (!MAKE_WEBHOOK || !MAKE_API_KEY) {
+        // Configuration incomplete : impossible de notifier Make. Le client a
+        // signe et la commande existe — seul le mail de confirmation manque.
+        // On le rend visible plutot que de le laisser passer en silence.
+        const manquantes = [
+          !MAKE_WEBHOOK ? "MAKE_WEBHOOK_VALIDATION_URL" : "",
+          !MAKE_API_KEY ? "MAKE_VALIDATION_API_KEY" : "",
+        ].filter(Boolean).join(", ");
+        console.error(`[valider] Webhook Make non configuré (${manquantes}) — ${numeroCommande} sans mail de confirmation`);
+        await createNotificationUnique({
+          type: "webhook_make_echec",
+          numero_affiche: numeroCommande,
+          titre: "⚠️ Webhook Make non configuré — mails de confirmation non envoyés",
+          message: `Variable(s) manquante(s) : ${manquantes}. Première commande concernée : ${numeroCommande}.`,
         });
-      } catch (webhookErr) {
-        console.error("Webhook error:", webhookErr);
+      } else {
+        try {
+          const makeRes = await fetch(MAKE_WEBHOOK, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-make-apikey": MAKE_API_KEY,
+            },
+            body: JSON.stringify(webhookPayload),
+          });
+          // ⚠️ fetch ne leve PAS d'exception sur un 4xx/5xx. Sans cette
+          // verification, une cle refusee par Make echoue en TOTAL silence : le
+          // client signe, la commande est creee, le mail ne part jamais et rien
+          // ne l'indique nulle part. C'est ce qui rend une rotation de cle
+          // verifiable — ne pas le retirer.
+          if (!makeRes.ok) {
+            console.error(`[valider] Webhook Make refusé (${makeRes.status}) — ${numeroCommande} sans mail de confirmation`);
+            await createNotificationUnique({
+              type: "webhook_make_echec",
+              numero_affiche: numeroCommande,
+              titre: "⚠️ Webhook Make refusé — mails de confirmation non envoyés",
+              message: `Make a répondu ${makeRes.status}. Vérifier la clé x-make-apikey. Première commande concernée : ${numeroCommande}.`,
+            });
+          } else {
+            console.log(`[valider] Webhook Make OK (${makeRes.status}) — ${numeroCommande}`);
+          }
+        } catch (webhookErr) {
+          console.error("Webhook error:", webhookErr);
+          await createNotificationUnique({
+            type: "webhook_make_echec",
+            numero_affiche: numeroCommande,
+            titre: "⚠️ Webhook Make injoignable — mails de confirmation non envoyés",
+            message: `Erreur réseau vers Make. Première commande concernée : ${numeroCommande}.`,
+          });
+        }
       }
     } else {
       console.log("[valider] Conversion manuelle — webhook Make skippé");
