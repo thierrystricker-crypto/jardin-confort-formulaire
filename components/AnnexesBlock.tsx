@@ -417,18 +417,20 @@ export default function AnnexesBlock({
                 </div>
               )}
 
-              {/* Aperçu */}
+              {/* Aperçu — hauteur FIXE (600 px) quel que soit le contenu : sans
+                  elle, changer de vignette redimensionne la carte et fait
+                  perdre le cadrage de défilement (constaté au smoke test). */}
               {selection.url ? (
-                <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                <div className="h-[600px] overflow-hidden rounded-2xl border border-white/10 bg-black/20">
                   {selection.mime === "application/pdf" ? (
-                    <iframe src={selection.url} title="Aperçu annexe" className="h-[600px] w-full border-0" />
+                    <iframe src={selection.url} title="Aperçu annexe" className="h-full w-full border-0" />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={selection.url} alt={selection.libelle || selection.nom_fichier} className="mx-auto max-h-[600px] object-contain" />
+                    <img src={selection.url} alt={selection.libelle || selection.nom_fichier} className="h-full w-full object-contain" />
                   )}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-white/10 bg-black/10 p-8 text-center text-sm text-zinc-500">
+                <div className="flex h-[600px] items-center justify-center rounded-2xl border border-white/10 bg-black/10 p-8 text-center text-sm text-zinc-500">
                   Pièce jointe indisponible.
                 </div>
               )}
