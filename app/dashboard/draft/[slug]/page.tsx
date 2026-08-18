@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TransformerModal from "@/components/TransformerModal";
+import AnnexesBlock from "@/components/AnnexesBlock";
 
 type TypeDocument = "Offre" | "Commande";
 
@@ -621,6 +622,12 @@ export default function DashboardDraftDetailPage({
                 </p>
               </section>
             )}
+
+            <AnnexesBlock
+              entityType="draft"
+              entitySlug={slug}
+              ajoutePar={draft.commercial}
+            />
 
           </div>
 

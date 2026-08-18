@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type React from "react";
+import { preparerFichier } from "@/lib/preparer-fichier";
 
 // Un fichier soumis au chat vit en MÉTADONNÉE, jamais en contenu : `content`
 // reste une string partout — dans le state React comme dans
@@ -282,16 +283,10 @@ function texteBrut(texte: string): string {
   return sortie.join("\n");
 }
 
-// ── Pièces jointes : préparation côté navigateur ────────────────────────────
-// Le redimensionnement n'est PAS une optimisation, c'est une CONDITION DE
-// FONCTIONNEMENT : une fonction Vercel refuse un corps au-delà de ~4,5 Mo — les
-// 32 Mo annoncés par l'API Anthropic sont donc hors d'atteinte — et une photo de
-// téléphone les dépasse vite. Côté long plafonné à 2000 px : très loin des
-// 8000 px de l'API, et largement lisible pour du manuscrit sur A4 (les scans du
-// pilote font ~750 Ko).
-const COTE_MAX = 2000;
-const QUALITE_JPEG = 0.85;
-const TAILLE_MAX = 4 * 1024 * 1024;
+// ── Pièces jointes ──────────────────────────────────────────────────────────
+// La préparation côté navigateur (redimensionnement 2000 px, EXIF, fond blanc,
+// plafond 4 Mo) vit dans lib/preparer-fichier.ts depuis le chantier annexes
+// (18.08.2026) — partagée avec la carte Annexes du dashboard.
 const MAX_FICHIERS = 8;
 // Durée de vie de la copie chez Anthropic (/api/cron/claude-files-purge).
 // Au-delà, le `file_id` peut être mort : on l'exclut de l'historique envoyé
@@ -301,62 +296,6 @@ const TTL_FICHIER_MS = 24 * 3600 * 1000;
 function estPerime(uploadedAt: string): boolean {
   const t = Date.parse(uploadedAt);
   return !Number.isFinite(t) || Date.now() - t > TTL_FICHIER_MS;
-}
-
-function nomEnJpg(nom: string): string {
-  // L'extension change, le reste du nom NON : il porte le n° manuscrit
-  // (« Scan_Copie_Commande_53864_… »), qui sert à retrouver le scan en base.
-  return nom.replace(/\.[^.]+$/, "") + ".jpg";
-}
-
-async function preparerFichier(f: File): Promise<File> {
-  if (f.type === "application/pdf") {
-    if (f.size > TAILLE_MAX) {
-      throw new Error("PDF trop lourd (max 4 Mo) — photographie les pages une à une");
-    }
-    return f;
-  }
-  if (!f.type.startsWith("image/")) {
-    throw new Error("format non accepté (photo ou PDF)");
-  }
-
-  let bitmap: ImageBitmap;
-  try {
-    // `from-image` applique l'orientation EXIF. Sans elle, une photo prise en
-    // portrait arrive couchée — et la lecture du manuscrit s'en ressent.
-    const options = { imageOrientation: "from-image" } as unknown as ImageBitmapOptions;
-    bitmap = await createImageBitmap(f, options);
-  } catch {
-    // Un HEIC d'iPhone atterrit ici hors de Safari : le navigateur ne sait pas
-    // le décoder. iOS convertit normalement en JPEG à la prise de vue.
-    throw new Error("image illisible par le navigateur — réessaie en JPEG");
-  }
-
-  const facteur = Math.min(1, COTE_MAX / Math.max(bitmap.width, bitmap.height));
-  const largeur = Math.max(1, Math.round(bitmap.width * facteur));
-  const hauteur = Math.max(1, Math.round(bitmap.height * facteur));
-  const toile = document.createElement("canvas");
-  toile.width = largeur;
-  toile.height = hauteur;
-  const ctx = toile.getContext("2d");
-  if (!ctx) {
-    bitmap.close();
-    throw new Error("redimensionnement impossible");
-  }
-  // Sans fond blanc, `toBlob("image/jpeg")` aplatit la transparence en NOIR :
-  // une capture PNG à fond transparent arrive en écriture noire sur noir, et la
-  // lecture échoue sans qu'aucune erreur ne l'explique.
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, largeur, hauteur);
-  ctx.drawImage(bitmap, 0, 0, largeur, hauteur);
-  bitmap.close();
-
-  const blob = await new Promise<Blob | null>((resoudre) =>
-    toile.toBlob(resoudre, "image/jpeg", QUALITE_JPEG)
-  );
-  if (!blob) throw new Error("redimensionnement impossible");
-  if (blob.size > TAILLE_MAX) throw new Error("image trop lourde même après réduction");
-  return new File([blob], nomEnJpg(f.name || "photo"), { type: "image/jpeg" });
 }
 
 // Les blocs ne sont fabriqués QU'ICI, au moment de l'envoi — jamais stockés.

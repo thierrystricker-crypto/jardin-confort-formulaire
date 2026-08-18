@@ -7,6 +7,7 @@ import CorrectionDrawer from "@/components/CorrectionDrawer";
 import CorrectionsHistoryBlock from "@/components/CorrectionsHistoryBlock";
 import RevisionsHistoryBlock from "@/components/RevisionsHistoryBlock";
 import StockMovementsBlock from "@/components/StockMovementsBlock";
+import AnnexesBlock from "@/components/AnnexesBlock";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -1626,6 +1627,12 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                 initialAt={ficheTravailInitialAt}
               />
             )}
+
+            <AnnexesBlock
+              entityType={offre.type_document === "Commande" ? "commande" : "offre"}
+              entitySlug={slug}
+              ajoutePar={offre.commercial}
+            />
 
             {!isCommandeDirecte && (
               <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
