@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification, createNotificationUnique } from "@/lib/notifications";
+import { recopierAnnexes } from "@/lib/annexes-suivi";
 
 // Webhook Make : l'URL ET la cle viennent UNIQUEMENT de l'environnement.
 // Plus aucun repli en dur. La cle a vecu ici en clair : elle est donc dans
@@ -349,6 +350,15 @@ export async function POST(
     //   5. SEULEMENT MAINTENANT : décrémentation Shopify
 
     after(async () => {
+      // ─── ÉTAPE 0 : Suivi des annexes DEV → CMD (chantier annexes) ───
+      // AVANT les PDF : la recopie ne coûte que trois requêtes Supabase et ne
+      // touche ni au stock ni aux PDF, mais la chaîne PDF → stock peut durer
+      // 30-60 s — placée après, la carte Annexes de la commande paraît vide à
+      // celui qui ouvre le dossier tout de suite (constaté au smoke test).
+      // recopierAnnexes ne lève jamais : rien ici ne peut retarder ou casser
+      // la suite.
+      await recopierAnnexes("offre", slug, "commande", cmdSlug)
+
       // ─── ÉTAPE 1 : PDFs sans dépendance stock (en parallèle) ───
       await Promise.allSettled([
         fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST", headers: EN_TETE_INTERNE })

@@ -21,6 +21,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { recopierAnnexes } from "@/lib/annexes-suivi";
 
 export async function POST(
   request: NextRequest,
@@ -116,6 +117,12 @@ export async function POST(
       console.error("PDF offre génération error (non bloquant):", err);
     });
 
+    // ─── Suivi des annexes : DRA → DEV (chantier annexes, étape 4) ───
+    // Recopie des lignes pieces_jointes du brouillon sur l'offre (mêmes
+    // fichiers, jamais dupliqués). recopierAnnexes ne lève jamais : une
+    // recopie manquée ne fait pas échouer la transformation.
+    const annexes = await recopierAnnexes("draft", slug, "offre", offre_slug);
+
     // ─── Réponse au client ───
     // URLs relatives — robustes localhost / preview / prod (cf. fix 1fbbda3)
     return NextResponse.json({
@@ -123,6 +130,7 @@ export async function POST(
       offreSlug: offre_slug,
       offreNumero: offre_numero,
       dashboardUrl: `/dashboard/${offre_slug}`,
+      annexesCopiees: annexes.copiees,
     });
   } catch (err) {
     console.error("Transform draft error (catch):", err);

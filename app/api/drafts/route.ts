@@ -21,10 +21,23 @@ function makeSlug(numero: string, withToken = false): string {
   return `${base}-${token}`;
 }
 
+const UUID_FORME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const data = body.data || {};
+
+    // ─── Pièces jointes à rattacher (chantier annexes, étape 5) ───
+    // Le connecteur jardi-mail-mcp transmet les `piece_id` rendus par
+    // /api/claude/upload : les scans archivés du chat, qui attendent en base
+    // avec entity_id NULL. Tableau (un scan multi-pages = plusieurs fichiers),
+    // borné à 8 comme le chat. Ids invalides ignorés — le rattachement ne doit
+    // JAMAIS faire échouer la création du brouillon.
+    const idsBruts = Array.isArray(body.pieces_jointes_ids) ? body.pieces_jointes_ids : [];
+    const piecesIds: string[] = idsBruts
+      .filter((x: unknown): x is string => typeof x === "string" && UUID_FORME.test(x))
+      .slice(0, 8);
 
     // ─── Génération du numéro DRA-XXX via RPC ───
     const { data: draNum, error: rpcError } = await supabaseAdmin.rpc("next_dra_numero");
@@ -134,6 +147,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ─── Rattachement des pièces jointes au brouillon créé ───
+    // Ne rattache qu'une ligne encore orpheline (entity_id NULL) et non
+    // supprimée : on ne vole jamais une pièce déjà rattachée à un autre
+    // dossier. Non bloquant : l'échec est signalé dans la réponse, pas en 500.
+    let piecesRattachees = 0;
+    const piecesIgnorees: string[] = [];
+    for (const pieceId of piecesIds) {
+      const { data: rattachee, error: erreurPiece } = await supabaseAdmin
+        .from("pieces_jointes")
+        .update({
+          entity_type: "draft",
+          entity_id: result.id,
+          entity_slug: result.slug,
+        })
+        .eq("id", pieceId)
+        .is("entity_id", null)
+        .is("supprime_at", null)
+        .select("id")
+        .maybeSingle();
+      if (erreurPiece || !rattachee) {
+        piecesIgnorees.push(pieceId);
+        if (erreurPiece) {
+          console.error(`[drafts] Rattachement pièce ${pieceId} :`, erreurPiece.message);
+        }
+      } else {
+        piecesRattachees++;
+      }
+    }
+
     // URLs relatives — fonctionnent sur localhost, preview Vercel et prod
     // sans dépendre de NEXT_PUBLIC_APP_URL.
     return NextResponse.json({
@@ -143,6 +185,9 @@ export async function POST(request: NextRequest) {
       numeroAffiche: result.numero_affiche,
       dashboardUrl: `/dashboard/draft/${result.slug}`,
       editUrl: `/drafts/${result.slug}/editer`,
+      ...(piecesIds.length > 0
+        ? { piecesRattachees, piecesIgnorees }
+        : {}),
     });
 
   } catch (err) {
