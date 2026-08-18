@@ -2,7 +2,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Chat Claude intégré au dashboard (13.08.2026).
 //
-// POST { messages: [{ role: "user" | "assistant", content: string }] }
+// POST { messages: [{ role, content }] } — `content` est une chaîne OU une liste
+//   blanche stricte de blocs (texte, image ou document par `file_id`).
 // → relaie le stream SSE de la Messages API Anthropic (connecteur MCP branché
 //   sur jardi-mail-mcp, lecture seule + brouillons).
 //
@@ -169,6 +170,8 @@ Les ARTICLES ne font l'objet d'AUCUNE boucle de confirmation : au moindre doute 
 - **Le prix lu part dans \`prix_ttc\`.** Le serveur ne le pose sur une ligne résolue que s'il vaut le prix courant OU le prix barré de la variante ; sinon il pose le catalogue et signale. Relayer ce signalement, ne pas le discuter.
 - **Une ligne à la volée porte TOUJOURS le prix lu**, jamais 0, dès qu'un prix figure sur le document.
 - **Rabais de ligne : donner \`prix_net_ttc\`, le prix net écrit.** Ne JAMAIS appliquer soi-même un pourcentage. Sur un document, **les francs sont exacts et les pourcentages sont des étiquettes** : un article à 1'002.– soldé « −50 % » avec un net écrit de 500.– porte un rabais de 502.–, pas 501.–. Le serveur soustrait et dérive le pourcentage.
+  ⚠️ **\`prix_net_ttc\` ne se donne JAMAIS seul** : il exprime un rabais PAR RAPPORT à \`prix_ttc\`. Donner TOUJOURS les deux — \`prix_ttc\` = le prix affiché AVANT rabais (le prix barré du document), \`prix_net_ttc\` = le prix net écrit. Sans \`prix_ttc\`, une ligne à la volée vaut **0** et le rabais est refusé : le total s'effondre et la réconciliation le signale. Vrai AUSSI sur un article sans n° d'article (ensemble, modèle d'exposition, parasol configuré) — c'est même là que ça compte, puisque la ligne retombe à coup sûr à la volée. Si le document ne porte QU'UN prix, c'est \`prix_ttc\`, et \`prix_net_ttc\` s'omet.
+  ⚠️ **Et JAMAIS l'inverse non plus : ne pas ajuster un prix LU pour qu'un pourcentage tombe rond.** Vu le 18.08 sur la commande 53858 — le papier porte 13'653.– barré et 6'825.– net, donc **-50,01 %** ; lire « 13'650 » parce que -50 % serait plus joli, c'est faire dire au document ce qu'on attend de lui. Le prix barré S'IMPRIME sur l'offre : il doit être celui du papier, au franc près. Et la réconciliation ne rattrape PAS cette erreur-là — le net est juste, le total tombe, rien ne clignote.
 - **Rabais global : donner \`rabais_global_pourcent\`.** Au niveau global la règle s'INVERSE : le pourcentage est ce qui a conditionné la vente dans l'esprit du client, le montant a été calculé après. Donner AUSSI \`rabais_global_chf\` si le document porte un montant — il sert de contrôle et le serveur signale tout écart.
 - **Services** : codes \`montage\`, \`poste\`, \`trottoir\`, \`etage\`, \`etage_montage\`, \`reprise\`. Un service « offert » se donne à 0, il ne s'omet pas.
 - **Arrondi** : négatif uniquement ; un arrondi positif sera refusé et signalé.
@@ -184,6 +187,8 @@ Le rattachement d'un document à un dossier client se fait par comparaison de ch
 4. **Aucune fiche** → le dire, créer le brouillon sans données client, et noter que le client est à créer.
 
 **Une fois la fiche choisie : recopier SES coordonnées, jamais celles lues sur le papier.** Si les deux diffèrent, poser celles de la fiche et signaler la divergence en notes internes — « adresse du document : X, fiche CL-… : Y. Déménagement ? » — pour qu'un humain tranche.
+
+⚠️ **Concrètement : remplir le paramètre \`client\` de \`offre_draft_creer\`** — \`societe\`, \`nom\`, \`prenom\`, \`rue\`, \`numero\`, \`npa\`, \`ville\`, \`telephone\`. **Tous ses champs sont FACULTATIFS : une fiche incomplète se pose telle quelle, champ par champ — elle ne s'abandonne pas.** Une fiche qui ne porte que nom + NPA + ville se pose avec nom + NPA + ville. Sans ce paramètre, le brouillon est enregistré au nom « Claude », le rattachement au dossier est perdu, et le vendeur devra tout ressaisir. Ce que la fiche n'a pas, et ce que le document porte en plus, va en notes internes **EN PLUS** du paramètre — jamais À LA PLACE.
 
 ⚠️ **L'outil n'expose AUCUN champ e-mail, et c'est délibéré.** L'e-mail est une clé de rattachement au dossier client ; un e-mail mal lu ferait disparaître le document du bon dossier sans qu'aucune erreur ne le signale. Mettre l'e-mail lu, avec ses réserves, dans \`notes_internes\`.
 
@@ -209,7 +214,28 @@ Ne JAMAIS : deviner un SKU ou une variante · arrondir ou recalculer un prix · 
 
 Un champ douteux reste VIDE et sa raison va dans les notes internes. **Vide vaut mieux qu'incertain** : une valeur absente se voit, une valeur fausse ne se voit pas.`;
 
-type MessageChat = { role: "user" | "assistant"; content: string };
+// ── Contrat de message ───────────────────────────────────────────────────────
+// `content` est soit une chaîne (cas historique, strictement inchangé), soit une
+// LISTE BLANCHE de blocs. Trois formes, et trois seulement :
+//   { type: "text",     text: string }
+//   { type: "image",    source: { type: "file", file_id: string } }
+//   { type: "document", source: { type: "file", file_id: string } }
+//
+// ⚠️ `source.type: "base64"` est REFUSÉ, et c'est tout le dispositif. Un PDF de
+// 2 Mo en base64 pèse ~2,7 millions de caractères — 45 fois le budget
+// d'historique — et serait renvoyé À CHAQUE TOUR. Le rendre impossible à faire
+// entrer vaut mieux que s'imposer de ne pas le faire : le piège cesse d'être une
+// question de discipline. Les fichiers passent par /api/claude/upload, donc par
+// une référence d'une trentaine d'octets.
+
+type BlocTexte = { type: "text"; text: string };
+type BlocFichier = {
+  type: "image" | "document";
+  source: { type: "file"; file_id: string };
+};
+type BlocMessage = BlocTexte | BlocFichier;
+type ContenuMessage = string | BlocMessage[];
+type MessageChat = { role: "user" | "assistant"; content: ContenuMessage };
 
 // ── Troncature d'historique ──────────────────────────────────────────────────
 // La fenêtre de contexte est gérée ici : on garde les derniers messages dans un
@@ -217,12 +243,28 @@ type MessageChat = { role: "user" | "assistant"; content: string };
 // utilisateur (exigence de l'API).
 const BUDGET_CARACTERES = 60_000;
 const MAX_MESSAGES = 40;
+// Un message ne porte pas un nombre arbitraire de blocs : une commande magasin
+// tient en quelques pages, et vingt références dans un seul tour signaleraient
+// une boucle côté front plutôt qu'un usage réel.
+const MAX_BLOCS = 20;
+
+// Seul le TEXTE compte dans le budget. Un bloc fichier ne pèse qu'un `file_id`,
+// quelle que soit la taille du document derrière — c'est exactement ce qui rend
+// la reprise d'un scan tenable sur plusieurs tours.
+function poidsTexte(contenu: ContenuMessage): number {
+  if (typeof contenu === "string") return contenu.length;
+  let total = 0;
+  for (const bloc of contenu) {
+    if (bloc.type === "text") total += bloc.text.length;
+  }
+  return total;
+}
 
 function tronquerHistorique(messages: MessageChat[]): MessageChat[] {
   const gardes: MessageChat[] = [];
   let total = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
-    total += messages[i].content.length;
+    total += poidsTexte(messages[i].content);
     if (gardes.length > 0 && (total > BUDGET_CARACTERES || gardes.length >= MAX_MESSAGES)) {
       break;
     }
@@ -234,12 +276,45 @@ function tronquerHistorique(messages: MessageChat[]): MessageChat[] {
   return gardes;
 }
 
+// ⚠️ La validation contrôle la FORME d'un bloc, pas ses clés en trop. Relayer
+// l'objet reçu tel quel rouvrirait le piège en grand : un
+// `{ type: "image", source: { type: "file", file_id: "…", data: "<2,7 Mo>" } }`
+// passe estBlocValide, pèse ZÉRO au budget (poidsTexte ne compte que le texte),
+// et repart à chaque tour. On ne relaie donc jamais — on RECONSTRUIT, champ par
+// champ. C'est ça qui ferme la branche, pas la liste blanche seule.
+function projeter(contenu: ContenuMessage): ContenuMessage {
+  if (typeof contenu === "string") return contenu;
+  return contenu.map((b) =>
+    b.type === "text"
+      ? { type: "text" as const, text: b.text }
+      : { type: b.type, source: { type: "file" as const, file_id: b.source.file_id } }
+  );
+}
+
+function estBlocValide(b: unknown): b is BlocMessage {
+  if (typeof b !== "object" || b === null) return false;
+  const o = b as Record<string, unknown>;
+  if (o.type === "text") return typeof o.text === "string";
+  if (o.type === "image" || o.type === "document") {
+    if (typeof o.source !== "object" || o.source === null) return false;
+    const src = o.source as Record<string, unknown>;
+    // Le point de refus : SEULE la référence Files API passe.
+    return src.type === "file" && typeof src.file_id === "string" && src.file_id.length > 0;
+  }
+  return false;
+}
+
+function estContenuValide(c: unknown): c is ContenuMessage {
+  if (typeof c === "string") return true;
+  return Array.isArray(c) && c.length > 0 && c.length <= MAX_BLOCS && c.every(estBlocValide);
+}
+
 function estMessageValide(m: unknown): m is MessageChat {
   if (typeof m !== "object" || m === null) return false;
   const objet = m as Record<string, unknown>;
   return (
     (objet.role === "user" || objet.role === "assistant") &&
-    typeof objet.content === "string"
+    estContenuValide(objet.content)
   );
 }
 
@@ -269,9 +344,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Format attendu : { messages: [...] }" }, { status: 400 });
   }
 
-  const messages = tronquerHistorique(bruts);
+  const messages = tronquerHistorique(bruts).map((m) => ({
+    role: m.role,
+    content: projeter(m.content),
+  }));
   if (messages.length === 0) {
     return NextResponse.json({ error: "Aucun message utilisateur" }, { status: 400 });
+  }
+
+  const corps_envoye = JSON.stringify({
+    model: MODELE,
+    max_tokens: 4096,
+    stream: true,
+    // cache_control : amortit le prompt système (règles Jardi) entre requêtes.
+    system: [
+      {
+        type: "text",
+        text: REGLES_JARDI,
+        cache_control: { type: "ephemeral" },
+      },
+      { type: "text", text: blocDate() },
+    ],
+    messages,
+    mcp_servers: [
+      {
+        type: "url",
+        url: URL_MCP,
+        name: "jardi-mail",
+        authorization_token: jetonMcp,
+      },
+    ],
+    tools: [{ type: "mcp_toolset", mcp_server_name: "jardi-mail" }],
+  });
+
+  // Dernier filet. Le budget d'historique et la projection des blocs devraient
+  // suffire ; si une requête arrive quand même à ce volume, c'est qu'un chemin
+  // nous a échappé — mieux vaut le voir dans les journaux qu'à la facture.
+  if (corps_envoye.length > 1_000_000) {
+    console.error("Chat Claude : corps anormalement volumineux", corps_envoye.length);
+    return NextResponse.json(
+      { error: "Conversation trop lourde. Ouvre une nouvelle conversation." },
+      { status: 413 }
+    );
   }
 
   const reponse = await fetch("https://api.anthropic.com/v1/messages", {
@@ -280,32 +394,11 @@ export async function POST(req: NextRequest) {
       "content-type": "application/json",
       "x-api-key": cleApi,
       "anthropic-version": "2023-06-01",
-      "anthropic-beta": "mcp-client-2025-11-20",
+      // AJOUT, jamais substitution : le connecteur MCP a besoin du sien, la
+      // Files API du sien. Remplacer l'un par l'autre couperait les outils.
+      "anthropic-beta": "mcp-client-2025-11-20,files-api-2025-04-14",
     },
-    body: JSON.stringify({
-      model: MODELE,
-      max_tokens: 4096,
-      stream: true,
-      // cache_control : amortit le prompt système (règles Jardi) entre requêtes.
-      system: [
-        {
-          type: "text",
-          text: REGLES_JARDI,
-          cache_control: { type: "ephemeral" },
-        },
-        { type: "text", text: blocDate() },
-      ],
-      messages,
-      mcp_servers: [
-        {
-          type: "url",
-          url: URL_MCP,
-          name: "jardi-mail",
-          authorization_token: jetonMcp,
-        },
-      ],
-      tools: [{ type: "mcp_toolset", mcp_server_name: "jardi-mail" }],
-    }),
+    body: corps_envoye,
   });
 
   if (!reponse.ok || !reponse.body) {

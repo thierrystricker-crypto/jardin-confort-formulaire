@@ -15,16 +15,42 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
+// Les fichiers soumis au chat vivent ici en MÉTADONNÉES seulement (~150 octets
+// par fichier) : `content` reste une string, comme avant. Aucun contenu de
+// fichier, aucun base64, ne transite ni ne se stocke — la copie de travail est
+// chez Anthropic (TTL 24 h) et l'archive dans le bucket `annexes`.
+// `messages` est un jsonb : aucune migration.
+type FichierJoint = {
+  file_id: string;
+  media_type: string;
+  nom: string;
+  uploadedAt: string;
+  piece_id?: string;
+};
+
 type MessageStocke = {
   role: "user" | "assistant";
   content: string;
   outils?: string[];
+  fichiers?: FichierJoint[];
 };
 
 function sessionValide(req: NextRequest): boolean {
   const secret = process.env.DASHBOARD_SESSION_SECRET;
   const cookie = req.cookies.get("jc_acces")?.value;
   return Boolean(secret && cookie === secret);
+}
+
+function estFichierValide(f: unknown): f is FichierJoint {
+  if (typeof f !== "object" || f === null) return false;
+  const o = f as Record<string, unknown>;
+  return (
+    typeof o.file_id === "string" &&
+    typeof o.media_type === "string" &&
+    typeof o.nom === "string" &&
+    typeof o.uploadedAt === "string" &&
+    (o.piece_id === undefined || typeof o.piece_id === "string")
+  );
 }
 
 function estMessageValide(m: unknown): m is MessageStocke {
@@ -35,6 +61,15 @@ function estMessageValide(m: unknown): m is MessageStocke {
   if (
     o.outils !== undefined &&
     (!Array.isArray(o.outils) || !o.outils.every((x) => typeof x === "string"))
+  ) {
+    return false;
+  }
+  // ⚠️ Sans cette branche, un message porteur de fichiers ferait répondre 400 —
+  // et le front avale l'échec en silence (« sauvegarde silencieuse ») : la
+  // conversation cesserait d'être enregistrée sans qu'aucun signal n'apparaisse.
+  if (
+    o.fichiers !== undefined &&
+    (!Array.isArray(o.fichiers) || !o.fichiers.every(estFichierValide))
   ) {
     return false;
   }
@@ -118,8 +153,12 @@ export async function POST(req: NextRequest) {
 
   // Nouvelle conversation — titre dérivé du premier message utilisateur
   const premier = (messages as MessageStocke[]).find((m) => m.role === "user");
+  // Une photo prise au comptoir part souvent SANS texte : sans ce repli, toutes
+  // ces conversations s'intituleraient « Nouvelle conversation ».
+  const replFichier = premier?.fichiers?.length ? `📎 ${premier.fichiers[0].nom}` : "";
   const titre =
     (premier?.content ?? "").replace(/\s+/g, " ").trim().slice(0, 60) ||
+    replFichier.slice(0, 60) ||
     "Nouvelle conversation";
 
   const { data, error } = await supabaseAdmin

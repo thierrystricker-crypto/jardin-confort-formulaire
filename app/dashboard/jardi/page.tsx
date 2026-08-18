@@ -15,8 +15,32 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type React from "react";
 
-type MessageChat = { role: "user" | "assistant"; content: string };
-type MessageAffiche = MessageChat & { outils?: string[]; erreur?: boolean };
+// Un fichier soumis au chat vit en MÉTADONNÉE, jamais en contenu : `content`
+// reste une string partout — dans le state React comme dans
+// `claude_conversations`. Les blocs de message ne sont fabriqués qu'à l'envoi
+// (construireContenu). Aucun octet de fichier ne transite par le state : ce qui
+// circule, c'est un `file_id` d'une trentaine de caractères.
+type FichierJoint = {
+  file_id: string;
+  media_type: string;
+  nom: string;
+  taille?: number;
+  uploadedAt: string;
+  piece_id?: string;
+};
+
+type BlocEnvoye =
+  | { type: "text"; text: string }
+  | { type: "image" | "document"; source: { type: "file"; file_id: string } };
+
+type MessageChat = { role: "user" | "assistant"; content: string | BlocEnvoye[] };
+type MessageAffiche = {
+  role: "user" | "assistant";
+  content: string;
+  outils?: string[];
+  erreur?: boolean;
+  fichiers?: FichierJoint[];
+};
 
 type ConvResume = {
   id: string;
@@ -109,7 +133,12 @@ function renduInline(texte: string): React.ReactNode[] {
       );
       if (suite) noeuds.push(suite);
     } else if (m[4] !== undefined) {
-      noeuds.push(<strong key={`g${cle++}`}>{m[4]}</strong>);
+      // Récursif, et non `{m[4]}` : l'alternance de MOTIF_INLINE retient ce qui
+      // commence le plus à GAUCHE, donc `**[texte](url)**` fait matcher le gras
+      // en premier — il avale le lien, qui s'affiche en markdown brut. Vu en
+      // production le 18.08 sur un lien Thunderbird. Pas de récursion infinie :
+      // `[^*\n]+` interdit déjà un `*` à l'intérieur du gras.
+      noeuds.push(<strong key={`g${cle++}`}>{renduInline(m[4])}</strong>);
     } else if (m[5] !== undefined) {
       noeuds.push(
         <code
@@ -253,6 +282,113 @@ function texteBrut(texte: string): string {
   return sortie.join("\n");
 }
 
+// ── Pièces jointes : préparation côté navigateur ────────────────────────────
+// Le redimensionnement n'est PAS une optimisation, c'est une CONDITION DE
+// FONCTIONNEMENT : une fonction Vercel refuse un corps au-delà de ~4,5 Mo — les
+// 32 Mo annoncés par l'API Anthropic sont donc hors d'atteinte — et une photo de
+// téléphone les dépasse vite. Côté long plafonné à 2000 px : très loin des
+// 8000 px de l'API, et largement lisible pour du manuscrit sur A4 (les scans du
+// pilote font ~750 Ko).
+const COTE_MAX = 2000;
+const QUALITE_JPEG = 0.85;
+const TAILLE_MAX = 4 * 1024 * 1024;
+const MAX_FICHIERS = 8;
+// Durée de vie de la copie chez Anthropic (/api/cron/claude-files-purge).
+// Au-delà, le `file_id` peut être mort : on l'exclut de l'historique envoyé
+// plutôt que de laisser l'API répondre en erreur au milieu d'une conversation.
+const TTL_FICHIER_MS = 24 * 3600 * 1000;
+
+function estPerime(uploadedAt: string): boolean {
+  const t = Date.parse(uploadedAt);
+  return !Number.isFinite(t) || Date.now() - t > TTL_FICHIER_MS;
+}
+
+function nomEnJpg(nom: string): string {
+  // L'extension change, le reste du nom NON : il porte le n° manuscrit
+  // (« Scan_Copie_Commande_53864_… »), qui sert à retrouver le scan en base.
+  return nom.replace(/\.[^.]+$/, "") + ".jpg";
+}
+
+async function preparerFichier(f: File): Promise<File> {
+  if (f.type === "application/pdf") {
+    if (f.size > TAILLE_MAX) {
+      throw new Error("PDF trop lourd (max 4 Mo) — photographie les pages une à une");
+    }
+    return f;
+  }
+  if (!f.type.startsWith("image/")) {
+    throw new Error("format non accepté (photo ou PDF)");
+  }
+
+  let bitmap: ImageBitmap;
+  try {
+    // `from-image` applique l'orientation EXIF. Sans elle, une photo prise en
+    // portrait arrive couchée — et la lecture du manuscrit s'en ressent.
+    const options = { imageOrientation: "from-image" } as unknown as ImageBitmapOptions;
+    bitmap = await createImageBitmap(f, options);
+  } catch {
+    // Un HEIC d'iPhone atterrit ici hors de Safari : le navigateur ne sait pas
+    // le décoder. iOS convertit normalement en JPEG à la prise de vue.
+    throw new Error("image illisible par le navigateur — réessaie en JPEG");
+  }
+
+  const facteur = Math.min(1, COTE_MAX / Math.max(bitmap.width, bitmap.height));
+  const largeur = Math.max(1, Math.round(bitmap.width * facteur));
+  const hauteur = Math.max(1, Math.round(bitmap.height * facteur));
+  const toile = document.createElement("canvas");
+  toile.width = largeur;
+  toile.height = hauteur;
+  const ctx = toile.getContext("2d");
+  if (!ctx) {
+    bitmap.close();
+    throw new Error("redimensionnement impossible");
+  }
+  // Sans fond blanc, `toBlob("image/jpeg")` aplatit la transparence en NOIR :
+  // une capture PNG à fond transparent arrive en écriture noire sur noir, et la
+  // lecture échoue sans qu'aucune erreur ne l'explique.
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, largeur, hauteur);
+  ctx.drawImage(bitmap, 0, 0, largeur, hauteur);
+  bitmap.close();
+
+  const blob = await new Promise<Blob | null>((resoudre) =>
+    toile.toBlob(resoudre, "image/jpeg", QUALITE_JPEG)
+  );
+  if (!blob) throw new Error("redimensionnement impossible");
+  if (blob.size > TAILLE_MAX) throw new Error("image trop lourde même après réduction");
+  return new File([blob], nomEnJpg(f.name || "photo"), { type: "image/jpeg" });
+}
+
+// Les blocs ne sont fabriqués QU'ICI, au moment de l'envoi — jamais stockés.
+// Le document ou l'image passe AVANT le texte : c'est l'ordre attendu quand la
+// consigne porte sur la pièce jointe.
+const EPOQUE = "1970-01-01T00:00:00.000Z";
+
+function construireContenu(texte: string, fichiers?: FichierJoint[]): string | BlocEnvoye[] {
+  const joints = fichiers ?? [];
+  const vivants = joints.filter((f) => !estPerime(f.uploadedAt));
+  if (vivants.length === 0) {
+    // ⚠️ Un message qui ne portait QUE des fichiers — la photo prise au comptoir,
+    // sans un mot — deviendrait VIDE une fois la copie de travail purgée, et
+    // serait retiré de l'historique. La réponse de Jardi, elle, resterait : deux
+    // messages `assistant` d'affilée, et un modèle qui commente un document dont
+    // l'énoncé a disparu. On garde le tour, avec ce qui reste vrai.
+    if (!texte && joints.length > 0) {
+      const noms = joints.map((f) => f.nom).join(", ");
+      return joints.length > 1
+        ? `[${joints.length} scans joints : ${noms} — copie de travail expirée, plus lisibles]`
+        : `[Scan joint : ${noms} — copie de travail expirée, plus lisible]`;
+    }
+    return texte;
+  }
+  const blocs: BlocEnvoye[] = vivants.map((f) => ({
+    type: f.media_type === "application/pdf" ? ("document" as const) : ("image" as const),
+    source: { type: "file" as const, file_id: f.file_id },
+  }));
+  if (texte) blocs.push({ type: "text", text: texte });
+  return blocs;
+}
+
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString("fr-CH", {
     day: "2-digit",
@@ -300,6 +436,12 @@ export default function PageChatClaude() {
   const [copieIndex, setCopieIndex] = useState<number | null>(null);
   const [dicteeDispo, setDicteeDispo] = useState(false);
   const [dicteeActive, setDicteeActive] = useState(false);
+  const [fichiers, setFichiers] = useState<FichierJoint[]>([]);
+  const [enUpload, setEnUpload] = useState(false);
+  const [erreurFichier, setErreurFichier] = useState<string | null>(null);
+  const [survolDepot, setSurvolDepot] = useState(false);
+  const inputFichierRef = useRef<HTMLInputElement>(null);
+  const verrouUploadRef = useRef(false);
   const vocalRef = useRef<ReconnaissanceVocale | null>(null);
   const baseSaisieRef = useRef("");
   const finRef = useRef<HTMLDivElement>(null);
@@ -331,6 +473,17 @@ export default function PageChatClaude() {
     }
     // Dictée : bouton affiché seulement si le navigateur la supporte (Chrome/Edge)
     setDicteeDispo(constructeurVocal() !== null);
+    // ⚠️ Un fichier lâché À CÔTÉ de la zone de dépôt fait naviguer le navigateur
+    // VERS ce fichier : la page du chat disparaît, avec la saisie en cours et la
+    // conversation elle-même si aucune réponse n'a encore été sauvegardée. Le
+    // vendeur vise naturellement le fil de messages, pas la bande du bas.
+    const bloquerDepot = (e: DragEvent) => e.preventDefault();
+    window.addEventListener("dragover", bloquerDepot);
+    window.addEventListener("drop", bloquerDepot);
+    return () => {
+      window.removeEventListener("dragover", bloquerDepot);
+      window.removeEventListener("drop", bloquerDepot);
+    };
   }, [chargerListe]);
 
   // ── Dictée vocale ──────────────────────────────────────────────────────────
@@ -367,7 +520,9 @@ export default function PageChatClaude() {
   useEffect(() => {
     if (enCours) return;
     const utiles = messages.filter(
-      (m) => !m.erreur && (m.content || (m.outils && m.outils.length))
+      (m) =>
+        !m.erreur &&
+        (m.content || (m.outils && m.outils.length) || (m.fichiers && m.fichiers.length))
     );
     if (utiles.length < 2 || utiles[utiles.length - 1].role !== "assistant") return;
     (async () => {
@@ -380,10 +535,11 @@ export default function PageChatClaude() {
           body: JSON.stringify({
             id: convIdRef.current ?? undefined,
             auteur,
-            messages: utiles.map(({ role, content, outils }) => ({
+            messages: utiles.map(({ role, content, outils, fichiers: pj }) => ({
               role,
               content,
               ...(outils && outils.length ? { outils } : {}),
+              ...(pj && pj.length ? { fichiers: pj } : {}),
             })),
           }),
         });
@@ -407,6 +563,8 @@ export default function PageChatClaude() {
       const json = (await res.json()) as { conversation?: { messages?: MessageAffiche[] } };
       setMessages(Array.isArray(json.conversation?.messages) ? json.conversation.messages : []);
       setConvId(id);
+      setFichiers([]);
+      setErreurFichier(null);
       if (typeof window !== "undefined" && window.innerWidth < 700) setPanneauOuvert(false);
     } catch {
       /* ignoré */
@@ -416,6 +574,8 @@ export default function PageChatClaude() {
   const nouvelleConversation = () => {
     if (enCours) return;
     setMessages([]);
+    setFichiers([]);
+    setErreurFichier(null);
     setConvId(null);
     zoneRef.current?.focus();
   };
@@ -440,24 +600,101 @@ export default function PageChatClaude() {
     );
   };
 
+  // ── Pièces jointes ─────────────────────────────────────────────────────────
+  // UN fichier par appel : le plafond de corps de Vercel (~4,5 Mo) porte sur la
+  // requête entière, pas sur le fichier. Chaque échec est nommé — un envoi qui
+  // disparaît sans un mot est pire qu'un refus.
+  const ajouterFichiers = async (liste: FileList | File[]) => {
+    // Garde en ref, pas en state : deux glissers rapprochés passeraient tous
+    // deux `if (enUpload)` avant le rendu suivant, liraient le même
+    // `fichiers.length`, et dépasseraient MAX_FICHIERS.
+    if (enCours || verrouUploadRef.current) return;
+    verrouUploadRef.current = true;
+    setSurvolDepot(false);
+    setErreurFichier(null);
+    setEnUpload(true);
+    const ajoutes: FichierJoint[] = [];
+    const soucis: string[] = [];
+    for (const brut of Array.from(liste)) {
+      if (fichiers.length + ajoutes.length >= MAX_FICHIERS) {
+        soucis.push(`maximum ${MAX_FICHIERS} fichiers par message`);
+        break;
+      }
+      try {
+        const pret = await preparerFichier(brut);
+        const corps = new FormData();
+        corps.append("file", pret);
+        const res = await fetch("/api/claude/upload", { method: "POST", body: corps });
+        const json = (await res.json().catch(() => null)) as {
+          piece_id?: string;
+          file_id?: string;
+          media_type?: string;
+          nom?: string;
+          taille?: number;
+          error?: string;
+        } | null;
+        if (!res.ok || !json?.file_id) {
+          soucis.push(`${brut.name} : ${json?.error ?? "envoi refusé"}`);
+          continue;
+        }
+        ajoutes.push({
+          file_id: json.file_id,
+          media_type: json.media_type ?? pret.type,
+          nom: json.nom ?? pret.name,
+          taille: json.taille,
+          uploadedAt: new Date().toISOString(),
+          piece_id: json.piece_id,
+        });
+      } catch (err) {
+        soucis.push(`${brut.name} : ${(err as Error).message}`);
+      }
+    }
+    // Plafond réappliqué dans la forme fonctionnelle : `p` est la valeur à jour.
+    if (ajoutes.length) setFichiers((p) => [...p, ...ajoutes].slice(0, MAX_FICHIERS));
+    if (soucis.length) setErreurFichier(soucis.join(" · "));
+    setEnUpload(false);
+    verrouUploadRef.current = false;
+  };
+
+  const surDepot = (e: React.DragEvent) => {
+    e.preventDefault();
+    setSurvolDepot(false);
+    if (enCours || verrouUploadRef.current) return;
+    if (e.dataTransfer?.files?.length) ajouterFichiers(e.dataTransfer.files);
+  };
+
+  // Un message peut n'être QUE des fichiers : la photo prise au comptoir, sans
+  // un mot. C'est l'usage principal du chantier.
+  const peutEnvoyer =
+    !enCours && !enUpload && (Boolean(saisie.trim()) || fichiers.length > 0);
+
   const envoyer = async (texteForce?: string) => {
     const texte = (texteForce ?? saisie).trim();
-    if (!texte || enCours) return;
+    // Un exemple cliqué n'emporte pas les pièces jointes en attente.
+    const joints = texteForce ? [] : fichiers;
+    if ((!texte && joints.length === 0) || enCours || enUpload) return;
     if (dicteeActive) vocalRef.current?.stop();
     setSaisie("");
+    if (!texteForce) setFichiers([]);
+    setErreurFichier(null);
 
     // Historique envoyé au serveur (les erreurs affichées n'en font pas partie ;
-    // la troncature fine est faite côté serveur).
+    // la troncature fine est faite côté serveur). Les blocs ne sont construits
+    // QU'ICI : `content` reste une string partout ailleurs — dans le state comme
+    // dans `claude_conversations`.
     const historique: MessageChat[] = [
       ...messages
-        .filter((m) => !m.erreur && m.content)
-        .map(({ role, content }) => ({ role, content })),
-      { role: "user", content: texte },
+        .filter((m) => !m.erreur)
+        .map((m) => ({ role: m.role, content: construireContenu(m.content, m.fichiers) }))
+        // Un message dont le texte est vide ET dont tous les fichiers ont été
+        // purgés n'a plus de contenu : l'API refuse un message vide.
+        .filter((m) => m.content.length > 0),
+      { role: "user", content: construireContenu(texte, joints) },
     ];
 
     setMessages((prec) => [
       ...prec,
-      { role: "user", content: texte },
+      { role: "user", content: texte, ...(joints.length ? { fichiers: joints } : {}) },
       { role: "assistant", content: "", outils: [] },
     ]);
     setEnCours(true);
@@ -473,6 +710,22 @@ export default function PageChatClaude() {
         let detail = "Erreur inattendue. Réessaie dans un instant.";
         if (reponse.status === 401) {
           detail = "Session expirée — recharge la page pour saisir le code d'accès.";
+        } else if (reponse.status === 502 && historique.some((m) => typeof m.content !== "string")) {
+          // Un `file_id` mort fait répondre 400 en amont, et le message qui le
+          // porte repartirait IDENTIQUE à chaque tentative : la conversation
+          // serait bloquée jusqu'à « Nouvelle conversation ». On périme les
+          // pièces jointes plutôt que de laisser boucler — le tour survit grâce
+          // au texte de substitution de construireContenu().
+          setMessages((prec) =>
+            prec.map((m) =>
+              m.fichiers?.length
+                ? { ...m, fichiers: m.fichiers.map((f) => ({ ...f, uploadedAt: EPOQUE })) }
+                : m
+            )
+          );
+          detail =
+            "Les scans joints ont peut-être expiré (24 h) : ils ont été retirés " +
+            "de la conversation. Réessaie, ou joins-les à nouveau.";
         } else {
           try {
             const corps = (await reponse.json()) as { error?: string };
@@ -775,7 +1028,43 @@ export default function PageChatClaude() {
                       🔧 {m.outils.join(" · ")}
                     </div>
                   )}
-                  {m.role === "assistant" ? renduContenu(m.content) : m.content}
+                  {m.role === "assistant" ? (
+                    renduContenu(m.content)
+                  ) : (
+                    <>
+                      {m.fichiers && m.fichiers.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: m.content ? 6 : 0 }}>
+                          {m.fichiers.map((f) => {
+                            const perime = estPerime(f.uploadedAt);
+                            return (
+                              <span
+                                key={f.file_id}
+                                title={perime ? "Scan effacé des serveurs Anthropic (24 h) — l'archive interne est conservée" : f.nom}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 5,
+                                  maxWidth: 220,
+                                  padding: "3px 7px",
+                                  fontSize: 12,
+                                  borderRadius: 7,
+                                  background: "rgba(255,255,255,0.14)",
+                                  color: perime ? "rgba(255,255,255,0.55)" : "#fff",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {perime ? "🚫" : f.media_type === "application/pdf" ? "📄" : "🖼"} {f.nom}
+                                {perime ? " (purgé)" : ""}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {m.content}
+                    </>
+                  )}
                   {m.role === "assistant" &&
                     enCours &&
                     i === messages.length - 1 &&
@@ -830,7 +1119,67 @@ export default function PageChatClaude() {
           </div>
 
           {/* Zone de saisie */}
-          <div style={{ flexShrink: 0, display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <div
+            style={{ flexShrink: 0 }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!enCours && !enUpload) setSurvolDepot(true);
+            }}
+            onDragLeave={() => setSurvolDepot(false)}
+            onDrop={surDepot}
+          >
+            {(fichiers.length > 0 || enUpload || erreurFichier) && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8, alignItems: "center" }}>
+                {fichiers.map((f) => (
+                  <span
+                    key={f.file_id}
+                    title={f.taille ? `${f.nom} · ${Math.round(f.taille / 1024)} Ko` : f.nom}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      maxWidth: 240,
+                      padding: "4px 8px",
+                      fontSize: 12,
+                      color: "#e4e4e7",
+                      background: "#2a2d31",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 8,
+                    }}
+                  >
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {f.media_type === "application/pdf" ? "📄" : "🖼"} {f.nom}
+                    </span>
+                    <button
+                      onClick={() => setFichiers((p) => p.filter((x) => x.file_id !== f.file_id))}
+                      disabled={enCours}
+                      title="Retirer"
+                      style={{ background: "none", border: "none", color: "#71717a", cursor: "pointer", fontSize: 12, padding: 0 }}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+                {enUpload && (
+                  <span style={{ fontSize: 12, color: "#a1a1aa", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <PointsAnimes /> préparation…
+                  </span>
+                )}
+                {erreurFichier && (
+                  <span style={{ fontSize: 12, color: "#fda4af" }}>⚠️ {erreurFichier}</span>
+                )}
+              </div>
+            )}
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "flex-end",
+              outline: survolDepot ? "2px dashed rgba(56,189,248,0.6)" : "none",
+              outlineOffset: 4,
+              borderRadius: 10,
+            }}
+          >
             <textarea
               ref={zoneRef}
               value={saisie}
@@ -852,6 +1201,36 @@ export default function PageChatClaude() {
                 color: "#ededed",
               }}
             />
+            <input
+              ref={inputFichierRef}
+              type="file"
+              accept="image/*,application/pdf"
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => {
+                if (e.target.files) ajouterFichiers(e.target.files);
+                // Remis a zero : sans ca, redeposer le MEME fichier ne declenche
+                // aucun onChange et le vendeur croit que son clic n'a pas pris.
+                e.target.value = "";
+              }}
+            />
+            <button
+              onClick={() => inputFichierRef.current?.click()}
+              disabled={enCours || enUpload}
+              title="Joindre une photo ou un PDF (scan de commande magasin)"
+              style={{
+                padding: "10px 12px",
+                fontSize: 16,
+                lineHeight: 1,
+                background: "#2a2d31",
+                color: enCours || enUpload ? "#52525b" : "#a1a1aa",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 10,
+                cursor: enCours || enUpload ? "default" : "pointer",
+              }}
+            >
+              📎
+            </button>
             {dicteeDispo && (
               <button
                 onClick={basculerDictee}
@@ -875,20 +1254,21 @@ export default function PageChatClaude() {
             )}
             <button
               onClick={() => envoyer()}
-              disabled={enCours || !saisie.trim()}
+              disabled={!peutEnvoyer}
               style={{
                 padding: "10px 18px",
                 fontSize: 14,
                 fontWeight: 600,
                 color: "#fff",
-                background: enCours || !saisie.trim() ? "#3f4348" : "#2B8AD1",
+                background: peutEnvoyer ? "#2B8AD1" : "#3f4348",
                 border: "none",
                 borderRadius: 10,
-                cursor: enCours || !saisie.trim() ? "default" : "pointer",
+                cursor: peutEnvoyer ? "pointer" : "default",
               }}
             >
               {enCours ? "…" : "Envoyer"}
             </button>
+            </div>
           </div>
         </div>
       </div>
