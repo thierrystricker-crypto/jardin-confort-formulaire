@@ -133,7 +133,12 @@ function renduInline(texte: string): React.ReactNode[] {
       );
       if (suite) noeuds.push(suite);
     } else if (m[4] !== undefined) {
-      noeuds.push(<strong key={`g${cle++}`}>{m[4]}</strong>);
+      // Récursif, et non `{m[4]}` : l'alternance de MOTIF_INLINE retient ce qui
+      // commence le plus à GAUCHE, donc `**[texte](url)**` fait matcher le gras
+      // en premier — il avale le lien, qui s'affiche en markdown brut. Vu en
+      // production le 18.08 sur un lien Thunderbird. Pas de récursion infinie :
+      // `[^*\n]+` interdit déjà un `*` à l'intérieur du gras.
+      noeuds.push(<strong key={`g${cle++}`}>{renduInline(m[4])}</strong>);
     } else if (m[5] !== undefined) {
       noeuds.push(
         <code
