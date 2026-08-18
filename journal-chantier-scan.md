@@ -196,6 +196,38 @@ rabais **6'828** (`lineDiscount` **et** `lineDiscountPerUnit` écrits tous deux)
 **Reiman**, `client_prenom` **André**, `1802 Corseaux`, `commercial` **Alejandro**,
 `client_email` **vide** (décision D7 respectée).
 
+### Purge et mobile — vérifiés le 18.08 au matin
+
+**La purge a été vue faire son travail, puis partir seule.** Premier essai
+déclenché à la main : une ligne antidatée à −25 h, `claude_file_id` repassé à
+**NULL**, et l'URL publique sert toujours le PDF.
+
+Second essai, **sans que personne le pousse** : une ligne antidatée avant le
+passage de `40 * * * *`, le cron parti seul à **22:40** en production. État
+constaté à 22:47 :
+
+| Âge | `claude_file_id` |
+|---|---|
+| 25,4 h | **NULL** ← purgée par le cron |
+| 20,0 h | intacte |
+| 19,0 h | intacte |
+| 12,0 h | intacte |
+
+Et le PDF de la ligne purgée **s'ouvre toujours** par son URL publique.
+
+C'est le second volet qui compte : une purge qui efface tout aurait passé pour un
+succès sur la seule ligne antidatée. **Les trois lignes de moins de 24 h prouvent
+qu'elle discrimine** — elle efface ce qu'elle doit, et seulement ce qu'elle doit.
+*(Doc `04` §9 : un mécanisme qui n'a pas rougi ne vaut rien — et un mécanisme
+qu'on a vu partir seul vaut mieux qu'un mécanisme qu'on a poussé.)*
+
+**L'upload depuis un téléphone fonctionne.** Une photo déposée depuis mobile
+arrive en `image/jpeg`, **579 Ko**, chemin `chat/<uuid>.jpg`, nom d'origine
+conservé en base. Une photo de téléphone pèse couramment 3 à 8 Mo : le
+redimensionnement navigateur n'est pas cosmétique, c'est lui qui fait tenir
+l'envoi sous le plafond de corps de ~4,5 Mo de Vercel. Un HEIC d'iPhone serait
+ré-encodé au passage par le même chemin.
+
 ### Le transport, mesuré
 
 Onglet Réseau, trois tours consécutifs sur un PDF de **766 Ko** :
@@ -340,16 +372,10 @@ qu'une règle de prompt.** Quand une décision métier est prise dans un dépôt
 
 ## 10. Reste ouvert
 
-- ⬜ **La purge n'a jamais été vue tourner.** `CRON_SECRET` est marqué
-  **Sensitive** dans Vercel — bonne posture, mais sa valeur n'est plus lisible,
-  donc pas de déclenchement manuel par `curl`. Une ligne a été **antidatée à
-  −25 h** et attend : au premier `:40` suivant le déploiement en production, le
-  cron partira seul. À vérifier alors : le log Vercel (`1 supprime(s)`),
-  `claude_file_id` passé à **NULL**, et **le PDF toujours servi** par son URL
-  publique. C'est ce couple qui prouve la promesse du lot.
-- ⬜ **Test mobile** : l'upload depuis un téléphone (appareil photo, EXIF, HEIC)
-  n'a pas été exercé — seul le PDF depuis l'ordinateur l'a été. C'est pourtant
-  l'usage principal du chantier.
+- ✅ **Purge, upload mobile et passage automatique du cron : tous vérifiés le
+  18.08** — voir §5. `CRON_SECRET` est marqué **Sensitive** dans Vercel, donc sa
+  valeur n'est pas relisible : bonne posture, à ne pas défaire pour se simplifier
+  un test.
 - ⬜ **DRA-808 et DRA-809 à supprimer** : déchets de test (doc `04` §9).
 - 🟡 **Le rattachement au DRA reste hors périmètre.** Toutes les lignes du Lot 2
   ont `entity_id NULL`, **définitivement** — c'est l'étape 5 du doc `14`.
