@@ -350,6 +350,15 @@ export async function POST(
     //   5. SEULEMENT MAINTENANT : décrémentation Shopify
 
     after(async () => {
+      // ─── ÉTAPE 0 : Suivi des annexes DEV → CMD (chantier annexes) ───
+      // AVANT les PDF : la recopie ne coûte que trois requêtes Supabase et ne
+      // touche ni au stock ni aux PDF, mais la chaîne PDF → stock peut durer
+      // 30-60 s — placée après, la carte Annexes de la commande paraît vide à
+      // celui qui ouvre le dossier tout de suite (constaté au smoke test).
+      // recopierAnnexes ne lève jamais : rien ici ne peut retarder ou casser
+      // la suite.
+      await recopierAnnexes("offre", slug, "commande", cmdSlug)
+
       // ─── ÉTAPE 1 : PDFs sans dépendance stock (en parallèle) ───
       await Promise.allSettled([
         fetch(`${BASE_URL}/api/offres/${slug}/pdf`, { method: "POST", headers: EN_TETE_INTERNE })
@@ -381,13 +390,6 @@ export async function POST(
       } catch (err) {
         console.error("[after] Stock movements err:", err)
       }
-
-      // ─── ÉTAPE 4 : Suivi des annexes DEV → CMD (chantier annexes) ───
-      // Placée en DERNIER, hors du chemin critique PDFs → stock : recopie des
-      // lignes pieces_jointes de l'offre sur la commande (mêmes fichiers,
-      // jamais dupliqués). recopierAnnexes ne lève jamais — une recopie
-      // manquée ne peut rien casser d'autre qu'elle-même.
-      await recopierAnnexes("offre", slug, "commande", cmdSlug)
     })
 
     // ⚠️ PDF COMMANDE : généré AVANT que after() lance la décrémentation Shopify
