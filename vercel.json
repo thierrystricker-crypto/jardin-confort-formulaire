@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/shopify-sync",
       "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/claude-files-purge",
+      "schedule": "40 * * * *"
     }
   ]
 }
