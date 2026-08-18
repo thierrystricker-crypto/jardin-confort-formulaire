@@ -324,6 +324,21 @@ function construireContenu(texte: string, fichiers?: FichierJoint[]): string | B
     type: f.media_type === "application/pdf" ? ("document" as const) : ("image" as const),
     source: { type: "file" as const, file_id: f.file_id },
   }));
+  // Le modèle ne voit que les file_id (copies de travail Anthropic) : sans
+  // cette ligne, il ne peut pas NOMMER les archives à rattacher au brouillon.
+  // Les piece_id sont les lignes pieces_jointes, attendus par
+  // offre_draft_creer (pieces_jointes_ids) et posés sur le DRA par
+  // POST /api/drafts (chantier annexes, étape 5).
+  const archives = vivants.filter((f) => f.piece_id);
+  if (archives.length) {
+    blocs.push({
+      type: "text",
+      text:
+        "[Archives des fichiers joints — à la création d'un brouillon, passer ces identifiants à offre_draft_creer via pieces_jointes_ids : " +
+        archives.map((f) => `${f.nom} → ${f.piece_id}`).join(" ; ") +
+        "]",
+    });
+  }
   if (texte) blocs.push({ type: "text", text: texte });
   return blocs;
 }

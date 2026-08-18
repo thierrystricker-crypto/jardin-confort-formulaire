@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification, createNotificationUnique } from "@/lib/notifications";
+import { recopierAnnexes } from "@/lib/annexes-suivi";
 
 // Webhook Make : l'URL ET la cle viennent UNIQUEMENT de l'environnement.
 // Plus aucun repli en dur. La cle a vecu ici en clair : elle est donc dans
@@ -380,6 +381,13 @@ export async function POST(
       } catch (err) {
         console.error("[after] Stock movements err:", err)
       }
+
+      // ─── ÉTAPE 4 : Suivi des annexes DEV → CMD (chantier annexes) ───
+      // Placée en DERNIER, hors du chemin critique PDFs → stock : recopie des
+      // lignes pieces_jointes de l'offre sur la commande (mêmes fichiers,
+      // jamais dupliqués). recopierAnnexes ne lève jamais — une recopie
+      // manquée ne peut rien casser d'autre qu'elle-même.
+      await recopierAnnexes("offre", slug, "commande", cmdSlug)
     })
 
     // ⚠️ PDF COMMANDE : généré AVANT que after() lance la décrémentation Shopify
