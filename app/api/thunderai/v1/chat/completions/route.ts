@@ -62,7 +62,16 @@ const CONTEXTE_THUNDERAI =
   "liens (lien Thunderbird, pièces jointes) restent valables pour les mails " +
   "provenant des outils. " +
   "4) Il n'y a pas d'envoi de fichiers ici : si un document est nécessaire, " +
-  "orienter vers le chat du dashboard.";
+  "orienter vers le chat du dashboard. " +
+  "5) Destinataire et civilité : la réponse s'adresse à l'EXPÉDITEUR du message " +
+  "le plus récent du fil — s'il est indiqué en tête du message fourni " +
+  "(« Expéditeur », « De »), c'est LUI qui fait foi, pas le contenu du fil. Un " +
+  "fil cité peut contenir plusieurs personnes : ne jamais mélanger les " +
+  "interlocuteurs. Ne JAMAIS deviner « Monsieur » ou « Madame » (ni d'après le " +
+  "prénom, ni d'après une signature du fil) : n'utiliser une civilité que si " +
+  "elle est certaine — le client la donne lui-même, ou une réponse précédente " +
+  "du fil s'adresse à CETTE personne avec cette civilité. Au moindre doute, " +
+  "saluer sans civilité : « Bonjour, » ou « Bonjour Prénom Nom, ».";
 
 // ── Contrat de message (format OpenAI, chaînes uniquement) ──────────────────
 type MessageOpenAI = { role: "user" | "assistant"; content: string };
