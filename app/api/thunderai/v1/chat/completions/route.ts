@@ -31,6 +31,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { REGLES_JARDI, blocDate } from "../../../../claude/chat/regles-jardi";
+import { supabaseAdmin } from "@/lib/supabase";
 
 // Les enchaînements d'outils dépassent facilement les 10 s par défaut.
 export const maxDuration = 300;
@@ -110,6 +111,28 @@ function extraireMessages(bruts: unknown): MessageOpenAI[] {
     }
   }
   return messages;
+}
+
+// ── Historique (filet anti « clic trop rapide », 19.08.2026) ────────────────
+// ThunderAI ne conserve rien : fenêtre fermée = réponse perdue. Chaque échange
+// complet est donc enregistré dans `thunderai_echanges` (projet Supabase
+// jardin-confort-database, RLS sans policy — service key uniquement) et
+// consultable sur /dashboard/thunderai. Un échec d'enregistrement ne doit
+// JAMAIS casser la réponse : tout est avalé et loggé.
+async function enregistrerEchange(question: string, reponse: string): Promise<void> {
+  if (!reponse.trim()) return;
+  try {
+    await supabaseAdmin.from("thunderai_echanges").insert({
+      question: question.slice(0, 20_000),
+      reponse: reponse.slice(0, 100_000),
+    });
+    // Purge au fil de l'eau : à leur volume, un DELETE indexé par insertion
+    // coûte moins cher qu'un cron dédié.
+    const limite = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
+    await supabaseAdmin.from("thunderai_echanges").delete().lt("cree_le", limite);
+  } catch (erreur) {
+    console.error("Façade ThunderAI : échec d'enregistrement de l'historique", erreur);
+  }
 }
 
 // ── Format OpenAI sortant ────────────────────────────────────────────────────
@@ -204,6 +227,10 @@ export async function POST(req: NextRequest) {
   const id = "chatcmpl-" + crypto.randomUUID();
   const created = Math.floor(Date.now() / 1000);
 
+  // Pour l'historique : la question est le dernier message utilisateur.
+  const question =
+    [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+
   // Un chunk au format OpenAI, déjà sérialisé en ligne SSE.
   function ligneChunk(
     delta: Record<string, string>,
@@ -275,6 +302,7 @@ export async function POST(req: NextRequest) {
     await pomper((t) => {
       texte += t;
     });
+    await enregistrerEchange(question, texte);
     return NextResponse.json({
       id,
       object: "chat.completion",
@@ -295,11 +323,17 @@ export async function POST(req: NextRequest) {
       try {
         // Premier chunk : le rôle, comme le fait l'API OpenAI.
         controleur.enqueue(encodeur.encode(ligneChunk({ role: "assistant" }, null)));
+        let texteComplet = "";
         await pomper((t) => {
+          texteComplet += t;
           controleur.enqueue(encodeur.encode(ligneChunk({ content: t }, null)));
         });
         controleur.enqueue(encodeur.encode(ligneChunk({}, "stop")));
         controleur.enqueue(encodeur.encode("data: [DONE]\n\n"));
+        // Après le [DONE] : ThunderAI a déjà tout reçu, l'enregistrement ne
+        // retarde pas l'affichage. On attend quand même — sur Vercel, la
+        // fonction peut être gelée dès que le flux se ferme.
+        await enregistrerEchange(question, texteComplet);
       } catch (erreur) {
         console.error("Façade ThunderAI : flux interrompu", erreur);
       } finally {
