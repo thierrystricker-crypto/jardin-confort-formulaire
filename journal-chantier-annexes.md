@@ -5,7 +5,7 @@
 **Dépôt lié** : `jardi-mail-mcp` (connecteur MCP, même base Supabase)
 **Production** : `https://offres.jardin-confort.ch`
 **Cadrage de référence** : doc projet `14` ; démarrage consigné au doc `09`
-**Dernière mise à jour** : 18.08.2026
+**Dernière mise à jour** : 19.08.2026 — chantier CLOS (blocs 1 et 2 + correctifs)
 
 > ⚠️ Fichier versionné (dépôt privé GitHub). **Aucun secret ici.**
 >
@@ -108,20 +108,139 @@ publique, donc protégé par défaut ; le cookie est revérifié dans les routes
   d'une carte dans une page de 1700 lignes tient en 1 import + 1 bloc JSX,
   aucun state partagé.
 
-## 6. Reste ouvert (le chantier continue)
+## 6. Bloc 2 — suivi DRA → DEV → CMD et rattachement des scans (18-19.08)
 
-- 🟡 **Étape 4 — le suivi DRA → DEV → CMD, demandé explicitement par Thierry
-  le 18.08** : en l'état, une annexe reste sur le document où elle a été
-  déposée ; la transformation crée un nouveau slug. Décision doc `14` §7 :
-  **recopie des lignes** (fichiers jamais dupliqués, même `chemin`). Piste
-  d'implémentation : côté routes (`/api/drafts/[slug]/transformer` et
-  `/api/offres/[slug]/valider`, recopie non bloquante), **sans toucher la RPC**
-  `transformer_draft`.
-- 🟡 **Étape 5 — rattachement des scans du chat** : paramètre `piece_jointe_id`
-  sur `offre_draft_creer` (connecteur), posé par `POST /api/drafts`. Sans elle,
-  les scans restent `entity_id NULL` et invisibles de la carte.
-- ⬜ Les 5 lignes de test du chat (dont 4 doublons du scan 53858) et
-  DRA-808/809 : déchets de test à nettoyer (déjà noté au journal scan §10).
+Formulaire : branche `feat/annexes-suivi-et-rattachement` (`b65af16` + `2c8a73c`),
+PR #42. Connecteur : branche `feat/draft-pieces-jointes` (`58b7730`), PR #4.
+
+### Étape 4 — la recopie (demandée explicitement par Thierry le 18.08)
+
+- `lib/annexes-suivi.ts` *(neuf)* : `recopierAnnexes()` — **ne lève jamais**,
+  idempotente par `content_hash`, recopie catégorie/nom/libellé/`chemin`
+  (jamais les fichiers), **conserve le `created_at` d'origine** (la date de
+  dépôt fait partie de la preuve), ne recopie **jamais** `claude_file_id`
+  (il pilote la purge : il n'existe que sur la ligne d'origine) ni les pièces
+  supprimées.
+- `transformer` : recopie DRA → DEV après la RPC, non bloquante,
+  `annexesCopiees` dans la réponse. **La RPC `transformer_draft` n'est pas
+  touchée.**
+- `valider` : recopie DEV → CMD dans `after()`. D'abord placée en DERNIER
+  (prudence maximale sur la route publique) — **prise en défaut au smoke test
+  en moins d'une minute** : la chaîne PDF → stock dure 30-60 s et la carte de
+  la commande paraissait vide. Déplacée en **tête** du bloc (3 requêtes
+  Supabase, aucune interaction avec l'ordre PDF → stock).
+- Vérifié en base sur DRA-815 → DEV-2026-724 → CMD-80908 : trois lignes, même
+  `chemin` `draft/<uuid>.jpg`, `created_at` identique. Et la dédup 409 refuse
+  un redépôt du même contenu sur un document qui le porte par recopie — y
+  compris quand le fichier redéposé est le PNG d'origine ré-encodé JPEG par le
+  navigateur : **le hash travaille sur le contenu préparé, pas sur le nom**.
+
+### Étape 5 — le rattachement
+
+- **`pieces_jointes_ids` en TABLEAU (max 8), pas l'id unique du doc `14` §6** :
+  un scan multi-pages = plusieurs fichiers, le flux pousse à photographier
+  page par page. Écart assumé et documenté.
+- Le modèle ne voit que les `file_id` (copies de travail Anthropic) : il ne
+  peut pas nommer une archive qu'on ne lui donne pas. `construireContenu`
+  (page jardi) ajoute donc sous les fichiers un bloc texte
+  « [Archives des fichiers joints — …nom → piece_id…] ».
+- Connecteur : paramètre `pieces_jointes_ids` (zod `.uuid()`, describe
+  détaillé), transmis tel quel à `POST /api/drafts` — aucun accès fichier
+  côté MCP. `annexes_rattachees` / `annexes_non_rattachees` dans la sortie.
+- `POST /api/drafts` : ne rattache qu'une ligne **encore orpheline**
+  (`entity_id IS NULL`) et non supprimée — on ne vole jamais une pièce d'un
+  autre dossier. Non bloquant, ids invalides ignorés.
+- Vérifié en prod : DRA-817 porte son scan épinglé (`scan_commande`), qui
+  suivra vers l'offre et la commande par l'étape 4.
+
+## 7. ⚠️ La panne « Réponse vide », et son vrai diagnostic (nuit du 18 au 19)
+
+**Symptôme** : après les merges, « prépare le brouillon » + scan → bulle rouge
+« Réponse vide — réessaie », deux fois de suite ; les autres usages du chat
+(stats, mails, lecture de scan) fonctionnaient.
+
+**Premier faux coupable — le déploiement.** La PR #42 du formulaire n'était
+**pas mergée** : Vercel montrait le bloc 2 en Preview seulement, la prod était
+restée au journal (#41). Une PR ouverte a toute l'apparence du travail livré —
+**vérifier la colonne Production de Vercel, pas le sentiment.** Après le vrai
+merge, la panne persistait pourtant, par intermittence.
+
+**La mesure plutôt que l'hypothèse** : la requête exacte a été rejouée hors
+interface (fetch instrumenté dans le navigateur, flux SSE capturé). Verdict :
+`stop_reason: "max_tokens"` — la route chat plafonnait à **4096 tokens de
+sortie**, et **la réflexion étendue du modèle ET toute la boucle d'outils MCP
+comptent dans la sortie**. Le régime §12 (réflexion + 10-15 appels d'outils)
+crève ce plafond ; quand il tombe avant le premier bloc de texte, l'écran ne
+montre rien. Selon la longueur de réflexion, ça passait ou cassait — d'où le
+troisième essai réussi (DRA-817) sans qu'on ait rien changé.
+
+**Correctifs** (`fix/chat-max-tokens-et-reflexion`, formulaire) :
+`max_tokens` 4096 → **16384** ; les blocs `thinking` — jusqu'ici **ignorés par
+la page** — affichent une puce « analyse » (l'écran n'est plus mort pendant la
+réflexion) ; un `stop_reason: max_tokens` s'annonce en clair (« Réponse
+interrompue — limite de longueur atteinte ») au lieu de passer pour une
+réponse complète ou vide.
+
+## 8. Correctifs nés des tests du 19.08
+
+- **Les numéros d'articles manuscrits disparaissaient des lignes à la volée**
+  (54063 : 4165, 4104, 4212, 4160, 5613 jugés ambigus au catalogue — 6 à 10
+  variantes chacun — et perdus, alors que c'est ce dont le vendeur a besoin
+  pour choisir la variante). Correctif **déterministe côté connecteur** : le
+  serveur ajoute « — art. XXXX » au titre de toute ligne à la volée dont la
+  référence cherchée est compacte et absente de la désignation. Le numéro
+  s'imprime, comme sur tout document commercial.
+- **« Michel » manuscrit rendu « Michel Gex » — un conseiller qui n'existe
+  pas, complété par le modèle** (le motif D5, appliqué à un nom). Enjeu réel :
+  le commercial se propage jusqu'au **modèle d'e-mail** préparé sur la fiche —
+  un nom inventé serait parti en signature d'un mail client. Correctif
+  déterministe côté connecteur : `rapprocherVendeur()` sur la **liste fermée**
+  des six conseillers (nom complet, initiales, jetons/préfixes, repli prénom
+  avec note « VÉRIFIER ») ; inconnu ou ambigu → valeur brute posée + signal
+  « VENDEUR NON RECONNU », le menu déroulant forcera un choix manuel.
+  ⚠️ **La liste vit désormais en DEUX endroits** : le menu déroulant de
+  `DraftFormulaire.tsx` (~l. 1695, la source de vérité) et `CONSEILLERS` dans
+  le connecteur. Un changement d'équipe se reporte aux deux.
+  16 cas testés unitairement avant livraison (prénoms, noms, initiales,
+  accents, ambigus, inconnus).
+
+## 9. Pièges nouveaux, à ne pas rejouer
+
+- **Une PR ouverte n'est pas un déploiement.** Le badge « Pull requests (1) »
+  de GitHub et la colonne Environment de Vercel font foi, pas la mémoire
+  d'avoir « mergé ».
+- **La réflexion étendue et la boucle MCP comptent dans `max_tokens`.** Un
+  plafond taillé pour du texte meurt en silence sur un flux à outils.
+- **Les blocs `thinking` existent dans le flux** : une UI qui ne les connaît
+  pas montre un écran mort — et un utilisateur qui réessaie.
+- **L'écriture de classes regex `\uXXXX` a posé les caractères littéraux DEUX
+  fois dans la même session** (contrôles `\u0000-\u001F`, diacritiques
+  `\u0300-\u036f`). Vérifier `file` + `grep` après chaque écriture de regex.
+- **Une réécriture python en mode texte avale les CRLF** (universal newlines) :
+  relire les fins de ligne après toute retouche programmatique, juste avant de
+  livrer.
+- **Un correctif « prudemment placé en dernier » peut créer le bug visible**
+  (recopie après la chaîne PDF : 60 s de carte vide). La prudence se mesure
+  aux dépendances réelles, pas à la position dans le fichier.
+
+## 10. Reste ouvert — fin de chantier
+
+- ⬜ **Déchets de test à supprimer** : DRA-808, 809, 816, 817 ;
+  DRA-815 → DEV-2026-724 → CMD-80908 (chaîne du smoke bloc 2) ; les annexes
+  d'essai encore sur CMD-80666 ; et **6 scans orphelins** en base (re-uploads
+  des 54063/54057 pendant les pannes) + les 4 doublons du 53858 (journal scan
+  §10). SQL Editor, tracé.
+- ⬜ **Pas de dédup à l'upload côté chat** (`/api/claude/upload`) : chaque
+  re-soumission crée une ligne. Le motif 409 de `/api/pieces-jointes` est
+  prêt à être transposé — petite tranche à part.
+- ⬜ **Purge des orphelines : toujours PAS implémentée, à dessein.** L'étape 5
+  existe désormais, mais les orphelins historiques et tout scan d'une
+  conversation sans brouillon seraient détruits. À recadrer avec exclusion de
+  `categorie = 'scan_commande'` — ne pas implémenter sans en reparler.
 - ⬜ Vignettes : bandeau, pas de grille — à réviser si l'usage réel dépasse
   ~10 pièces par dossier.
-- ⬜ Purge des orphelines : voir §3, ne pas implémenter sans en reparler.
+- ⬜ Backlog séparé (doc `14` §3) : sauvegarde du Storage Supabase, qu'aucun
+  backup de base ne couvre.
+- 📔 Docs projet à mettre à jour en fin de chantier : `05` (backlog), `09`
+  (avancement), `14` (statut : livré), `04` (pièges §9 ci-dessus),
+  `08` (paramètre `pieces_jointes_ids` du connecteur).
