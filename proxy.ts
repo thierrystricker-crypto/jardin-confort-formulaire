@@ -42,6 +42,13 @@ function estRoutePublique(pathname: string, method: string): boolean {
   // $CRON_SECRET` que Vercel joint automatiquement, et refuse tout le reste.
   if (pathname.startsWith("/api/cron/")) return true;
 
+  // Façade ThunderAI (19.08.2026) : appelée par l'extension ThunderAI depuis
+  // les postes, sans navigateur donc sans cookie. Pas ouverte pour autant —
+  // chaque route sous /api/thunderai/ vérifie elle-même l'en-tête
+  // `Authorization: Bearer $THUNDERAI_SECRET` (secret dédié aux postes,
+  // révocable indépendamment) et refuse tout le reste.
+  if (pathname.startsWith("/api/thunderai/")) return true;
+
   // API lues par les pages clients (lecture seule)
   if (pathname === "/api/revisions" && method === "GET") return true;
   if (pathname === "/api/corrections" && method === "GET") return true;
