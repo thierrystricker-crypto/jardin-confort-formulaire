@@ -354,7 +354,12 @@ export async function POST(req: NextRequest) {
 
   const corps_envoye = JSON.stringify({
     model: MODELE,
-    max_tokens: 4096,
+    // ⚠️ La réflexion étendue et TOUTE la boucle d'outils MCP comptent dans la
+    // sortie. À 4096, le régime reprise de document (§12 : réflexion + 10-15
+    // appels d'outils) tombait sur `stop_reason: "max_tokens"` — parfois avant
+    // le premier mot visible, d'où des « Réponse vide » intermittents
+    // (constaté au flux le 19.08, chantier annexes).
+    max_tokens: 16384,
     stream: true,
     // cache_control : amortit le prompt système (règles Jardi) entre requêtes.
     system: [

@@ -53,7 +53,7 @@ type ConvResume = {
 type EvenementStream = {
   type: string;
   content_block?: { type?: string; name?: string };
-  delta?: { type?: string; text?: string };
+  delta?: { type?: string; text?: string; stop_reason?: string };
   error?: { message?: string };
 };
 
@@ -701,6 +701,16 @@ export default function PageChatClaude() {
           if (evt.content_block.type === "mcp_tool_use" && evt.content_block.name) {
             const nom = evt.content_block.name;
             majDernier((m) => ({ ...m, outils: [...(m.outils ?? []), nom] }));
+          } else if (evt.content_block.type === "thinking") {
+            // La réflexion étendue est invisible sinon : l'écran reste vide
+            // pendant des dizaines de secondes, et un flux qui meurt là
+            // s'affichait « Réponse vide ». La puce « analyse » rend la phase
+            // visible — sans exposer le contenu de la réflexion.
+            majDernier((m) =>
+              m.outils?.includes("analyse")
+                ? m
+                : { ...m, outils: [...(m.outils ?? []), "analyse"] }
+            );
           } else if (evt.content_block.type === "text") {
             // Nouveau bloc de texte après un appel d'outil → saut de paragraphe.
             majDernier((m) =>
@@ -714,6 +724,19 @@ export default function PageChatClaude() {
         ) {
           const morceau = evt.delta.text;
           majDernier((m) => ({ ...m, content: m.content + morceau }));
+        } else if (
+          evt.type === "message_delta" &&
+          evt.delta?.stop_reason === "max_tokens"
+        ) {
+          // Le plafond de sortie est tombé en plein vol : le dire, plutôt que
+          // de laisser une réponse tronquée passer pour complète — ou pour
+          // vide si rien n'avait encore été émis.
+          majDernier((m) => ({
+            ...m,
+            content:
+              (m.content ? m.content + "\n\n" : "") +
+              "⚠️ Réponse interrompue — limite de longueur atteinte. Écris « continue » pour reprendre.",
+          }));
         } else if (evt.type === "error") {
           const msg = evt.error?.message ?? "Erreur du service Jardi.";
           majDernier((m) => ({
