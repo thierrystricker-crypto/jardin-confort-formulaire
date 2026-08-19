@@ -30,7 +30,7 @@
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { REGLES_JARDI, blocDate } from "../../../claude/chat/regles-jardi";
+import { REGLES_JARDI, blocDate } from "../../../../claude/chat/regles-jardi";
 
 // Les enchaînements d'outils dépassent facilement les 10 s par défaut.
 export const maxDuration = 300;
