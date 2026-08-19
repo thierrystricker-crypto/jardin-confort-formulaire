@@ -407,6 +407,18 @@ export default function PageChatClaude() {
     finRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
+  // ── Zone de saisie auto-extensible (20.08.2026) ────────────────────────────
+  // La hauteur suit le contenu, plafonnée à 240 px (~10 lignes) puis défilement
+  // interne. Effet sur `saisie` plutôt que onChange : la dictée vocale et le
+  // vidage après envoi passent aussi par setSaisie, la hauteur suit donc dans
+  // tous les cas (y compris le retour à 2 lignes après envoi).
+  useEffect(() => {
+    const zone = zoneRef.current;
+    if (!zone) return;
+    zone.style.height = "auto";
+    zone.style.height = Math.min(zone.scrollHeight, 240) + "px";
+  }, [saisie]);
+
   // ── Historique ─────────────────────────────────────────────────────────────
   const chargerListe = useCallback(async () => {
     try {
@@ -1168,6 +1180,10 @@ export default function PageChatClaude() {
               style={{
                 flex: 1,
                 resize: "none",
+                // Hauteur pilotée par l'effet auto-extensible (plafond 240 px,
+                // puis défilement interne).
+                maxHeight: 240,
+                overflowY: "auto",
                 padding: "10px 12px",
                 fontSize: 14,
                 fontFamily: "inherit",
