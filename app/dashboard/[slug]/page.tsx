@@ -25,6 +25,7 @@ type OffreRecord = {
   tva_montant: number; total_ttc: number; nb_articles: number
   remarques: string|null; notes_internes: string|null; note_commerciale: string|null
   date_abandon: string|null
+  statut_livraison: "ouverte"|"livree"|null; date_livraison: string|null
   data: Record<string,unknown>; created_at: string; updated_at: string|null
 }
 
@@ -179,6 +180,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [commandeIssue, setCommandeIssue] = useState<{slug: string; numero: string}|null>(null)
   const [probabilite,setProbabilite]=useState<string>("neutre")
   const [probSaving,setProbSaving]=useState(false)
+  const [livraisonSaving,setLivraisonSaving]=useState(false)
   const [converting,setConverting]=useState(false)
   const [correctionDrawerOpen, setCorrectionDrawerOpen] = useState(false)
 
@@ -523,6 +525,30 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
       }
     } catch(e) {
       alert("Erreur réseau: " + (e as Error).message)
+    }
+  }
+
+  // Livraison des commandes magasin — l'équivalent du fulfilled Shopify
+  // [20.08.2026]. Le trigger Supabase répercute le statut sur le suivi des
+  // délais fournisseurs (boutique 'magasin').
+  async function changeLivraison(next: "ouverte"|"livree") {
+    if(!offre) return
+    setLivraisonSaving(true)
+    try {
+      const res=await fetch(`/api/offres/${slug}/livraison`,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({statut_livraison:next})
+      })
+      const json = await res.json().catch(()=>({}))
+      if(res.ok) {
+        setOffre(prev=>prev?{...prev,statut_livraison:next,date_livraison:json.date_livraison??null}:prev)
+      } else {
+        alert("Erreur: " + (json.error || res.status))
+      }
+    } catch(e) {
+      alert("Erreur réseau: " + (e as Error).message)
+    } finally {
+      setLivraisonSaving(false)
     }
   }
 
@@ -1079,7 +1105,38 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                           {probabilite==="forte"?"🟢 Forte":probabilite==="moyenne"?"🟡 Moyenne":"🔴 Faible"}
                         </span>
                       )}
+                      {/* Livraison (commandes magasin) — équivalent du fulfilled Shopify */}
+                      {offre.type_document==="Commande"&&(
+                        offre.statut_livraison==="livree" ? (
+                          <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-300">
+                            🚚 Livrée{offre.date_livraison?` le ${fmtDate(offre.date_livraison)}`:""}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300">
+                            ⏳ À livrer
+                          </span>
+                        )
+                      )}
                     </div>
+                    {/* Bouton livraison : un clic une fois la marchandise remise/livrée.
+                        Le suivi des délais fournisseurs suit automatiquement (trigger). */}
+                    {offre.type_document==="Commande"&&(
+                      <div className="mt-2">
+                        {offre.statut_livraison==="livree" ? (
+                          <button type="button" onClick={()=>changeLivraison("ouverte")} disabled={livraisonSaving}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-50"
+                            title="Rouvrir la commande (clic par erreur) — la ligne revient dans le suivi des délais">
+                            ↩ Rouvrir la livraison
+                          </button>
+                        ) : (
+                          <button type="button" onClick={()=>changeLivraison("livree")} disabled={livraisonSaving}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/25 hover:border-emerald-400/60 disabled:opacity-50"
+                            title="Marquer la commande comme livrée au client — équivalent du fulfilled Shopify. La ligne sort du suivi des délais fournisseurs.">
+                            {livraisonSaving?"…":"✅ Marquer livrée"}
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {/* Badge inverse : sur une offre convertie, lien vers la commande générée */}
                     {commandeIssue && (
                       <div className="mt-2">
