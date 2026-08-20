@@ -373,11 +373,38 @@ function PointsAnimes() {
   );
 }
 
-const EXEMPLES = [
-  "mails Fermob de cette semaine",
-  "dernier mail Dedon",
-  "cherche le client Rochat à Pully",
-  "stats de ventes de juillet",
+// Modèles de départ (20.08.2026) : un clic REMPLIT la zone de saisie avec un
+// début de demande à compléter (curseur en fin de texte), il n'envoie rien —
+// contrairement aux anciens exemples qui partaient tels quels. L'utilisateur
+// complète puis Entrée.
+const MODELES: { titre: string; texte: string }[] = [
+  {
+    titre: "🔎 Articles — prix, stock, liens",
+    texte:
+      "Recherche les articles suivants et indique pour chacun le prix, le stock et le lien article :\n- ",
+  },
+  {
+    titre: "👤 Retrouver un client",
+    texte:
+      "Retrouve le client suivant dans la base (nom, société, ville, e-mail ou téléphone) et montre son dossier : ",
+  },
+  {
+    titre: "📝 Brouillon d'offre",
+    texte:
+      "Crée un brouillon d'offre avec ces indications (client, articles + quantités, rabais et services éventuels) :\n",
+  },
+  {
+    titre: "📬 Mails d'un expéditeur",
+    texte: "Montre les mails de cette semaine de : ",
+  },
+  {
+    titre: "✉️ Dernier mail",
+    texte: "dernier mail ",
+  },
+  {
+    titre: "📊 Stats de ventes",
+    texte: "Stats de ventes de ",
+  },
 ];
 
 export default function PageChatClaude() {
@@ -961,27 +988,57 @@ export default function PageChatClaude() {
           <div style={{ flex: 1, overflowY: "auto", padding: "16px 4px" }}>
             {messages.length === 0 && (
               <div style={{ color: "#a1a1aa", fontSize: 14, marginTop: 24 }}>
-                <p style={{ marginBottom: 12 }}>Quelques exemples pour démarrer :</p>
-                {EXEMPLES.map((ex) => (
-                  <button
-                    key={ex}
-                    onClick={() => envoyer(ex)}
-                    style={{
-                      display: "block",
-                      marginBottom: 8,
-                      padding: "8px 12px",
-                      fontSize: 13,
-                      color: "#7dd3fc",
-                      background: "rgba(56,189,248,0.08)",
-                      border: "1px solid rgba(56,189,248,0.25)",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                  >
-                    {ex}
-                  </button>
-                ))}
+                <p style={{ marginBottom: 12 }}>
+                  Modèles pour démarrer — un clic remplit la zone de saisie, tu
+                  complètes, puis Entrée :
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {MODELES.map((m) => (
+                    <button
+                      key={m.titre}
+                      onClick={() => {
+                        setSaisie(m.texte);
+                        // Après le re-rendu : focus + curseur en fin de modèle,
+                        // prêt à compléter.
+                        setTimeout(() => {
+                          const z = zoneRef.current;
+                          if (z) {
+                            z.focus();
+                            z.setSelectionRange(z.value.length, z.value.length);
+                          }
+                        }, 0);
+                      }}
+                      style={{
+                        flex: "1 1 260px",
+                        maxWidth: 360,
+                        padding: "10px 12px",
+                        fontSize: 13,
+                        color: "#7dd3fc",
+                        background: "rgba(56,189,248,0.08)",
+                        border: "1px solid rgba(56,189,248,0.25)",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+                        {m.titre}
+                      </span>
+                      <span
+                        style={{
+                          display: "block",
+                          color: "#a1a1aa",
+                          fontSize: 12,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {m.texte.split("\n")[0]}…
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
