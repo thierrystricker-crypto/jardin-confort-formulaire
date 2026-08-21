@@ -24,6 +24,7 @@ type Ligne = {
   alarme_echeance_proche: boolean; alarme_retard: boolean; alarme_delai_manquant: boolean
   date_expedition_reelle: string|null; preuve_depart: string|null
   arrivage_estime_reel: string|null; etape: string
+  client_societe: string|null; commande_url: string|null
 }
 type Orpheline = {
   id: string; marque: string|null; type_document: string|null
@@ -50,6 +51,7 @@ type Evenement = {
   source: string; confiance: number; statut_validation: string; portee: string
   articles_concernes: string[]|null; commentaire: string|null; saisi_par: string|null
   created_at: string; pj_url: string|null; pj_nom: string|null
+  ref_fournisseur: string|null
 }
 
 const JOURS = ["di","lu","ma","me","je","ve","sa"];
@@ -67,8 +69,9 @@ function fmtDateCourte(iso: string|null|undefined) {
   const mm = String(d.getUTCMonth()+1).padStart(2,"0");
   return `${JOURS[d.getUTCDay()]} ${dd}.${mm}.${String(d.getUTCFullYear()).slice(2)}`;
 }
+// Convention équipe : NOM Prénom (la société en premier quand elle existe).
 function nomClient(l: {client_nom: string|null; client_prenom: string|null}) {
-  return [l.client_prenom, l.client_nom].filter(Boolean).join(" ") || "—";
+  return [l.client_nom, l.client_prenom].filter(Boolean).join(" ") || "—";
 }
 // Départ fournisseur BRUT — format Fermob proposé « S35 · dès le je 03.09.26 »
 function departBrut(l: Ligne) {
@@ -307,7 +310,14 @@ export default function DelaisPage() {
                       {l.numero_commande}
                       {l.ref_fournisseur && <div className="text-xs text-zinc-500">{l.ref_fournisseur}</div>}
                     </td>
-                    <td className="px-4 py-3">{nomClient(l)}</td>
+                    <td className="px-4 py-3">
+                      {l.client_societe ? (
+                        <>
+                          <div>{l.client_societe}</div>
+                          <div className="text-xs text-zinc-400">{nomClient(l)}</div>
+                        </>
+                      ) : nomClient(l)}
+                    </td>
                     <td className="px-4 py-3 text-zinc-300">{l.marque}</td>
                     <td className="px-4 py-3 text-zinc-400">{fmtDate(l.date_commande)}</td>
                     <td className="px-4 py-3">
@@ -334,6 +344,11 @@ export default function DelaisPage() {
                       {l.nb_a_valider > 0 && <span className="ml-1 inline-flex items-center rounded-full bg-sky-500/15 px-2 py-0.5 text-xs text-sky-300">{l.nb_a_valider} à valider</span>}
                     </td>
                     <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                      {l.commande_url && (
+                        <a href={l.commande_url} target="_blank" rel="noopener noreferrer"
+                          title="Ouvrir la commande client dans un nouvel onglet"
+                          className="mr-1.5 inline-flex items-center rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs text-sky-300 hover:bg-sky-500/20">↗ Commande</a>
+                      )}
                       {receptionPour === l.id ? (
                         <span className="inline-flex items-center gap-1.5">
                           <input type="date" value={dateReception} onChange={e => setDateReception(e.target.value)}
@@ -364,8 +379,12 @@ export default function DelaisPage() {
                             {evts && evts.length > 0 && (
                               <div className="space-y-2">
                                 {evts.map((e, i) => {
+                                  // L'écart se mesure au sein de la MÊME commande fournisseur
+                                  // (même n° V/BTB) : deux commandes fournisseur séparées pour
+                                  // la même commande client ne sont pas des reports entre elles.
                                   const prec = evts.slice(0, i).reverse().find(p =>
-                                    ["confirmation_fournisseur","report"].includes(p.type) && p.date_depart && p.statut_validation === "valide");
+                                    ["confirmation_fournisseur","report"].includes(p.type) && p.date_depart && p.statut_validation === "valide"
+                                    && (!e.ref_fournisseur || !p.ref_fournisseur || p.ref_fournisseur === e.ref_fournisseur));
                                   const ecart = (e.type === "report" && e.date_depart && prec?.date_depart)
                                     ? Math.round((new Date(e.date_depart).getTime() - new Date(prec.date_depart).getTime()) / 86400000)
                                     : null;
@@ -373,6 +392,7 @@ export default function DelaisPage() {
                                   <div key={e.id} className={`flex flex-wrap items-center gap-2 rounded-xl border border-white/5 px-3 py-2 text-sm ${e.statut_validation === "rejete" ? "opacity-40 line-through" : ""}`}>
                                     <span className="text-xs text-zinc-500 w-20">{fmtDate(e.created_at)}</span>
                                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${e.type === "report" ? "bg-rose-500/15 text-rose-300" : e.type === "reception" ? "bg-emerald-500/25 text-emerald-200" : ["facture","expedition"].includes(e.type) ? "bg-emerald-500/15 text-emerald-300" : "bg-sky-500/15 text-sky-300"}`}>{TYPES_EVT[e.type] || e.type}</span>
+                                    {e.ref_fournisseur && <span className="text-xs text-zinc-500" title="N° de commande fournisseur — une commande client peut en porter plusieurs">{e.ref_fournisseur}</span>}
                                     <span className="font-medium">{e.semaine_annoncee ? `${e.semaine_annoncee.replace(/^\d{4}-/, "")} · ` : ""}{fmtDateCourte(e.date_depart)}</span>
                                     {ecart !== null && <span className={`text-xs ${ecart > 0 ? "text-rose-300" : "text-emerald-300"}`}>({ecart > 0 ? "+" : ""}{ecart} j vs promesse précédente)</span>}
                                     {e.portee === "article" && e.articles_concernes && <span className="text-xs text-amber-300" title={e.articles_concernes.join(", ")}>· {e.articles_concernes.length} article(s)</span>}
@@ -445,7 +465,7 @@ export default function DelaisPage() {
               {aValider.map(e => (
                 <div key={e.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/5 px-3 py-2 text-sm">
                   <span className="font-medium">{e.suivi_commandes?.numero_commande}</span>
-                  <span className="text-zinc-400">{[e.suivi_commandes?.client_prenom, e.suivi_commandes?.client_nom].filter(Boolean).join(" ")}</span>
+                  <span className="text-zinc-400">{[e.suivi_commandes?.client_nom, e.suivi_commandes?.client_prenom].filter(Boolean).join(" ")}</span>
                   <span className="text-zinc-500">· {e.suivi_commandes?.marque}</span>
                   <span className="inline-flex items-center rounded-full bg-sky-500/15 px-2 py-0.5 text-xs text-sky-300">{TYPES_EVT[e.type] || e.type}</span>
                   <span>{e.semaine_annoncee ? `${e.semaine_annoncee.replace(/^\d{4}-/, "")} · ` : ""}{fmtDateCourte(e.date_depart)}</span>

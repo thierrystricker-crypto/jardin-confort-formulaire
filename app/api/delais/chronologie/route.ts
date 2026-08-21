@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from("delais_evenements")
-      .select("id, type, date_depart, semaine_annoncee, source, confiance, statut_validation, portee, articles_concernes, commentaire, saisi_par, mail_uid_unique, pj_chemin, created_at")
+      .select("id, type, date_depart, semaine_annoncee, source, confiance, statut_validation, portee, articles_concernes, commentaire, saisi_par, mail_uid_unique, pj_chemin, ref_fournisseur, created_at")
       .eq("commande_id", commandeId)
       .order("created_at", { ascending: true })
 

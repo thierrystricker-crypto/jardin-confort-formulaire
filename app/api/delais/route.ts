@@ -38,8 +38,37 @@ export async function GET() {
     const erreur = lignes.error || orphelines.error || calibrage.error || fournisseurs.error || aValider.error
     if (erreur) return NextResponse.json({ error: erreur.message }, { status: 500 })
 
+    // Enrichissement : lien vers la commande client (page dashboard pour le
+    // magasin, admin Shopify pour le web) + société du client (magasin).
+    const lignesBrutes = (lignes.data || []) as {boutique: string; numero_commande: string}[]
+    const numsMagasin = lignesBrutes.filter(l => l.boutique === "magasin").map(l => l.numero_commande)
+    const numsShopify = lignesBrutes.filter(l => l.boutique === "jardin-confort.ch").map(l => l.numero_commande)
+    const [offresInfo, shopifyInfo] = await Promise.all([
+      numsMagasin.length
+        ? supabaseAdmin.from("offres").select("numero_affiche, slug, client_societe").eq("type_document", "Commande").in("numero_affiche", numsMagasin)
+        : Promise.resolve({ data: [] as {numero_affiche: string; slug: string; client_societe: string|null}[], error: null }),
+      numsShopify.length
+        ? supabaseAdmin.from("commandes_shopify").select("shopify_order_name, shopify_order_legacy_id").in("shopify_order_name", numsShopify)
+        : Promise.resolve({ data: [] as {shopify_order_name: string; shopify_order_legacy_id: number|null}[], error: null }),
+    ])
+    const parNumMag = new Map((offresInfo.data || []).map(o => [o.numero_affiche, o]))
+    const parNumShop = new Map((shopifyInfo.data || []).map(o => [o.shopify_order_name, o]))
+    const lignesEnrichies = lignesBrutes.map(l => {
+      const mag = l.boutique === "magasin" ? parNumMag.get(l.numero_commande) : null
+      const shp = l.boutique === "jardin-confort.ch" ? parNumShop.get(l.numero_commande) : null
+      return {
+        ...l,
+        client_societe: mag?.client_societe || null,
+        commande_url: mag?.slug
+          ? `/dashboard/${mag.slug}`
+          : shp?.shopify_order_legacy_id
+            ? `https://www.jardin-confort.ch/admin/orders/${shp.shopify_order_legacy_id}`
+            : null,
+      }
+    })
+
     return NextResponse.json({
-      lignes: lignes.data || [],
+      lignes: lignesEnrichies,
       orphelines: orphelines.data || [],
       calibrage: calibrage.data || [],
       fournisseurs: fournisseurs.data || [],
