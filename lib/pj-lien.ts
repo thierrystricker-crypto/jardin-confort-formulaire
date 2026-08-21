@@ -17,3 +17,18 @@ export function lienPJ(chemin: string | null | undefined, ttlSecondes = 4 * 3600
   const sig = crypto.createHmac("sha256", secret).update(`${chemin}:${exp}`).digest("hex")
   return `${BASE_ATTACHMENT}/attachment?p=${encodeURIComponent(chemin)}&exp=${exp}&sig=${sig}`
 }
+
+// Nom lisible du document source : nom de fichier débarrassé du préfixe
+// technique de l'archivage (uid_xxx_n_). Les PDF au nom générique (ARC
+// Fermob « jobrpt_ARCCLIENT_… ») sont remplacés par la référence de commande
+// fournisseur extraite du commentaire de l'événement (BTBx / SAVx).
+export function nomDocument(chemin: string | null | undefined, commentaire?: string | null): string | null {
+  if (!chemin) return null
+  const base = decodeURIComponent(String(chemin).split("/").pop() || "")
+  const nettoye = base.replace(/^[0-9a-f]{6,12}_\d+(_\d+)?_/i, "").replace(/\.pdf$/i, "").trim()
+  if (/arcclient/i.test(nettoye)) {
+    const ref = /(BTB\d+|SAV\d*FE\d+)/i.exec(commentaire || "")?.[1]
+    return ref ? `ARC ${ref.toUpperCase()}` : "ARC Fermob"
+  }
+  return nettoye || null
+}

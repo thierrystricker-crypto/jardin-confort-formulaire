@@ -6,7 +6,7 @@
 // Les écritures passent par /api/delais/evenement.
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
-import { lienPJ } from "@/lib/pj-lien"
+import { lienPJ, nomDocument } from "@/lib/pj-lien"
 
 export async function GET() {
   try {
@@ -43,7 +43,10 @@ export async function GET() {
       orphelines: orphelines.data || [],
       calibrage: calibrage.data || [],
       fournisseurs: fournisseurs.data || [],
-      a_valider: (aValider.data || []).map((e) => ({ ...e, pj_url: lienPJ((e as {pj_chemin?: string|null}).pj_chemin) })),
+      a_valider: (aValider.data || []).map((e) => {
+        const brut = e as {pj_chemin?: string|null; commentaire?: string|null}
+        return { ...e, pj_url: lienPJ(brut.pj_chemin), pj_nom: nomDocument(brut.pj_chemin, brut.commentaire) }
+      }),
     })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
