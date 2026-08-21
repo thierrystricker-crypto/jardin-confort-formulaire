@@ -6,6 +6,7 @@
 // Les écritures passent par /api/delais/evenement.
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { lienPJ } from "@/lib/pj-lien"
 
 export async function GET() {
   try {
@@ -28,7 +29,7 @@ export async function GET() {
       // avec la commande porteuse (jointure implicite PostgREST).
       supabaseAdmin
         .from("delais_evenements")
-        .select("id, commande_id, type, date_depart, semaine_annoncee, confiance, portee, articles_concernes, commentaire, created_at, suivi_commandes(numero_commande, marque, client_nom, client_prenom)")
+        .select("id, commande_id, type, date_depart, semaine_annoncee, confiance, portee, articles_concernes, commentaire, pj_chemin, created_at, suivi_commandes(numero_commande, marque, client_nom, client_prenom)")
         .eq("statut_validation", "a_valider")
         .order("created_at", { ascending: false })
         .limit(100),
@@ -42,7 +43,7 @@ export async function GET() {
       orphelines: orphelines.data || [],
       calibrage: calibrage.data || [],
       fournisseurs: fournisseurs.data || [],
-      a_valider: aValider.data || [],
+      a_valider: (aValider.data || []).map((e) => ({ ...e, pj_url: lienPJ((e as {pj_chemin?: string|null}).pj_chemin) })),
     })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

@@ -5,6 +5,7 @@
 // promesse. Lecture seule.
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { lienPJ } from "@/lib/pj-lien"
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,12 +14,15 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from("delais_evenements")
-      .select("id, type, date_depart, semaine_annoncee, source, confiance, statut_validation, portee, articles_concernes, commentaire, saisi_par, mail_uid_unique, created_at")
+      .select("id, type, date_depart, semaine_annoncee, source, confiance, statut_validation, portee, articles_concernes, commentaire, saisi_par, mail_uid_unique, pj_chemin, created_at")
       .eq("commande_id", commandeId)
       .order("created_at", { ascending: true })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ evenements: data || [] })
+    // Lien signé frais (4 h) vers le PDF source de chaque événement — le
+    // chemin est permanent, le lien se régénère à chaque ouverture du dépli.
+    const evenements = (data || []).map((e) => ({ ...e, pj_url: lienPJ(e.pj_chemin) }))
+    return NextResponse.json({ evenements })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

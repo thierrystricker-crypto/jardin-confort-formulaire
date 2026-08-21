@@ -33,6 +33,7 @@ type AValider = {
   id: string; commande_id: string; type: string; date_depart: string|null
   semaine_annoncee: string|null; confiance: number; portee: string
   articles_concernes: string[]|null; commentaire: string|null; created_at: string
+  pj_url: string|null
   suivi_commandes: {numero_commande: string; marque: string; client_nom: string|null; client_prenom: string|null}|null
 }
 type Calibrage = {
@@ -48,7 +49,7 @@ type Evenement = {
   id: string; type: string; date_depart: string|null; semaine_annoncee: string|null
   source: string; confiance: number; statut_validation: string; portee: string
   articles_concernes: string[]|null; commentaire: string|null; saisi_par: string|null
-  created_at: string
+  created_at: string; pj_url: string|null
 }
 
 const JOURS = ["di","lu","ma","me","je","ve","sa"];
@@ -376,6 +377,11 @@ export default function DelaisPage() {
                                     {ecart !== null && <span className={`text-xs ${ecart > 0 ? "text-rose-300" : "text-emerald-300"}`}>({ecart > 0 ? "+" : ""}{ecart} j vs promesse précédente)</span>}
                                     {e.portee === "article" && e.articles_concernes && <span className="text-xs text-amber-300" title={e.articles_concernes.join(", ")}>· {e.articles_concernes.length} article(s)</span>}
                                     <span className="text-xs text-zinc-500">· {e.source === "auto" ? `auto (${Math.round(e.confiance * 100)} %)` : e.saisi_par || "manuel"}</span>
+                                    {e.pj_url && (
+                                      <a href={e.pj_url} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()}
+                                        title="Ouvrir le document fournisseur d'origine (lien signé, valable 4 h — régénéré à chaque ouverture)"
+                                        className="inline-flex items-center rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs text-sky-300 hover:bg-sky-500/20">📄 PDF</a>
+                                    )}
                                     {e.statut_validation === "a_valider" && (
                                       <span className="ml-auto inline-flex gap-1.5">
                                         <button disabled={enCours} onClick={() => action({action: "valider", evenement_id: e.id})} className="rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-300 hover:bg-emerald-500/25">✓ Valider</button>
@@ -445,6 +451,11 @@ export default function DelaisPage() {
                   <span>{e.semaine_annoncee ? `${e.semaine_annoncee.replace(/^\d{4}-/, "")} · ` : ""}{fmtDateCourte(e.date_depart)}</span>
                   <span className="text-xs text-zinc-500">confiance {Math.round(e.confiance * 100)} %</span>
                   {e.commentaire && <span className="text-xs text-zinc-500 truncate max-w-[300px]" title={e.commentaire}>{e.commentaire}</span>}
+                  {e.pj_url && (
+                    <a href={e.pj_url} target="_blank" rel="noopener noreferrer"
+                      title="Ouvrir le document fournisseur d'origine (lien signé, valable 4 h)"
+                      className="inline-flex items-center rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs text-sky-300 hover:bg-sky-500/20">📄 PDF</a>
+                  )}
                   <span className="ml-auto inline-flex gap-1.5">
                     <button disabled={enCours} onClick={() => action({action: "valider", evenement_id: e.id})} className="rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300 hover:bg-emerald-500/25">✓ Valider</button>
                     <button disabled={enCours} onClick={() => action({action: "rejeter", evenement_id: e.id})} className="rounded-lg border border-rose-400/40 bg-rose-500/15 px-2.5 py-1 text-xs text-rose-300 hover:bg-rose-500/25">✕ Rejeter</button>
