@@ -284,7 +284,7 @@ export default function DelaisPage() {
         {/* Tableau principal */}
         <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#2a2d31]">
           <div className="px-4 pt-3 text-xs text-zinc-500">{visibles.length} ligne(s) — filtre : {filtre}{marque !== "toutes" ? ` · ${marque}` : ""}{boutique !== "toutes" ? ` · ${boutique}` : ""}</div>
-          <table className="w-full min-w-[1100px] text-sm">
+          <table className="w-full min-w-[1400px] text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-zinc-500">
                 <th className="px-4 py-3">Réf.</th>
@@ -293,8 +293,11 @@ export default function DelaisPage() {
                 <th className="px-4 py-3">Commande</th>
                 <th className="px-4 py-3">Départ fournisseur</th>
                 <th className="px-4 py-3">Arrivage</th>
+                <th className="px-4 py-3" title="De la commande client à l'arrivage prévu">Durée</th>
+                <th className="px-4 py-3" title="Délai annoncé au client à la vente — la question finale : tient-on notre promesse ?">Promesse client</th>
                 <th className="px-4 py-3">Étape</th>
                 <th className="px-4 py-3">Alarme</th>
+                <th className="px-4 py-3"></th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -302,6 +305,13 @@ export default function DelaisPage() {
               {visibles.map(l => {
                 const etape = ETAPES[l.etape] || ETAPES.sans_delai;
                 const evts = chrono[l.id];
+                // Arrivage de référence : le réel (preuve de départ) s'il existe,
+                // sinon le calculé depuis la promesse fournisseur.
+                const prevu = l.arrivage_estime_reel || l.arrivage_calcule;
+                const duree = prevu && l.date_commande
+                  ? Math.round((new Date(prevu).getTime() - new Date(l.date_commande).getTime()) / 86400000) : null;
+                const ecartPromesse = prevu && l.delai_annonce_client
+                  ? Math.round((new Date(prevu).getTime() - new Date(l.delai_annonce_client).getTime()) / 86400000) : null;
                 return (
                 <React.Fragment key={l.id}>
                   <tr onClick={() => ouvrirChrono(l)}
@@ -334,6 +344,21 @@ export default function DelaisPage() {
                         <span title={l.regle_transit || ""}>{l.arrivage_calcule ? fmtDateCourte(l.arrivage_calcule) : "—"}</span>
                       )}
                     </td>
+                    <td className="px-4 py-3 text-zinc-300" title="De la commande client à l'arrivage prévu">
+                      {duree !== null ? `${duree} j` : <span className="text-zinc-600">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {l.delai_annonce_client ? (
+                        <>
+                          <div title="Délai annoncé au client à la vente">{fmtDateCourte(l.delai_annonce_client)}</div>
+                          {ecartPromesse !== null && (
+                            ecartPromesse > 0
+                              ? <span className="inline-flex items-center rounded-full bg-rose-500/20 px-2 py-0.5 text-xs font-semibold text-rose-300" title="L'arrivage prévu dépasse la promesse faite au client">⚠️ +{ecartPromesse} j vs promis</span>
+                              : <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-300" title="L'arrivage prévu tient dans la promesse faite au client">✓ raccord</span>
+                          )}
+                        </>
+                      ) : <span className="text-zinc-600">—</span>}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${etape.cls}`}>{etape.label}</span>
                     </td>
@@ -343,12 +368,14 @@ export default function DelaisPage() {
                       {!l.alarme_retard && !l.alarme_echeance_proche && l.alarme_delai_manquant && <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2.5 py-1 text-xs text-amber-300">❓ délai manquant</span>}
                       {l.nb_a_valider > 0 && <span className="ml-1 inline-flex items-center rounded-full bg-sky-500/15 px-2 py-0.5 text-xs text-sky-300">{l.nb_a_valider} à valider</span>}
                     </td>
-                    <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       {l.commande_url && (
                         <a href={l.commande_url} target="_blank" rel="noopener noreferrer"
                           title="Ouvrir la commande client dans un nouvel onglet"
-                          className="mr-1.5 inline-flex items-center rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs text-sky-300 hover:bg-sky-500/20">↗ Commande</a>
+                          className="inline-flex items-center rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs text-sky-300 hover:bg-sky-500/20">↗ Commande</a>
                       )}
+                    </td>
+                    <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                       {receptionPour === l.id ? (
                         <span className="inline-flex items-center gap-1.5">
                           <input type="date" value={dateReception} onChange={e => setDateReception(e.target.value)}
@@ -370,7 +397,7 @@ export default function DelaisPage() {
                   {/* Dépli : chronologie + articles + recherche approfondie */}
                   {ouverte === l.id && (
                     <tr className="border-t border-white/5 bg-[#26292d]">
-                      <td colSpan={9} className="px-6 py-4">
+                      <td colSpan={12} className="px-6 py-4">
                         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
                           <div>
                             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Chronologie des délais — rien n'est jamais écrasé</div>
@@ -435,7 +462,7 @@ export default function DelaisPage() {
                 </React.Fragment>
               )})}
               {!visibles.length && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-zinc-500">Aucune ligne pour ce filtre.</td></tr>
+                <tr><td colSpan={12} className="px-4 py-8 text-center text-sm text-zinc-500">Aucune ligne pour ce filtre.</td></tr>
               )}
             </tbody>
           </table>
