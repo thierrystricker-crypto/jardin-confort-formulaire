@@ -144,7 +144,17 @@ export default function DelaisPage() {
     } catch (e) { setErreur((e as Error).message); }
     finally { setLoading(false); }
   }
-  useEffect(() => { charger(); }, []);
+  useEffect(() => {
+    charger();
+    // En arrière-plan : remplir la promesse client des commandes web qui
+    // n'en ont pas encore (métachamp/tags Shopify), puis rafraîchir si des
+    // lignes ont été complétées. Silencieux en cas d'échec — le tableau
+    // reste utilisable, la prochaine ouverture retentera.
+    fetch("/api/delais/promesse", { method: "POST" })
+      .then((r) => r.json())
+      .then((b) => { if (b?.remplies > 0) charger(); })
+      .catch(() => {});
+  }, []);
 
   async function ouvrirChrono(l: Ligne) {
     if (ouverte === l.id) { setOuverte(null); return; }

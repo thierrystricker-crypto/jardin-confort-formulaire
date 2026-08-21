@@ -75,7 +75,9 @@ export type ShopifyVariantLookup = {
 } | null
 
 // ─── Appel GraphQL Admin générique ───
-async function shopifyAdminGraphQL<T = unknown>(
+// Exporté : lib/promesse-shopify.ts s'en sert pour lire les métachamps et
+// tags de délai (lecture seule, mêmes identifiants Client Credentials).
+export async function shopifyAdminGraphQL<T = unknown>(
   query: string,
   variables?: Record<string, unknown>
 ): Promise<T> {
