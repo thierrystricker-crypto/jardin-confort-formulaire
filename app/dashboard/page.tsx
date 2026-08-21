@@ -46,6 +46,7 @@ type OffreRecord = {
   total_ttc: number; nb_articles: number
   date_derniere_relance: string|null; nb_relances: number|null
   probabilite: string|null
+  statut_livraison: "ouverte"|"livree"|null; date_livraison: string|null
   created_at: string; updated_at: string|null
 }
 
@@ -140,7 +141,7 @@ const COMMERCIAUX = ["Brice Chappé","Alejandro Gallegos","Fabian Coquoz","Miche
 
 type SortKey = "date"|"client"|"montant"|"statut"|"commercial"|"jours"|"numero"|"probabilite"
 type SortDir = "asc"|"desc"
-type QuickFilter = "all"|"offres"|"commandes"|"abandonnes"|"relance"|"prob_forte"|"prob_moyenne"|"prob_faible"|"prob_neutre"
+type QuickFilter = "all"|"offres"|"commandes"|"a_livrer"|"abandonnes"|"relance"|"prob_forte"|"prob_moyenne"|"prob_faible"|"prob_neutre"
 
 function isoWeek(d: Date) {
   const t = new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()))
@@ -419,6 +420,7 @@ export default function DashboardPage() {
     }
     if(quickFilter==="offres") list=list.filter(o=>o.type_document==="Offre"&&!["Abandonnée","Convertie","Refusée"].includes(o.statut))
     else if(quickFilter==="commandes") list=list.filter(o=>o.type_document==="Commande"||o.statut==="Acceptée")
+    else if(quickFilter==="a_livrer") list=list.filter(o=>o.type_document==="Commande"&&o.statut_livraison!=="livree")
     else if(quickFilter==="abandonnes") list=list.filter(o=>["Abandonnée","Refusée"].includes(o.statut))
     else if(quickFilter==="relance") list=list.filter(o=>{const d=getDaysOpen(o);return d!==null&&d>=7})
     // ─── Filtres par probabilité (uniquement sur les offres en cours, pas les commandes) ───
@@ -484,7 +486,9 @@ export default function DashboardPage() {
 
   const quickFilters:{label:string;value:QuickFilter}[] = [
     {label:"Toutes",value:"all"},{label:"Offres actives",value:"offres"},
-    {label:"Commandes",value:"commandes"},{label:"Abandonnées",value:"abandonnes"},
+    {label:"Commandes",value:"commandes"},
+    {label:"🚚 Commandes à livrer",value:"a_livrer"},
+    {label:"Abandonnées",value:"abandonnes"},
     {label:"À relancer (≥7j)",value:"relance"},
   ]
 
@@ -707,7 +711,24 @@ export default function DashboardPage() {
                         <td className="px-4 py-4 text-zinc-300">{o.commercial||"—"}</td>
                         <td className="px-4 py-4 font-medium text-zinc-100">{fmtMoney(o.total_ttc)}</td>
                         <td className="px-4 py-4">
-                          <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(o.statut,o.type_document)}`}>{o.statut}</span>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(o.statut,o.type_document)}`}>{o.statut}</span>
+                            {/* Livraison (commandes magasin) — équivalent du fulfilled Shopify.
+                                Le clic « Marquer livrée » est sur la page commande (Voir). */}
+                            {o.type_document==="Commande"&&(
+                              o.statut_livraison==="livree" ? (
+                                <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-300"
+                                  title={o.date_livraison?`Livrée le ${fmtDate(o.date_livraison)}`:"Livrée"}>
+                                  🚚 Livrée
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300"
+                                  title="Pas encore livrée — clic « Marquer livrée » sur la page commande">
+                                  ⏳ À livrer
+                                </span>
+                              )
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-4 text-center text-lg">
                           {/* Le feu de probabilité ne s'affiche QUE pour les offres en cours.
