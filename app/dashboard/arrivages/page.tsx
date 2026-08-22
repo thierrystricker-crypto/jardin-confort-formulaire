@@ -95,6 +95,13 @@ export default function ArrivagesPage() {
     finally { setChargement(false); setSaisie(""); }
   }, []);
 
+  // Arrivée depuis le dashboard délais ou la page commande : ?q=<numéro>
+  // (lu sur window, pas via useSearchParams → pas de Suspense à poser).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) chercher(q);
+  }, [chercher]);
+
   const ouvrirCandidat = useCallback(async (c: Candidat) => {
     setChargement(true); setErreur("");
     try {

@@ -8,6 +8,7 @@ import CorrectionsHistoryBlock from "@/components/CorrectionsHistoryBlock";
 import RevisionsHistoryBlock from "@/components/RevisionsHistoryBlock";
 import StockMovementsBlock from "@/components/StockMovementsBlock";
 import AnnexesBlock from "@/components/AnnexesBlock";
+import ArrivagesBlock from "@/components/ArrivagesBlock";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -1685,6 +1686,12 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
               />
             )}
 
+            {/* Arrivages (chantier Arrivages, étape 3) : ce qui est déjà arrivé,
+                ligne par ligne — distinct de la livraison au client ci-dessus. */}
+            {isCommandeReelle && (
+              <ArrivagesBlock boutique="magasin" numero={offre.numero_affiche} />
+            )}
+
             <AnnexesBlock
               entityType={offre.type_document === "Commande" ? "commande" : "offre"}
               entitySlug={slug}
@@ -1759,4 +1766,4 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
       )}
     </main>
   )
-}
+}

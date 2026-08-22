@@ -6,6 +6,10 @@
 // toujours ensemble : le départ fournisseur BRUT (celui qu'on cite au
 // téléphone) et l'arrivage calculé, avec la règle de transit en clair.
 // Alimenté par la vue v_suivi_delais + le job d'extraction automatique.
+// Chantier Arrivages (étape 3, 22.08) : colonne « Reçu » x/y lignes, étapes
+// partiellement_recue / en_stock / marque_non_suivie, filtre « marques suivies
+// seulement », et le bouton « Reçu » renvoie vers /dashboard/arrivages (la
+// réception se saisit par ligne et par quantité, jamais plus en bloc ici).
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -25,6 +29,9 @@ type Ligne = {
   date_expedition_reelle: string|null; preuve_depart: string|null
   arrivage_estime_reel: string|null; etape: string
   client_societe: string|null; commande_url: string|null
+  marque_suivie: boolean; en_stock: boolean; stock_etat: string|null
+  nb_lignes: number|null; nb_lignes_couvertes: number|null; nb_lignes_recues: number|null
+  reception_partielle: boolean; date_reception_partielle: string|null
 }
 type Orpheline = {
   id: string; marque: string|null; type_document: string|null
@@ -98,6 +105,9 @@ const ETAPES: Record<string,{label: string; cls: string}> = {
   facturee:               { label: "🚚 Facturée",     cls: "bg-emerald-500/15 text-emerald-300" },
   expediee:               { label: "🚚 Expédiée",     cls: "bg-emerald-500/15 text-emerald-300" },
   recue:                  { label: "✅ Reçue",         cls: "bg-emerald-500/25 text-emerald-200" },
+  partiellement_recue:    { label: "📦 Part. reçue",    cls: "bg-lime-500/15 text-lime-200" },
+  en_stock:               { label: "🏬 En stock",       cls: "bg-zinc-500/20 text-zinc-200" },
+  marque_non_suivie:      { label: "Marque non suivie", cls: "bg-zinc-500/10 text-zinc-400" },
 };
 const TYPES_EVT: Record<string,string> = {
   confirmation_fournisseur: "Confirmation",
@@ -122,10 +132,9 @@ export default function DelaisPage() {
   const [boutique, setBoutique] = useState("toutes");
   const [filtre, setFiltre] = useState<FiltreRapide>("en_cours");
   const [recherche, setRecherche] = useState("");
+  const [suiviesSeules, setSuiviesSeules] = useState(false);
   const [ouverte, setOuverte] = useState<string|null>(null);
   const [chrono, setChrono] = useState<Record<string, Evenement[]>>({});
-  const [receptionPour, setReceptionPour] = useState<string|null>(null);
-  const [dateReception, setDateReception] = useState(new Date().toISOString().slice(0,10));
   const [enCours, setEnCours] = useState(false);
   const [voletBas, setVoletBas] = useState<"a_valider"|"orphelines"|"fournisseurs"|null>(null);
 
@@ -180,7 +189,7 @@ export default function DelaisPage() {
       setChrono({});
       await charger();
     } catch (e) { alert("Erreur réseau : " + (e as Error).message); }
-    finally { setEnCours(false); setReceptionPour(null); }
+    finally { setEnCours(false); }
   }
 
   function rechercheApprofondie(l: Ligne) {
@@ -196,6 +205,7 @@ export default function DelaisPage() {
     let liste = [...lignes];
     if (marque !== "toutes") liste = liste.filter(l => l.marque === marque);
     if (boutique !== "toutes") liste = liste.filter(l => l.boutique === boutique);
+    if (suiviesSeules) liste = liste.filter(l => l.marque_suivie);
     if (filtre === "en_cours") liste = liste.filter(l => l.statut === "en_cours");
     else if (filtre === "retard") liste = liste.filter(l => l.alarme_retard);
     else if (filtre === "echeance") liste = liste.filter(l => l.alarme_echeance_proche);
@@ -216,7 +226,7 @@ export default function DelaisPage() {
       const aa = a.arrivage_calcule || "9999", ab = b.arrivage_calcule || "9999";
       return aa < ab ? -1 : aa > ab ? 1 : 0;
     });
-  }, [lignes, marque, boutique, filtre, recherche]);
+  }, [lignes, marque, boutique, filtre, recherche, suiviesSeules]);
 
   const stats = useMemo(() => {
     const ec = lignes.filter(l => l.statut === "en_cours");
@@ -286,7 +296,14 @@ export default function DelaisPage() {
           </select>
           <input value={recherche} onChange={e => setRecherche(e.target.value)} placeholder="Recherche : numéro (JAR-x, CMD-x), client, réf fournisseur (Vx, BTBx)…"
             className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"/>
-          <button onClick={() => {setMarque("toutes");setBoutique("toutes");setFiltre("en_cours");setRecherche("")}} className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2.5 text-sm text-zinc-100 transition hover:bg-[#40454b]">Reset</button>
+          <button onClick={() => {setMarque("toutes");setBoutique("toutes");setFiltre("en_cours");setRecherche("");setSuiviesSeules(false)}} className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2.5 text-sm text-zinc-100 transition hover:bg-[#40454b]">Reset</button>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-zinc-300">
+            <input type="checkbox" checked={suiviesSeules} onChange={e => setSuiviesSeules(e.target.checked)} className="h-4 w-4 accent-sky-400"/>
+            Marques suivies seulement <span className="text-xs text-zinc-500">(extraction automatique des délais)</span>
+          </label>
+          <Link href="/dashboard/arrivages" className="inline-flex items-center rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/25" title="Réception par article et par quantité — scan de la fiche de travail">📦 Arrivages</Link>
         </div>
 
         {erreur && <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">{erreur}</div>}
@@ -306,6 +323,7 @@ export default function DelaisPage() {
                 <th className="px-4 py-3" title="De la commande client à l'arrivage prévu">Durée</th>
                 <th className="px-4 py-3" title="Délai annoncé au client à la vente — la question finale : tient-on notre promesse ?">Promesse client</th>
                 <th className="px-4 py-3">Étape</th>
+                <th className="px-4 py-3" title="Lignes d'articles couvertes (en stock à la commande + reçues) sur le total de la marque">Reçu</th>
                 <th className="px-4 py-3">Alarme</th>
                 <th className="px-4 py-3"></th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -373,6 +391,15 @@ export default function DelaisPage() {
                       <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${etape.cls}`}>{etape.label}</span>
                     </td>
                     <td className="px-4 py-3">
+                      {l.nb_lignes ? (
+                        <span title={`${l.nb_lignes_couvertes}/${l.nb_lignes} lignes couvertes${l.nb_lignes_recues ? ` · ${l.nb_lignes_recues} reçue(s)` : ""}${l.date_reception_partielle ? ` · dernier arrivage ${fmtDate(l.date_reception_partielle)}` : ""}`}
+                          className={`font-medium ${Number(l.nb_lignes_couvertes) >= Number(l.nb_lignes) ? "text-emerald-300" : l.reception_partielle ? "text-lime-300" : "text-zinc-500"}`}>
+                          {l.nb_lignes_couvertes}/{l.nb_lignes}
+                          {l.reception_partielle && Number(l.nb_lignes_couvertes) < Number(l.nb_lignes) && <span className="ml-1 rounded-full bg-lime-500/15 px-1.5 py-0.5 text-[10px] text-lime-200">partiel</span>}
+                        </span>
+                      ) : <span className="text-zinc-600">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
                       {l.alarme_retard && <span className="inline-flex items-center rounded-full bg-rose-500/20 px-2.5 py-1 text-xs font-semibold text-rose-300">⚠️ {l.jours_retard} j de retard</span>}
                       {!l.alarme_retard && l.alarme_echeance_proche && <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2.5 py-1 text-xs text-amber-300">🔔 dans {l.jours_avant_echeance} j</span>}
                       {!l.alarme_retard && !l.alarme_echeance_proche && l.alarme_delai_manquant && <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2.5 py-1 text-xs text-amber-300">❓ délai manquant</span>}
@@ -386,20 +413,10 @@ export default function DelaisPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                      {receptionPour === l.id ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <input type="date" value={dateReception} onChange={e => setDateReception(e.target.value)}
-                            className="rounded-lg border border-white/10 bg-[#1f2125] px-2 py-1 text-xs text-zinc-100 outline-none"/>
-                          <button disabled={enCours} onClick={() => action({action: "reception", commande_id: l.id, date: dateReception})}
-                            className="rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50">OK</button>
-                          <button onClick={() => setReceptionPour(null)} className="rounded-lg border border-white/10 px-2 py-1 text-xs text-zinc-400">✕</button>
-                        </span>
-                      ) : (
-                        l.statut === "en_cours" && !l.date_reception && (
-                          <button onClick={() => {setReceptionPour(l.id); setDateReception(new Date().toISOString().slice(0,10))}}
-                            title="Marchandise arrivée chez Jardin Confort — nourrit le calibrage des règles de transit"
-                            className="rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300 hover:bg-emerald-500/25">📦 Reçu</button>
-                        )
+                      {l.statut === "en_cours" && !l.date_reception && (
+                        <Link href={`/dashboard/arrivages?q=${encodeURIComponent(l.numero_commande)}`}
+                          title="Saisir la réception article par article (page Arrivages) — nourrit le calibrage des règles de transit quand toute la marque est couverte"
+                          className="inline-flex items-center rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300 hover:bg-emerald-500/25">📦 Reçu</Link>
                       )}
                     </td>
                   </tr>
@@ -407,7 +424,7 @@ export default function DelaisPage() {
                   {/* Dépli : chronologie + articles + recherche approfondie */}
                   {ouverte === l.id && (
                     <tr className="border-t border-white/5 bg-[#26292d]">
-                      <td colSpan={12} className="px-6 py-4">
+                      <td colSpan={13} className="px-6 py-4">
                         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
                           <div>
                             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Chronologie des délais — rien n'est jamais écrasé</div>
@@ -459,6 +476,7 @@ export default function DelaisPage() {
                             </div>
                             {l.delai_annonce_client && <div className="text-xs text-zinc-400">Délai annoncé au client : <span className="text-zinc-200">{fmtDate(l.delai_annonce_client)}</span></div>}
                             {l.date_reception && <div className="text-xs text-emerald-300">Reçue le {fmtDate(l.date_reception)}</div>}
+                            {!l.date_reception && l.date_reception_partielle && <div className="text-xs text-lime-300">Partiellement reçue — dernier arrivage le {fmtDate(l.date_reception_partielle)}</div>}
                             <button onClick={() => rechercheApprofondie(l)}
                               title="Copie la demande dans le presse-papier et ouvre le chat Jardi : colle et envoie."
                               className="w-full rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
@@ -472,7 +490,7 @@ export default function DelaisPage() {
                 </React.Fragment>
               )})}
               {!visibles.length && (
-                <tr><td colSpan={12} className="px-4 py-8 text-center text-sm text-zinc-500">Aucune ligne pour ce filtre.</td></tr>
+                <tr><td colSpan={13} className="px-4 py-8 text-center text-sm text-zinc-500">Aucune ligne pour ce filtre.</td></tr>
               )}
             </tbody>
           </table>
@@ -564,7 +582,7 @@ export default function DelaisPage() {
                         <div className="mt-1 text-xs text-zinc-500">moyenne {cal.ecart_moyen_jours} j · min {cal.ecart_min_jours} · max {cal.ecart_max_jours} — positif = règle optimiste, négatif = règle large. La règle ne s'ajuste jamais toute seule.</div>
                       </>
                     ) : (
-                      <div className="text-xs text-zinc-500">Pas encore de calibrage — il se construit à chaque clic « 📦 Reçu ».</div>
+                      <div className="text-xs text-zinc-500">Pas encore de calibrage — il se construit à chaque réception complète saisie sur la page Arrivages.</div>
                     )}
                   </div>
                 </div>
