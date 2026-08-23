@@ -4,12 +4,22 @@
 // commande client × marque), file des extractions orphelines du job auto,
 // calibrage des règles de transit et fiches fournisseurs.
 // Les écritures passent par /api/delais/evenement.
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 import { lienPJ, nomDocument, lienThunderbird } from "@/lib/pj-lien"
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    // Branche légère : ?numero=JAR-13585 → les lignes de suivi de CETTE
+    // commande seulement (carte « Délais fournisseurs » de la page commande).
+    const numero = req.nextUrl.searchParams.get("numero")
+    if (numero) {
+      const { data, error } = await supabaseAdmin
+        .from("v_suivi_delais").select("*")
+        .ilike("numero_commande", numero.trim().replace(/^#/, ""))
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ lignes: data || [] })
+    }
     const [lignes, orphelines, calibrage, fournisseurs, aValider] = await Promise.all([
       supabaseAdmin
         .from("v_suivi_delais")

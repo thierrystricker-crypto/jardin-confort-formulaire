@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getShopifyPdfUrls } from "@/lib/shopify-pdf-urls";
 import PrintAddressButton from "@/components/PrintAddressButton";
 import EmailBadge from "@/components/EmailBadge";
+import ArrivagesClientCard from "@/components/ArrivagesClientCard";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -979,6 +980,14 @@ function copyAddress(type: "facturation" | "livraison") {
               </section>
             )}
           </div>
+
+          {/* ARRIVAGES — commandes en cours du client (chantier Arrivages, 23.08) */}
+          <ArrivagesClientCard cibles={[
+            ...offres.filter(o => o.type_document === "Commande").slice(0, 5)
+              .map(o => ({ boutique: "magasin" as const, numero: o.numero_affiche, url: `/dashboard/${o.slug}` })),
+            ...commandesShopify.filter(c => !c.cancelled_at && c.fulfillment_status !== "FULFILLED" && !c.test).slice(0, 5)
+              .map(c => ({ boutique: "jardin-confort.ch" as const, numero: c.shopify_order_name })),
+          ]} />
 
           {/* HISTORIQUE OFFRES */}
           <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">

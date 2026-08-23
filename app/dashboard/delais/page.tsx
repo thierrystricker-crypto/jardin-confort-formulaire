@@ -167,6 +167,11 @@ export default function DelaisPage() {
     } catch (e) { setErreur((e as Error).message); }
     finally { setLoading(false); }
   }
+  // Arrivée depuis une page commande : ?q=<numéro> pré-remplit la recherche.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setRecherche(q);
+  }, []);
   useEffect(() => {
     charger();
     // En arrière-plan : remplir la promesse client des commandes web qui

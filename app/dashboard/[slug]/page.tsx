@@ -9,6 +9,7 @@ import RevisionsHistoryBlock from "@/components/RevisionsHistoryBlock";
 import StockMovementsBlock from "@/components/StockMovementsBlock";
 import AnnexesBlock from "@/components/AnnexesBlock";
 import ArrivagesBlock from "@/components/ArrivagesBlock";
+import SuiviDelaisBlock from "@/components/SuiviDelaisBlock";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -83,18 +84,9 @@ function FicheTravailPreview({
   currentUrl: string | null
   initialAt: string | null
 }) {
-  // L'ACTUELLE est l'outil de travail : onglet par défaut dès qu'elle existe.
-  // L'initiale (la preuve) reste accessible d'un clic. Corrigé le 23.08.2026 —
-  // avant, la carte s'ouvrait sur l'initiale même quand une actuelle existait.
   const defaultMode: "initial" | "current" =
-    currentUrl ? "current" : "initial"
+    initialUrl ? "initial" : "current"
   const [mode, setMode] = React.useState<"initial" | "current">(defaultMode)
-
-  // Quand la fiche actuelle vient d'être (re)générée, basculer dessus sans
-  // recharger la page.
-  React.useEffect(() => {
-    if (currentUrl) setMode("current")
-  }, [currentUrl])
 
   const url = mode === "initial" ? initialUrl : currentUrl
 
@@ -144,7 +136,7 @@ function FicheTravailPreview({
       )}
       {mode === "current" && (
         <div className="mb-3 text-xs text-amber-300/80 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
-          🟡 Version actuelle de la commande (révisions et corrections comprises) — stocks figés ligne par ligne, chacune à sa date
+          🟡 Stock actuel — re-générée à chaque clic sur le bouton du haut
         </div>
       )}
       {url ? (
@@ -173,10 +165,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [saveKind,setSaveKind]=useState<"success"|"error"|"info">("info")
   const [pdfUrl,setPdfUrl]=useState<string|null>(null)
   const [pdfGenerating,setPdfGenerating]=useState(false)
-  // Chantier « PDF de commande toujours à jour » (23.08.2026)
-  const [pdfSnapshotAt,setPdfSnapshotAt]=useState<string|null>(null)
-  const [pdfInitialUrl,setPdfInitialUrl]=useState<string|null>(null)
-  const [pdfOpening,setPdfOpening]=useState(false)
   const [qrUrl,setQrUrl]=useState<string|null>(null)
   const [qrGenerating,setQrGenerating]=useState(false)
   const [ficheTravailUrl, setFicheTravailUrl] = useState<string|null>(null)
@@ -198,15 +186,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [converting,setConverting]=useState(false)
   const [correctionDrawerOpen, setCorrectionDrawerOpen] = useState(false)
 
-  // Contourne le cache d'une heure du Storage Supabase : le fichier est
-  // remplacé au même chemin à chaque régénération, mais l'URL nue peut servir
-  // l'ancienne version jusqu'à 1 h. Un paramètre unique force la version
-  // courante. (Chantier « PDF de commande toujours à jour », 23.08.2026.)
-  function frais(u: string|null|undefined): string|null {
-    if (!u) return null
-    return `${u}${u.includes("?") ? "&" : "?"}v=${Date.now()}`
-  }
-
   async function pollPdf(slugToCheck: string) {
     for (let i = 0; i < 15; i++) {
       await new Promise(r => setTimeout(r, 3000))
@@ -215,7 +194,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         if (res.ok) {
           const json = await res.json()
           const url = (json.offre as Record<string,unknown>)?.pdf_url as string|null
-          if (url) { setPdfUrl(frais(url)); setPdfGenerating(false); return }
+          if (url) { setPdfUrl(url); setPdfGenerating(false); return }
         }
       } catch { /* ignore */ }
     }
@@ -236,21 +215,19 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         setNotesInternes(o.notes_internes||"")
         const existingPdfUrl = (o as unknown as Record<string,unknown>).pdf_url as string|null
         if (existingPdfUrl) {
-          setPdfUrl(frais(existingPdfUrl))
+          setPdfUrl(existingPdfUrl)
         } else {
           setPdfGenerating(true)
           pollPdf(s)
         }
-        setPdfSnapshotAt(((o as unknown as Record<string,unknown>).pdf_snapshot_at as string|null) || null)
-        setPdfInitialUrl(((o as unknown as Record<string,unknown>).pdf_initial_url as string|null) || null)
         if ((o as unknown as Record<string,unknown>).qr_url) {
-          setQrUrl(frais((o as unknown as Record<string,unknown>).qr_url as string))
+          setQrUrl((o as unknown as Record<string,unknown>).qr_url as string)
         }
         if ((o as unknown as Record<string,unknown>).fiche_travail_pdf_url) {
-          setFicheTravailUrl(frais((o as unknown as Record<string,unknown>).fiche_travail_pdf_url as string))
+          setFicheTravailUrl((o as unknown as Record<string,unknown>).fiche_travail_pdf_url as string)
         }
         if ((o as unknown as Record<string,unknown>).fiche_travail_initial_url) {
-          setFicheTravailInitialUrl(frais((o as unknown as Record<string,unknown>).fiche_travail_initial_url as string))
+          setFicheTravailInitialUrl((o as unknown as Record<string,unknown>).fiche_travail_initial_url as string)
         }
         if ((o as unknown as Record<string,unknown>).fiche_travail_initial_at) {
           setFicheTravailInitialAt((o as unknown as Record<string,unknown>).fiche_travail_initial_at as string)
@@ -320,89 +297,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     finally { setPdfGenerating(false) }
   }
 
-  // ─── Ouvrir le PDF de commande en le régénérant d'abord ───────────────
-  // Chantier « PDF de commande toujours à jour » (23.08.2026).
-  // Le PDF Storage n'est plus considéré comme frais : on le régénère à
-  // l'instant où quelqu'un veut l'envoyer, puis on ouvre le fichier obtenu.
-  // Aucun risque sur le stock : /api/offres/[slug] renvoie pour une commande
-  // les lignes figées J0 de data, jamais Shopify en direct — un PDF régénéré
-  // affiche donc toujours le stock du jour de la commande.
-  // L'onglet est ouvert AVANT l'await (sinon le navigateur le bloque), puis
-  // redirigé sur le fichier une fois pdf.co revenu.
-  async function ouvrirPdfAJour() {
-    if(!slug || pdfOpening) return
-    const onglet = window.open("", "_blank")
-    if (onglet) {
-      onglet.document.write(
-        `<!doctype html><meta charset="utf-8"><title>PDF en cours…</title>` +
-        `<body style="margin:0;display:flex;align-items:center;justify-content:center;` +
-        `height:100vh;font-family:system-ui,sans-serif;color:#334;background:#f6f7f9">` +
-        `<div style="text-align:center"><div style="font-size:15px">Génération du PDF à jour…</div>` +
-        `<div style="margin-top:8px;font-size:13px;color:#889">10 à 20 secondes</div></div>`
-      )
-    }
-    setPdfOpening(true)
-    try {
-      const res=await fetch(`/api/offres/${slug}/pdf`,{method:"POST"})
-      const json=await res.json()
-      if(res.ok && json.pdf_url){
-        setPdfUrl(json.pdf_url)
-        setPdfSnapshotAt(new Date().toISOString())
-        const frais=`${json.pdf_url}?t=${Date.now()}`
-        if (onglet) onglet.location.replace(frais)
-        else window.open(frais,"_blank")
-      } else {
-        if (onglet) onglet.close()
-        setSaveKind("error")
-        setSaveStatus("Génération du PDF impossible. Le PDF précédent reste dans « Documents PDF ».")
-      }
-    } catch {
-      if (onglet) onglet.close()
-      setSaveKind("error")
-      setSaveStatus("Génération du PDF impossible. Le PDF précédent reste dans « Documents PDF ».")
-    }
-    finally { setPdfOpening(false) }
-  }
-
-  // ─── Ouvrir le QR de paiement en le régénérant d'abord ────────────────
-  // Même logique que ouvrirPdfAJour : le POST /qr relit total_ttc à
-  // l'instant, donc après une révision le QR régénéré porte le nouveau
-  // montant (et 50 % si acompte). Le fichier sanctuarisé qr/route.ts
-  // n'est pas modifié — seulement appelé.
-  async function ouvrirQrAJour() {
-    if(!slug || qrGenerating) return
-    const onglet = window.open("", "_blank")
-    if (onglet) {
-      onglet.document.write(
-        `<!doctype html><meta charset="utf-8"><title>QR en cours…</title>` +
-        `<body style="margin:0;display:flex;align-items:center;justify-content:center;` +
-        `height:100vh;font-family:system-ui,sans-serif;color:#334;background:#f6f7f9">` +
-        `<div style="text-align:center"><div style="font-size:15px">Génération du QR de paiement au montant courant…</div>` +
-        `<div style="margin-top:8px;font-size:13px;color:#889">10 à 20 secondes</div></div>`
-      )
-    }
-    setQrGenerating(true)
-    try {
-      const res=await fetch(`/api/offres/${slug}/qr`,{method:"POST"})
-      const json=await res.json()
-      if(res.ok && json.qr_url){
-        setQrUrl(json.qr_url)
-        const frais=`${json.qr_url}?t=${Date.now()}`
-        if (onglet) onglet.location.replace(frais)
-        else window.open(frais,"_blank")
-      } else {
-        if (onglet) onglet.close()
-        setSaveKind("error")
-        setSaveStatus("Génération du QR impossible.")
-      }
-    } catch {
-      if (onglet) onglet.close()
-      setSaveKind("error")
-      setSaveStatus("Génération du QR impossible.")
-    }
-    finally { setQrGenerating(false) }
-  }
-
   async function generateQr() {
     if(!slug) return
     setQrGenerating(true)
@@ -421,15 +315,12 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     // sera celui du jour, potentiellement DIFFÉRENT de celui vu par le client à
     // la commande. La fiche initiale, elle, reste figée pour preuve juridique.
     if (mode === "current") {
-      // Texte corrigé le 23.08.2026 : l'ancien avertissement annonçait le
-      // « stock du jour », ce qui est faux pour une commande — la page fiche
-      // de travail lit les lignes figées de data, jamais Shopify en direct.
       const confirmed = confirm(
-        "Fiche de travail ACTUELLE\n\n" +
-        "Le document régénéré reflète la commande dans son état courant (corrections et révisions comprises).\n\n" +
-        "🔵 Les niveaux de stock affichés restent FIGÉS : ceux du jour de la validation pour les articles d'origine, ceux du jour de l'ajout pour les articles ajoutés en révision. Rien n'est recalculé.\n\n" +
-        "La fiche INITIALE (preuve du stock vendu) reste intacte.\n\n" +
-        "Régénérer la fiche de travail actuelle ?"
+        "⚠️ ATTENTION — Fiche de travail ACTUELLE\n\n" +
+        "Le nouveau document généré affichera le STOCK DU JOUR — donc potentiellement différent de celui vu par le client au moment de la commande.\n\n" +
+        "👉 Cette version sert pour la préparation et la livraison (état actuel des stocks).\n\n" +
+        "🔵 Pour conserver la preuve juridique du stock vendu, utilisez la fiche INITIALE (figée à la commande), qui reste intacte.\n\n" +
+        "Confirmer la génération avec le stock actuel ?"
       )
       if (!confirmed) return
     }
@@ -1324,21 +1215,10 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                   Documents PDF <span className="ml-1 text-[10px] font-normal normal-case text-zinc-500">à télécharger / archiver</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Chantier « PDF de commande toujours à jour » (23.08.2026) :
-                      pour une COMMANDE, ce bouton ne sert plus le fichier Storage
-                      tel quel — il passe par ouvrirPdfAJour (régénère, puis ouvre),
-                      comme le bouton de la carte d'aperçu. Une offre garde le lien
-                      direct : son PDF est régénéré par les corrections. */}
-                  {!isTypeOffre ? (
-                    <button onClick={ouvrirPdfAJour} disabled={pdfOpening}
-                      title="Régénère le PDF depuis la page commande client, puis l'ouvre — toujours la version courante"
-                      className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
-                      {pdfOpening ? "📄 Génération…" : "📄 Commande PDF"}
-                    </button>
-                  ) : pdfUrl ? (
+                  {pdfUrl ? (
                     <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
                       className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
-                      📄 Offre PDF
+                      📄 {isTypeOffre ? "Offre PDF" : "Commande PDF"}
                     </a>
                   ) : (
                     <button onClick={generatePdf} disabled={pdfGenerating}
@@ -1348,18 +1228,10 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                           <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
                         </span>
                       )}
-                      <span className="relative">{pdfGenerating ? "📄 Génération…" : "📄 Générer offre PDF"}</span>
+                      <span className="relative">{pdfGenerating ? "📄 Génération…" : (isTypeOffre ? "📄 Générer offre PDF" : "📄 Générer commande PDF")}</span>
                     </button>
                   )}
-                  {/* Pour une COMMANDE : le montant peut avoir changé (révision) —
-                      on régénère le QR avant de l'ouvrir, comme le PDF. */}
-                  {!isTypeOffre ? (
-                    <button onClick={ouvrirQrAJour} disabled={qrGenerating}
-                      title="Régénère le QR au montant courant de la commande, puis l'ouvre"
-                      className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
-                      {qrGenerating ? "⏳ Génération QR…" : "🧾 QR paiement"}
-                    </button>
-                  ) : qrUrl ? (
+                  {qrUrl ? (
                     <a href={qrUrl} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
                       🧾 QR paiement
@@ -1377,23 +1249,22 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                   )}
                   {isCommandeReelle && (
                     <>
-                      {/* Fiche INITIALE : pièce d'archive, pas un document de
-                          travail — son bouton de téléchargement a été retiré
-                          d'ici le 23.08.2026 (risque : préparer une livraison
-                          sur la V1 après une révision). Elle reste accessible
-                          dans la carte « Fiche de travail », onglet Initiale.
-                          Ne subsiste que le bouton de RATTRAPAGE pour les
-                          anciennes commandes sans fiche initiale. */}
-                      {!ficheTravailInitialUrl && (
+                      {ficheTravailInitialUrl ? (
+                        <a href={ficheTravailInitialUrl} target="_blank" rel="noopener noreferrer" download
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20"
+                          title={ficheTravailInitialAt ? `Figée le ${new Date(ficheTravailInitialAt).toLocaleString("fr-CH")} — stock vu par le client à la commande` : "Stock figé à la commande"}>
+                          📋 Fiche de travail initiale PDF
+                        </a>
+                      ) : (
                         <button onClick={() => generateFicheTravail("initial")} disabled={ficheTravailGenerating}
                           className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/70 transition hover:bg-emerald-500/15 disabled:opacity-80"
-                          title="Cette commande n'a pas de fiche initiale archivée — la générer une fois (stock du jour de la commande, figé ensuite)">
+                          title="Générer la fiche initiale avec le stock du jour de la commande">
                           {ficheTravailGenerating ? "📋 Génération…" : "📋 Générer fiche de travail initiale PDF"}
                         </button>
                       )}
                       <button onClick={() => generateFicheTravail("current")} disabled={ficheTravailGenerating}
                         className="relative inline-flex items-center gap-1.5 overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-80"
-                        title="Régénère la fiche au contenu actuel de la commande (révisions et corrections comprises). Les stocks affichés restent figés ligne par ligne, chacun à sa date — jamais le stock du jour. Pour la prépa/livraison.">
+                        title="⚠ Génère une nouvelle fiche avec le STOCK DU JOUR — différent du stock vu par le client à la commande. Pour la prépa/livraison.">
                         {ficheTravailGenerating && (
                           <span className="absolute inset-0 overflow-hidden rounded-xl">
                             <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
@@ -1403,8 +1274,8 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                           {ficheTravailGenerating
                             ? "🔄 Génération…"
                             : ficheTravailUrl
-                              ? "🔄 Régénérer fiche de travail — commande actuelle PDF"
-                              : "🔄 Générer fiche de travail — commande actuelle PDF"}
+                              ? "🔄 Régénérer fiche de travail avec stock actuel PDF"
+                              : "🔄 Générer fiche de travail avec stock actuel PDF"}
                         </span>
                       </button>
                     </>
@@ -1778,74 +1649,34 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                 </div>
               </section>
             ) : (
-              /* Chantier « PDF de commande toujours à jour » (23.08.2026).
-                 Avant : <iframe src={pdfUrl}> — le PDF Storage, figé à sa dernière
-                 génération, donc muet sur les corrections et les révisions.
-                 Maintenant : la page commande client, comme pour l'offre juste
-                 au-dessus. Elle lit /api/offres/[slug], qui renvoie pour une
-                 commande les lignes figées J0 — le contenu est à jour, les
-                 niveaux de stock restent ceux du jour de la commande. */
-              <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
-                <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
-                    Aperçu commande
-                    <span className="text-xs font-normal text-blue-300/70 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-0.5" title="C'est la page commande client, relue à chaque ouverture : elle intègre les corrections et les révisions. Les niveaux de stock affichés restent ceux du jour de la commande.">
-                      🔄 Page à jour · stock figé J0
-                    </span>
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(urlPrint)
-                        const btn = document.activeElement as HTMLButtonElement
-                        if (btn) {
-                          const original = btn.innerText
-                          btn.innerText = "✓ Copié"
-                          setTimeout(() => { btn.innerText = original }, 2000)
-                        }
-                      }}
-                      className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]"
-                      title="Copier l'URL de la page commande client">
-                      🔗 Copier l&apos;URL
-                    </button>
-                    <a href={urlPrint} target="_blank" rel="noopener noreferrer"
-                      className="rounded-xl border border-sky-500/30 bg-sky-500/15 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/25"
-                      title="Ouvrir la page en plein écran">
-                      ⛶ Plein écran
+              pdfUrl && (
+                <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+                  <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                      Aperçu commande
+                      <span className="text-xs font-normal text-blue-300/70 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-0.5" title="PDF figé au moment de la commande — preuve du stock vu par le client">
+                        🔒 Stock figé
+                      </span>
+                    </h2>
+                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
+                      className="rounded-xl border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">
+                      Télécharger ↓
                     </a>
-                    <button onClick={ouvrirPdfAJour} disabled={pdfOpening}
-                      className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
-                      title="Régénère le PDF depuis cette page, puis l'ouvre — le fichier envoyé au client est donc toujours la version courante">
-                      {pdfOpening ? "📄 Génération…" : "📄 PDF à jour"}
-                    </button>
                   </div>
-                </div>
-                {(((offre.data as Record<string,unknown>)?.stock_frozen_at as string) || offre.created_at) && (
-                  <div className="mb-3 text-xs text-blue-300/80 bg-blue-500/5 border border-blue-500/20 rounded-lg px-3 py-2">
-                    🔵 Stock figé à la commande · {new Date(((offre.data as Record<string,unknown>)?.stock_frozen_at as string) || offre.created_at as string).toLocaleString("fr-CH")}
+                  {offre.created_at && (
+                    <div className="mb-3 text-xs text-blue-300/80 bg-blue-500/5 border border-blue-500/20 rounded-lg px-3 py-2">
+                      🔵 Stock figé à la commande · {new Date(offre.created_at).toLocaleString("fr-CH")}
+                    </div>
+                  )}
+                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                    <iframe
+  src={pdfUrl ? `${pdfUrl}?t=${encodeURIComponent(offre.updated_at || offre.created_at || '')}` : undefined}
+  title="Aperçu commande PDF"
+  className="h-[800px] w-full border-0"
+/>
                   </div>
-                )}
-                {pdfUrl && (
-                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-500">
-                    <span>
-                      PDF en Storage
-                      {pdfSnapshotAt ? ` · généré le ${new Date(pdfSnapshotAt).toLocaleString("fr-CH")}` : " · date de génération inconnue"}
-                    </span>
-                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download className="underline hover:text-zinc-300">
-                      fichier tel quel ↓
-                    </a>
-                    {pdfInitialUrl && (
-                      <a href={pdfInitialUrl} target="_blank" rel="noopener noreferrer" download className="underline hover:text-zinc-300"
-                        title="Le PDF tel qu'il était avant la première régénération">
-                        version d&apos;origine ↓
-                      </a>
-                    )}
-                  </div>
-                )}
-                <div className="overflow-hidden rounded-2xl border border-white/10 bg-white">
-                  <iframe src={urlPrint} title="Aperçu commande" className="h-[900px] w-full border-0"/>
-                </div>
-              </section>
+                </section>
+              )
             )}
 
             {isCommandeReelle && (ficheTravailInitialUrl || ficheTravailUrl) && (
@@ -1858,6 +1689,9 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
 
             {/* Arrivages (chantier Arrivages, étape 3) : ce qui est déjà arrivé,
                 ligne par ligne — distinct de la livraison au client ci-dessus. */}
+            {isCommandeReelle && (
+              <SuiviDelaisBlock numero={offre.numero_affiche} />
+            )}
             {isCommandeReelle && (
               <ArrivagesBlock boutique="magasin" numero={offre.numero_affiche} />
             )}
