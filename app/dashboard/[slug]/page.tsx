@@ -1377,16 +1377,17 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                   )}
                   {isCommandeReelle && (
                     <>
-                      {ficheTravailInitialUrl ? (
-                        <a href={ficheTravailInitialUrl} target="_blank" rel="noopener noreferrer" download
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20"
-                          title={ficheTravailInitialAt ? `Figée le ${new Date(ficheTravailInitialAt).toLocaleString("fr-CH")} — stock vu par le client à la commande` : "Stock figé à la commande"}>
-                          📋 Fiche de travail initiale PDF
-                        </a>
-                      ) : (
+                      {/* Fiche INITIALE : pièce d'archive, pas un document de
+                          travail — son bouton de téléchargement a été retiré
+                          d'ici le 23.08.2026 (risque : préparer une livraison
+                          sur la V1 après une révision). Elle reste accessible
+                          dans la carte « Fiche de travail », onglet Initiale.
+                          Ne subsiste que le bouton de RATTRAPAGE pour les
+                          anciennes commandes sans fiche initiale. */}
+                      {!ficheTravailInitialUrl && (
                         <button onClick={() => generateFicheTravail("initial")} disabled={ficheTravailGenerating}
                           className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/70 transition hover:bg-emerald-500/15 disabled:opacity-80"
-                          title="Générer la fiche initiale avec le stock du jour de la commande">
+                          title="Cette commande n'a pas de fiche initiale archivée — la générer une fois (stock du jour de la commande, figé ensuite)">
                           {ficheTravailGenerating ? "📋 Génération…" : "📋 Générer fiche de travail initiale PDF"}
                         </button>
                       )}
