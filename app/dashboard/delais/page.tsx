@@ -369,9 +369,16 @@ export default function DelaisPage() {
               </tr>
             </thead>
             <tbody>
-              {visibles.map(l => {
+              {(() => {
+                // Commande « ouverte » : toutes ses lignes + le dépli partagent
+                // le même fond et une barre bleue à gauche, pour qu'on voie d'un
+                // coup d'œil ce qui appartient à la commande dépliée.
+                const ligneOuverte = ouverte ? visibles.find(v => v.id === ouverte) : null;
+                const cleOuverte = ligneOuverte ? `${ligneOuverte.boutique}|${ligneOuverte.numero_commande}` : null;
+                return visibles.map(l => {
                 const etape = ETAPES[l.etape] || ETAPES.sans_delai;
                 const groupe = l as Ligne & { _premiere: boolean; _taille: number; _correspond: boolean };
+                const dansGroupeOuvert = cleOuverte === `${l.boutique}|${l.numero_commande}`;
                 const evts = chrono[l.id];
                 // Arrivage de référence : le réel (preuve de départ) s'il existe,
                 // sinon le calculé depuis la promesse fournisseur.
@@ -383,8 +390,8 @@ export default function DelaisPage() {
                 return (
                 <React.Fragment key={l.id}>
                   <tr onClick={() => ouvrirChrono(l)}
-                    className={`cursor-pointer transition hover:bg-[#31353b] ${groupe._premiere ? "border-t-2 border-white/15" : "border-t border-white/5"} ${l.alarme_retard ? "bg-rose-500/5" : ""} ${groupe._correspond ? "" : "opacity-50"}`}>
-                    <td className="px-4 py-3 font-medium">
+                    className={`cursor-pointer transition hover:bg-[#31353b] ${groupe._premiere ? "border-t-2 border-white/15" : "border-t border-white/5"} ${dansGroupeOuvert ? "bg-[#26292d]" : l.alarme_retard ? "bg-rose-500/5" : ""} ${groupe._correspond || dansGroupeOuvert ? "" : "opacity-50"}`}>
+                    <td className={`px-4 py-3 font-medium ${dansGroupeOuvert ? "border-l-4 border-l-sky-400/60" : ""}`}>
                       {groupe._premiere ? (
                         <>
                           {l.numero_commande}
@@ -470,8 +477,8 @@ export default function DelaisPage() {
 
                   {/* Dépli : chronologie + articles + recherche approfondie */}
                   {ouverte === l.id && (
-                    <tr className="border-t border-white/5 bg-[#26292d]">
-                      <td colSpan={13} className="px-6 py-4">
+                    <tr className="bg-[#26292d]">
+                      <td colSpan={13} className="border-l-4 border-l-sky-400/60 border-b-2 border-b-sky-400/30 px-6 py-4">
                         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
                           <div>
                             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Chronologie des délais — rien n'est jamais écrasé</div>
@@ -568,7 +575,8 @@ export default function DelaisPage() {
                     </tr>
                   )}
                 </React.Fragment>
-              )})}
+              )});
+              })()}
               {!visibles.length && (
                 <tr><td colSpan={13} className="px-4 py-8 text-center text-sm text-zinc-500">Aucune ligne pour ce filtre.</td></tr>
               )}
