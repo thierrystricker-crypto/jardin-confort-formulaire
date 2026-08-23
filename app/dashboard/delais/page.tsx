@@ -43,6 +43,7 @@ type AValider = {
   articles_concernes: string[]|null; commentaire: string|null; created_at: string
   pj_url: string|null; pj_nom: string|null
   suivi_commandes: {numero_commande: string; marque: string; client_nom: string|null; client_prenom: string|null}|null
+  mail_url: string|null
 }
 type Calibrage = {
   marque: string; nb_observations: number; ecart_median_jours: number|null
@@ -63,7 +64,7 @@ type Evenement = {
   source: string; confiance: number; statut_validation: string; portee: string
   articles_concernes: string[]|null; commentaire: string|null; saisi_par: string|null
   created_at: string; pj_url: string|null; pj_nom: string|null
-  ref_fournisseur: string|null
+  ref_fournisseur: string|null; mail_url: string|null
 }
 
 const JOURS = ["di","lu","ma","me","je","ve","sa"];
@@ -518,6 +519,11 @@ export default function DelaisPage() {
                                         title={`Ouvrir le document fournisseur d'origine${e.pj_nom ? ` : ${e.pj_nom}` : ""} (lien signé, valable 4 h — régénéré à chaque ouverture)`}
                                         className="inline-flex max-w-[280px] items-center gap-1 truncate rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs text-sky-300 hover:bg-sky-500/20">📄 <span className="truncate">{e.pj_nom || "PDF"}</span></a>
                                     )}
+                                    {e.mail_url && (
+                                      <a href={e.mail_url} onClick={ev => ev.stopPropagation()}
+                                        title="Ouvrir le mail d'origine dans Thunderbird — pour répondre directement au fournisseur"
+                                        className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-[#1f2125] px-2 py-0.5 text-xs text-zinc-300 hover:bg-[#34383d]">✉️ Mail</a>
+                                    )}
                                     {e.statut_validation === "a_valider" && (
                                       <span className="ml-auto inline-flex gap-1.5">
                                         <button disabled={enCours} onClick={() => action({action: "valider", evenement_id: e.id})} className="rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-300 hover:bg-emerald-500/25">✓ Valider</button>
@@ -626,6 +632,10 @@ export default function DelaisPage() {
                     <a href={e.pj_url} target="_blank" rel="noopener noreferrer"
                       title={`Ouvrir le document fournisseur d'origine${e.pj_nom ? ` : ${e.pj_nom}` : ""} (lien signé, valable 4 h)`}
                       className="inline-flex max-w-[240px] items-center gap-1 truncate rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs text-sky-300 hover:bg-sky-500/20">📄 <span className="truncate">{e.pj_nom || "PDF"}</span></a>
+                  )}
+                  {e.mail_url && (
+                    <a href={e.mail_url} title="Ouvrir le mail d'origine dans Thunderbird — pour répondre directement au fournisseur"
+                      className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-[#1f2125] px-2 py-0.5 text-xs text-zinc-300 hover:bg-[#34383d]">✉️ Mail</a>
                   )}
                   <span className="ml-auto inline-flex gap-1.5">
                     <button disabled={enCours} onClick={() => action({action: "valider", evenement_id: e.id})} className="rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300 hover:bg-emerald-500/25">✓ Valider</button>

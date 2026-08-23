@@ -18,6 +18,16 @@ export function lienPJ(chemin: string | null | undefined, ttlSecondes = 4 * 3600
   return `${BASE_ATTACHMENT}/attachment?p=${encodeURIComponent(chemin)}&exp=${exp}&sig=${sig}`
 }
 
+// Lien cliquable vers le MAIL D'ORIGINE dans Thunderbird, via la passerelle
+// /mid/<mid> de jardi-mail-mcp (même construction que lienThunderbird côté
+// connecteur). `mid` vient de mails.thunderbird_link (« mid:<message-id> »).
+// Les mails sans Message-ID (robot Fermob paiement@) n'en ont pas : null,
+// et l'interface n'affiche rien — jamais de lien de secours inventé.
+export function lienThunderbird(mid: string | null | undefined): string | null {
+  if (!mid || !String(mid).startsWith("mid:")) return null
+  return `${BASE_ATTACHMENT}/mid/${encodeURIComponent(mid)}`
+}
+
 // Nom lisible du document source : nom de fichier débarrassé du préfixe
 // technique de l'archivage (uid_xxx_n_). Les PDF au nom générique (ARC
 // Fermob « jobrpt_ARCCLIENT_… ») sont remplacés par la référence de commande

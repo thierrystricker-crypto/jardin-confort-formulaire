@@ -6,7 +6,7 @@
 // Les écritures passent par /api/delais/evenement.
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
-import { lienPJ, nomDocument } from "@/lib/pj-lien"
+import { lienPJ, nomDocument, lienThunderbird } from "@/lib/pj-lien"
 
 export async function GET() {
   try {
@@ -29,7 +29,7 @@ export async function GET() {
       // avec la commande porteuse (jointure implicite PostgREST).
       supabaseAdmin
         .from("delais_evenements")
-        .select("id, commande_id, type, date_depart, semaine_annoncee, confiance, portee, articles_concernes, commentaire, pj_chemin, created_at, suivi_commandes(numero_commande, marque, client_nom, client_prenom)")
+        .select("id, commande_id, type, date_depart, semaine_annoncee, confiance, portee, articles_concernes, commentaire, pj_chemin, mail_uid_unique, created_at, suivi_commandes(numero_commande, marque, client_nom, client_prenom)")
         .eq("statut_validation", "a_valider")
         .order("created_at", { ascending: false })
         .limit(100),
@@ -72,10 +72,18 @@ export async function GET() {
       orphelines: orphelines.data || [],
       calibrage: calibrage.data || [],
       fournisseurs: fournisseurs.data || [],
-      a_valider: (aValider.data || []).map((e) => {
-        const brut = e as {pj_chemin?: string|null; commentaire?: string|null}
-        return { ...e, pj_url: lienPJ(brut.pj_chemin), pj_nom: nomDocument(brut.pj_chemin, brut.commentaire) }
-      }),
+      a_valider: await (async () => {
+        const liste = (aValider.data || []) as {pj_chemin?: string|null; commentaire?: string|null; mail_uid_unique?: string|null}[]
+        // Mail d'origine (Thunderbird) pour répondre au fournisseur depuis la file.
+        const uids = [...new Set(liste.map(e => e.mail_uid_unique).filter(Boolean))] as string[]
+        const parUid = new Map<string, string|null>()
+        if (uids.length) {
+          const { data: mails } = await supabaseAdmin.from("mails").select("uid_unique, thunderbird_link").in("uid_unique", uids)
+          for (const m of mails || []) parUid.set(m.uid_unique, m.thunderbird_link)
+        }
+        return liste.map(e => ({ ...e, pj_url: lienPJ(e.pj_chemin), pj_nom: nomDocument(e.pj_chemin, e.commentaire),
+          mail_url: lienThunderbird(e.mail_uid_unique ? parUid.get(e.mail_uid_unique) : null) }))
+      })(),
     })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
