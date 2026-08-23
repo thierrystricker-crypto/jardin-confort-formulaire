@@ -2814,3 +2814,103 @@ connecteur `jardi-mail-mcp` ne sont pas concernées.
 git branch -d nav-listes-nouvel-onglet
 git push origin --delete nav-listes-nouvel-onglet
 ```
+
+---
+
+## Session du 23.08.2026 (suite) — Flèches d'ordre des lignes + popup d'annonces
+
+Branche `fleches-ordre-lignes` · commits `baf281e` et suivants
+
+### 🎯 Deux demandes
+
+1. Réordonner les lignes d'une offre **au clic**, sans perdre le glisser-déposer.
+2. Réveiller le popup d'annonces pour faire connaître ce qui a été livré depuis mai —
+   flèches, chat Jardi, Arrivages, Délais fournisseurs, annexes, filtres mémorisés.
+
+### ✅ 1. Les flèches ▲▼ (`DraftFormulaire.tsx`)
+
+Deux fonctions ajoutées à côté de `reorderLines` :
+
+- `deplacerLigne(id, sens)` — résout le voisin par index et **délègue à `reorderLines`**.
+  Donc `captureUndo()` est appelé comme pour un glisser : **un déplacement au clic est
+  annulable**, sans une ligne de code de plus.
+- `renderTdNum(id, idx, libelle)` — la cellule `#` commune aux **trois** types de ligne
+  (article, commentaire 💬, média 🖼️). Le numéro, puis les deux flèches dans un
+  `<span className="screenOnly">` : elles ne sortent jamais à l'impression.
+
+Colonne `#` élargie de 32 à 48 px, ▲ désactivée sur la première ligne, ▼ sur la dernière,
+CSS `.jc-num-cell` / `.jc-move-btns` / `.jc-move-btn` avec variante `light-mode`.
+
+**Portée réelle, vérifiée avant de coder :** `/drafts/nouveau`, `/drafts/[slug]/editer` et
+`/dashboard/[slug]/reviser` montent **tous les trois** `DraftFormulaire`. Les flèches sont
+donc disponibles dans la révision d'une commande sans travail supplémentaire.
+
+**`app/offres/nouveau/page.tsx` n'a délibérément PAS été modifié.** Vérification faite :
+aucun lien de l'interface n'y mène (dashboard, page clients, formulaire : zéro référence),
+et l'audit `07` §6 le donne pour 3084 lignes identiques à `DraftFormulaire`. Y ajouter les
+flèches aurait créé un second endroit à corriger pour un écran que personne n'ouvre. La
+bonne action sur ce fichier reste sa suppression, dans un passage de ménage dédié.
+
+### ✅ 2. Le popup d'annonces (`ReleaseNotesPopup.tsx`)
+
+**Il était inerte depuis le 29.05.2026** — `SHOW_UNTIL` dépassé, personne ne le voyait
+plus. Nouvelle butoir au **31.08.2026 00:00 UTC**, nouvelle `HIDE_KEY`
+(`jc-release-notes-hidden-until-2026-08-23`) pour que ceux qui avaient masqué l'ancien
+voient bien celui-ci.
+
+**Déplacé de `/drafts/nouveau` vers le dashboard** : cinq des six blocs annoncent des
+fonctions qui vivent sur le dashboard ou s'atteignent depuis lui. `OnboardingDraftPopup`
+reste sur la création de brouillon.
+
+Six blocs : flèches ▲▼ · annexes au dossier · chat Jardi et ses outils · Arrivages ·
+Délais fournisseurs · filtres mémorisés des listes. Plus un encadré expliquant **d'où
+viennent les dates de délai** — l'extraction automatique des mails fournisseurs toutes les
+3 h, les règles de transit par marque, les volets « À valider » et « Orphelines ».
+
+Le contenu a été écrit **après relecture du code réel** (`AnnexesBlock.tsx` pour les
+formats acceptés, `arrivages/page.tsx` pour le mode de scan) et des docs `08` et `15` pour
+les outils du connecteur — pas de mémoire.
+
+### 🐛 Le piège de la session : `&apos;` mange l'espace qui le précède
+
+**Symptôme** : au rendu, des mots collés — « Jardi**en** haut », « brouillon d'offre**à**
+partir », « Chiffres de vente**d'une** période ». Dans le source, l'espace est bien là.
+
+**Le pattern qui a donné la cause** : l'espace ne sautait **que dans les phrases contenant
+`&apos;`**. « **Chercher un article** par désignation » s'affichait correctement,
+« **Chiffres de vente** d'une période » non. La seule différence entre les deux lignes
+était l'entité.
+
+**Cause** : le compilateur JSX découpe le nœud texte autour de l'entité HTML et applique
+son rognage d'espaces de début de ligne à **chaque morceau**, pas seulement au premier.
+L'espace de tête du segment qui suit `</strong>` disparaît.
+
+**Correctif** : les 32 `&apos;` remplacés par l'apostrophe typographique **`’`** (U+2019).
+Pas de contournement par `{" "}` un peu partout — on supprime la cause. Bénéfice
+secondaire : c'est la bonne apostrophe française, et ESLint `react/no-unescaped-entities`
+ne vise que `'` droit, `"`, `>` et `}`.
+
+> **Règle à retenir : dans du texte JSX, écrire `’`, jamais `&apos;`.** Les deux autres
+> popups (`AnnonceStockPopup`, `OnboardingDraftPopup`) et l'ancien contenu du release notes
+> utilisent encore `&apos;` — s'ils affichent des mots collés, c'est la même cause.
+
+**Second cas, classique celui-là** : un saut de ligne collé à une balise inline
+(`</strong>` en fin de ligne, texte à la ligne suivante) est supprimé au lieu de devenir un
+espace. Un seul endroit concerné, corrigé par `{" "}`.
+
+### 📂 Fichiers
+
+- `app/drafts/_components/DraftFormulaire.tsx` — flèches
+- `components/ReleaseNotesPopup.tsx` — popup réécrit
+- `app/dashboard/page.tsx` — montage du popup
+- `app/drafts/nouveau/page.tsx` — démontage du popup
+
+Aucune migration SQL, aucune colonne touchée, aucun appel Shopify : les 5 RPC du
+connecteur ne sont pas concernées.
+
+### 🔧 Après stabilité
+
+```powershell
+git branch -d fleches-ordre-lignes
+git push origin --delete fleches-ordre-lignes
+```
