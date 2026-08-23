@@ -263,7 +263,7 @@ export default function DelaisPage() {
     // (une commande ne remonte pas en tête grâce à une marque hors filtre).
     groupes.sort((A, B) => tri(A.g.find(correspond) || A.g[0], B.g.find(correspond) || B.g[0]));
     return groupes.flatMap(({ g }) =>
-      g.map((l, i) => ({ ...l, _premiere: i === 0, _taille: g.length, _correspond: correspond(l) }))
+      g.map((l, i) => ({ ...l, _premiere: i === 0, _derniere: i === g.length - 1, _taille: g.length, _correspond: correspond(l) }))
     );
   }, [lignes, marque, boutique, filtre, recherche, suiviesSeules]);
 
@@ -377,9 +377,8 @@ export default function DelaisPage() {
                 const cleOuverte = ligneOuverte ? `${ligneOuverte.boutique}|${ligneOuverte.numero_commande}` : null;
                 return visibles.map(l => {
                 const etape = ETAPES[l.etape] || ETAPES.sans_delai;
-                const groupe = l as Ligne & { _premiere: boolean; _taille: number; _correspond: boolean };
+                const groupe = l as Ligne & { _premiere: boolean; _derniere: boolean; _taille: number; _correspond: boolean };
                 const dansGroupeOuvert = cleOuverte === `${l.boutique}|${l.numero_commande}`;
-                const evts = chrono[l.id];
                 // Arrivage de référence : le réel (preuve de départ) s'il existe,
                 // sinon le calculé depuis la promesse fournisseur.
                 const prevu = l.arrivage_estime_reel || l.arrivage_calcule;
@@ -390,7 +389,7 @@ export default function DelaisPage() {
                 return (
                 <React.Fragment key={l.id}>
                   <tr onClick={() => ouvrirChrono(l)}
-                    className={`cursor-pointer transition hover:bg-[#31353b] ${groupe._premiere ? "border-t-2 border-white/15" : "border-t border-white/5"} ${dansGroupeOuvert ? "bg-[#26292d]" : l.alarme_retard ? "bg-rose-500/5" : ""} ${groupe._correspond || dansGroupeOuvert ? "" : "opacity-50"}`}>
+                    className={`cursor-pointer transition hover:bg-[#31353b] ${dansGroupeOuvert ? (groupe._premiere ? "border-t-2 border-t-sky-400/60" : "border-t border-white/5") : groupe._premiere ? "border-t-2 border-white/15" : "border-t border-white/5"} ${dansGroupeOuvert ? "bg-[#26292d]" : l.alarme_retard ? "bg-rose-500/5" : ""} ${groupe._correspond || dansGroupeOuvert ? "" : "opacity-50"}`}>
                     <td className={`px-4 py-3 font-medium ${dansGroupeOuvert ? "border-l-4 border-l-sky-400/60" : ""}`}>
                       {groupe._premiere ? (
                         <>
@@ -466,7 +465,7 @@ export default function DelaisPage() {
                           className="inline-flex items-center rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs text-sky-300 hover:bg-sky-500/20">↗ Commande</a>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                    <td className={`px-4 py-3 text-right ${dansGroupeOuvert ? "border-r-2 border-r-sky-400/40" : ""}`} onClick={e => e.stopPropagation()}>
                       {l.statut === "en_cours" && !l.date_reception && (
                         <Link href={`/dashboard/arrivages?q=${encodeURIComponent(l.numero_commande)}`}
                           title="Saisir la réception article par article (page Arrivages) — nourrit le calibrage des règles de transit quand toute la marque est couverte"
@@ -476,21 +475,21 @@ export default function DelaisPage() {
                   </tr>
 
                   {/* Dépli : chronologie + articles + recherche approfondie */}
-                  {ouverte === l.id && (
+                  {ligneOuverte && dansGroupeOuvert && groupe._derniere && (() => { const lo = ligneOuverte; const evtsO = chrono[lo.id]; return (
                     <tr className="bg-[#26292d]">
-                      <td colSpan={13} className="border-l-4 border-l-sky-400/60 border-b-2 border-b-sky-400/30 px-6 py-4">
+                      <td colSpan={13} className="border-l-4 border-l-sky-400/60 border-r-2 border-r-sky-400/40 border-b-2 border-b-sky-400/60 px-6 py-4">
                         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
                           <div>
                             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Chronologie des délais — rien n'est jamais écrasé</div>
-                            {!evts && <div className="text-sm text-zinc-500">Chargement…</div>}
-                            {evts && evts.length === 0 && <div className="text-sm text-zinc-500">Aucun événement — délai fournisseur jamais relevé. Lancer la recherche approfondie ci-contre.</div>}
-                            {evts && evts.length > 0 && (
+                            {!evtsO && <div className="text-sm text-zinc-500">Chargement…</div>}
+                            {evtsO && evtsO.length === 0 && <div className="text-sm text-zinc-500">Aucun événement — délai fournisseur jamais relevé. Lancer la recherche approfondie ci-contre.</div>}
+                            {evtsO && evtsO.length > 0 && (
                               <div className="space-y-2">
-                                {evts.map((e, i) => {
+                                {evtsO.map((e, i) => {
                                   // L'écart se mesure au sein de la MÊME commande fournisseur
                                   // (même n° V/BTB) : deux commandes fournisseur séparées pour
                                   // la même commande client ne sont pas des reports entre elles.
-                                  const prec = evts.slice(0, i).reverse().find(p =>
+                                  const prec = evtsO.slice(0, i).reverse().find(p =>
                                     ["confirmation_fournisseur","report"].includes(p.type) && p.date_depart && p.statut_validation === "valide"
                                     && (!e.ref_fournisseur || !p.ref_fournisseur || p.ref_fournisseur === e.ref_fournisseur));
                                   const ecart = (e.type === "report" && e.date_depart && prec?.date_depart)
@@ -525,16 +524,16 @@ export default function DelaisPage() {
                             {(() => {
                               // Toute la commande, groupée par marque — la marque de la
                               // ligne d'abord. Repli : snapshot des articles de la marque.
-                              const toutes = lignesCommande[`${l.boutique}|${l.numero_commande}`];
+                              const toutes = lignesCommande[`${lo.boutique}|${lo.numero_commande}`];
                               if (!toutes) return (
                                 <div>
-                                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Articles {l.marque} ({(l.articles || []).length})</div>
+                                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Articles {lo.marque} ({(lo.articles || []).length})</div>
                                   <div className="max-h-40 space-y-1 overflow-y-auto text-xs text-zinc-400">
-                                    {(l.articles || []).map((a, i) => <div key={i}>{a.qty ?? "?"}× {a.titre || a.sku}</div>)}
+                                    {(lo.articles || []).map((a, i) => <div key={i}>{a.qty ?? "?"}× {a.titre || a.sku}</div>)}
                                   </div>
                                 </div>
                               );
-                              const marques = [l.marque, ...[...new Set(toutes.map(a => a.marque || "à la volée"))].filter(m => m !== l.marque)];
+                              const marques = [lo.marque, ...[...new Set(toutes.map(a => a.marque || "à la volée"))].filter(m => m !== l.marque)];
                               return (
                                 <div>
                                   <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Toute la commande ({toutes.length} article{toutes.length > 1 ? "s" : ""})</div>
@@ -544,7 +543,7 @@ export default function DelaisPage() {
                                       if (!arts.length) return null;
                                       return (
                                         <div key={m}>
-                                          <div className={`font-semibold ${m === l.marque ? "text-zinc-200" : "text-zinc-500"}`}>{m}{m === l.marque ? " (cette ligne)" : ""}</div>
+                                          <div className={`font-semibold ${m === lo.marque ? "text-zinc-200" : "text-zinc-500"}`}>{m}{m === lo.marque ? " (cette ligne)" : ""}</div>
                                           {arts.map(a => (
                                             <div key={a.position} className="flex flex-wrap items-baseline gap-x-2 text-zinc-400">
                                               <span>{a.qty_commandee}× {a.titre || a.sku}</span>
@@ -561,10 +560,10 @@ export default function DelaisPage() {
                                 </div>
                               );
                             })()}
-                            {l.delai_annonce_client && <div className="text-xs text-zinc-400">Délai annoncé au client : <span className="text-zinc-200">{fmtDate(l.delai_annonce_client)}</span></div>}
-                            {l.date_reception && <div className="text-xs text-emerald-300">Reçue le {fmtDate(l.date_reception)}</div>}
-                            {!l.date_reception && l.date_reception_partielle && <div className="text-xs text-lime-300">Partiellement reçue — dernier arrivage le {fmtDate(l.date_reception_partielle)}</div>}
-                            <button onClick={() => rechercheApprofondie(l)}
+                            {lo.delai_annonce_client && <div className="text-xs text-zinc-400">Délai annoncé au client : <span className="text-zinc-200">{fmtDate(lo.delai_annonce_client)}</span></div>}
+                            {lo.date_reception && <div className="text-xs text-emerald-300">Reçue le {fmtDate(lo.date_reception)}</div>}
+                            {!lo.date_reception && lo.date_reception_partielle && <div className="text-xs text-lime-300">Partiellement reçue — dernier arrivage le {fmtDate(lo.date_reception_partielle)}</div>}
+                            <button onClick={() => rechercheApprofondie(lo)}
                               title="Copie la demande dans le presse-papier et ouvre le chat Jardi : colle et envoie."
                               className="w-full rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
                               🔍 Recherche approfondie (via Jardi)
@@ -573,7 +572,7 @@ export default function DelaisPage() {
                         </div>
                       </td>
                     </tr>
-                  )}
+                  ); })()}
                 </React.Fragment>
               )});
               })()}
