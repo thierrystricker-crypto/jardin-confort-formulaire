@@ -346,6 +346,45 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     finally { setPdfOpening(false) }
   }
 
+  // ─── Ouvrir le QR de paiement en le régénérant d'abord ────────────────
+  // Même logique que ouvrirPdfAJour : le POST /qr relit total_ttc à
+  // l'instant, donc après une révision le QR régénéré porte le nouveau
+  // montant (et 50 % si acompte). Le fichier sanctuarisé qr/route.ts
+  // n'est pas modifié — seulement appelé.
+  async function ouvrirQrAJour() {
+    if(!slug || qrGenerating) return
+    const onglet = window.open("", "_blank")
+    if (onglet) {
+      onglet.document.write(
+        `<!doctype html><meta charset="utf-8"><title>QR en cours…</title>` +
+        `<body style="margin:0;display:flex;align-items:center;justify-content:center;` +
+        `height:100vh;font-family:system-ui,sans-serif;color:#334;background:#f6f7f9">` +
+        `<div style="text-align:center"><div style="font-size:15px">Génération du QR de paiement au montant courant…</div>` +
+        `<div style="margin-top:8px;font-size:13px;color:#889">10 à 20 secondes</div></div>`
+      )
+    }
+    setQrGenerating(true)
+    try {
+      const res=await fetch(`/api/offres/${slug}/qr`,{method:"POST"})
+      const json=await res.json()
+      if(res.ok && json.qr_url){
+        setQrUrl(json.qr_url)
+        const frais=`${json.qr_url}?t=${Date.now()}`
+        if (onglet) onglet.location.replace(frais)
+        else window.open(frais,"_blank")
+      } else {
+        if (onglet) onglet.close()
+        setSaveKind("error")
+        setSaveStatus("Génération du QR impossible.")
+      }
+    } catch {
+      if (onglet) onglet.close()
+      setSaveKind("error")
+      setSaveStatus("Génération du QR impossible.")
+    }
+    finally { setQrGenerating(false) }
+  }
+
   async function generateQr() {
     if(!slug) return
     setQrGenerating(true)
@@ -1291,7 +1330,15 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                       <span className="relative">{pdfGenerating ? "📄 Génération…" : "📄 Générer offre PDF"}</span>
                     </button>
                   )}
-                  {qrUrl ? (
+                  {/* Pour une COMMANDE : le montant peut avoir changé (révision) —
+                      on régénère le QR avant de l'ouvrir, comme le PDF. */}
+                  {!isTypeOffre ? (
+                    <button onClick={ouvrirQrAJour} disabled={qrGenerating}
+                      title="Régénère le QR au montant courant de la commande, puis l'ouvre"
+                      className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
+                      {qrGenerating ? "⏳ Génération QR…" : "🧾 QR paiement"}
+                    </button>
+                  ) : qrUrl ? (
                     <a href={qrUrl} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
                       🧾 QR paiement
