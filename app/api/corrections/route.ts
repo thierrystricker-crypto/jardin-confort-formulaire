@@ -281,12 +281,12 @@ export async function POST(request: NextRequest) {
           // INITIALE n'est jamais touchee. Best-effort, non bloquant.
           // (Chantier "PDF de commande toujours a jour", 23.08.2026.)
           try {
-            const { data: ficheEtat } = await supabase
+            const { data: docsEtat } = await supabase
               .from("offres")
-              .select("fiche_travail_pdf_url")
+              .select("fiche_travail_pdf_url, qr_url")
               .eq("slug", entity.slug)
               .single();
-            if (ficheEtat?.fiche_travail_pdf_url) {
+            if (docsEtat?.fiche_travail_pdf_url) {
               await fetch(`${APP_URL}/api/offres/${entity.slug}/fiche-travail-pdf`, {
                 method: "POST",
                 headers: {
@@ -296,8 +296,20 @@ export async function POST(request: NextRequest) {
                 body: JSON.stringify({ mode: "current" }),
               });
             }
+            // QR de paiement : la QR-facture suisse porte le DEBITEUR
+            // (nom/societe, rue, NPA, ville) - exactement les champs que la
+            // correction sert a rectifier. Sans regeneration, le client
+            // corrige paie avec un bulletin au mauvais debiteur (bug deja
+            // observe par le passe). qr/route.ts (sanctuarise) n'est pas
+            // modifie : il relit les colonnes client a l'instant.
+            if (docsEtat?.qr_url) {
+              await fetch(`${APP_URL}/api/offres/${entity.slug}/qr`, {
+                method: "POST",
+                headers: { "x-jc-interne": process.env.DASHBOARD_SESSION_SECRET || "" },
+              });
+            }
           } catch (err) {
-            console.error("[corrections] fiche courante regen err:", err);
+            console.error("[corrections] regen fiche/QR err:", err);
           }
           const { error: stampError } = await supabase
             .from("corrections")
