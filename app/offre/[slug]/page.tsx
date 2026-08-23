@@ -220,6 +220,15 @@ function ValidationOverlay({ step }: { step: number }) {
   );
 }
 
+// Contourne le cache d'une heure du Storage Supabase : le fichier PDF/QR est
+// remplacé au même chemin à chaque régénération (correction, révision), mais
+// l'URL nue peut servir l'ancienne version jusqu'à 1 h. Un paramètre unique
+// force la version courante. (Chantier « PDF de commande toujours à jour ».)
+function frais(u: string | null | undefined): string {
+  if (!u) return "";
+  return `${u}${u.includes("?") ? "&" : "?"}v=${Date.now()}`;
+}
+
 export default function OffrePage({ params }: { params: Promise<{ slug: string }> }) {
   const [offre, setOffre] = useState<OffreRow | null>(null);
   // Version vivante (chantier revision-commandes) : nb revisions + 1.
@@ -270,9 +279,9 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
               // marqueur non bloquant : on ignore une erreur de fetch revisions
             }
           }
-        // Récupérer URLs PDF + QR si déjà disponibles
-        setPdfUrl(o.pdf_url || "");
-        setQrUrl(o.qr_url || "");
+        // Récupérer URLs PDF + QR si déjà disponibles (cache-buster : voir frais())
+        setPdfUrl(frais(o.pdf_url));
+        setQrUrl(frais(o.qr_url));
       } catch { setPageError("error"); }
       finally { setLoading(false); }
     }
@@ -292,7 +301,7 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
         if (res.ok) {
           const json = await res.json();
           if (json.offre?.qr_url) {
-            setQrUrl(json.offre.qr_url);
+            setQrUrl(frais(json.offre.qr_url));
             clearInterval(interval);
             return;
           }
@@ -315,7 +324,7 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
         if (res.ok) {
           const json = await res.json();
           if (json.offre?.pdf_url) {
-            setPdfUrl(json.offre.pdf_url);
+            setPdfUrl(frais(json.offre.pdf_url));
             clearInterval(interval);
             return;
           }
@@ -357,8 +366,8 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
           if (res.ok) {
             const json = await res.json();
             if (json.offre?.qr_url) {
-              setQrUrl(json.offre.qr_url);
-              window.open(json.offre.qr_url, "_blank");
+              setQrUrl(frais(json.offre.qr_url));
+              window.open(frais(json.offre.qr_url), "_blank");
               setQrDownloading(false);
               return;
             }

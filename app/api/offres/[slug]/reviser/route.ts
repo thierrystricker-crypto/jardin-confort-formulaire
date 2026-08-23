@@ -235,6 +235,16 @@ export async function POST(
           method: "POST",
           headers: EN_TETE_INTERNE,
         }).catch((err) => console.error("[after] QR revision err:", err)),
+        // Fiche de travail COURANTE (mode "current") : document interne de
+        // preparation, qui affiche par nature le stock DU JOUR - la
+        // regenerer apres la revision est donc sa semantique normale.
+        // La fiche INITIALE (preuve du stock a la vente) n'est jamais
+        // touchee : la route l'ignore sans force=true.
+        fetch(`${BASE_URL}/api/offres/${slug}/fiche-travail-pdf`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...EN_TETE_INTERNE },
+          body: JSON.stringify({ mode: "current" }),
+        }).catch((err) => console.error("[after] Fiche courante revision err:", err)),
       ]);
     });
 

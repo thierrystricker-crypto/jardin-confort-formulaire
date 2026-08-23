@@ -189,6 +189,15 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [converting,setConverting]=useState(false)
   const [correctionDrawerOpen, setCorrectionDrawerOpen] = useState(false)
 
+  // Contourne le cache d'une heure du Storage Supabase : le fichier est
+  // remplacé au même chemin à chaque régénération, mais l'URL nue peut servir
+  // l'ancienne version jusqu'à 1 h. Un paramètre unique force la version
+  // courante. (Chantier « PDF de commande toujours à jour », 23.08.2026.)
+  function frais(u: string|null|undefined): string|null {
+    if (!u) return null
+    return `${u}${u.includes("?") ? "&" : "?"}v=${Date.now()}`
+  }
+
   async function pollPdf(slugToCheck: string) {
     for (let i = 0; i < 15; i++) {
       await new Promise(r => setTimeout(r, 3000))
@@ -197,7 +206,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         if (res.ok) {
           const json = await res.json()
           const url = (json.offre as Record<string,unknown>)?.pdf_url as string|null
-          if (url) { setPdfUrl(url); setPdfGenerating(false); return }
+          if (url) { setPdfUrl(frais(url)); setPdfGenerating(false); return }
         }
       } catch { /* ignore */ }
     }
@@ -218,7 +227,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         setNotesInternes(o.notes_internes||"")
         const existingPdfUrl = (o as unknown as Record<string,unknown>).pdf_url as string|null
         if (existingPdfUrl) {
-          setPdfUrl(existingPdfUrl)
+          setPdfUrl(frais(existingPdfUrl))
         } else {
           setPdfGenerating(true)
           pollPdf(s)
@@ -226,13 +235,13 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         setPdfSnapshotAt(((o as unknown as Record<string,unknown>).pdf_snapshot_at as string|null) || null)
         setPdfInitialUrl(((o as unknown as Record<string,unknown>).pdf_initial_url as string|null) || null)
         if ((o as unknown as Record<string,unknown>).qr_url) {
-          setQrUrl((o as unknown as Record<string,unknown>).qr_url as string)
+          setQrUrl(frais((o as unknown as Record<string,unknown>).qr_url as string))
         }
         if ((o as unknown as Record<string,unknown>).fiche_travail_pdf_url) {
-          setFicheTravailUrl((o as unknown as Record<string,unknown>).fiche_travail_pdf_url as string)
+          setFicheTravailUrl(frais((o as unknown as Record<string,unknown>).fiche_travail_pdf_url as string))
         }
         if ((o as unknown as Record<string,unknown>).fiche_travail_initial_url) {
-          setFicheTravailInitialUrl((o as unknown as Record<string,unknown>).fiche_travail_initial_url as string)
+          setFicheTravailInitialUrl(frais((o as unknown as Record<string,unknown>).fiche_travail_initial_url as string))
         }
         if ((o as unknown as Record<string,unknown>).fiche_travail_initial_at) {
           setFicheTravailInitialAt((o as unknown as Record<string,unknown>).fiche_travail_initial_at as string)
