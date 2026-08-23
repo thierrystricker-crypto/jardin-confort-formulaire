@@ -23,16 +23,24 @@ import {
  *   - On regenere uniquement pour les commandes. Les offres en cours
  *     ont leur PDF servi dynamiquement par le template (stock live),
  *     pas fige en Storage de maniere durable.
- *   - Pour qu'une commande soit regenerable, son snapshot stock doit
- *     exister : on verifie data.lines[].shopifyLocked (invariant fort
- *     pose a la conversion offre->commande), plutot que
- *     data.stock_frozen_at qui peut manquer sur des cas marginaux
- *     (anciennes commandes pre-deploiement, conversion manuelles
- *     anterieures).
+ *   - Une commande est regenerable des lors que son stock a bien ete
+ *     fige : data.stock_frozen_at, pose a la conversion offre->commande
+ *     et a la creation d'une commande directe.
  *
- * Consequence : les ~11 anciennes commandes sans snapshot retournent
- * `false` ici - leur correction est tracee mais leur PDF reste fige
- * a son etat d'origine (preuve juridique preservee).
+ * Revu le 23.08.2026 (chantier « PDF de commande toujours a jour ») :
+ * le critere precedent exigeait data.lines[].shopifyLocked sur TOUTES
+ * les lignes. Une seule ligne a la volee, un service ou un logo de
+ * marque suffisait a bloquer la regeneration - 195 commandes sur 382
+ * etaient concernees, leur PDF restant muet sur les corrections.
+ *
+ * Regenerer ne peut pas deformer le stock affiche : /api/offres/[slug]
+ * renvoie pour une commande les lignes figees de data, jamais Shopify
+ * en direct. Un PDF regenere aujourd'hui reproduit donc exactement le
+ * stock du jour de la commande.
+ *
+ * Consequence : seules les commandes sans snapshot (5 documents de
+ * mai-juin 2026) retournent `false` - leur correction est tracee mais
+ * leur PDF d'origine reste la seule trace du stock vu par le client.
  */
 function shouldRegeneratePdf(
   entityType: "offre" | "commande",
@@ -41,12 +49,8 @@ function shouldRegeneratePdf(
   if (entityType !== "commande") return false;
   const lines = data?.lines;
   if (!Array.isArray(lines) || lines.length === 0) return false;
-  return lines.every(
-    (line: unknown) =>
-      typeof line === "object" &&
-      line !== null &&
-      (line as { shopifyLocked?: boolean }).shopifyLocked === true
-  );
+  const fige = data?.stock_frozen_at;
+  return typeof fige === "string" && fige.length > 0;
 }
 
 // ============================================================================

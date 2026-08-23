@@ -209,6 +209,35 @@ export async function POST(
       });
     }
 
+    // 5. Documents de la commande : PDF + QR de paiement.
+    //    Chantier « PDF de commande toujours a jour » (23.08.2026).
+    //    Une revision change le contenu ET le total. Sans cette etape, le PDF
+    //    Storage reste celui d'avant la revision et le QR reclame l'ancien
+    //    montant - c'etait le cas pour 60 commandes revisees.
+    //    Acte utilisateur explicite (l'enregistrement de la revision), jamais
+    //    un timer. Best-effort : la revision reste valide si pdf.co echoue.
+    //    Aucun risque sur le stock : /api/offres/[slug] renvoie pour une
+    //    commande les lignes figees de data, jamais Shopify en direct.
+    //    Le fichier sanctuarise api/offres/[slug]/qr n'est pas modifie, il est
+    //    seulement appele - son POST relit total_ttc a l'instant.
+    after(async () => {
+      const BASE_URL =
+        process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch";
+      const EN_TETE_INTERNE = {
+        "x-jc-interne": process.env.DASHBOARD_SESSION_SECRET || "",
+      };
+      await Promise.allSettled([
+        fetch(`${BASE_URL}/api/offres/${slug}/pdf`, {
+          method: "POST",
+          headers: EN_TETE_INTERNE,
+        }).catch((err) => console.error("[after] PDF revision err:", err)),
+        fetch(`${BASE_URL}/api/offres/${slug}/qr`, {
+          method: "POST",
+          headers: EN_TETE_INTERNE,
+        }).catch((err) => console.error("[after] QR revision err:", err)),
+      ]);
+    });
+
     return NextResponse.json({
       success: true,
       version_num: versionNum,

@@ -23,7 +23,7 @@ export async function POST(
     // 1. Vérifier que l'offre existe
     const { data: offre, error: readError } = await supabaseAdmin
       .from("offres")
-      .select("id, slug, numero_affiche, type_document")
+      .select("id, slug, numero_affiche, type_document, pdf_initial_url")
       .eq("slug", slug)
       .single()
 
@@ -80,6 +80,30 @@ export async function POST(
     const folder = offre.type_document === "Commande" ? "commandes" : "offres"
     const storagePath = `${folder}/${slug}.pdf`
 
+    // 5 bis. Archive du PDF d'origine — chantier « PDF de commande toujours
+    // à jour » (23.08.2026). Le PDF d'une commande est désormais régénéré à
+    // chaque correction, chaque révision et chaque téléchargement. On garde
+    // donc une copie du tout premier fichier, écrite une seule fois et jamais
+    // écrasée — même logique que la fiche de travail « initiale ».
+    // La preuve de référence reste l'offre signée : ceci n'est qu'un filet.
+    if (offre.type_document === "Commande" && !offre.pdf_initial_url) {
+      const cheminArchive = `commandes/${slug}_initial.pdf`
+      const { error: copieErr } = await supabaseAdmin.storage
+        .from("pdfs")
+        .copy(storagePath, cheminArchive)
+      if (!copieErr) {
+        await supabaseAdmin
+          .from("offres")
+          .update({
+            pdf_initial_url: `${SUPABASE_URL}/storage/v1/object/public/pdfs/${cheminArchive}`,
+          })
+          .eq("slug", slug)
+      } else if (!/not\s*found|does not exist/i.test(copieErr.message || "")) {
+        // Première génération : le fichier source n'existe pas encore — normal.
+        console.error("[pdf] archive initiale:", copieErr.message)
+      }
+    }
+
     // 6. Upload dans Supabase Storage bucket "pdfs"
     const { error: uploadError } = await supabaseAdmin.storage
       .from("pdfs")
@@ -99,7 +123,7 @@ export async function POST(
     // 8. Mettre à jour l'URL dans la table offres
     await supabaseAdmin
       .from("offres")
-      .update({ pdf_url: pdfPublicUrl })
+      .update({ pdf_url: pdfPublicUrl, pdf_snapshot_at: new Date().toISOString() })
       .eq("slug", slug)
 
     return NextResponse.json({
