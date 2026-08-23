@@ -83,9 +83,18 @@ function FicheTravailPreview({
   currentUrl: string | null
   initialAt: string | null
 }) {
+  // L'ACTUELLE est l'outil de travail : onglet par défaut dès qu'elle existe.
+  // L'initiale (la preuve) reste accessible d'un clic. Corrigé le 23.08.2026 —
+  // avant, la carte s'ouvrait sur l'initiale même quand une actuelle existait.
   const defaultMode: "initial" | "current" =
-    initialUrl ? "initial" : "current"
+    currentUrl ? "current" : "initial"
   const [mode, setMode] = React.useState<"initial" | "current">(defaultMode)
+
+  // Quand la fiche actuelle vient d'être (re)générée, basculer dessus sans
+  // recharger la page.
+  React.useEffect(() => {
+    if (currentUrl) setMode("current")
+  }, [currentUrl])
 
   const url = mode === "initial" ? initialUrl : currentUrl
 
@@ -135,7 +144,7 @@ function FicheTravailPreview({
       )}
       {mode === "current" && (
         <div className="mb-3 text-xs text-amber-300/80 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
-          🟡 Stock actuel — re-générée à chaque clic sur le bouton du haut
+          🟡 Version actuelle de la commande (révisions et corrections comprises) — stocks figés ligne par ligne, chacune à sa date
         </div>
       )}
       {url ? (
@@ -1383,7 +1392,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                       )}
                       <button onClick={() => generateFicheTravail("current")} disabled={ficheTravailGenerating}
                         className="relative inline-flex items-center gap-1.5 overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-80"
-                        title="⚠ Génère une nouvelle fiche avec le STOCK DU JOUR — différent du stock vu par le client à la commande. Pour la prépa/livraison.">
+                        title="Régénère la fiche au contenu actuel de la commande (révisions et corrections comprises). Les stocks affichés restent figés ligne par ligne, chacun à sa date — jamais le stock du jour. Pour la prépa/livraison.">
                         {ficheTravailGenerating && (
                           <span className="absolute inset-0 overflow-hidden rounded-xl">
                             <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
@@ -1393,8 +1402,8 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                           {ficheTravailGenerating
                             ? "🔄 Génération…"
                             : ficheTravailUrl
-                              ? "🔄 Régénérer fiche de travail avec stock actuel PDF"
-                              : "🔄 Générer fiche de travail avec stock actuel PDF"}
+                              ? "🔄 Régénérer fiche de travail — commande actuelle PDF"
+                              : "🔄 Générer fiche de travail — commande actuelle PDF"}
                         </span>
                       </button>
                     </>
