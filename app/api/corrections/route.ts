@@ -273,6 +273,32 @@ export async function POST(request: NextRequest) {
 
         if (regenRes.ok && regenJson.success) {
           pdfRegenerated = true;
+
+          // Fiche de travail COURANTE : elle affiche l'adresse de facturation
+          // et les remarques - une correction peut donc la perimer. On ne la
+          // regenere que si elle existe deja (fiche_travail_pdf_url non NULL),
+          // pour ne pas creer un document que personne n'a demande. La fiche
+          // INITIALE n'est jamais touchee. Best-effort, non bloquant.
+          // (Chantier "PDF de commande toujours a jour", 23.08.2026.)
+          try {
+            const { data: ficheEtat } = await supabase
+              .from("offres")
+              .select("fiche_travail_pdf_url")
+              .eq("slug", entity.slug)
+              .single();
+            if (ficheEtat?.fiche_travail_pdf_url) {
+              await fetch(`${APP_URL}/api/offres/${entity.slug}/fiche-travail-pdf`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-jc-interne": process.env.DASHBOARD_SESSION_SECRET || "",
+                },
+                body: JSON.stringify({ mode: "current" }),
+              });
+            }
+          } catch (err) {
+            console.error("[corrections] fiche courante regen err:", err);
+          }
           const { error: stampError } = await supabase
             .from("corrections")
             .update({ pdf_regenerated_at: new Date().toISOString() })
