@@ -5,6 +5,7 @@ import StatsCards from "./StatsCards";
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import AnnonceStockPopup from "@/components/AnnonceStockPopup";
+import ReleaseNotesPopup from "@/components/ReleaseNotesPopup";
 import { clicLigne, clicMilieuLigne, useFiltresMemorises } from "@/lib/liste-navigation";
 
 type OffreStatut = "En cours"|"Envoyée"|"Convertie"|"Acceptée"|"Abandonnée"|"Refusée"
@@ -522,6 +523,10 @@ export default function DashboardPage() {
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       {/* Annonce temporaire équipe : bug sorties de stock corrigé (jusqu'au 10.08.2026) */}
       <AnnonceStockPopup />
+      {/* Release notes 23.08.2026 : flèches de déplacement, Arrivages, Délais
+          fournisseurs. Monté ici plutôt que sur /drafts/nouveau — deux des trois
+          nouveautés vivent sur cette page. S'éteint seul le 31.08. */}
+      <ReleaseNotesPopup />
       <div className="mx-auto max-w-[1700px] space-y-6">
 
         <div className="space-y-4">

@@ -8,14 +8,14 @@
 // l'URL vers /drafts/[slug]/editer via router.replace() — sans remount.
 
 import DraftFormulaire from "../_components/DraftFormulaire";
+// Note 23.08.2026 : ReleaseNotesPopup a été déplacé sur le dashboard — les
+// nouveautés annoncées portent surtout sur des pages qu'on atteint depuis là.
 import OnboardingDraftPopup from "@/components/OnboardingDraftPopup";
-import ReleaseNotesPopup from "@/components/ReleaseNotesPopup";
 
 export default function DraftNouveauPage() {
   return (
     <>
       <OnboardingDraftPopup />
-      <ReleaseNotesPopup />
       <DraftFormulaire />
     </>
   );
