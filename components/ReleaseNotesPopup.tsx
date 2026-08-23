@@ -166,7 +166,7 @@ export default function ReleaseNotesPopup() {
             fontWeight: 700,
             color: "#0a1551",
           }}>
-            Quoi de neuf sur le système d&apos;offres
+            Quoi de neuf sur le système d’offres
           </h2>
         </div>
 
@@ -207,7 +207,7 @@ export default function ReleaseNotesPopup() {
               color: "#064e3b",
               marginBottom: 8,
             }}>
-              ▲▼ Déplacer une ligne d&apos;article au clic
+              ▲▼ Déplacer une ligne d’article au clic
             </div>
 
             <div style={{
@@ -218,7 +218,7 @@ export default function ReleaseNotesPopup() {
             }}>
               Deux petites flèches apparaissent dans la colonne{" "}
               <code style={codeStyle}>#</code> de chaque ligne. Un clic la fait monter
-              ou descendre d&apos;un cran — plus besoin de viser un glisser-déposer.
+              ou descendre d’un cran — plus besoin de viser un glisser-déposer.
             </div>
 
             <ul style={{
@@ -229,10 +229,84 @@ export default function ReleaseNotesPopup() {
               color: "#064e3b",
             }}>
               <li>Fonctionne sur les articles, les commentaires 💬 et les images 🖼️</li>
-              <li>Disponible dans un brouillon <strong>et</strong> dans la révision d&apos;une commande</li>
+              <li>Disponible dans un brouillon <strong>et</strong> dans la révision d’une commande</li>
               <li>Le glisser-déposer continue de marcher exactement comme avant</li>
               <li>Un déplacement de trop se défait avec le bouton « Annuler »</li>
             </ul>
+          </div>
+        </div>
+
+        {/* ─── Section : annexes au dossier ─── */}
+        <div style={{ padding: "0 28px 18px 28px" }}>
+          <div style={{
+            background: "#fffbeb",
+            border: "1px solid #fde68a",
+            borderLeft: "4px solid #f59e0b",
+            borderRadius: 12,
+            padding: "16px 18px",
+          }}>
+            <div style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: "#78350f",
+              marginBottom: 6,
+            }}>
+              📎 Déposer des pièces au dossier d’une commande
+            </div>
+
+            <div style={{
+              fontSize: 13.5,
+              lineHeight: 1.6,
+              color: "#78350f",
+              marginBottom: 10,
+            }}>
+              Chaque offre, commande et brouillon porte désormais une carte{" "}
+              <strong>Annexes</strong> dans son dossier : on y glisse un plan du client,
+              une photo de la terrasse ou de l’accès de livraison, un croquis de cotes,
+              un bon de reprise, une fiche technique fournisseur.
+            </div>
+
+            <ul style={{
+              margin: 0,
+              padding: "0 0 0 22px",
+              fontSize: 13,
+              lineHeight: 1.75,
+              color: "#78350f",
+            }}>
+              <li>
+                <strong>Depuis le téléphone</strong>, le bouton ouvre directement
+                l’appareil photo : la photo prise chez le client part dans le dossier
+                sans passer par un mail.
+              </li>
+              <li>
+                JPEG, PNG, WebP, HEIC et PDF. Les images sont redimensionnées toutes
+                seules — inutile de les préparer.
+              </li>
+              <li>
+                Chaque pièce reçoit un <strong>libellé</strong> et une catégorie
+                (plan client, photo, document) — « IMG_4821 » ne dit rien à personne
+                trois mois plus tard.
+              </li>
+              <li>
+                Aperçu intégré dans la page, et téléchargement sous le nom d’origine.
+              </li>
+            </ul>
+
+            <div style={{
+              marginTop: 12,
+              padding: "8px 12px",
+              background: "rgba(255,255,255,0.7)",
+              borderRadius: 8,
+              fontSize: 12.5,
+              lineHeight: 1.6,
+              color: "#78350f",
+            }}>
+              🔒 Ces pièces sont <strong>internes</strong> : elles n’apparaissent sur
+              aucun document client. Et déposer une annexe <strong>ne modifie pas</strong>{" "}
+              la commande — c’est une pièce versée au dossier, donc possible même après
+              signature. C’est d’ailleurs tout l’intérêt : la photo de l’accès de
+              livraison arrive presque toujours après.
+            </div>
           </div>
         </div>
 
@@ -251,7 +325,7 @@ export default function ReleaseNotesPopup() {
               color: "#075985",
               marginBottom: 6,
             }}>
-              💬 Jardi — l&apos;assistant du dashboard
+              💬 Jardi — l’assistant du dashboard
             </div>
 
             <div style={{
@@ -262,7 +336,7 @@ export default function ReleaseNotesPopup() {
             }}>
               Le bouton <strong>💬 Jardi</strong> en haut du dashboard ouvre un chat qui
               a accès aux vrais outils de la maison — catalogue, stock, clients,
-              commandes, mails, factures. Quelques exemples de ce qu&apos;on peut lui
+              commandes, mails, factures. Quelques exemples de ce qu’on peut lui
               demander en une phrase :
             </div>
 
@@ -274,8 +348,8 @@ export default function ReleaseNotesPopup() {
               color: "#075985",
             }}>
               <li>
-                <strong>Créer un brouillon d&apos;offre</strong> à partir d&apos;un texte
-                dicté — ou de la <strong>photo d&apos;une commande manuscrite</strong>
+                <strong>Créer un brouillon d’offre</strong> à partir d’un texte
+                dicté — ou de la <strong>photo d’une commande manuscrite</strong>{" "}
                 déposée dans le chat : il résout les articles au catalogue et rend un{" "}
                 <code style={codeStyle}>DRA-XXX</code> prêt à compléter.
               </li>
@@ -289,8 +363,8 @@ export default function ReleaseNotesPopup() {
                 <em>« qui a commandé ce parasol ? »</em>.
               </li>
               <li>
-                <strong>Sortir le dossier complet d&apos;un client</strong> : coordonnées,
-                offres, commandes web, factures WinBiz et derniers échanges, d&apos;un seul
+                <strong>Sortir le dossier complet d’un client</strong> : coordonnées,
+                offres, commandes web, factures WinBiz et derniers échanges, d’un seul
                 coup.
               </li>
               <li>
@@ -302,8 +376,8 @@ export default function ReleaseNotesPopup() {
                 bonne signature.
               </li>
               <li>
-                <strong>Chiffres de vente</strong> d&apos;une période, meilleures ventes,
-                et l&apos;état des <strong>délais fournisseurs</strong>.
+                <strong>Chiffres de vente</strong> d’une période, meilleures ventes,
+                et l’état des <strong>délais fournisseurs</strong>.
               </li>
             </ul>
 
@@ -316,11 +390,11 @@ export default function ReleaseNotesPopup() {
               lineHeight: 1.6,
               color: "#0c4a6e",
             }}>
-              🔒 <strong>Jardi ne fait que des brouillons.</strong> Une offre n&apos;est
-              jamais créée ni validée, un mail n&apos;est jamais envoyé : il prépare, vous
+              🔒 <strong>Jardi ne fait que des brouillons.</strong> Une offre n’est
+              jamais créée ni validée, un mail n’est jamais envoyé : il prépare, vous
               relisez et vous cliquez. Deux limites à connaître : la recherche dans les
               mails peut ignorer <strong>la dernière heure ou deux</strong>, et la boîte
-              amook n&apos;y est pas indexée.
+              amook n’y est pas indexée.
             </div>
 
             <div style={{
@@ -362,17 +436,17 @@ export default function ReleaseNotesPopup() {
               <span style={{ position: "absolute", left: 0, top: 0 }}>📦</span>
               <strong>Arrivages</strong> — la réception, article par article.
               Scannez la fiche de travail (douchette du comptoir ou caméra du
-              téléphone) : la commande s&apos;ouvre, et vous pointez ce qui est arrivé
-              ligne par ligne, avec la quantité. <strong>Tout reçu</strong> solde d&apos;un
+              téléphone) : la commande s’ouvre, et vous pointez ce qui est arrivé
+              ligne par ligne, avec la quantité. <strong>Tout reçu</strong> solde d’un
               coup ce qui attend encore. Une erreur se corrige par une ligne
-              d&apos;annulation — rien n&apos;est jamais écrasé, l&apos;historique reste entier.
+              d’annulation — rien n’est jamais écrasé, l’historique reste entier.
             </li>
 
             <li style={{ marginBottom: 4, paddingLeft: 26, position: "relative" }}>
               <span style={{ position: "absolute", left: 0, top: 0 }}>⏱</span>
               <strong>Délais fournisseurs</strong> — une ligne par commande et par
-              marque : le départ annoncé par le fabricant, l&apos;arrivage qui en découle,
-              et surtout la comparaison avec <strong>ce qu&apos;on a promis au client</strong>.
+              marque : le départ annoncé par le fabricant, l’arrivage qui en découle,
+              et surtout la comparaison avec <strong>ce qu’on a promis au client</strong>.
               Un badge{" "}
               <span style={{
                 background: "#fdf2f8",
@@ -404,7 +478,7 @@ export default function ReleaseNotesPopup() {
               color: "#12306b",
               marginBottom: 8,
             }}>
-              📬 D&apos;où viennent ces dates ? Des mails fournisseurs, tout seuls
+              📬 D’où viennent ces dates ? Des mails fournisseurs, tout seuls
             </div>
 
             <div style={{
@@ -416,7 +490,7 @@ export default function ReleaseNotesPopup() {
               Personne ne les saisit. <strong>Toutes les 3 heures</strong>, un automate
               relit les mails des fournisseurs et leurs pièces jointes — accusés de
               réception Fermob, factures Glatz — en extrait la date de départ et la
-              pose sur la bonne commande. L&apos;arrivage se déduit ensuite d&apos;une règle
+              pose sur la bonne commande. L’arrivage se déduit ensuite d’une règle
               de transit propre à chaque marque (Fermob : le jeudi de la semaine
               suivante ; Glatz : +3 jours ouvrés ; Fatboy : +5).
             </div>
@@ -429,20 +503,56 @@ export default function ReleaseNotesPopup() {
               color: "#12306b",
             }}>
               <li>
-                Ce dont il n&apos;est <strong>pas sûr</strong> part dans le volet
-                « À valider » en bas de page : vous tranchez d&apos;un clic.
+                Ce dont il n’est <strong>pas sûr</strong> part dans le volet
+                « À valider » en bas de page : vous tranchez d’un clic.
               </li>
               <li>
-                Ce qu&apos;il ne sait <strong>pas rattacher</strong> à une commande reste
-                visible dans « Orphelines ». <strong>Rien n&apos;est jeté en silence.</strong>
+                Ce qu’il ne sait <strong>pas rattacher</strong> à une commande reste
+                visible dans « Orphelines ». <strong>Rien n’est jeté en silence.</strong>
               </li>
               <li>
-                Le bouton <strong>Reçu</strong> d&apos;une ligne sert à recaler les règles
-                de transit sur le réel — c&apos;est ce qui rend les prévisions plus justes
+                Le bouton <strong>Reçu</strong> d’une ligne sert à recaler les règles
+                de transit sur le réel — c’est ce qui rend les prévisions plus justes
                 avec le temps.
               </li>
             </ul>
           </div>
+        </div>
+
+        {/* ─── Section : navigation des listes ─── */}
+        <div style={{ padding: "18px 28px 0 28px" }}>
+          <div style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: "#6f76a7",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            marginBottom: 10,
+            borderBottom: "1px solid #E8EAF3",
+            paddingBottom: 6,
+          }}>
+            ✨ Et un confort de tous les jours
+          </div>
+
+          <ul style={{
+            margin: 0,
+            padding: 0,
+            listStyle: "none",
+            fontSize: 14,
+            lineHeight: 1.65,
+            color: "#0a1551",
+          }}>
+            <li style={{ marginBottom: 4, paddingLeft: 26, position: "relative" }}>
+              <span style={{ position: "absolute", left: 0, top: 0 }}>🔍</span>
+              <strong>Les listes gardent votre recherche.</strong> Sur le dashboard
+              comme sur la page clients, ouvrir un dossier puis revenir en arrière ne
+              perd plus rien : le texte cherché, les filtres, le commercial et le tri
+              sont retrouvés tels quels. Et un <strong>Ctrl+clic</strong> (ou un clic
+              avec la molette) ouvre la fiche dans un nouvel onglet — la liste reste
+              intacte derrière, ce qui évite l’aller-retour quand on s’est trompé de
+              ligne.
+            </li>
+          </ul>
         </div>
 
         {/* Footer : checkbox + bouton */}
