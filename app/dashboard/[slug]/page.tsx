@@ -1264,10 +1264,21 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                   Documents PDF <span className="ml-1 text-[10px] font-normal normal-case text-zinc-500">à télécharger / archiver</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {pdfUrl ? (
+                  {/* Chantier « PDF de commande toujours à jour » (23.08.2026) :
+                      pour une COMMANDE, ce bouton ne sert plus le fichier Storage
+                      tel quel — il passe par ouvrirPdfAJour (régénère, puis ouvre),
+                      comme le bouton de la carte d'aperçu. Une offre garde le lien
+                      direct : son PDF est régénéré par les corrections. */}
+                  {!isTypeOffre ? (
+                    <button onClick={ouvrirPdfAJour} disabled={pdfOpening}
+                      title="Régénère le PDF depuis la page commande client, puis l'ouvre — toujours la version courante"
+                      className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
+                      {pdfOpening ? "📄 Génération…" : "📄 Commande PDF"}
+                    </button>
+                  ) : pdfUrl ? (
                     <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
                       className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
-                      📄 {isTypeOffre ? "Offre PDF" : "Commande PDF"}
+                      📄 Offre PDF
                     </a>
                   ) : (
                     <button onClick={generatePdf} disabled={pdfGenerating}
@@ -1277,7 +1288,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                           <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
                         </span>
                       )}
-                      <span className="relative">{pdfGenerating ? "📄 Génération…" : (isTypeOffre ? "📄 Générer offre PDF" : "📄 Générer commande PDF")}</span>
+                      <span className="relative">{pdfGenerating ? "📄 Génération…" : "📄 Générer offre PDF"}</span>
                     </button>
                   )}
                   {qrUrl ? (
