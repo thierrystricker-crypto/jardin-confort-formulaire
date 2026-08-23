@@ -138,6 +138,10 @@ export default function DelaisPage() {
   const [filtre, setFiltre] = useState<FiltreRapide>("en_cours");
   const [recherche, setRecherche] = useState("");
   const [suiviesSeules, setSuiviesSeules] = useState(false);
+  // 75 % des commandes web sont du stock expédié le jour même : elles n'ont
+  // rien à attendre d'un fournisseur. Masquées par défaut (Thierry 23.08) —
+  // la case les réaffiche, le compteur dit combien dorment là.
+  const [voirEnStock, setVoirEnStock] = useState(false);
   const [ouverte, setOuverte] = useState<string|null>(null);
   const [chrono, setChrono] = useState<Record<string, Evenement[]>>({});
   // Articles de TOUTE la commande (toutes marques), chargés au dépli — le
@@ -225,6 +229,7 @@ export default function DelaisPage() {
   // correspondent pas elles-mêmes sont affichées atténuées.
   const visibles = useMemo(() => {
     const correspond = (l: Ligne) => {
+      if (!voirEnStock && l.etape === "en_stock" && l.statut === "en_cours") return false;
       if (marque !== "toutes" && l.marque !== marque) return false;
       if (boutique !== "toutes" && l.boutique !== boutique) return false;
       if (suiviesSeules && !l.marque_suivie) return false;
@@ -265,7 +270,7 @@ export default function DelaisPage() {
     return groupes.flatMap(({ g }) =>
       g.map((l, i) => ({ ...l, _premiere: i === 0, _derniere: i === g.length - 1, _taille: g.length, _correspond: correspond(l) }))
     );
-  }, [lignes, marque, boutique, filtre, recherche, suiviesSeules]);
+  }, [lignes, marque, boutique, filtre, recherche, suiviesSeules, voirEnStock]);
 
   const stats = useMemo(() => {
     const ec = lignes.filter(l => l.statut === "en_cours");
@@ -335,12 +340,16 @@ export default function DelaisPage() {
           </select>
           <input value={recherche} onChange={e => setRecherche(e.target.value)} placeholder="Recherche : numéro (JAR-x, CMD-x), client, réf fournisseur (Vx, BTBx)…"
             className="w-full rounded-xl border border-white/10 bg-[#2a2d31] px-4 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"/>
-          <button onClick={() => {setMarque("toutes");setBoutique("toutes");setFiltre("en_cours");setRecherche("");setSuiviesSeules(false)}} className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2.5 text-sm text-zinc-100 transition hover:bg-[#40454b]">Reset</button>
+          <button onClick={() => {setMarque("toutes");setBoutique("toutes");setFiltre("en_cours");setRecherche("");setSuiviesSeules(false);setVoirEnStock(false)}} className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2.5 text-sm text-zinc-100 transition hover:bg-[#40454b]">Reset</button>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <label className="inline-flex cursor-pointer items-center gap-2 text-zinc-300">
             <input type="checkbox" checked={suiviesSeules} onChange={e => setSuiviesSeules(e.target.checked)} className="h-4 w-4 accent-sky-400"/>
             Marques suivies seulement <span className="text-xs text-zinc-500">(extraction automatique des délais)</span>
+          </label>
+          <label className="inline-flex cursor-pointer items-center gap-2 text-zinc-300" title="Commandes entièrement en stock à la commande : rien à attendre d'un fournisseur. Elles sortent du tableau à la livraison (fulfilled) — une vieille ligne ici est probablement une livraison jamais marquée.">
+            <input type="checkbox" checked={voirEnStock} onChange={e => setVoirEnStock(e.target.checked)} className="h-4 w-4 accent-sky-400"/>
+            Voir les commandes en stock <span className="text-xs text-zinc-500">({lignes.filter(l => l.etape === "en_stock" && l.statut === "en_cours").length} masquées)</span>
           </label>
           <Link href="/dashboard/arrivages" className="inline-flex items-center rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/25" title="Réception par article et par quantité — scan de la fiche de travail">📦 Arrivages</Link>
         </div>
