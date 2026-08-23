@@ -412,12 +412,15 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     // sera celui du jour, potentiellement DIFFÉRENT de celui vu par le client à
     // la commande. La fiche initiale, elle, reste figée pour preuve juridique.
     if (mode === "current") {
+      // Texte corrigé le 23.08.2026 : l'ancien avertissement annonçait le
+      // « stock du jour », ce qui est faux pour une commande — la page fiche
+      // de travail lit les lignes figées de data, jamais Shopify en direct.
       const confirmed = confirm(
-        "⚠️ ATTENTION — Fiche de travail ACTUELLE\n\n" +
-        "Le nouveau document généré affichera le STOCK DU JOUR — donc potentiellement différent de celui vu par le client au moment de la commande.\n\n" +
-        "👉 Cette version sert pour la préparation et la livraison (état actuel des stocks).\n\n" +
-        "🔵 Pour conserver la preuve juridique du stock vendu, utilisez la fiche INITIALE (figée à la commande), qui reste intacte.\n\n" +
-        "Confirmer la génération avec le stock actuel ?"
+        "Fiche de travail ACTUELLE\n\n" +
+        "Le document régénéré reflète la commande dans son état courant (corrections et révisions comprises).\n\n" +
+        "🔵 Les niveaux de stock affichés restent FIGÉS : ceux du jour de la validation pour les articles d'origine, ceux du jour de l'ajout pour les articles ajoutés en révision. Rien n'est recalculé.\n\n" +
+        "La fiche INITIALE (preuve du stock vendu) reste intacte.\n\n" +
+        "Régénérer la fiche de travail actuelle ?"
       )
       if (!confirmed) return
     }

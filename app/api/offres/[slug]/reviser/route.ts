@@ -236,8 +236,13 @@ export async function POST(
           headers: EN_TETE_INTERNE,
         }).catch((err) => console.error("[after] QR revision err:", err)),
         // Fiche de travail COURANTE (mode "current") : document interne de
-        // preparation, qui affiche par nature le stock DU JOUR - la
-        // regenerer apres la revision est donc sa semantique normale.
+        // preparation. Verifie le 23.08.2026 dans print/fiche-travail : la
+        // page lit /api/offres/[slug], qui renvoie pour une commande les
+        // lignes FIGEES de data - aucun appel de stock live. Chaque ligne
+        // affiche donc son stock fige : celui de la validation pour les
+        // articles d'origine ("au <date commande>"), celui du jour de
+        // l'ajout pour les articles ajoutes en revision ("au <date ajout>").
+        // Regenerer n'altere jamais un niveau de stock affiche existant.
         // La fiche INITIALE (preuve du stock a la vente) n'est jamais
         // touchee : la route l'ignore sans force=true.
         fetch(`${BASE_URL}/api/offres/${slug}/fiche-travail-pdf`, {
