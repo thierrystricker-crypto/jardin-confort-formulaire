@@ -712,6 +712,44 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
     });
   }
 
+  // ── Déplacement d'une ligne au clic, sans glisser ──────────────────
+  // Même chemin que le glisser-déposer (reorderLines → captureUndo), donc
+  // annulable par le bouton « Annuler » comme le reste. Le glisser-déposer
+  // reste en place : ces flèches s'ajoutent, elles ne remplacent rien.
+  function deplacerLigne(id: string, sens: -1 | 1) {
+    const i = lines.findIndex((l) => l.id === id);
+    const j = i + sens;
+    if (i < 0 || j < 0 || j >= lines.length) return;
+    reorderLines(id, lines[j].id);
+  }
+
+  // Cellule « # » commune aux trois types de ligne (article, commentaire,
+  // média) : le repère de position, puis les deux flèches. `screenOnly` :
+  // elles ne doivent jamais sortir à l'impression.
+  function renderTdNum(id: string, idx: number, libelle: React.ReactNode) {
+    return (
+      <td className="td-num">
+        <div className="jc-num-cell">
+          <span>{libelle}</span>
+          <span className="jc-move-btns screenOnly">
+            <button
+              type="button" className="jc-move-btn" title="Monter cette ligne"
+              aria-label="Monter cette ligne"
+              disabled={idx === 0}
+              onClick={() => deplacerLigne(id, -1)}
+            >▲</button>
+            <button
+              type="button" className="jc-move-btn" title="Descendre cette ligne"
+              aria-label="Descendre cette ligne"
+              disabled={idx === lines.length - 1}
+              onClick={() => deplacerLigne(id, 1)}
+            >▼</button>
+          </span>
+        </div>
+      </td>
+    );
+  }
+
   function makeSnapshot(): DraftSnapshot {
     return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, complement_nom: complementNom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livr_complement_nom: livrComplementNom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, validiteDuree, accesLivraison, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
@@ -2302,12 +2340,12 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
               <span className="jc-badge screenOnly">{lines.filter(l => l.type !== "comment" && l.type !== "media").length} article{lines.filter(l => l.type !== "comment" && l.type !== "media").length !== 1 ? "s" : ""}</span>
             </div>
           </div>
-          <p className="jc-drag-hint screenOnly">⬆⬇ Glisser-déposer pour réordonner</p>
+          <p className="jc-drag-hint screenOnly">⬆⬇ Glisser-déposer, ou les flèches ▲▼ de la colonne « # », pour réordonner</p>
           <div className="jc-table-wrap">
             <table className="jc-table">
               <thead>
                 <tr>
-                  <th style={{ width: 32 }}>#</th>
+                  <th style={{ width: 48 }}>#</th>
                   <th style={{ width: 82 }}>Img</th>
                   <th style={{ width: 72 }}>Qté</th>
                   <th style={{ width: 130 }}>SKU</th>
@@ -2344,7 +2382,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                           justAddedLineId === line.id ? "tr-added" : "",
                         ].join(" ")}
                       >
-                        <td className="td-num">🖼️</td>
+                        {renderTdNum(line.id, idx, "🖼️")}
                         <td colSpan={7} className="td-media-cell">
                           <MediaLinePicker
                             line={{
@@ -2403,7 +2441,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                         justAddedLineId === line.id ? "tr-added" : "",
                       ].join(" ")}
                     >
-                      <td className="td-num">{isComment ? "💬" : idx + 1}</td>
+                      {renderTdNum(line.id, idx, isComment ? "💬" : idx + 1)}
 
                       {isComment ? (
                         /* ── Ligne commentaire : s'étend sur toute la largeur ── */
@@ -3488,6 +3526,27 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
           100% { box-shadow: inset 0 0 0 9999px rgba(59,130,246,0); }
         }
         .td-num   { color: var(--text-dim); font-size: 12px; text-align: center; font-weight: 700; }
+
+        /* ── Flèches de déplacement de ligne (colonne « # ») ── */
+        .jc-num-cell  { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+        .jc-move-btns { display: flex; gap: 2px; }
+        .jc-move-btn {
+          width: 18px; height: 16px;
+          display: inline-flex; align-items: center; justify-content: center;
+          padding: 0; line-height: 1;
+          background: transparent; color: var(--text-dim);
+          border: 1px solid var(--border-2); border-radius: 3px;
+          font-size: 8px; cursor: pointer; transition: all 0.15s;
+        }
+        .jc-move-btn:hover:not(:disabled) {
+          background: rgba(96,165,250,0.22); color: #60a5fa;
+          border-color: rgba(96,165,250,0.35);
+        }
+        .jc-move-btn:disabled { opacity: 0.25; cursor: default; }
+        .light-mode .jc-move-btn:hover:not(:disabled) {
+          background: rgba(37,99,235,0.12); color: #2563eb;
+          border-color: rgba(37,99,235,0.3);
+        }
         .td-money { text-align: right; font-weight: 700; font-size: 13px; white-space: nowrap; }
         .jc-line-img {
           width: 58px; height: 58px; border-radius: var(--radius-sm);
