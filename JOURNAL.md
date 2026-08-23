@@ -2725,3 +2725,92 @@ e2cccd0  feat(dashboard): recherche insensible aux accents + tri pertinence sur 
 
 - `docs/sql/005-search-clients-unaccent.sql` (1ère version, RPC simples — superseded)
 - `docs/sql/006-search-clients-relevance.sql` (RPC finale + wrapper `jc_unaccent`)
+
+---
+
+## Session du 23.08.2026 — Listes : ouverture en nouvel onglet + filtres mémorisés
+
+Branche `nav-listes-nouvel-onglet` · commit `7489bfa`
+
+### 🎯 Problème
+
+Ouvrir la mauvaise commande depuis le dashboard, ou le mauvais client depuis la page
+clients, coûtait le travail de recherche : le retour arrière ramenait une liste vierge.
+Terme de recherche, filtre rapide, commercial et tri, tout repartait à zéro.
+
+### 🔍 Diagnostic (code réel, pas les journaux)
+
+- **Dashboard** — `<tr onClick={() => window.location.href = …}>` sur les offres/commandes
+  et sur les brouillons. Navigation dure, donc remontage complet au retour ; et comme les
+  filtres vivent dans des `useState` sans trace dans l'URL, il ne restait rien à restaurer.
+  Ctrl+clic ne faisait rien de particulier.
+- **Clients** — le Ctrl/Cmd+clic était déjà géré, mais le clic milieu était **mort** : le
+  test `e.button === 1` était écrit dans un `onClick`, or React n'y route jamais le bouton
+  du milieu. Il passe par `onAuxClick`. La condition n'avait donc jamais pu être vraie.
+- **Délais** — faux positif : le clic sur une ligne déplie la chronologie *dans* la page,
+  on ne quitte rien. Seul le bouton « 📦 Reçu » faisait sortir vers Arrivages.
+- **Arrivages** — hors sujet, c'est un scanner, pas une liste filtrée.
+
+### ✅ Solution livrée
+
+**Nouveau module `lib/liste-navigation.ts`**, trois exports :
+
+- `clicLigne(url, e)` — `onClick` d'une ligne. Ctrl/Cmd/Maj+clic → `window.open` en
+  `noopener,noreferrer`. Sinon, navigation normale.
+- `clicMilieuLigne(url, e)` — `onAuxClick`, `e.button === 1` → nouvel onglet.
+- `useFiltresMemorises(cle, valeurs, restaurer)` — sauve les filtres dans
+  `sessionStorage` et les restaure au montage. La sauvegarde n'est **armée qu'au rendu
+  qui suit la restauration** (state `arme`), sinon le premier rendu aux valeurs par
+  défaut écraserait ce qu'on vient de relire.
+
+**Câblage :**
+
+| Page | Nouvel onglet | Filtres mémorisés (clé) |
+|---|---|---|
+| `dashboard/page.tsx` | lignes offres/commandes + lignes brouillons | `dashboard:filtres` — search, quickFilter, commercial, hideAbandoned, hideConverted, sortKey, sortDir, searchArticles, hideTransformedDrafts, draftsCollapsed |
+| `dashboard/clients/page.tsx` | lignes du tableau | `clients:filtres` — search, searchDoc, activeSearch |
+| `dashboard/delais/page.tsx` | bouton « 📦 Reçu » (`target="_blank"`) | `delais:filtres` — marque, boutique, filtre, recherche, suiviesSeules, voirEnStock |
+
+### 🐛 Pièges rencontrés / arbitrages
+
+- **`e.button` dans un `onClick` ne vaut jamais 1.** Le clic milieu est un `auxclick`.
+  Le code de la page clients le testait depuis sa création : la fonctionnalité était
+  annoncée dans un commentaire et n'a jamais fonctionné.
+- **`sessionStorage`, pas `localStorage`.** La mémoire doit mourir avec l'onglet. Un
+  filtre posé la veille et retrouvé le lendemain sans s'en souvenir ferait croire à une
+  liste vide — exactement le genre de faux négatif silencieux qu'on cherche à éviter.
+- **L'URL garde la priorité sur la mémoire.** Le hook est déclaré *avant* les effets qui
+  lisent `?recherche=` (dashboard, lien depuis Statistiques) et `?q=` (délais, arrivée
+  depuis une commande) : ces effets s'exécutent après et écrasent la restauration. Une
+  arrivée par lien gagne toujours. L'ordre de déclaration des `useEffect` fait la règle
+  métier — à ne pas déplacer sans y penser.
+- **`onAuxClick={e => e.stopPropagation()}`** ajouté sur les blocs de boutons en bout de
+  ligne (dashboard) et sur la cellule d'actions (clients). Sans ça, un clic milieu sur un
+  bouton d'action ouvrait la fiche dans un onglet.
+- **CRLF** : `dashboard/page.tsx` et `clients/page.tsx` sont en CRLF dans le dépôt, les
+  patches ont été réécrits en CRLF pour garder un diff propre. Les deux autres fichiers
+  sont en LF, Git normalise.
+
+### 🚧 Volontairement pas fait
+
+Le **« ouvrir dans un nouvel onglet » du menu contextuel** (clic droit) ne fonctionne
+toujours pas : une ligne de tableau n'est pas une ancre. Le rendre possible demanderait
+d'envelopper le contenu de chaque cellule dans un `<a>`, donc de toucher la mise en page
+des trois tableaux. Ctrl/Cmd/Maj+clic et clic milieu couvrent le besoin réel.
+
+### 📂 Fichiers
+
+- `lib/liste-navigation.ts` (nouveau)
+- `app/dashboard/page.tsx`
+- `app/dashboard/clients/page.tsx`
+- `app/dashboard/delais/page.tsx`
+
+Aucune migration SQL, aucun contact Shopify, aucune colonne touchée : les 5 RPC du
+connecteur `jardi-mail-mcp` ne sont pas concernées.
+
+### 🔧 Après stabilité
+
+```powershell
+git branch -d nav-listes-nouvel-onglet
+git push origin --delete nav-listes-nouvel-onglet
+```
