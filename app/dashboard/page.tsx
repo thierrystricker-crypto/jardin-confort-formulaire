@@ -5,6 +5,7 @@ import StatsCards from "./StatsCards";
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import AnnonceStockPopup from "@/components/AnnonceStockPopup";
+import { clicLigne, clicMilieuLigne, useFiltresMemorises } from "@/lib/liste-navigation";
 
 type OffreStatut = "En cours"|"Envoyée"|"Convertie"|"Acceptée"|"Abandonnée"|"Refusée"
 type TypeDocument = "Offre"|"Commande"
@@ -278,6 +279,25 @@ export default function DashboardPage() {
   const [articleHits,setArticleHits]=useState<Record<number,string>>({})
   const [articleSearching,setArticleSearching]=useState(false)
   const [searchArticles,setSearchArticles]=useState(true)
+
+  // Filtres mémorisés le temps de l'onglet : on ouvre une offre, on revient,
+  // et la recherche, les filtres rapides, le commercial et le tri sont encore
+  // là. Voir lib/liste-navigation.ts.
+  useFiltresMemorises("dashboard:filtres", {
+    search, quickFilter, commercial, hideAbandoned, hideConverted,
+    sortKey, sortDir, searchArticles, hideTransformedDrafts, draftsCollapsed,
+  }, v => {
+    if (typeof v.search === "string") setSearch(v.search)
+    if (typeof v.quickFilter === "string") setQuickFilter(v.quickFilter as QuickFilter)
+    if (typeof v.commercial === "string") setCommercial(v.commercial)
+    if (typeof v.hideAbandoned === "boolean") setHideAbandoned(v.hideAbandoned)
+    if (typeof v.hideConverted === "boolean") setHideConverted(v.hideConverted)
+    if (typeof v.sortKey === "string") setSortKey(v.sortKey as SortKey)
+    if (typeof v.sortDir === "string") setSortDir(v.sortDir as SortDir)
+    if (typeof v.searchArticles === "boolean") setSearchArticles(v.searchArticles)
+    if (typeof v.hideTransformedDrafts === "boolean") setHideTransformedDrafts(v.hideTransformedDrafts)
+    if (typeof v.draftsCollapsed === "boolean") setDraftsCollapsed(v.draftsCollapsed)
+  })
   // ─────────────────────────────
 
   function loadOffres() {
@@ -681,7 +701,10 @@ export default function DashboardPage() {
                       ? "border-l-4 border-l-emerald-400/80"
                       : "border-l-4 border-l-sky-500/40"
                     return (
-                      <tr key={o.id} onClick={()=>window.location.href=`/dashboard/${o.slug}`}
+                      <tr key={o.id}
+                        onClick={e=>clicLigne(`/dashboard/${o.slug}`,e)}
+                        onAuxClick={e=>clicMilieuLigne(`/dashboard/${o.slug}`,e)}
+                        title="Ctrl/Cmd+clic ou clic milieu : ouvrir dans un nouvel onglet"
                         className={`${rowBg} ${leftBorder} cursor-pointer border-t border-white/5 text-zinc-200 transition hover:bg-white/10`}>
                         <td className="px-4 py-4">
                           <div className="font-semibold text-zinc-100">{o.numero_affiche}</div>
@@ -762,7 +785,7 @@ export default function DashboardPage() {
                         </td>
                         <td className="px-4 py-4 text-zinc-400">{fmtDate(o.date_document)}</td>
                         <td className="px-4 py-4">
-                          <div className="flex justify-end gap-2" onClick={e=>e.stopPropagation()}>
+                          <div className="flex justify-end gap-2" onClick={e=>e.stopPropagation()} onAuxClick={e=>e.stopPropagation()}>
                             <Link href={`/dashboard/${o.slug}`} className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-[#40454b]">Voir</Link>
                             <a href={`/offre/${o.slug}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-[#40454b]">Client</a>
                             {o.client_email&&(
@@ -856,7 +879,10 @@ export default function DashboardPage() {
                           : "border-l-4 border-l-amber-400/60"
                         const textOpacity = isTransformed ? "text-zinc-400" : "text-zinc-200"
                         return (
-                          <tr key={d.id} onClick={()=>window.location.href=`/dashboard/draft/${d.slug}`}
+                          <tr key={d.id}
+                            onClick={e=>clicLigne(`/dashboard/draft/${d.slug}`,e)}
+                            onAuxClick={e=>clicMilieuLigne(`/dashboard/draft/${d.slug}`,e)}
+                            title="Ctrl/Cmd+clic ou clic milieu : ouvrir dans un nouvel onglet"
                             className={`${rowBg} ${leftBorder} ${textOpacity} cursor-pointer border-t border-white/5 transition hover:bg-white/10`}>
                             <td className="px-4 py-4">
                               <div className={`font-semibold ${isTransformed?"text-zinc-400":"text-amber-200"}`}>{d.numero_affiche}</div>
@@ -887,7 +913,7 @@ export default function DashboardPage() {
                             </td>
                             <td className="px-4 py-4 text-zinc-400">{fmtDate(d.updated_at)}</td>
                             <td className="px-4 py-4">
-                              <div className="flex justify-end gap-2" onClick={e=>e.stopPropagation()}>
+                              <div className="flex justify-end gap-2" onClick={e=>e.stopPropagation()} onAuxClick={e=>e.stopPropagation()}>
                                 <Link href={`/dashboard/draft/${d.slug}`}
                                   className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-[#40454b]">Voir</Link>
                                 {!isTransformed && (

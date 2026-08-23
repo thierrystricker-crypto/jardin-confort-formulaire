@@ -13,6 +13,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useFiltresMemorises } from "@/lib/liste-navigation";
 
 type Ligne = {
   id: string; numero_commande: string; boutique: string
@@ -151,6 +152,20 @@ export default function DelaisPage() {
   const [lignesCommande, setLignesCommande] = useState<Record<string, LigneCommande[]>>({});
   const [enCours, setEnCours] = useState(false);
   const [voletBas, setVoletBas] = useState<"a_valider"|"orphelines"|"fournisseurs"|null>(null);
+
+  // Filtres mémorisés le temps de l'onglet. Le ?q= de l'URL est appliqué
+  // après, dans l'effet suivant : une arrivée depuis une commande gagne
+  // toujours sur la mémoire. Voir lib/liste-navigation.ts.
+  useFiltresMemorises("delais:filtres", {
+    marque, boutique, filtre, recherche, suiviesSeules, voirEnStock,
+  }, v => {
+    if (typeof v.marque === "string") setMarque(v.marque);
+    if (typeof v.boutique === "string") setBoutique(v.boutique);
+    if (typeof v.filtre === "string") setFiltre(v.filtre as FiltreRapide);
+    if (typeof v.recherche === "string") setRecherche(v.recherche);
+    if (typeof v.suiviesSeules === "boolean") setSuiviesSeules(v.suiviesSeules);
+    if (typeof v.voirEnStock === "boolean") setVoirEnStock(v.voirEnStock);
+  });
 
   async function charger() {
     setLoading(true);
@@ -483,7 +498,8 @@ export default function DelaisPage() {
                     <td className={`px-4 py-3 text-right ${dansGroupeOuvert ? "border-r-2 border-r-sky-400/40" : ""}`} onClick={e => e.stopPropagation()}>
                       {l.statut === "en_cours" && !l.date_reception && (
                         <Link href={`/dashboard/arrivages?q=${encodeURIComponent(l.numero_commande)}`}
-                          title="Saisir la réception article par article (page Arrivages) — nourrit le calibrage des règles de transit quand toute la marque est couverte"
+                          target="_blank" rel="noopener noreferrer"
+                          title="S'ouvre dans un nouvel onglet — saisir la réception article par article (page Arrivages) — nourrit le calibrage des règles de transit quand toute la marque est couverte"
                           className="inline-flex items-center rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300 hover:bg-emerald-500/25">📦 Reçu</Link>
                       )}
                     </td>

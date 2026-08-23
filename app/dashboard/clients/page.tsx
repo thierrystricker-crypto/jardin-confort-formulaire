@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PrintAddressButton from "@/components/PrintAddressButton";
+import { clicLigne, clicMilieuLigne, useFiltresMemorises } from "@/lib/liste-navigation";
 
 type Client = {
   id: number
@@ -425,6 +426,15 @@ export default function ClientsPage() {
   const [search, setSearch] = useState("")
   const [searchDoc, setSearchDoc] = useState("")
   const [activeSearch, setActiveSearch] = useState<"client" | "document">("client")
+
+  // Filtres mémorisés le temps de l'onglet : on ouvre une fiche client, on
+  // revient, et la recherche est encore là. Le fetch débounce se relance tout
+  // seul sur le changement de `search`. Voir lib/liste-navigation.ts.
+  useFiltresMemorises("clients:filtres", { search, searchDoc, activeSearch }, v => {
+    if (typeof v.search === "string") setSearch(v.search)
+    if (typeof v.searchDoc === "string") setSearchDoc(v.searchDoc)
+    if (typeof v.activeSearch === "string" && (v.activeSearch === "client" || v.activeSearch === "document")) setActiveSearch(v.activeSearch)
+  })
   const [showImport, setShowImport] = useState(false)
   const [showNew, setShowNew] = useState(false)
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1059,14 +1069,9 @@ export default function ClientsPage() {
   const isMatch = clientHasDocumentMatch(c, matchQuery)
   return (
     <tr key={c.id}
-      onClick={(e) => {
-  // Ctrl/Cmd+click ou clic milieu → nouvel onglet
-  if (e.ctrlKey || e.metaKey || e.button === 1) {
-    window.open(`/dashboard/clients/${c.id}`, "_blank")
-  } else {
-    window.location.href = `/dashboard/clients/${c.id}`
-  }
-}}
+      onClick={(e) => clicLigne(`/dashboard/clients/${c.id}`, e)}
+      onAuxClick={(e) => clicMilieuLigne(`/dashboard/clients/${c.id}`, e)}
+      title="Ctrl/Cmd+clic ou clic milieu : ouvrir dans un nouvel onglet"
       className={`border-t text-zinc-200 transition cursor-pointer ${
         isMatch
           ? "border-violet-500/40 bg-violet-500/15 hover:bg-violet-500/25 ring-1 ring-inset ring-violet-400/40 relative"
@@ -1117,7 +1122,7 @@ export default function ClientsPage() {
                           <DocsCellExternes client={c} matchQuery={activeSearch === "document" ? searchDoc : undefined} />
                         </td>
                         <td className="px-4 py-3 text-zinc-500 text-xs align-top">{fmtDate(c.created_at)}</td>
-                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()} onAuxClick={e => e.stopPropagation()}>
   <div className="flex justify-end gap-2">
     <PrintAddressButton client={c} compact />
     <Link href={`/drafts/nouveau?prefill=${encodeURIComponent(JSON.stringify({
