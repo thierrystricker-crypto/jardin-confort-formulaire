@@ -53,6 +53,11 @@ type Fournisseur = {
   marque: string; transit_regle: Record<string, unknown>|null
   seuil_echeance_jours: number; seuil_delai_manquant_jours_ouvres: number; actif: boolean
 }
+type LigneCommande = {
+  position: number; sku: string|null; titre: string|null; marque: string|null
+  qty_commandee: number; qty_stock_cmd: number; qty_recue_totale: number; qty_restante: number
+  etat: string; mode_ligne: string; derniere_reception: string|null
+}
 type Evenement = {
   id: string; type: string; date_depart: string|null; semaine_annoncee: string|null
   source: string; confiance: number; statut_validation: string; portee: string
@@ -135,6 +140,10 @@ export default function DelaisPage() {
   const [suiviesSeules, setSuiviesSeules] = useState(false);
   const [ouverte, setOuverte] = useState<string|null>(null);
   const [chrono, setChrono] = useState<Record<string, Evenement[]>>({});
+  // Articles de TOUTE la commande (toutes marques), chargés au dépli — le
+  // tableau est par commande × marque, mais quand on ouvre une ligne on veut
+  // voir la commande entière (constat Thierry 22.08, JAR-12814).
+  const [lignesCommande, setLignesCommande] = useState<Record<string, LigneCommande[]>>({});
   const [enCours, setEnCours] = useState(false);
   const [voletBas, setVoletBas] = useState<"a_valider"|"orphelines"|"fournisseurs"|null>(null);
 
@@ -174,6 +183,14 @@ export default function DelaisPage() {
         const json = await res.json();
         setChrono(prev => ({ ...prev, [l.id]: json.evenements || [] }));
       } catch { /* silencieux, le dépli montrera "chargement" */ }
+    }
+    const cle = `${l.boutique}|${l.numero_commande}`;
+    if (!lignesCommande[cle]) {
+      try {
+        const res = await fetch(`/api/arrivages?boutique=${encodeURIComponent(l.boutique)}&numero=${encodeURIComponent(l.numero_commande)}`);
+        const json = await res.json();
+        if (res.ok && json.commande?.lignes) setLignesCommande(prev => ({ ...prev, [cle]: json.commande.lignes }));
+      } catch { /* le dépli retombera sur le snapshot de la marque */ }
     }
   }
 
@@ -468,12 +485,45 @@ export default function DelaisPage() {
                             )}
                           </div>
                           <div className="space-y-3">
-                            <div>
-                              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Articles ({(l.articles || []).length})</div>
-                              <div className="max-h-40 space-y-1 overflow-y-auto text-xs text-zinc-400">
-                                {(l.articles || []).map((a, i) => <div key={i}>{a.qty ?? "?"}× {a.titre || a.sku}</div>)}
-                              </div>
-                            </div>
+                            {(() => {
+                              // Toute la commande, groupée par marque — la marque de la
+                              // ligne d'abord. Repli : snapshot des articles de la marque.
+                              const toutes = lignesCommande[`${l.boutique}|${l.numero_commande}`];
+                              if (!toutes) return (
+                                <div>
+                                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Articles {l.marque} ({(l.articles || []).length})</div>
+                                  <div className="max-h-40 space-y-1 overflow-y-auto text-xs text-zinc-400">
+                                    {(l.articles || []).map((a, i) => <div key={i}>{a.qty ?? "?"}× {a.titre || a.sku}</div>)}
+                                  </div>
+                                </div>
+                              );
+                              const marques = [l.marque, ...[...new Set(toutes.map(a => a.marque || "à la volée"))].filter(m => m !== l.marque)];
+                              return (
+                                <div>
+                                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Toute la commande ({toutes.length} article{toutes.length > 1 ? "s" : ""})</div>
+                                  <div className="max-h-56 space-y-2 overflow-y-auto text-xs">
+                                    {marques.map(m => {
+                                      const arts = toutes.filter(a => (a.marque || "à la volée") === m);
+                                      if (!arts.length) return null;
+                                      return (
+                                        <div key={m}>
+                                          <div className={`font-semibold ${m === l.marque ? "text-zinc-200" : "text-zinc-500"}`}>{m}{m === l.marque ? " (cette ligne)" : ""}</div>
+                                          {arts.map(a => (
+                                            <div key={a.position} className="flex flex-wrap items-baseline gap-x-2 text-zinc-400">
+                                              <span>{a.qty_commandee}× {a.titre || a.sku}</span>
+                                              {a.mode_ligne === "en_stock" ? <span className="text-zinc-500">🏬 en stock</span>
+                                                : a.etat === "complete" || a.etat === "excedent" ? <span className="text-emerald-300">✅ reçu{a.derniere_reception ? ` ${fmtDate(a.derniere_reception)}` : ""}</span>
+                                                : a.etat === "partielle" ? <span className="text-amber-300">{Number(a.qty_stock_cmd) + Number(a.qty_recue_totale)}/{a.qty_commandee}, reste {a.qty_restante}</span>
+                                                : <span className="text-sky-300">⏳ attendu</span>}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                             {l.delai_annonce_client && <div className="text-xs text-zinc-400">Délai annoncé au client : <span className="text-zinc-200">{fmtDate(l.delai_annonce_client)}</span></div>}
                             {l.date_reception && <div className="text-xs text-emerald-300">Reçue le {fmtDate(l.date_reception)}</div>}
                             {!l.date_reception && l.date_reception_partielle && <div className="text-xs text-lime-300">Partiellement reçue — dernier arrivage le {fmtDate(l.date_reception_partielle)}</div>}
