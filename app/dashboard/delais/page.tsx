@@ -218,31 +218,53 @@ export default function DelaisPage() {
   const marques = useMemo(() => [...new Set(lignes.map(l => l.marque))].sort(), [lignes]);
   const boutiques = useMemo(() => [...new Set(lignes.map(l => l.boutique))].sort(), [lignes]);
 
+  // Une ligne « correspond » aux filtres ; mais l'affichage est SOLIDAIRE par
+  // commande (Thierry 22.08) : si une seule marque d'une commande correspond,
+  // TOUTES les lignes de la commande sortent ensemble — le vendeur voit la
+  // commande d'un coup d'œil, jamais une marque orpheline. Les lignes qui ne
+  // correspondent pas elles-mêmes sont affichées atténuées.
   const visibles = useMemo(() => {
-    let liste = [...lignes];
-    if (marque !== "toutes") liste = liste.filter(l => l.marque === marque);
-    if (boutique !== "toutes") liste = liste.filter(l => l.boutique === boutique);
-    if (suiviesSeules) liste = liste.filter(l => l.marque_suivie);
-    if (filtre === "en_cours") liste = liste.filter(l => l.statut === "en_cours");
-    else if (filtre === "retard") liste = liste.filter(l => l.alarme_retard);
-    else if (filtre === "echeance") liste = liste.filter(l => l.alarme_echeance_proche);
-    else if (filtre === "delai_manquant") liste = liste.filter(l => l.alarme_delai_manquant);
-    else if (filtre === "a_valider") liste = liste.filter(l => l.nb_a_valider > 0);
-    else if (filtre === "parties") liste = liste.filter(l => ["facturee","expediee","partiellement_expediee"].includes(l.etape) && l.statut === "en_cours");
-    if (recherche.trim()) {
-      const q = recherche.trim().toLowerCase();
-      liste = liste.filter(l =>
-        l.numero_commande.toLowerCase().includes(q) ||
-        nomClient(l).toLowerCase().includes(q) ||
-        (l.ref_fournisseur || "").toLowerCase().includes(q));
+    const correspond = (l: Ligne) => {
+      if (marque !== "toutes" && l.marque !== marque) return false;
+      if (boutique !== "toutes" && l.boutique !== boutique) return false;
+      if (suiviesSeules && !l.marque_suivie) return false;
+      if (filtre === "en_cours" && l.statut !== "en_cours") return false;
+      else if (filtre === "retard" && !l.alarme_retard) return false;
+      else if (filtre === "echeance" && !l.alarme_echeance_proche) return false;
+      else if (filtre === "delai_manquant" && !l.alarme_delai_manquant) return false;
+      else if (filtre === "a_valider" && !(l.nb_a_valider > 0)) return false;
+      else if (filtre === "parties" && !(["facturee","expediee","partiellement_expediee"].includes(l.etape) && l.statut === "en_cours")) return false;
+      if (recherche.trim()) {
+        const q = recherche.trim().toLowerCase();
+        if (!(l.numero_commande.toLowerCase().includes(q) ||
+              nomClient(l).toLowerCase().includes(q) ||
+              (l.ref_fournisseur || "").toLowerCase().includes(q))) return false;
+      }
+      return true;
+    };
+    // Groupes = commande (boutique + numéro), gardés si une ligne correspond.
+    const parCommande = new Map<string, Ligne[]>();
+    for (const l of lignes) {
+      const cle = `${l.boutique}|${l.numero_commande}`;
+      const g = parCommande.get(cle) || [];
+      g.push(l); parCommande.set(cle, g);
     }
-    return liste.sort((a, b) => {
+    const tri = (a: Ligne, b: Ligne) => {
       const ra = rangUrgence(a), rb = rangUrgence(b);
       if (ra !== rb) return ra - rb;
       if (ra === 0) return b.jours_retard - a.jours_retard;
       const aa = a.arrivage_calcule || "9999", ab = b.arrivage_calcule || "9999";
       return aa < ab ? -1 : aa > ab ? 1 : 0;
-    });
+    };
+    const groupes = [...parCommande.values()]
+      .map(g => ({ g: g.sort(tri), ok: g.some(correspond) }))
+      .filter(x => x.ok);
+    // Les commandes se classent par leur ligne la plus urgente QUI CORRESPOND
+    // (une commande ne remonte pas en tête grâce à une marque hors filtre).
+    groupes.sort((A, B) => tri(A.g.find(correspond) || A.g[0], B.g.find(correspond) || B.g[0]));
+    return groupes.flatMap(({ g }) =>
+      g.map((l, i) => ({ ...l, _premiere: i === 0, _taille: g.length, _correspond: correspond(l) }))
+    );
   }, [lignes, marque, boutique, filtre, recherche, suiviesSeules]);
 
   const stats = useMemo(() => {
@@ -349,6 +371,7 @@ export default function DelaisPage() {
             <tbody>
               {visibles.map(l => {
                 const etape = ETAPES[l.etape] || ETAPES.sans_delai;
+                const groupe = l as Ligne & { _premiere: boolean; _taille: number; _correspond: boolean };
                 const evts = chrono[l.id];
                 // Arrivage de référence : le réel (preuve de départ) s'il existe,
                 // sinon le calculé depuis la promesse fournisseur.
@@ -360,18 +383,25 @@ export default function DelaisPage() {
                 return (
                 <React.Fragment key={l.id}>
                   <tr onClick={() => ouvrirChrono(l)}
-                    className={`cursor-pointer border-t border-white/5 transition hover:bg-[#31353b] ${l.alarme_retard ? "bg-rose-500/5" : ""}`}>
+                    className={`cursor-pointer transition hover:bg-[#31353b] ${groupe._premiere ? "border-t-2 border-white/15" : "border-t border-white/5"} ${l.alarme_retard ? "bg-rose-500/5" : ""} ${groupe._correspond ? "" : "opacity-50"}`}>
                     <td className="px-4 py-3 font-medium">
-                      {l.numero_commande}
-                      {l.ref_fournisseur && <div className="text-xs text-zinc-500">{l.ref_fournisseur}</div>}
+                      {groupe._premiere ? (
+                        <>
+                          {l.numero_commande}
+                          {groupe._taille > 1 && <span className="ml-1.5 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] text-zinc-400" title="Cette commande est suivie sur plusieurs marques — les lignes restent toujours groupées">{groupe._taille} marques</span>}
+                        </>
+                      ) : (
+                        <span className="pl-3 text-zinc-500" title={`Même commande ${l.numero_commande}`}>↳</span>
+                      )}
+                      {l.ref_fournisseur && <div className={groupe._premiere ? "text-xs text-zinc-500" : "pl-3 text-xs text-zinc-500"}>{l.ref_fournisseur}</div>}
                     </td>
                     <td className="px-4 py-3">
-                      {l.client_societe ? (
+                      {groupe._premiere ? (l.client_societe ? (
                         <>
                           <div>{l.client_societe}</div>
                           <div className="text-xs text-zinc-400">{nomClient(l)}</div>
                         </>
-                      ) : nomClient(l)}
+                      ) : nomClient(l)) : <span className="text-zinc-600">〃</span>}
                     </td>
                     <td className="px-4 py-3 text-zinc-300">{l.marque}</td>
                     <td className="px-4 py-3 text-zinc-400">{fmtDate(l.date_commande)}</td>
