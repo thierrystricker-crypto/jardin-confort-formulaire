@@ -3886,7 +3886,15 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
         .jc-service-custom-label:focus { border-color: var(--accent) !important; }
         .jc-stock-zero { color: var(--danger); font-weight: 700; font-size: 12px; }
         .jc-stock-cmd { color: #f59e0b; font-weight: 700; font-size: 12px; }
-        .jc-line-delai { color: var(--text-muted); font-size: 10px; margin-top: 2px; white-space: nowrap; }
+        /* .td-stock impose white-space:nowrap (déclarée DEUX fois, l. ~3906 puis
+           ~3998 — c'est la seconde qui gagne). Sans ce normal, « 2–3 semaines »
+           ne peut pas passer à la ligne et déborde sur la colonne Total. On
+           annule ici plutôt que sur la cellule, dont le nowrap protège
+           « 2 pces » et « Sur commande » d'être coupés en deux. */
+        .jc-line-delai {
+          color: var(--text-muted); font-size: 10px; line-height: 1.25;
+          margin-top: 3px; white-space: normal; word-break: normal;
+        }
         .jc-critical-wrap { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
         .jc-critical-badge {
           display: inline-flex; align-items: center; gap: 4px;
