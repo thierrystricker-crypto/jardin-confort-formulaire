@@ -260,16 +260,22 @@ async function getAdminAvailableByVariantId(variantIds: string[]) {
 // « simplifier » : le pas passe à +2 dès 6weeks, et la chaîne du thème est
 // ASCENDANTE — sur un produit multi-tags, c'est le délai le plus COURT qui
 // s'affiche au client. Ne pas réordonner cette liste. Voir doc 03 par. 4 ter.
+// FORME COURTE, identique a celle de lib/shopify-refresh-stock.ts : c'est la
+// meme donnee, elle doit s'ecrire pareil partout. Une ligne fraichement ajoutee
+// au formulaire et la meme ligne rechargee depuis la base afficheraient sinon
+// deux textes differents pour un seul et meme delai. Chaque affichage habille
+// (le picker en tuiles recompose « Sur commande ✓ Délai … »).
+// Chaine vide = aucun delai connu : rien ne s'affiche, on n'invente pas.
 function getDelaiFromTags(tags: string[]): string {
-  if (tags.includes('1week'))   return 'Sur commande ✓ Délai 1-2 semaines';
-  if (tags.includes('2weeks'))  return 'Sur commande ✓ Délai 2-3 semaines';
-  if (tags.includes('3weeks'))  return 'Sur commande ✓ Délai 3-4 semaines';
-  if (tags.includes('4weeks'))  return 'Sur commande ✓ Délai 4-5 semaines';
-  if (tags.includes('5weeks'))  return 'Sur commande ✓ Délai 5-6 semaines';
-  if (tags.includes('6weeks'))  return 'Sur commande ✓ Délai 6-8 semaines';
-  if (tags.includes('8weeks'))  return 'Sur commande ✓ Délai 8-10 semaines';
-  if (tags.includes('10weeks')) return 'Sur commande ✓ Délai 10-12 semaines';
-  return 'Sur commande ✓';
+  if (tags.includes('1week'))   return '1–2 semaines';
+  if (tags.includes('2weeks'))  return '2–3 semaines';
+  if (tags.includes('3weeks'))  return '3–4 semaines';
+  if (tags.includes('4weeks'))  return '4–5 semaines';
+  if (tags.includes('5weeks'))  return '5–6 semaines';
+  if (tags.includes('6weeks'))  return '6–8 semaines';
+  if (tags.includes('8weeks'))  return '8–10 semaines';
+  if (tags.includes('10weeks')) return '10–12 semaines';
+  return '';
 }
 
 // Métachamp de VARIANTE "fournisseur.delai_semaines" ("2-3", "10-12"…) : le délai
@@ -284,7 +290,7 @@ function getDelaiFromMetachamp(valeur: string | null | undefined): string | null
   const haut = m[2] ? parseInt(m[2], 10) : null;
   if (bas < 1 || bas > 52) return null;
   if (haut !== null && (haut < bas || haut > 52)) return null;
-  return `Sur commande ✓ Délai ${haut !== null ? `${bas}-${haut}` : `${bas}`} semaines`;
+  return haut !== null ? `${bas}–${haut} semaines` : `${bas} semaines`;
 }
 
 function buildStorefrontItems(products: ShopifyProduct[], words: string[]): ResultItem[] {

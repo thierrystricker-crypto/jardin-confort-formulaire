@@ -64,6 +64,7 @@ type QuoteLine = {
   lineDiscountPerUnit?: number;   // rabais à la pièce en CHF — source de vérité
   shopifyLocked?: boolean;
   shopifyVariantId?: string;      // gid variante Shopify — matching stock fiable (SKU non unique)
+  delaiLivraison?: string;        // « 2–3 semaines » — écrit par refreshStock, figé J0 sur une commande
   // ── Lignes média uniquement ──
   mediaUrl?: string;
   mediaSize?: "small" | "medium" | "large";
@@ -681,6 +682,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
       lineDiscountPerUnit: hasPromo ? Math.round((compareAt - price) * 100) / 100 : 0,
       shopifyLocked: true,
       inventoryPolicy: item.inventoryPolicy === "DENY" ? "DENY" : "CONTINUE",
+      delaiLivraison: item.delaiLivraison || undefined,
     }]);
     highlightAdded(id);
     setFlashProductId(item.id);
@@ -2249,8 +2251,9 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                             </div>
                             <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-open-link">Ouvrir sur la boutique ↗</a>
                             {/* Délai de livraison basé sur les tags */}
-                            {item.stock !== null && item.stock < 1 && item.inventoryPolicy === "CONTINUE" && item.delaiLivraison && (
-                              <div className="jc-shopify-delai">{item.delaiLivraison}</div>
+                            {item.stock !== null && item.stock < 1 && item.inventoryPolicy === "CONTINUE"
+                              && item.delaiLivraison && item.delaiLivraison !== "Sur commande" && (
+                              <div className="jc-shopify-delai">Sur commande ✓ Délai {item.delaiLivraison}</div>
                             )}
                           </div>
 
@@ -2594,6 +2597,15 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                                   <span className={(line.stock as number) > 2 ? "jc-stock-ok" : (line.stock as number) > 0 ? "jc-stock-low" : "jc-stock-cmd"}>
                                     {line.stock === 0 ? "Sur commande" : `${line.stock} pce${(line.stock as number) > 1 ? "s" : ""}`}
                                   </span>
+                                )}
+                                {/* Délai fournisseur — seulement sur une rupture VENDABLE, exactement
+                                    la règle de la page produit du thème (doc 03 §4 ter). Sur une
+                                    commande, cette valeur est figée J0 : c'est la promesse faite. */}
+                                {(line.stock === "sur_commande" || line.stock === 0)
+                                  && line.inventoryPolicy === "CONTINUE"
+                                  && line.delaiLivraison
+                                  && line.delaiLivraison !== "Sur commande" && (
+                                  <div className="jc-line-delai">{line.delaiLivraison}</div>
                                 )}
                                 {isStockCritical(line) && (
                                   <div className="jc-critical-wrap">
@@ -2947,6 +2959,11 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                                     return <span style={{ fontSize: 11, fontWeight: 600, color: b.couleur }}>{b.texte}</span>;
                                   })()}
                                 </div>
+                                {/* Le délai, là où le commercial décide. Même règle que la ligne. */}
+                                {item.stock !== null && item.stock < 1 && item.inventoryPolicy === "CONTINUE"
+                                  && item.delaiLivraison && item.delaiLivraison !== "Sur commande" && (
+                                  <div style={{ fontSize: 10, opacity: 0.72, marginTop: 2 }}>{item.delaiLivraison}</div>
+                                )}
                               </div>
                               <button onClick={(e) => { e.stopPropagation(); addShopifyItem(item); }}
                                 style={{ flexShrink: 0, background: "var(--accent)", color: "white", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 18, cursor: "pointer" }}>+</button>
@@ -3869,6 +3886,15 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
         .jc-service-custom-label:focus { border-color: var(--accent) !important; }
         .jc-stock-zero { color: var(--danger); font-weight: 700; font-size: 12px; }
         .jc-stock-cmd { color: #f59e0b; font-weight: 700; font-size: 12px; }
+        /* .td-stock impose white-space:nowrap (déclarée DEUX fois, l. ~3906 puis
+           ~3998 — c'est la seconde qui gagne). Sans ce normal, « 2–3 semaines »
+           ne peut pas passer à la ligne et déborde sur la colonne Total. On
+           annule ici plutôt que sur la cellule, dont le nowrap protège
+           « 2 pces » et « Sur commande » d'être coupés en deux. */
+        .jc-line-delai {
+          color: var(--text-muted); font-size: 10px; line-height: 1.25;
+          margin-top: 3px; white-space: normal; word-break: normal;
+        }
         .jc-critical-wrap { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
         .jc-critical-badge {
           display: inline-flex; align-items: center; gap: 4px;
@@ -3972,8 +3998,14 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
           color: var(--ok) !important;
         }
         .jc-line-discount-input::placeholder { color: var(--ok); opacity: 0.4; }
+        /* .td-money impose white-space:nowrap pour que « CHF 208.00 » ne soit
+           jamais coupé. Mais la mention de remise est longue : sans ce normal,
+           elle déborde de sa cellule et s'écrit par-dessus la colonne Stock,
+           volontairement étroite (voir « COLONNE STOCK RÉDUITE » plus bas).
+           On annule sur l'enfant, jamais sur la cellule. */
         .jc-line-discount-shown {
           font-size: 11px; color: var(--ok); text-align: right; margin-top: 1px;
+          white-space: normal; line-height: 1.3;
         }
 
         /* ── COLONNE STOCK RÉDUITE ── */
