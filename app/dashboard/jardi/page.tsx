@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type React from "react";
 import { preparerFichier } from "@/lib/preparer-fichier";
+import { BoutonLireAudio } from "./lecture-audio";
 
 // Un fichier soumis au chat vit en MÉTADONNÉE, jamais en contenu : `content`
 // reste une string partout — dans le state React comme dans
@@ -1141,7 +1142,15 @@ export default function PageChatClaude() {
                     m.content &&
                     !m.erreur &&
                     !(enCours && i === messages.length - 1) && (
-                      <div style={{ marginTop: 6, textAlign: "right" }}>
+                      <div
+                        style={{
+                          marginTop: 6,
+                          display: "flex",
+                          justifyContent: "flex-end",
+                          gap: 14,
+                        }}
+                      >
+                        <BoutonLireAudio texte={m.content} />
                         <button
                           onClick={() => copierMessage(i, m.content)}
                           title="Copier le message (sans mise en forme)"
