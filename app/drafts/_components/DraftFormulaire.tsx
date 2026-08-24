@@ -3998,8 +3998,14 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
           color: var(--ok) !important;
         }
         .jc-line-discount-input::placeholder { color: var(--ok); opacity: 0.4; }
+        /* .td-money impose white-space:nowrap pour que « CHF 208.00 » ne soit
+           jamais coupé. Mais la mention de remise est longue : sans ce normal,
+           elle déborde de sa cellule et s'écrit par-dessus la colonne Stock,
+           volontairement étroite (voir « COLONNE STOCK RÉDUITE » plus bas).
+           On annule sur l'enfant, jamais sur la cellule. */
         .jc-line-discount-shown {
           font-size: 11px; color: var(--ok); text-align: right; margin-top: 1px;
+          white-space: normal; line-height: 1.3;
         }
 
         /* ── COLONNE STOCK RÉDUITE ── */
