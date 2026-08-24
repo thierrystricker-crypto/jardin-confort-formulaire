@@ -2232,10 +2232,15 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                             </div>
                             <div className="jc-shopify-row">
                               <span className="jc-shopify-label">Stock</span>
-                              {item.stock === null ? (
+                              {item.stock === null || item.inventoryPolicy === null ? (
                                 <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-stock-link">Vérifier ↗</a>
                               ) : stockZero ? (
-                                <span className="jc-stock-cmd">Sur commande</span>
+                                // Meme regle que le picker liste (P1-47) : a 0, seul DENY est une rupture.
+                                item.inventoryPolicy === "CONTINUE" ? (
+                                  <span className="jc-stock-cmd">Sur commande</span>
+                                ) : (
+                                  <span className="jc-stock-zero">Rupture</span>
+                                )
                               ) : (
                                 <span className={stockOk ? "jc-stock-ok" : "jc-stock-low"}>
                                   {item.stock} pce{item.stock > 1 ? "s" : ""}
@@ -2244,7 +2249,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                             </div>
                             <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-open-link">Ouvrir sur la boutique ↗</a>
                             {/* Délai de livraison basé sur les tags */}
-                            {item.stock !== null && item.stock < 1 && item.delaiLivraison && (
+                            {item.stock !== null && item.stock < 1 && item.inventoryPolicy === "CONTINUE" && item.delaiLivraison && (
                               <div className="jc-shopify-delai">{item.delaiLivraison}</div>
                             )}
                           </div>
