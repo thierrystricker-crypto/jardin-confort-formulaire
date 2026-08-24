@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# sorties de scripts one-shot (progression du rattrapage P1-46)
+rattrapage-log.json
+
+# copies de reference posees a la racine avant un chantier - jamais versionnees
+_base_*.tsx

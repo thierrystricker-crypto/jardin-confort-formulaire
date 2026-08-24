@@ -1,4 +1,4 @@
-# Journal — Suivi des délais fournisseurs, côté formulaire [20-21.08.2026]
+# Journal — Suivi des délais fournisseurs, côté formulaire [20-23.08.2026]
 
 Chantier mené sur deux jours. État : **en production** (déploiement au dernier
 push). Spec et état de référence : doc projet
@@ -142,3 +142,88 @@ bloquerait tout accès).
 - Canaux GAL / lumi-shop non seedés dans le suivi ; rattrapage magasin
   mai-juillet si besoin.
 - RLS des 5 tables du projet webshop (§5).
+
+## 8. Session du 22-23.08 — chantier Arrivages et ergonomie du dashboard
+
+Réception par article et par quantité : spec et état de référence dans le doc
+projet `claude/chantier-arrivages.md` (les 4 étapes livrées le 22.08 : SQL
+dans `jardi-mail-mcp/sql/`, page `/dashboard/arrivages` + `/api/arrivages` +
+`lib/arrivages.ts`, extension du dashboard délais, outils MCP). Ci-dessous les
+améliorations d'ergonomie du 23.08 dans CE dépôt, nées de l'usage réel.
+
+### Le dashboard pense « marque », le vendeur pense « commande »
+
+Constat de Thierry sur JAR-12814 (1 ligne Fermob + 2 Fatboy) : la ligne
+Fermob semblait être toute la commande, le dépli ne montrait que ses articles.
+Trois réponses, toutes dans `app/dashboard/delais/page.tsx` :
+
+- **Lignes solidaires par commande.** Les lignes d'une même commande restent
+  TOUJOURS groupées : la commande se classe par sa ligne la plus urgente **qui
+  correspond aux filtres**, les autres marques suivent en dessous (`↳`, badge
+  « n marques », client remplacé par 〃). Un filtre ou une recherche sélectionne
+  des commandes entières : si la ligne Fermob matche, la ligne Fatboy sort
+  aussi, atténuée (opacity-50) pour montrer qu'elle n'a pas matché elle-même.
+- **Le dépli montre TOUTE la commande** : articles chargés via
+  `/api/arrivages?boutique&numero`, groupés par marque (celle de la ligne en
+  premier, « (cette ligne) »), chacun avec son état d'arrivage (🏬 en stock /
+  ✅ reçu + date / x/y reste n / ⏳ attendu). Repli sur le snapshot de la marque
+  si l'appel échoue. Le panneau s'ouvre après la DERNIÈRE ligne du groupe.
+- **Cadre bleu complet** autour de la commande dépliée : fond commun
+  `#26292d`, barre gauche sky continue, trait haut sur la première ligne,
+  droite sur la dernière cellule, fermeture sous le panneau — tout ce qui est
+  dans le cadre = la commande. Les infos du panneau (chrono, promesse,
+  recherche approfondie) restent celles de la ligne CLIQUÉE (`ligneOuverte`).
+
+### Commandes « en stock » masquées par défaut
+
+75 % des commandes web sont du stock expédié le jour même ; elles entraient
+quand même au suivi (voulu) et encombraient le tableau. L'étape `en_stock`
+(statut en cours) est désormais masquée par défaut ; case « Voir les commandes
+en stock (n masquées) ». La solidarité tient : une commande mi-stock
+mi-fournisseur reste entière, seules les commandes 100 % stock disparaissent.
+Constat chiffré au passage : 75 lignes en stock en cours dont 48 de plus de
+7 jours (la plus vieille du 10.01) → du fulfilled jamais cliqué, hygiène
+d'équipe à faire dans Shopify, pas du code.
+
+### Lien Thunderbird sur chaque événement (répondre au fournisseur en un clic)
+
+`lib/pj-lien.ts` : `lienThunderbird(mid)` → passerelle `/mid/<mid>` de
+jardi-mail-mcp (même construction que le connecteur). `mails.thunderbird_link`
+est joint par lot dans `/api/delais` (file à valider) et
+`/api/delais/chronologie` → bouton « ✉️ Mail » à côté du 📄 PDF dans la chrono
+et la file. Mesuré : 105/109 événements liés à un mail ont le lien ; les 4
+absents viennent tous de `paiement@fermob.com` (robot sans Message-ID) —
+aucun bouton dans ce cas, jamais de lien inventé.
+
+### L'info va au vendeur : cartes sur la page commande et la fiche client
+
+- `components/SuiviDelaisBlock.tsx` (page commande magasin, au-dessus du bloc
+  Arrivages) : une ligne par marque — étape, départ brut ET arrivage calculé
+  (réel en vert avec preuve), Reçu x/y, promesse client, alarmes, reports,
+  à valider. Invisible si la commande n'est pas au suivi. Source :
+  `GET /api/delais?numero=…` (nouvelle branche légère de la route).
+- `components/ArrivagesClientCard.tsx` (fiche client, avant l'historique) :
+  pour les 5 dernières commandes magasin + 5 Shopify non livrées du client,
+  « ✅ Tout est là / x/y lignes là / ⏳ Rien d'arrivé », lignes attendues,
+  dernier arrivage, lien détail. La réponse à « où en est ma commande ? »
+  depuis la fiche, sans ouvrir chaque commande.
+- Liens croisés : `/dashboard/delais?q=<numéro>` et
+  `/dashboard/arrivages?q=<numéro>` pré-remplissent la recherche (lus sur
+  `window.location`, pas `useSearchParams` → pas de Suspense).
+
+### Côté jardi-mail-mcp le même soir (pour mémoire, journal de l'autre dépôt)
+
+Résumé `arrivages` dans `commande_ouvrir` / `client_dossier` / `delai_lister` ;
+correctifs SQL `jc_marque` (marque au milieu du titre, 137 lignes récupérées)
+et `rafraichir_articles_suivi()` (snapshot du suivi rafraîchi par la sync) ;
+`extraction-delais.mjs` pose `dernier_run` même sans mail candidat (6 runs
+verts d'un dimanche calme étaient invisibles en base — le heartbeat distingue
+désormais « rien à faire » de « job mort »).
+
+### Reçu en bloc : retiré
+
+Le bouton « 📦 Reçu » du tableau n'écrit plus une réception commande × marque
+d'un clic : il ouvre `/dashboard/arrivages?q=<numéro>` — la réception se
+saisit par ligne et par quantité, c'est elle qui nourrit le calibrage.
+L'action `reception` de `/api/delais/evenement` existe encore mais n'est plus
+appelée par la page.
