@@ -100,6 +100,34 @@ export async function refreshStock(
     return "Sur commande";
   }
 
+  // Metachamp de VARIANTE "fournisseur.delai_semaines" : le delai client FINAL,
+  // acheminement compris, sans mot d'unite (la boutique est trilingue, les
+  // metachamps ne sont pas traduits - l'unite vient du gabarit).
+  // Valeurs observees : "2-3", "5-6", "7-9", "10-12", parfois un nombre seul.
+  // Rend null si la valeur ne parse pas : on retombe alors sur les tags.
+  function getDelayFromMetafield(valeur: string | null | undefined): string | null {
+    if (!valeur) return null;
+    const m = /^\s*(\d{1,2})(?:\s*-\s*(\d{1,2}))?\s*$/.exec(valeur);
+    if (!m) return null;
+    const bas = parseInt(m[1], 10);
+    const haut = m[2] ? parseInt(m[2], 10) : null;
+    if (bas < 1 || bas > 52) return null;
+    if (haut !== null && (haut < bas || haut > 52)) return null;
+    return haut !== null ? `${bas}\u2013${haut} semaines` : `${bas} semaines`;
+  }
+
+  // La cascade du theme de la boutique : METACHAMP de variante d'abord, tags
+  // produit en repli, sinon "Sur commande" sans delai. Le metachamp prime depuis
+  // la publication du theme MAIN « Enterprise by Claude » le 23.08.2026 : c'est
+  // lui que le client lit sur la fiche produit, donc lui qu'il doit relire sur
+  // son offre. Voir doc 03 par. 4 ter.
+  function getDelay(
+    valeurMetachamp: string | null | undefined,
+    tags: string[] | undefined | null
+  ): string {
+    return getDelayFromMetafield(valeurMetachamp) ?? getDelayFromTags(tags);
+  }
+
   // Somme du stock "available" sur tous les emplacements (robuste multi-locations)
   function sumAvailable(inv: {
     inventoryLevels?: { nodes?: Array<{ quantities?: Array<{ name: string; quantity: number }> }> };
@@ -115,6 +143,7 @@ export async function refreshStock(
     sku?: string | null;
     inventoryPolicy?: "DENY" | "CONTINUE" | null;
     product?: { tags?: string[] } | null;
+    metafield?: { value?: string | null } | null;
     inventoryItem?: {
       inventoryLevels?: {
         nodes?: Array<{ quantities?: Array<{ name: string; quantity: number }> }>;
@@ -137,6 +166,7 @@ export async function refreshStock(
               id
               inventoryPolicy
               product { tags }
+              metafield(namespace: "fournisseur", key: "delai_semaines") { value }
               inventoryItem {
                 inventoryLevels(first: 20) {
                   nodes { quantities(names: ["available"]) { name quantity } }
@@ -157,7 +187,7 @@ export async function refreshStock(
         if (!node?.id) continue;
         idMap.set(node.id, {
           stock: sumAvailable(node.inventoryItem),
-          delay: getDelayFromTags(node.product?.tags),
+          delay: getDelay(node.metafield?.value, node.product?.tags),
           inventoryPolicy: node.inventoryPolicy ?? null,
         });
       }
@@ -173,6 +203,7 @@ export async function refreshStock(
               sku
               inventoryPolicy
               product { tags }
+              metafield(namespace: "fournisseur", key: "delai_semaines") { value }
               inventoryItem {
                 inventoryLevels(first: 20) {
                   nodes { quantities(names: ["available"]) { name quantity } }
@@ -193,7 +224,7 @@ export async function refreshStock(
         const sku = node.sku ?? "";
         if (sku) skuMap.set(sku, {
           stock: sumAvailable(node.inventoryItem),
-          delay: getDelayFromTags(node.product?.tags),
+          delay: getDelay(node.metafield?.value, node.product?.tags),
           inventoryPolicy: node.inventoryPolicy ?? null,
         });
       }
@@ -222,7 +253,7 @@ export async function refreshStock(
       return {
         ...line,
         stock: fresh.stock < 1 ? "sur_commande" : fresh.stock,
-        delaiLivraison: fresh.delay, // 🚚 Délai estimé depuis tags Shopify
+        delaiLivraison: fresh.delay, // 🚚 Délai client : métachamp de variante d'abord, tags en repli
         inventoryPolicy: fresh.inventoryPolicy ?? undefined, // 🔒 DENY = non-réassortable (garde-fou interne)
       };
     });

@@ -81,6 +81,7 @@ type AdminInventoryByIdResponse = {
     nodes?: Array<{
       id: string;
       inventoryPolicy?: "DENY" | "CONTINUE" | null;
+      metafield?: { value?: string | null } | null;
       inventoryItem?: {
         inventoryLevels?: {
           nodes?: Array<{
@@ -207,7 +208,7 @@ async function getAdminAccessToken() {
 }
 
 async function getAdminAvailableByVariantId(variantIds: string[]) {
-  if (!variantIds.length) return new Map<string, { qty: number; inventoryPolicy: "DENY" | "CONTINUE" }>();
+  if (!variantIds.length) return new Map<string, { qty: number; inventoryPolicy: "DENY" | "CONTINUE"; delaiMetachamp: string | null }>();
   const adminToken = await getAdminAccessToken();
   const graphqlQuery = `
     query VariantInventoryByIds($ids: [ID!]!) {
@@ -215,6 +216,7 @@ async function getAdminAvailableByVariantId(variantIds: string[]) {
         ... on ProductVariant {
           id
           inventoryPolicy
+          metafield(namespace: "fournisseur", key: "delai_semaines") { value }
           inventoryItem {
             inventoryLevels(first: 20) {
               nodes {
@@ -238,7 +240,7 @@ async function getAdminAvailableByVariantId(variantIds: string[]) {
   });
   const json = (await response.json()) as AdminInventoryByIdResponse;
   if (!response.ok || json.errors) throw new Error('Erreur Shopify Admin Inventory');
-  const map = new Map<string, { qty: number; inventoryPolicy: "DENY" | "CONTINUE" }>();
+  const map = new Map<string, { qty: number; inventoryPolicy: "DENY" | "CONTINUE"; delaiMetachamp: string | null }>();
   for (const node of json.data?.nodes ?? []) {
     if (!node?.id) continue;
     // Somme du stock "available" sur tous les emplacements (robuste multi-locations).
@@ -247,21 +249,42 @@ async function getAdminAvailableByVariantId(variantIds: string[]) {
       return sum + avail;
     }, 0);
     const inventoryPolicy = (node.inventoryPolicy === 'DENY' ? 'DENY' : 'CONTINUE') as "DENY" | "CONTINUE";
-    map.set(node.id, { qty, inventoryPolicy });
+    map.set(node.id, { qty, inventoryPolicy, delaiMetachamp: getDelaiFromMetachamp(node.metafield?.value) });
   }
   return map;
 }
 
 // ── Décoder les tags Shopify en délai de livraison ──
+// Barème relevé DANS LE THÈME de la boutique (assets/product-inventory.js, thème
+// MAIN « Enterprise by Claude »), relevé le 23.08.2026. Deux points à ne pas
+// « simplifier » : le pas passe à +2 dès 6weeks, et la chaîne du thème est
+// ASCENDANTE — sur un produit multi-tags, c'est le délai le plus COURT qui
+// s'affiche au client. Ne pas réordonner cette liste. Voir doc 03 par. 4 ter.
 function getDelaiFromTags(tags: string[]): string {
-  if (tags.includes('10weeks')) return 'Sur commande ✓ Délai 10-12 semaines';
-  if (tags.includes('6weeks'))  return 'Sur commande ✓ Délai 6-8 semaines';
-  if (tags.includes('5weeks'))  return 'Sur commande ✓ Délai 5-6 semaines';
-  if (tags.includes('4weeks'))  return 'Sur commande ✓ Délai 4-5 semaines';
-  if (tags.includes('3weeks'))  return 'Sur commande ✓ Délai 3-4 semaines';
-  if (tags.includes('2weeks'))  return 'Sur commande ✓ Délai 2-3 semaines';
   if (tags.includes('1week'))   return 'Sur commande ✓ Délai 1-2 semaines';
+  if (tags.includes('2weeks'))  return 'Sur commande ✓ Délai 2-3 semaines';
+  if (tags.includes('3weeks'))  return 'Sur commande ✓ Délai 3-4 semaines';
+  if (tags.includes('4weeks'))  return 'Sur commande ✓ Délai 4-5 semaines';
+  if (tags.includes('5weeks'))  return 'Sur commande ✓ Délai 5-6 semaines';
+  if (tags.includes('6weeks'))  return 'Sur commande ✓ Délai 6-8 semaines';
+  if (tags.includes('8weeks'))  return 'Sur commande ✓ Délai 8-10 semaines';
+  if (tags.includes('10weeks')) return 'Sur commande ✓ Délai 10-12 semaines';
   return 'Sur commande ✓';
+}
+
+// Métachamp de VARIANTE "fournisseur.delai_semaines" ("2-3", "10-12"…) : le délai
+// client FINAL, acheminement compris, sans mot d'unité (boutique trilingue).
+// Il PRIME sur les tags depuis la publication du thème le 23.08.2026.
+// Rend null si la valeur ne parse pas : on retombe alors sur les tags.
+function getDelaiFromMetachamp(valeur: string | null | undefined): string | null {
+  if (!valeur) return null;
+  const m = /^\s*(\d{1,2})(?:\s*-\s*(\d{1,2}))?\s*$/.exec(valeur);
+  if (!m) return null;
+  const bas = parseInt(m[1], 10);
+  const haut = m[2] ? parseInt(m[2], 10) : null;
+  if (bas < 1 || bas > 52) return null;
+  if (haut !== null && (haut < bas || haut > 52)) return null;
+  return `Sur commande ✓ Délai ${haut !== null ? `${bas}-${haut}` : `${bas}`} semaines`;
 }
 
 function buildStorefrontItems(products: ShopifyProduct[], words: string[]): ResultItem[] {
@@ -338,6 +361,9 @@ export async function GET(request: NextRequest) {
           ...item,
           stock: adminData ? adminData.qty : null,
           inventoryPolicy: adminData ? adminData.inventoryPolicy : null,
+          // Cascade du thème : le métachamp de variante prime, le tag (déjà posé
+          // par buildStorefrontItems) reste le repli.
+          delaiLivraison: adminData?.delaiMetachamp ?? item.delaiLivraison,
         };
       });
       return NextResponse.json({ items });
