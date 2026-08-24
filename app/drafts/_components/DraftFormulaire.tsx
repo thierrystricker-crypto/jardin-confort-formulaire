@@ -2251,7 +2251,8 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                             </div>
                             <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="jc-shopify-open-link">Ouvrir sur la boutique ↗</a>
                             {/* Délai de livraison basé sur les tags */}
-                            {item.stock !== null && item.stock < 1 && item.inventoryPolicy === "CONTINUE" && item.delaiLivraison && (
+                            {item.stock !== null && item.stock < 1 && item.inventoryPolicy === "CONTINUE"
+                              && item.delaiLivraison && item.delaiLivraison !== "Sur commande" && (
                               <div className="jc-shopify-delai">Sur commande ✓ Délai {item.delaiLivraison}</div>
                             )}
                           </div>
@@ -2602,7 +2603,8 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                                     commande, cette valeur est figée J0 : c'est la promesse faite. */}
                                 {(line.stock === "sur_commande" || line.stock === 0)
                                   && line.inventoryPolicy === "CONTINUE"
-                                  && line.delaiLivraison && (
+                                  && line.delaiLivraison
+                                  && line.delaiLivraison !== "Sur commande" && (
                                   <div className="jc-line-delai">{line.delaiLivraison}</div>
                                 )}
                                 {isStockCritical(line) && (
@@ -2958,7 +2960,8 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                                   })()}
                                 </div>
                                 {/* Le délai, là où le commercial décide. Même règle que la ligne. */}
-                                {item.stock !== null && item.stock < 1 && item.inventoryPolicy === "CONTINUE" && item.delaiLivraison && (
+                                {item.stock !== null && item.stock < 1 && item.inventoryPolicy === "CONTINUE"
+                                  && item.delaiLivraison && item.delaiLivraison !== "Sur commande" && (
                                   <div style={{ fontSize: 10, opacity: 0.72, marginTop: 2 }}>{item.delaiLivraison}</div>
                                 )}
                               </div>
