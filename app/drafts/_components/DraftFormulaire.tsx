@@ -33,6 +33,23 @@ type ShopifyItem = {
   delaiLivraison?: string;
 };
 
+// Badge de stock du picker (P1-47).
+// Le stock seul ne veut rien dire : un 0 en CONTINUE reste commandable au
+// fournisseur (cas courant chez Jardin-Confort), un 0 en DENY est une piece
+// perdue. On lit donc toujours stock ET inventoryPolicy dans la meme main, avec
+// le vocabulaire deja employe sur la ligne du tableau (voir doc 03 par.3).
+// Politique inconnue (API Admin injoignable) = on ne sait pas : neutre, jamais rouge.
+function badgeStockPicker(
+  stock: number | null,
+  policy: "DENY" | "CONTINUE" | null
+): { texte: string; couleur: string } {
+  if (stock === null || policy === null) return { texte: "Stock à vérifier", couleur: "#888" };
+  if (stock > 2) return { texte: "✓ " + stock, couleur: "#2C7E3F" };
+  if (stock > 0) return { texte: "⚠ " + stock, couleur: "#E67E22" };
+  if (policy === "CONTINUE") return { texte: "Sur commande", couleur: "#E67E22" };
+  return { texte: "Rupture", couleur: "#dc2626" };
+}
+
 type QuoteLine = {
   id: string;
   type: "product" | "custom" | "comment" | "media";
@@ -2920,9 +2937,10 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                                     )}
                                     <span style={{ fontSize: 13, fontWeight: 700, color: item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price) ? "#dc2626" : "inherit" }}>CHF {item.price}</span>
                                   </span>
-                                  <span style={{ fontSize: 11, fontWeight: 600, color: (item.stock !== null && item.stock > 2) ? "#2C7E3F" : (item.stock !== null && item.stock > 0 && item.stock <= 2) ? "#E67E22" : (item.stock !== null && item.stock < 1) ? "#dc2626" : "#888" }}>
-                                    {item.stock === null ? "N/A" : item.stock > 2 ? `✓ ${item.stock}` : item.stock > 0 ? `⚠ ${item.stock}` : "Rupture"}
-                                  </span>
+                                  {(() => {
+                                    const b = badgeStockPicker(item.stock, item.inventoryPolicy);
+                                    return <span style={{ fontSize: 11, fontWeight: 600, color: b.couleur }}>{b.texte}</span>;
+                                  })()}
                                 </div>
                               </div>
                               <button onClick={(e) => { e.stopPropagation(); addShopifyItem(item); }}
