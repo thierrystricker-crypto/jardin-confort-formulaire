@@ -63,6 +63,10 @@ function estRoutePublique(pathname: string, method: string): boolean {
   //   • GET (racine)   → lecture de l'offre par le client         → PUBLIC
   //   • /valider       → validation de l'offre par le client      → PUBLIC
   //   • /qr            → QR de paiement affiché au client          → PUBLIC
+  //   • /signature     → tracé signé, lu par /print/offre/[slug]    → PUBLIC
+  //     (GET seul. Public par nécessité : pdf.co rend la page print
+  //      depuis ses serveurs, sans cookie — protégée, elle renverrait
+  //      401 et le document sortirait sans signature, en silence.)
   //   • tout le reste (PATCH racine, /pdf, /statut, /notes,
   //     /reviser, /relance, /fiche-travail-pdf, /probabilite)      → INTERNE
   const m = pathname.match(/^\/api\/offres\/([^/]+)(\/[^/]*)?$/);
@@ -71,6 +75,7 @@ function estRoutePublique(pathname: string, method: string): boolean {
     if (sousChemin === "" && method === "GET") return true;
     if (sousChemin === "/valider") return true;
     if (sousChemin === "/qr") return true;
+    if (sousChemin === "/signature" && method === "GET") return true;
     return false;
   }
 

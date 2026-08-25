@@ -193,6 +193,9 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [offreOrigineSlug, setOffreOrigineSlug] = useState<string|null>(null)
   const [commandeIssue, setCommandeIssue] = useState<{slug: string; numero: string}|null>(null)
   const [probabilite,setProbabilite]=useState<string>("neutre")
+  // Signature manuscrite du client (25.08.2026). Pour une commande, elle est
+  // remontée depuis l'offre parente par /api/offres/[slug]/signature.
+  const [signature,setSignature]=useState<{image:string;signataire:string;date:string;devNumero:string|null}|null>(null)
   const [probSaving,setProbSaving]=useState(false)
   const [livraisonSaving,setLivraisonSaving]=useState(false)
   const [converting,setConverting]=useState(false)
@@ -286,6 +289,23 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
             }
           } catch { /* ignore */ }
         }
+
+        // ─── Signature manuscrite du client (25.08.2026) ───
+        // Non bloquant : sans elle, la fiche s'affiche exactement comme avant.
+        try {
+          const sigRes = await fetch(`/api/offres/${s}/signature`)
+          if (sigRes.ok) {
+            const sigJson = await sigRes.json()
+            if (sigJson.image) {
+              setSignature({
+                image: sigJson.image,
+                signataire: sigJson.signataire || "",
+                date: sigJson.date_signature || "",
+                devNumero: sigJson.source === "offre_parente" ? (sigJson.dev_numero || null) : null,
+              })
+            }
+          }
+        } catch { /* ignore */ }
 
         if (o.client_email || o.client_tel1) {
           try {
@@ -1533,6 +1553,30 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                 <span className="text-2xl font-bold text-white">{fmtMoney(offre.total_ttc)}</span>
               </div>
             </section>
+
+            {/* Signature du client (25.08.2026). Affichée sur la présence du
+                tracé, JAMAIS sur une comparaison signataire / commercial :
+                trois documents convertis en interne portent une vraie
+                signature, prise en magasin via le lien public. Sans tracé —
+                les conversions internes — la carte ne s'affiche pas du tout,
+                un cadre vide inquiéterait au lieu de rassurer. */}
+            {signature&&(
+              <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+                <h2 className="mb-1 text-xl font-semibold">Signature du client</h2>
+                <p className="mb-4 text-xs text-zinc-400">
+                  Signée en ligne par {signature.signataire}
+                  {signature.date?` le ${signature.date}`:""}
+                  {signature.devNumero?` — reprise de l'offre ${signature.devNumero}`:""}
+                </p>
+                {/* Le tracé est un PNG à fond blanc opaque : on l'assume et on
+                    le pose sur du blanc, ça se lit comme un bout de papier. */}
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-white p-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={signature.image} alt="Signature du client"
+                    className="block h-24 w-auto max-w-full object-contain object-left"/>
+                </div>
+              </section>
+            )}
 
             {offre.remarques&&(
               <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">

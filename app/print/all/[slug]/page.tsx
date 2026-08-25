@@ -58,6 +58,9 @@ function formatDateTime() {
 export default function PrintAllPage({ params }: { params: Promise<{ slug: string }> }) {
   const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<PrintData>(EMPTY);
+  // Signature manuscrite du client (25.08.2026) — voir /print/offre/[slug],
+  // ce template en est la copie et doit rester aligné avec lui.
+  const [signature, setSignature] = useState<{ image: string; signataire: string; date: string } | null>(null);
   const [ready, setReady] = useState(false);
   const [numeroAffiche, setNumeroAffiche] = useState("");
   const [offreSlug, setOffreSlug] = useState("");
@@ -128,6 +131,26 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       } catch (e) {
         console.error("Erreur chargement commande:", e);
       }
+      // ─── Signature manuscrite du client (25.08.2026) ───
+      // Dans le load() principal et AVANT setReady : la page s'auto-imprime
+      // 1500 ms après le rendu, un chargement plus tardif serait hors délai.
+      try {
+        const { slug: sg } = await params;
+        const sRes = await fetch(`/api/offres/${sg}/signature`);
+        if (sRes.ok) {
+          const sJson = await sRes.json();
+          if (sJson.image) {
+            setSignature({
+              image: sJson.image,
+              signataire: sJson.signataire || "",
+              date: sJson.date_signature || "",
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Erreur chargement signature:", e);
+      }
+
       setReady(true);
     }
     load();
@@ -544,6 +567,12 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .cc-sign-name { font-weight: 700; color: ${BLACK}; font-size: 12px; margin-bottom: 24px; }
         .cc-sign-line { border-bottom: 1.5px solid #5a9e6a; margin-bottom: 5px; }
         .cc-sign-sub { font-size: 10px; color: #5a9e6a; font-style: italic; }
+        .cc-sign-name-signed { margin-bottom: 4px; }
+        .cc-sign-img {
+          display: block; height: 18mm; max-width: 70mm;
+          object-fit: contain; object-position: left bottom;
+          mix-blend-mode: multiply; margin-bottom: 2px;
+        }
         .cc-pricing { width: 100%; border-collapse: collapse; }
         .cc-pricing td { padding: 5px 4px; font-size: 12px; }
         .cc-pricing tr:nth-child(even) td { background: ${LIGHT}; }
@@ -1371,11 +1400,30 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 <div className="cc-notes-text">{data.remarks}</div>
               </>
             )}
-            {data.formType === "Offre" && (
+            {/* Aligné sur /print/offre/[slug] le 25.08.2026 : le tracé s'il
+                existe, sinon la ligne à signer, et rien du tout pour une
+                commande sans signature (conversion interne). */}
+            {(data.formType === "Offre" || signature) && (
               <div className="cc-sign-block">
-                <div className="cc-sign-name">Bon pour accord — {data.nom} {data.prenom}</div>
-                <div className="cc-sign-line" />
-                <div className="cc-sign-sub">Signature &amp; date</div>
+                <div className={signature ? "cc-sign-name cc-sign-name-signed" : "cc-sign-name"}>
+                  Bon pour accord — {data.nom} {data.prenom}
+                </div>
+                {signature ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img className="cc-sign-img" src={signature.image} alt="Signature du client" />
+                    <div className="cc-sign-line" />
+                    <div className="cc-sign-sub">
+                      Signé en ligne par {signature.signataire}
+                      {signature.date ? ` — ${signature.date}` : ""}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="cc-sign-line" />
+                    <div className="cc-sign-sub">Signature &amp; date</div>
+                  </>
+                )}
               </div>
             )}
           </div>

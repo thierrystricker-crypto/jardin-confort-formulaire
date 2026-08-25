@@ -41,6 +41,9 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
   // Version vivante (chantier revision-commandes) : nb revisions + 1.
   const [versionVivante, setVersionVivante] = useState(1);
   const [lastCorrectionAt, setLastCorrectionAt] = useState<string | null>(null);
+  // Signature manuscrite du client (25.08.2026). null = aucun tracé : le bloc
+  // signature reste alors exactement celui d'avant ce chantier.
+  const [signature, setSignature] = useState<{ image: string; signataire: string; date: string } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -96,6 +99,28 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         }
       } catch (e) {
         console.error("Erreur chargement corrections:", e);
+      }
+
+      // ─── Signature manuscrite du client (25.08.2026) ───
+      // Chargée ICI, dans le load() principal et AVANT setReady : pdf.co rend
+      // la page dès qu'elle s'affiche, un fetch plus tardif arriverait après
+      // la capture et le PDF sortirait sans signature, sans erreur visible.
+      // Non bloquant : en cas d'échec, le document s'imprime comme avant.
+      try {
+        const { slug: sg } = await params;
+        const sRes = await fetch(`/api/offres/${sg}/signature`);
+        if (sRes.ok) {
+          const sJson = await sRes.json();
+          if (sJson.image) {
+            setSignature({
+              image: sJson.image,
+              signataire: sJson.signataire || "",
+              date: sJson.date_signature || "",
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Erreur chargement signature:", e);
       }
 
       setReady(true);
@@ -211,6 +236,16 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         .doc-sign-name { font-weight: 700; color: ${BLACK}; font-size: 12px; margin-bottom: 24px; }
         .doc-sign-line { border-bottom: 1.5px solid #5a9e6a; margin-bottom: 5px; }
         .doc-sign-sub { font-size: 10px; color: #5a9e6a; font-style: italic; }
+        /* Le canvas de signature est rempli en blanc opaque avant le tracé :
+           multiply fait disparaître ce fond sur le vert du bloc et ne laisse
+           que le trait. Si le moteur d'impression ignore la propriété, on
+           retombe sur un rectangle blanc — dégradé, jamais cassé. */
+        .doc-sign-name-signed { margin-bottom: 4px; }
+        .doc-sign-img {
+          display: block; height: 18mm; max-width: 70mm;
+          object-fit: contain; object-position: left bottom;
+          mix-blend-mode: multiply; margin-bottom: 2px;
+        }
         .doc-pricing { width: 100%; border-collapse: collapse; }
         .doc-pricing td { padding: 5px 4px; font-size: 12px; }
         .doc-pricing tr:nth-child(even) td { background: ${LIGHT}; }
@@ -509,11 +544,34 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                 <div className="doc-notes-text">{data.remarks}</div>
               </>
             )}
-            {data.formType === "Offre" && (
+            {/* Bloc signature. Avant le 25.08.2026 il n'existait que sur les
+                offres, et n'affichait qu'une ligne vide même une fois l'offre
+                signée en ligne. Désormais : le tracé s'il existe (offre signée
+                OU commande, dont la signature est remontée depuis son offre
+                parente), sinon la ligne à signer à la main, comme avant.
+                Une commande sans tracé — conversion interne — n'affiche
+                toujours rien : pas de cadre vide sur un document client. */}
+            {(data.formType === "Offre" || signature) && (
               <div className="doc-sign-block">
-                <div className="doc-sign-name">Bon pour accord — {data.nom} {data.prenom}</div>
-                <div className="doc-sign-line" />
-                <div className="doc-sign-sub">Signature &amp; date</div>
+                <div className={signature ? "doc-sign-name doc-sign-name-signed" : "doc-sign-name"}>
+                  Bon pour accord — {data.nom} {data.prenom}
+                </div>
+                {signature ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img className="doc-sign-img" src={signature.image} alt="Signature du client" />
+                    <div className="doc-sign-line" />
+                    <div className="doc-sign-sub">
+                      Signé en ligne par {signature.signataire}
+                      {signature.date ? ` — ${signature.date}` : ""}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="doc-sign-line" />
+                    <div className="doc-sign-sub">Signature &amp; date</div>
+                  </>
+                )}
               </div>
             )}
           </div>
