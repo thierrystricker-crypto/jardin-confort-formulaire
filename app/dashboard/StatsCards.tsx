@@ -1,7 +1,7 @@
 "use client";
 // ═══════════════════════════════════════════════════════════════
 //  app/dashboard/StatsCards.tsx
-//  2 cards compactes côte à côte
+//  2 cards compactes côte à côte (empilées sous 640 px)
 //  Calées en hauteur sur 2 lignes (quick-filters + probabilité)
 //  Affichent breakdown commercial complet avec barres
 // ═══════════════════════════════════════════════════════════════
@@ -149,7 +149,7 @@ export default function StatsCards() {
   }, []);
 
   return (
-    <div className="flex items-stretch gap-2 flex-1 min-w-0 self-stretch">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch flex-1 min-w-0 self-stretch">
       <MiniCard
         title="Chiffre du jour"
         emoji="📅"

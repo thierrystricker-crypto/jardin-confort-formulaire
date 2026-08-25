@@ -616,9 +616,16 @@ export default function DashboardPage() {
           </div>
 
          {/* Wrapper : 2 lignes de filtres à gauche + StatsCards à droite occupant la hauteur des 2 lignes */}
-          <div className="flex items-stretch gap-3">
+          {/* Mobile (24.08.2026) — la colonne de gauche était en `flex-shrink-0`
+              alors qu'elle contient deux rangées en `flex-wrap` : elle prenait
+              donc sa largeur max-content (tous les boutons sur une ligne, ~1000 px)
+              et ne rétrécissait jamais. Le document dépassait la largeur de
+              l'écran, Safari réduisait toute la page pour la faire tenir, et les
+              StatsCards à droite se retrouvaient écrasées, texte superposé.
+              Empilé en dessous de xl, côte à côte au-delà. */}
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-stretch">
             {/* Colonne de gauche : 2 lignes empilées (quick-filters + probabilité) */}
-            <div className="flex flex-col gap-2 flex-shrink-0">
+            <div className="flex min-w-0 flex-col gap-2 xl:flex-shrink-0">
               {/* Ligne 1 : filtres rapides */}
               <div className="flex flex-wrap gap-2 items-center">
                 {quickFilters.map(f=>(

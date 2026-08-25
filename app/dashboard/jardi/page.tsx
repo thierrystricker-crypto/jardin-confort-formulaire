@@ -853,6 +853,18 @@ export default function PageChatClaude() {
         @keyframes jcClignote {
           50% { opacity: 0; }
         }
+        /* Mobile (24.08.2026) — la rangee de saisie mangeait la moitie de
+           l'ecran en boutons et debordait a droite. Le champ prend toute la
+           largeur, les boutons descendent d'une ligne. Le 16px du textarea
+           n'est pas cosmetique : en dessous, iOS zoome tout seul au focus et
+           casse la mise en page. */
+        @media (max-width: 620px) {
+          .jcColonne { padding: 12px 10px 10px !important; }
+          .jcSaisie { flex-wrap: wrap; justify-content: flex-end; }
+          .jcSaisie > textarea { flex: 1 1 100% !important; font-size: 16px !important; }
+          .jcBulle { max-width: 92% !important; }
+          .jcSousTitre { font-size: 12px !important; }
+        }
       `}</style>
       <div style={{ display: "flex", height: "100dvh", maxWidth: 1150, margin: "0 auto" }}>
         {/* Barre latérale — historique des conversations */}
@@ -942,6 +954,7 @@ export default function PageChatClaude() {
 
         {/* Colonne principale */}
         <div
+          className="jcColonne"
           style={{
             flex: 1,
             minWidth: 0,
@@ -978,7 +991,7 @@ export default function PageChatClaude() {
             <h1 style={{ fontSize: 20, fontWeight: 800, color: "#f4f4f5", marginTop: 8, marginBottom: 2 }}>
               💬 Jardi
             </h1>
-            <p style={{ color: "#a1a1aa", fontSize: 13, margin: 0 }}>
+            <p className="jcSousTitre" style={{ color: "#a1a1aa", fontSize: 13, margin: 0 }}>
               Mails, clients, commandes, statistiques — usage interne. Lecture seule :
               Jardi ne peut rien envoyer, uniquement déposer des brouillons à relire
               dans Thunderbird.
@@ -1053,6 +1066,7 @@ export default function PageChatClaude() {
                 }}
               >
                 <div
+                  className="jcBulle"
                   style={{
                     maxWidth: "85%",
                     padding: "10px 14px",
@@ -1226,6 +1240,7 @@ export default function PageChatClaude() {
               </div>
             )}
           <div
+            className="jcSaisie"
             style={{
               display: "flex",
               gap: 8,
@@ -1245,6 +1260,7 @@ export default function PageChatClaude() {
               disabled={enCours}
               style={{
                 flex: 1,
+                minWidth: 0,
                 resize: "none",
                 // Hauteur pilotée par l'effet auto-extensible (plafond 240 px,
                 // puis défilement interne).
