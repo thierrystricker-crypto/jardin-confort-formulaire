@@ -1,19 +1,28 @@
 // app/api/claude/conversations/route.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// Historique du chat Claude du dashboard (14.08.2026).
+// Historique du chat Claude du dashboard (14.08.2026 ; refonte 27.08.2026).
 // Table Supabase `claude_conversations` — RLS sans policy : seul ce serveur
 // (service key) peut lire/écrire. Route protégée par proxy.ts + revérification
 // du cookie de session (défense en profondeur).
 //
-// GET    /api/claude/conversations        → liste (sans les messages)
-// GET    /api/claude/conversations?id=…   → une conversation complète
-// POST   /api/claude/conversations        → { id?, messages, auteur? } (upsert)
-// DELETE /api/claude/conversations?id=…   → suppression
+// GET    /api/claude/conversations?q=&auteur=&limite=  → liste enrichie
+//        (question complète, début de réponse, nb messages, outils, extrait
+//        autour du mot cherché) via la RPC `jardi_conversations_lister`.
+//        Recherche plein texte sans accents ni casse, tous les mots exigés.
+// GET    /api/claude/conversations?id=…                 → une conversation complète
+// POST   /api/claude/conversations                      → { id?, messages, auteur? } (upsert)
+// PATCH  /api/claude/conversations                      → { id, titre?, auteur? } (renommer / attribuer)
+// DELETE /api/claude/conversations?id=…                 → suppression
+//
+// L'auteur est NORMALISÉ (lib/jardi-equipe.ts) : une valeur hors liste est
+// ignorée plutôt que stockée — le classement par utilisateur ne survit pas aux
+// variantes libres (« thierry », « TS », « brice c » avant la refonte).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { normaliserMembre } from "@/lib/jardi-equipe";
 
 // Les fichiers soumis au chat vivent ici en MÉTADONNÉES seulement (~150 octets
 // par fichier) : `content` reste une string, comme avant. Aucun contenu de
@@ -81,11 +90,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 401 });
   }
 
-  const id = req.nextUrl.searchParams.get("id");
+  const params = req.nextUrl.searchParams;
+  const id = params.get("id");
   if (id) {
     const { data, error } = await supabaseAdmin
       .from("claude_conversations")
-      .select("id, titre, auteur, messages, updated_at")
+      .select("id, titre, auteur, messages, created_at, updated_at")
       .eq("id", id)
       .single();
     if (error || !data) {
@@ -94,13 +104,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ conversation: data });
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("claude_conversations")
-    .select("id, titre, auteur, updated_at")
-    .order("updated_at", { ascending: false })
-    .limit(100);
+  // Liste / recherche. `q` : mots séparés par des espaces, tous exigés ;
+  // `auteur` : prénom canonique (une valeur inconnue = pas de filtre, pour ne
+  // jamais rendre une liste vide à cause d'une faute de frappe côté client).
+  const q = (params.get("q") ?? "").trim().slice(0, 200);
+  const auteur = normaliserMembre(params.get("auteur"));
+  const limiteBrute = Number(params.get("limite"));
+  const limite = Number.isFinite(limiteBrute) && limiteBrute > 0 ? Math.min(limiteBrute, 500) : 200;
+
+  const { data, error } = await supabaseAdmin.rpc("jardi_conversations_lister", {
+    p_q: q || null,
+    p_auteur: auteur,
+    p_limite: limite,
+  });
   if (error) {
-    console.error("claude_conversations GET :", error);
+    console.error("jardi_conversations_lister :", error);
     return NextResponse.json({ error: "Erreur base de données" }, { status: 500 });
   }
   return NextResponse.json({ conversations: data ?? [] });
@@ -130,8 +148,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Conversation trop longue pour être sauvegardée" }, { status: 413 });
   }
 
-  const aut =
-    typeof auteur === "string" && auteur.trim() ? auteur.trim().slice(0, 60) : null;
+  const aut = normaliserMembre(auteur);
 
   // Mise à jour d'une conversation existante
   if (typeof id === "string" && id) {
@@ -157,8 +174,8 @@ export async function POST(req: NextRequest) {
   // ces conversations s'intituleraient « Nouvelle conversation ».
   const replFichier = premier?.fichiers?.length ? `📎 ${premier.fichiers[0].nom}` : "";
   const titre =
-    (premier?.content ?? "").replace(/\s+/g, " ").trim().slice(0, 60) ||
-    replFichier.slice(0, 60) ||
+    (premier?.content ?? "").replace(/\s+/g, " ").trim().slice(0, 80) ||
+    replFichier.slice(0, 80) ||
     "Nouvelle conversation";
 
   const { data, error } = await supabaseAdmin
@@ -171,6 +188,50 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Erreur base de données" }, { status: 500 });
   }
   return NextResponse.json({ id: data.id });
+}
+
+// Renommer une conversation, ou l'attribuer à quelqu'un (les 49 conversations
+// sans auteur d'avant la refonte se rattrapent ainsi, au cas par cas).
+export async function PATCH(req: NextRequest) {
+  if (!sessionValide(req)) {
+    return NextResponse.json({ error: "Accès non autorisé" }, { status: 401 });
+  }
+  let corps: unknown;
+  try {
+    corps = await req.json();
+  } catch {
+    return NextResponse.json({ error: "JSON invalide" }, { status: 400 });
+  }
+  const { id, titre, auteur } = corps as { id?: unknown; titre?: unknown; auteur?: unknown };
+  if (typeof id !== "string" || !id) {
+    return NextResponse.json({ error: "Paramètre id manquant" }, { status: 400 });
+  }
+
+  const maj: { titre?: string; auteur?: string } = {};
+  if (typeof titre === "string") {
+    const t = titre.replace(/\s+/g, " ").trim().slice(0, 120);
+    if (t) maj.titre = t;
+  }
+  if (auteur !== undefined) {
+    const a = normaliserMembre(auteur);
+    if (a) maj.auteur = a;
+  }
+  if (!maj.titre && !maj.auteur) {
+    return NextResponse.json({ error: "Rien à modifier" }, { status: 400 });
+  }
+
+  // ⚠️ Pas de `updated_at` ici : renommer ne fait pas remonter la conversation
+  // en tête de liste — c'est la date du dernier échange qui compte.
+  const { data, error } = await supabaseAdmin
+    .from("claude_conversations")
+    .update(maj)
+    .eq("id", id)
+    .select("id, titre, auteur")
+    .single();
+  if (error || !data) {
+    return NextResponse.json({ error: "Conversation introuvable" }, { status: 404 });
+  }
+  return NextResponse.json({ conversation: data });
 }
 
 export async function DELETE(req: NextRequest) {

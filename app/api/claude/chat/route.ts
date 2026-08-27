@@ -23,6 +23,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { REGLES_JARDI, blocDate } from "./regles-jardi";
+import { normaliserMembre } from "@/lib/jardi-equipe";
 
 // Les enchaînements d'outils dépassent facilement les 10 s par défaut.
 export const maxDuration = 300;
@@ -162,6 +163,12 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(bruts) || !bruts.every(estMessageValide)) {
     return NextResponse.json({ error: "Format attendu : { messages: [...] }" }, { status: 400 });
   }
+  // Qui parle (27.08.2026) : prénom choisi dans le sélecteur de la page,
+  // normalisé contre la liste fermée de l'équipe — une valeur inconnue est
+  // simplement tue. Va dans le bloc système NON caché, à côté de la date :
+  // le bloc des règles reste identique d'un utilisateur à l'autre, donc le
+  // cache de prompt est conservé.
+  const utilisateur = normaliserMembre((corps as { utilisateur?: unknown })?.utilisateur);
 
   const messages = tronquerHistorique(bruts).map((m) => ({
     role: m.role,
@@ -187,7 +194,16 @@ export async function POST(req: NextRequest) {
         text: REGLES_JARDI,
         cache_control: { type: "ephemeral" },
       },
-      { type: "text", text: blocDate() },
+      {
+        type: "text",
+        text:
+          blocDate() +
+          (utilisateur
+            ? `\n\nLa personne qui te parle est ${utilisateur}, de l'équipe Jardin Confort. ` +
+              `Tutoie-la et utilise son prénom quand c'est naturel (jamais dans les ` +
+              `brouillons destinés aux clients : la signature de la boîte fait foi).`
+            : ""),
+      },
     ],
     messages,
     mcp_servers: [

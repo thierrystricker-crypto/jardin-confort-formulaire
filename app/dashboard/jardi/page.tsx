@@ -7,6 +7,16 @@
 // code inline), historique des conversations (Supabase via
 // /api/claude/conversations, 14.08.2026) dans une barre latérale.
 // La page est protégée par proxy.ts comme le reste du dashboard.
+//
+// Refonte 27.08.2026 — l'historique est devenu central (mobile → bureau) :
+// - pleine largeur (plus de plafond 1150 px), barre latérale 320 px, fil
+//   jusqu'à 1500 px centré, bulles de réponse jusqu'à 96 % ;
+// - historique riche : ./historique.tsx (aperçus, groupes par date, puces par
+//   utilisateur, recherche serveur, renommage) ;
+// - identité : ./utilisateur.tsx — prénom mémorisé par appareil, envoyé à la
+//   sauvegarde (auteur) ET au chat (Jardi sait à qui il parle) ;
+// - URL ?c=<id> : une conversation ouverte a une adresse, le bouton retour et
+//   le partage de lien marchent ; « Reprendre » au démarrage.
 // ─────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -15,7 +25,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type React from "react";
 import { preparerFichier } from "@/lib/preparer-fichier";
+import type { MembreEquipe } from "@/lib/jardi-equipe";
 import { BoutonLireAudio } from "./lecture-audio";
+import {
+  Avatar,
+  Historique,
+  apercuTexte,
+  fmtDateRelative,
+  type ConvResume,
+} from "./historique";
+import {
+  ChoixUtilisateur,
+  SelecteurUtilisateur,
+  ecrireUtilisateur,
+  lireUtilisateur,
+} from "./utilisateur";
 
 // Un fichier soumis au chat vit en MÉTADONNÉE, jamais en contenu : `content`
 // reste une string partout — dans le state React comme dans
@@ -42,13 +66,6 @@ type MessageAffiche = {
   outils?: string[];
   erreur?: boolean;
   fichiers?: FichierJoint[];
-};
-
-type ConvResume = {
-  id: string;
-  titre: string;
-  auteur: string | null;
-  updated_at: string;
 };
 
 type EvenementStream = {
@@ -344,13 +361,13 @@ function construireContenu(texte: string, fichiers?: FichierJoint[]): string | B
   return blocs;
 }
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleString("fr-CH", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+// Point de bascule mobile / bureau : sous cette largeur, l'historique est un
+// volet superposé (et replié par défaut), au-dessus il est une colonne fixe.
+const LARGEUR_MOBILE = 900;
+const CLE_FILTRE_AUTEUR = "jardi-filtre-auteur";
+
+function estMobile(): boolean {
+  return typeof window !== "undefined" && window.innerWidth < LARGEUR_MOBILE;
 }
 
 // Indicateur d'activité — trois points orange qui pulsent (animation maison,
@@ -413,8 +430,16 @@ export default function PageChatClaude() {
   const [saisie, setSaisie] = useState("");
   const [enCours, setEnCours] = useState(false);
   const [conversations, setConversations] = useState<ConvResume[]>([]);
+  const [chargementListe, setChargementListe] = useState(false);
+  const [recentes, setRecentes] = useState<ConvResume[]>([]);
+  const [recherche, setRecherche] = useState("");
+  const [filtreAuteur, setFiltreAuteur] = useState("");
   const [convId, setConvId] = useState<string | null>(null);
   const [panneauOuvert, setPanneauOuvert] = useState(true);
+  const [mobile, setMobile] = useState(false);
+  const [utilisateur, setUtilisateur] = useState<MembreEquipe | null>(null);
+  const [demanderUtilisateur, setDemanderUtilisateur] = useState(false);
+  const [loinDuBas, setLoinDuBas] = useState(false);
   const [copieIndex, setCopieIndex] = useState<number | null>(null);
   const [dicteeDispo, setDicteeDispo] = useState(false);
   const [dicteeActive, setDicteeActive] = useState(false);
@@ -427,13 +452,32 @@ export default function PageChatClaude() {
   const vocalRef = useRef<ReconnaissanceVocale | null>(null);
   const baseSaisieRef = useRef("");
   const finRef = useRef<HTMLDivElement>(null);
+  const filRef = useRef<HTMLDivElement>(null);
   const zoneRef = useRef<HTMLTextAreaElement>(null);
+  const rechercheRef = useRef<HTMLInputElement>(null);
   const convIdRef = useRef<string | null>(null);
   convIdRef.current = convId;
+  const utilisateurRef = useRef<MembreEquipe | null>(null);
+  utilisateurRef.current = utilisateur;
 
+  // Défilement automatique — SEULEMENT si on est déjà en bas. Quelqu'un qui
+  // remonte relire un tableau pendant que Jardi écrit ne doit pas être ramené
+  // de force en bas à chaque mot reçu.
   useEffect(() => {
-    finRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (!loinDuBas) finRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
+
+  const surDefilement = () => {
+    const fil = filRef.current;
+    if (!fil) return;
+    setLoinDuBas(fil.scrollHeight - fil.scrollTop - fil.clientHeight > 160);
+  };
+
+  const allerEnBas = () => {
+    finRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    setLoinDuBas(false);
+  };
 
   // ── Zone de saisie auto-extensible (20.08.2026) ────────────────────────────
   // La hauteur suit le contenu, plafonnée à 240 px (~10 lignes) puis défilement
@@ -448,23 +492,86 @@ export default function PageChatClaude() {
   }, [saisie]);
 
   // ── Historique ─────────────────────────────────────────────────────────────
-  const chargerListe = useCallback(async () => {
+  // La liste dépend de la recherche et du filtre ; le serveur fait le tri
+  // (RPC jardi_conversations_lister). Un compteur de requête écarte les
+  // réponses arrivées dans le désordre quand on tape vite.
+  const requeteListeRef = useRef(0);
+  const chargerListe = useCallback(async (q: string, auteur: string) => {
+    const n = ++requeteListeRef.current;
+    setChargementListe(true);
     try {
-      const res = await fetch("/api/claude/conversations");
-      if (!res.ok) return;
+      const params = new URLSearchParams();
+      if (q.trim()) params.set("q", q.trim());
+      if (auteur) params.set("auteur", auteur);
+      const res = await fetch(`/api/claude/conversations?${params.toString()}`);
+      if (!res.ok || n !== requeteListeRef.current) return;
       const json = (await res.json()) as { conversations?: ConvResume[] };
-      setConversations(json.conversations ?? []);
+      if (n === requeteListeRef.current) setConversations(json.conversations ?? []);
     } catch {
       /* liste indisponible — sans gravité */
+    } finally {
+      if (n === requeteListeRef.current) setChargementListe(false);
     }
   }, []);
 
-  useEffect(() => {
-    chargerListe();
-    // Sur petit écran, replier l'historique par défaut
-    if (typeof window !== "undefined" && window.innerWidth < 700) {
-      setPanneauOuvert(false);
+  // Les 3 dernières conversations de la personne : la section « Reprendre »
+  // de l'écran d'accueil — c'est là que le mobile → bureau se joue.
+  const chargerRecentes = useCallback(async (nom: MembreEquipe | null) => {
+    if (!nom) {
+      setRecentes([]);
+      return;
     }
+    try {
+      const res = await fetch(`/api/claude/conversations?auteur=${encodeURIComponent(nom)}&limite=3`);
+      if (!res.ok) return;
+      const json = (await res.json()) as { conversations?: ConvResume[] };
+      setRecentes(json.conversations ?? []);
+    } catch {
+      /* sans gravité */
+    }
+  }, []);
+
+  // Rechargement à chaque changement de recherche (léger délai) ou de filtre.
+  useEffect(() => {
+    const t = setTimeout(() => chargerListe(recherche, filtreAuteur), recherche ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [recherche, filtreAuteur, chargerListe]);
+
+  useEffect(() => {
+    chargerRecentes(utilisateur);
+  }, [utilisateur, chargerRecentes]);
+
+  // Adresse de la conversation ouverte : ?c=<id>. replaceState plutôt que le
+  // routeur Next : aucune navigation, aucun rechargement, juste une adresse
+  // qu'on peut copier ou retrouver dans l'historique du navigateur.
+  const majUrl = (id: string | null) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("c", id);
+    else url.searchParams.delete("c");
+    window.history.replaceState(null, "", url.toString());
+  };
+
+  useEffect(() => {
+    // Identité : mémorisée sur l'appareil, sinon on demande (bloquant, un clic).
+    const u = lireUtilisateur();
+    setUtilisateur(u);
+    setDemanderUtilisateur(!u);
+    // Filtre d'auteur mémorisé (« Tous » par défaut : l'historique est commun).
+    try {
+      setFiltreAuteur(localStorage.getItem(CLE_FILTRE_AUTEUR) ?? "");
+    } catch {
+      /* ignoré */
+    }
+    // Mobile : historique en volet superposé, replié par défaut.
+    const m = estMobile();
+    setMobile(m);
+    if (m) setPanneauOuvert(false);
+    const surRedim = () => setMobile(estMobile());
+    window.addEventListener("resize", surRedim);
+    // Conversation désignée dans l'adresse (lien collé, retour arrière, reprise).
+    const idUrl = new URLSearchParams(window.location.search).get("c");
+    if (idUrl) ouvrirConversation(idUrl);
     // Dictée : bouton affiché seulement si le navigateur la supporte (Chrome/Edge)
     setDicteeDispo(constructeurVocal() !== null);
     // ⚠️ Un fichier lâché À CÔTÉ de la zone de dépôt fait naviguer le navigateur
@@ -474,11 +581,38 @@ export default function PageChatClaude() {
     const bloquerDepot = (e: DragEvent) => e.preventDefault();
     window.addEventListener("dragover", bloquerDepot);
     window.addEventListener("drop", bloquerDepot);
+    // Ctrl+K (ou ⌘K) : la recherche de l'historique, comme partout ailleurs.
+    const raccourci = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPanneauOuvert(true);
+        setTimeout(() => rechercheRef.current?.focus(), 0);
+      }
+    };
+    window.addEventListener("keydown", raccourci);
     return () => {
       window.removeEventListener("dragover", bloquerDepot);
       window.removeEventListener("drop", bloquerDepot);
+      window.removeEventListener("resize", surRedim);
+      window.removeEventListener("keydown", raccourci);
     };
-  }, [chargerListe]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const choisirUtilisateur = (m: MembreEquipe) => {
+    ecrireUtilisateur(m);
+    setUtilisateur(m);
+    setDemanderUtilisateur(false);
+  };
+
+  const changerFiltreAuteur = (a: string) => {
+    setFiltreAuteur(a);
+    try {
+      localStorage.setItem(CLE_FILTRE_AUTEUR, a);
+    } catch {
+      /* ignoré */
+    }
+  };
 
   // ── Dictée vocale ──────────────────────────────────────────────────────────
   const basculerDictee = () => {
@@ -521,8 +655,10 @@ export default function PageChatClaude() {
     if (utiles.length < 2 || utiles[utiles.length - 1].role !== "assistant") return;
     (async () => {
       try {
-        const auteur =
-          (typeof window !== "undefined" && localStorage.getItem("corrections-author")) || undefined;
+        // L'auteur est le prénom choisi dans le sélecteur — plus le champ libre
+        // « corrections-author » (qui donnait « thierry », « TS », « brice c »
+        // ou rien du tout sur mobile).
+        const auteur = utilisateurRef.current ?? undefined;
         const res = await fetch("/api/claude/conversations", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -539,8 +675,12 @@ export default function PageChatClaude() {
         });
         const json = (await res.json().catch(() => null)) as { id?: string } | null;
         if (res.ok && json?.id) {
-          if (!convIdRef.current) setConvId(json.id);
-          chargerListe();
+          if (!convIdRef.current) {
+            setConvId(json.id);
+            majUrl(json.id);
+          }
+          chargerListe(recherche, filtreAuteur);
+          chargerRecentes(utilisateurRef.current);
         }
       } catch {
         /* sauvegarde silencieuse */
@@ -553,13 +693,19 @@ export default function PageChatClaude() {
     if (enCours) return;
     try {
       const res = await fetch(`/api/claude/conversations?id=${encodeURIComponent(id)}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        // Lien périmé (conversation supprimée) : on nettoie l'adresse.
+        if (res.status === 404) majUrl(null);
+        return;
+      }
       const json = (await res.json()) as { conversation?: { messages?: MessageAffiche[] } };
       setMessages(Array.isArray(json.conversation?.messages) ? json.conversation.messages : []);
       setConvId(id);
+      majUrl(id);
       setFichiers([]);
       setErreurFichier(null);
-      if (typeof window !== "undefined" && window.innerWidth < 700) setPanneauOuvert(false);
+      setLoinDuBas(false);
+      if (estMobile()) setPanneauOuvert(false);
     } catch {
       /* ignoré */
     }
@@ -571,11 +717,12 @@ export default function PageChatClaude() {
     setFichiers([]);
     setErreurFichier(null);
     setConvId(null);
+    majUrl(null);
+    if (estMobile()) setPanneauOuvert(false);
     zoneRef.current?.focus();
   };
 
-  const supprimerConversation = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const supprimerConversation = async (id: string) => {
     if (!confirm("Supprimer cette conversation ?")) return;
     try {
       await fetch(`/api/claude/conversations?id=${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -583,7 +730,25 @@ export default function PageChatClaude() {
       /* ignoré */
     }
     if (convIdRef.current === id) nouvelleConversation();
-    chargerListe();
+    chargerListe(recherche, filtreAuteur);
+    chargerRecentes(utilisateurRef.current);
+  };
+
+  const renommerConversation = async (id: string, titre: string) => {
+    try {
+      const res = await fetch("/api/claude/conversations", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, titre }),
+      });
+      if (res.ok) {
+        // Mise à jour locale immédiate, sans attendre le rechargement.
+        setConversations((p) => p.map((c) => (c.id === id ? { ...c, titre } : c)));
+        setRecentes((p) => p.map((c) => (c.id === id ? { ...c, titre } : c)));
+      }
+    } catch {
+      /* ignoré */
+    }
   };
 
   // ── Envoi et streaming ─────────────────────────────────────────────────────
@@ -691,13 +856,16 @@ export default function PageChatClaude() {
       { role: "user", content: texte, ...(joints.length ? { fichiers: joints } : {}) },
       { role: "assistant", content: "", outils: [] },
     ]);
+    setLoinDuBas(false);
     setEnCours(true);
+    if (estMobile()) setPanneauOuvert(false);
 
     try {
       const reponse = await fetch("/api/claude/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: historique }),
+        // `utilisateur` : Jardi sait à qui il parle (bloc système non caché).
+        body: JSON.stringify({ messages: historique, utilisateur: utilisateurRef.current }),
       });
 
       if (!reponse.ok || !reponse.body) {
@@ -859,96 +1027,73 @@ export default function PageChatClaude() {
            n'est pas cosmetique : en dessous, iOS zoome tout seul au focus et
            casse la mise en page. */
         @media (max-width: 620px) {
-          .jcColonne { padding: 12px 10px 10px !important; }
+          .jcColonne { padding: 10px 10px 10px !important; }
           .jcSaisie { flex-wrap: wrap; justify-content: flex-end; }
           .jcSaisie > textarea { flex: 1 1 100% !important; font-size: 16px !important; }
-          .jcBulle { max-width: 92% !important; }
-          .jcSousTitre { font-size: 12px !important; }
+          .jcBulle { max-width: 96% !important; }
+          .jcSousTitre { display: none; }
         }
+        /* Pleine largeur (27.08.2026) : la barre latérale est une colonne
+           fixe de 320 px au-dessus de 900 px, un volet superposé en dessous. */
+        .jcLateral {
+          width: 320px;
+          flex-shrink: 0;
+          border-right: 1px solid rgba(255,255,255,0.08);
+          background: #1f2125;
+          min-height: 0;
+        }
+        @media (max-width: 900px) {
+          .jcLateral {
+            position: fixed;
+            inset: 0 auto 0 0;
+            width: min(92vw, 380px);
+            z-index: 40;
+            box-shadow: 0 0 60px rgba(0,0,0,0.6);
+          }
+        }
+        .jcFil { width: 100%; max-width: 1500px; margin: 0 auto; }
+        .jcCarteReprise {
+          flex: 1 1 280px;
+          max-width: 420px;
+          padding: 10px 12px;
+          text-align: left;
+          background: #2a2d31;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 10px;
+          cursor: pointer;
+          color: #e4e4e7;
+          font-family: inherit;
+        }
+        .jcCarteReprise:hover { border-color: rgba(56,189,248,0.45); }
       `}</style>
-      <div style={{ display: "flex", height: "100dvh", maxWidth: 1150, margin: "0 auto" }}>
+      <div style={{ display: "flex", height: "100dvh" }}>
+        {/* Voile derrière le volet (mobile) */}
+        {mobile && panneauOuvert && (
+          <div
+            onClick={() => setPanneauOuvert(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 39, background: "rgba(0,0,0,0.5)" }}
+          />
+        )}
+
         {/* Barre latérale — historique des conversations */}
         {panneauOuvert && (
-          <div
-            style={{
-              width: 250,
-              flexShrink: 0,
-              borderRight: "1px solid rgba(255,255,255,0.08)",
-              display: "flex",
-              flexDirection: "column",
-              padding: "14px 10px",
-            }}
-          >
-            <button
-              onClick={nouvelleConversation}
-              style={{
-                padding: "9px 12px",
-                fontSize: 13,
-                fontWeight: 600,
-                color: "#fff",
-                background: "#2B8AD1",
-                border: "none",
-                borderRadius: 10,
-                cursor: "pointer",
-                textAlign: "left",
-              }}
-            >
-              + Nouvelle conversation
-            </button>
-            <div style={{ flex: 1, overflowY: "auto", marginTop: 10 }}>
-              {conversations.map((c) => (
-                <div
-                  key={c.id}
-                  onClick={() => ouvrirConversation(c.id)}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    cursor: "pointer",
-                    background: convId === c.id ? "#2a2d31" : "transparent",
-                    marginBottom: 2,
-                    position: "relative",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "#e4e4e7",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      paddingRight: 18,
-                    }}
-                  >
-                    {c.titre}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#71717a" }}>
-                    {fmtDate(c.updated_at)}
-                    {c.auteur ? ` · ${c.auteur}` : ""}
-                  </div>
-                  <button
-                    onClick={(e) => supprimerConversation(c.id, e)}
-                    title="Supprimer"
-                    style={{
-                      position: "absolute",
-                      right: 6,
-                      top: 8,
-                      background: "none",
-                      border: "none",
-                      color: "#71717a",
-                      cursor: "pointer",
-                      fontSize: 12,
-                    }}
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-              {conversations.length === 0 && (
-                <div style={{ fontSize: 12, color: "#71717a", padding: 8 }}>
-                  Aucune conversation enregistrée.
-                </div>
-              )}
-            </div>
+          <div className="jcLateral">
+            <Historique
+              conversations={conversations}
+              chargement={chargementListe}
+              convId={convId}
+              utilisateur={utilisateur}
+              filtreAuteur={filtreAuteur}
+              recherche={recherche}
+              onFiltreAuteur={changerFiltreAuteur}
+              onRecherche={setRecherche}
+              onOuvrir={ouvrirConversation}
+              onNouvelle={nouvelleConversation}
+              onSupprimer={supprimerConversation}
+              onRenommer={renommerConversation}
+              onFermer={mobile ? () => setPanneauOuvert(false) : undefined}
+              rechercheRef={rechercheRef}
+            />
           </div>
         )}
 
@@ -960,48 +1105,121 @@ export default function PageChatClaude() {
             minWidth: 0,
             display: "flex",
             flexDirection: "column",
-            padding: "16px 16px 12px",
+            padding: "12px 20px 12px",
           }}
         >
-          {/* En-tête */}
-          <div style={{ flexShrink: 0, paddingBottom: 10, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <button
-                onClick={() => setPanneauOuvert((o) => !o)}
-                title="Historique des conversations"
-                style={{
-                  background: "none",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  borderRadius: 8,
-                  color: "#a1a1aa",
-                  cursor: "pointer",
-                  padding: "2px 9px",
-                  fontSize: 14,
-                }}
-              >
-                ☰
-              </button>
-              <Link
-                href="/dashboard"
-                style={{ color: "#7dd3fc", fontSize: 13, textDecoration: "none" }}
-              >
-                ← Retour au dashboard
-              </Link>
-            </div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: "#f4f4f5", marginTop: 8, marginBottom: 2 }}>
+          {/* En-tête — une seule ligne : historique, titre, retour, utilisateur */}
+          <div
+            style={{
+              flexShrink: 0,
+              paddingBottom: 8,
+              borderBottom: "1px solid rgba(255,255,255,0.1)",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              onClick={() => setPanneauOuvert((o) => !o)}
+              title="Historique des conversations (Ctrl+K pour chercher)"
+              style={{
+                background: panneauOuvert ? "rgba(255,255,255,0.08)" : "none",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 8,
+                color: "#a1a1aa",
+                cursor: "pointer",
+                padding: "3px 10px",
+                fontSize: 15,
+              }}
+            >
+              ☰
+            </button>
+            <h1 style={{ fontSize: 19, fontWeight: 800, color: "#f4f4f5", margin: 0 }}>
               💬 Jardi
             </h1>
-            <p className="jcSousTitre" style={{ color: "#a1a1aa", fontSize: 13, margin: 0 }}>
-              Mails, clients, commandes, statistiques — usage interne. Lecture seule :
-              Jardi ne peut rien envoyer, uniquement déposer des brouillons à relire
-              dans Thunderbird.
+            <p className="jcSousTitre" style={{ color: "#71717a", fontSize: 12, margin: 0, flex: 1, minWidth: 0 }}>
+              Mails, clients, commandes, statistiques — lecture seule, brouillons
+              à relire dans Thunderbird.
             </p>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+              <Link
+                href="/dashboard"
+                style={{ color: "#7dd3fc", fontSize: 13, textDecoration: "none", whiteSpace: "nowrap" }}
+              >
+                ← Dashboard
+              </Link>
+              <SelecteurUtilisateur utilisateur={utilisateur} onChoix={choisirUtilisateur} />
+            </div>
           </div>
 
           {/* Fil de messages */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "16px 4px" }}>
+          <div
+            ref={filRef}
+            onScroll={surDefilement}
+            style={{ flex: 1, overflowY: "auto", padding: "16px 4px", position: "relative" }}
+          >
+            <div className="jcFil">
             {messages.length === 0 && (
-              <div style={{ color: "#a1a1aa", fontSize: 14, marginTop: 24 }}>
+              <div style={{ color: "#a1a1aa", fontSize: 14, marginTop: 16 }}>
+                {recentes.length > 0 && (
+                  <div style={{ marginBottom: 22 }}>
+                    <p style={{ marginBottom: 10, color: "#e4e4e7", fontWeight: 600 }}>
+                      Reprendre{utilisateur ? `, ${utilisateur}` : ""} :
+                    </p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {recentes.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="jcCarteReprise"
+                          onClick={() => ouvrirConversation(c.id)}
+                        >
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 13,
+                              fontWeight: 600,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {c.titre}
+                          </span>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 12,
+                              color: "#a1a1aa",
+                              marginTop: 3,
+                              lineHeight: 1.35,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {apercuTexte(c.reponse, 140) || "—"}
+                          </span>
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              fontSize: 11,
+                              color: "#71717a",
+                              marginTop: 6,
+                            }}
+                          >
+                            <Avatar nom={c.auteur} taille={14} />
+                            {fmtDateRelative(c.updated_at)} · {Math.ceil(c.nb_messages / 2)}{" "}
+                            {c.nb_messages > 2 ? "échanges" : "échange"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <p style={{ marginBottom: 12 }}>
                   Modèles pour démarrer — un clic remplit la zone de saisie, tu
                   complètes, puis Entrée :
@@ -1068,8 +1286,11 @@ export default function PageChatClaude() {
                 <div
                   className="jcBulle"
                   style={{
-                    maxWidth: "85%",
-                    padding: "10px 14px",
+                    // Les réponses prennent (presque) toute la largeur : c'est
+                    // là que vivent les tableaux. Les questions restent des
+                    // bulles à droite.
+                    maxWidth: m.role === "user" ? "78%" : "96%",
+                    padding: m.role === "user" ? "10px 14px" : "12px 18px",
                     borderRadius: 14,
                     fontSize: 14,
                     lineHeight: 1.55,
@@ -1185,7 +1406,36 @@ export default function PageChatClaude() {
               </div>
             ))}
             <div ref={finRef} />
+            </div>
           </div>
+
+          {/* Retour en bas — n'apparaît que si on a remonté le fil */}
+          {loinDuBas && messages.length > 0 && (
+            <div style={{ position: "relative", height: 0, flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={allerEnBas}
+                title="Aller en bas"
+                style={{
+                  position: "absolute",
+                  right: 16,
+                  bottom: 10,
+                  zIndex: 5,
+                  width: 36,
+                  height: 36,
+                  borderRadius: "50%",
+                  background: "#2a2d31",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  color: "#e4e4e7",
+                  cursor: "pointer",
+                  fontSize: 16,
+                  boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
+                }}
+              >
+                ↓
+              </button>
+            </div>
+          )}
 
           {/* Zone de saisie */}
           <div
@@ -1347,6 +1597,7 @@ export default function PageChatClaude() {
           </div>
         </div>
       </div>
+      {demanderUtilisateur && <ChoixUtilisateur onChoix={choisirUtilisateur} />}
     </div>
   );
 }
