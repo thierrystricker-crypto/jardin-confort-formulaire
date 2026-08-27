@@ -24,6 +24,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { REGLES_JARDI, blocDate } from "./regles-jardi";
 import { normaliserMembre } from "@/lib/jardi-equipe";
+import { compteurUsage } from "@/lib/jardi-usage";
 
 // Les enchaînements d'outils dépassent facilement les 10 s par défaut.
 export const maxDuration = 300;
@@ -169,6 +170,11 @@ export async function POST(req: NextRequest) {
   // le bloc des règles reste identique d'un utilisateur à l'autre, donc le
   // cache de prompt est conservé.
   const utilisateur = normaliserMembre((corps as { utilisateur?: unknown })?.utilisateur);
+  // Pour rattacher la ligne d'usage à la conversation (null si première réponse :
+  // la conversation n'existe pas encore en base à ce moment-là).
+  const convBrut = (corps as { conversation_id?: unknown })?.conversation_id;
+  const conversationId =
+    typeof convBrut === "string" && /^[0-9a-f-]{36}$/i.test(convBrut) ? convBrut : null;
 
   const messages = tronquerHistorique(bruts).map((m) => ({
     role: m.role,
@@ -251,8 +257,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Relais direct du stream SSE au navigateur.
-  return new Response(reponse.body, {
+  // Relais direct du stream SSE au navigateur — compté au passage (27.08.2026) :
+  // tokens, outils, durée → `jardi_usage`, sans rien modifier ni retarder.
+  const flux = reponse.body.pipeThrough(
+    compteurUsage({ source: "chat", auteur: utilisateur, modele: MODELE, conversationId })
+  );
+  return new Response(flux, {
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",

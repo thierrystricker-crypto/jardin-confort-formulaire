@@ -5,14 +5,18 @@
 // (service key) peut lire/écrire. Route protégée par proxy.ts + revérification
 // du cookie de session (défense en profondeur).
 //
-// GET    /api/claude/conversations?q=&auteur=&limite=  → liste enrichie
+// GET    /api/claude/conversations?q=&auteur=&limite=&source=  → liste enrichie
 //        (question complète, début de réponse, nb messages, outils, extrait
 //        autour du mot cherché) via la RPC `jardi_conversations_lister`.
 //        Recherche plein texte sans accents ni casse, tous les mots exigés.
-// GET    /api/claude/conversations?id=…                 → une conversation complète
+//        `source` : jardi (défaut) | thunderai | tous — les échanges passés par
+//        ThunderAI (table `thunderai_echanges`, purge 60 j) vivent dans le même
+//        historique depuis le 27.08.2026.
+// GET    /api/claude/conversations?id=…[&source=thunderai] → une conversation complète
+//        (un échange ThunderAI est rendu sous la forme [user, assistant])
 // POST   /api/claude/conversations                      → { id?, messages, auteur? } (upsert)
 // PATCH  /api/claude/conversations                      → { id, titre?, auteur? } (renommer / attribuer)
-// DELETE /api/claude/conversations?id=…                 → suppression
+// DELETE /api/claude/conversations?id=…[&source=thunderai] → suppression
 //
 // L'auteur est NORMALISÉ (lib/jardi-equipe.ts) : une valeur hors liste est
 // ignorée plutôt que stockée — le classement par utilisateur ne survit pas aux
@@ -92,6 +96,31 @@ export async function GET(req: NextRequest) {
 
   const params = req.nextUrl.searchParams;
   const id = params.get("id");
+  const source = params.get("source") === "thunderai" ? "thunderai" : params.get("source") === "tous" ? "tous" : "jardi";
+  if (id && source === "thunderai") {
+    const { data, error } = await supabaseAdmin
+      .from("thunderai_echanges")
+      .select("id, cree_le, question, reponse")
+      .eq("id", id)
+      .single();
+    if (error || !data) {
+      return NextResponse.json({ error: "Conversation introuvable" }, { status: 404 });
+    }
+    return NextResponse.json({
+      conversation: {
+        id: data.id,
+        titre: String(data.question ?? "").replace(/\s+/g, " ").trim().slice(0, 80),
+        auteur: null,
+        source: "thunderai",
+        created_at: data.cree_le,
+        updated_at: data.cree_le,
+        messages: [
+          { role: "user", content: data.question ?? "" },
+          { role: "assistant", content: data.reponse ?? "" },
+        ],
+      },
+    });
+  }
   if (id) {
     const { data, error } = await supabaseAdmin
       .from("claude_conversations")
@@ -101,7 +130,7 @@ export async function GET(req: NextRequest) {
     if (error || !data) {
       return NextResponse.json({ error: "Conversation introuvable" }, { status: 404 });
     }
-    return NextResponse.json({ conversation: data });
+    return NextResponse.json({ conversation: { ...data, source: "jardi" } });
   }
 
   // Liste / recherche. `q` : mots séparés par des espaces, tous exigés ;
@@ -116,6 +145,7 @@ export async function GET(req: NextRequest) {
     p_q: q || null,
     p_auteur: auteur,
     p_limite: limite,
+    p_source: source,
   });
   if (error) {
     console.error("jardi_conversations_lister :", error);
@@ -242,8 +272,10 @@ export async function DELETE(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "Paramètre id manquant" }, { status: 400 });
   }
+  const table =
+    req.nextUrl.searchParams.get("source") === "thunderai" ? "thunderai_echanges" : "claude_conversations";
   const { error } = await supabaseAdmin
-    .from("claude_conversations")
+    .from(table)
     .delete()
     .eq("id", id);
   if (error) {

@@ -30,7 +30,13 @@ export type ConvResume = {
   reponse: string | null;
   outils: string[] | null;
   extrait: string | null;
+  // « jardi » = chat du dashboard ; « thunderai » = échange passé par
+  // l'extension ThunderAI dans Thunderbird (même Jardi, autre fenêtre).
+  source: SourceConv;
 };
+
+export type SourceConv = "jardi" | "thunderai";
+export type FiltreSource = "jardi" | "thunderai" | "tous";
 
 // Une couleur par personne : l'œil trie avant de lire.
 export const COULEURS_EQUIPE: Record<MembreEquipe, string> = {
@@ -181,10 +187,11 @@ function Carte({
   active: boolean;
   enRecherche: boolean;
   motsRecherche: string[];
-  onOuvrir: (id: string) => void;
-  onSupprimer: (id: string) => void;
+  onOuvrir: (id: string, source: SourceConv) => void;
+  onSupprimer: (id: string, source: SourceConv) => void;
   onRenommer: (id: string, titre: string) => Promise<void> | void;
 }) {
+  const thunderai = c.source === "thunderai";
   const [edition, setEdition] = useState(false);
   const [brouillon, setBrouillon] = useState(c.titre);
   const champRef = useRef<HTMLInputElement>(null);
@@ -212,13 +219,13 @@ function Carte({
   return (
     <div
       className={"jcCarte" + (active ? " jcCarteActive" : "")}
-      onClick={() => !edition && onOuvrir(c.id)}
+      onClick={() => !edition && onOuvrir(c.id, c.source)}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
         if (!edition && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
-          onOuvrir(c.id);
+          onOuvrir(c.id, c.source);
         }
       }}
     >
@@ -265,32 +272,46 @@ function Carte({
           )}
         </div>
         <div className="jcCarteActions" onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            title="Renommer"
-            onClick={() => {
-              setBrouillon(c.titre);
-              setEdition(true);
-            }}
-          >
-            ✎
-          </button>
-          <button type="button" title="Supprimer" onClick={() => onSupprimer(c.id)}>
+          {!thunderai && (
+            <button
+              type="button"
+              title="Renommer"
+              onClick={() => {
+                setBrouillon(c.titre);
+                setEdition(true);
+              }}
+            >
+              ✎
+            </button>
+          )}
+          <button type="button" title="Supprimer" onClick={() => onSupprimer(c.id, c.source)}>
             ✕
           </button>
         </div>
       </div>
       <div className="jcCarteMeta">
-        <Avatar nom={c.auteur} taille={16} />
-        <span style={{ color: couleurMembre(c.auteur), fontWeight: 600 }}>
-          {c.auteur ?? "—"}
-        </span>
+        {thunderai ? (
+          <span className="jcBadgeTb" title="Échange passé par ThunderAI dans Thunderbird">
+            ✉️ Thunderbird
+          </span>
+        ) : (
+          <>
+            <Avatar nom={c.auteur} taille={16} />
+            <span style={{ color: couleurMembre(c.auteur), fontWeight: 600 }}>
+              {c.auteur ?? "—"}
+            </span>
+          </>
+        )}
         <span>·</span>
-        <span>{fmtDateRelative(c.updated_at)}</span>
-        <span>·</span>
-        <span title={`${c.nb_messages} messages`}>
-          {nbEchanges} {nbEchanges > 1 ? "échanges" : "échange"}
-        </span>
+        <span className="jcCarteDate">{fmtDateRelative(c.updated_at)}</span>
+        {!thunderai && (
+          <>
+            <span>·</span>
+            <span title={`${c.nb_messages} messages`}>
+              {nbEchanges} {nbEchanges > 1 ? "échanges" : "échange"}
+            </span>
+          </>
+        )}
         {outils.length > 0 && (
           <span
             title={"Outils : " + outils.join(", ")}
@@ -311,8 +332,10 @@ export function Historique({
   convId,
   utilisateur,
   filtreAuteur,
+  source,
   recherche,
   onFiltreAuteur,
+  onSource,
   onRecherche,
   onOuvrir,
   onNouvelle,
@@ -326,12 +349,14 @@ export function Historique({
   convId: string | null;
   utilisateur: MembreEquipe | null;
   filtreAuteur: string; // "" = tous
+  source: FiltreSource;
   recherche: string;
   onFiltreAuteur: (a: string) => void;
+  onSource: (s: FiltreSource) => void;
   onRecherche: (q: string) => void;
-  onOuvrir: (id: string) => void;
+  onOuvrir: (id: string, source: SourceConv) => void;
   onNouvelle: () => void;
-  onSupprimer: (id: string) => void;
+  onSupprimer: (id: string, source: SourceConv) => void;
   onRenommer: (id: string, titre: string) => Promise<void> | void;
   onFermer?: () => void;
   rechercheRef?: React.RefObject<HTMLInputElement | null>;
@@ -397,11 +422,37 @@ export function Historique({
           display: flex;
           align-items: center;
           gap: 5px;
-          font-size: 11px;
-          color: #71717a;
+          font-size: 11.5px;
+          color: #8b8b93;
           white-space: nowrap;
           overflow: hidden;
         }
+        .jcCarteDate { color: #e4e4e7; font-weight: 600; }
+        .jcBadgeTb {
+          color: #D97757;
+          font-weight: 600;
+        }
+        .jcSegment {
+          display: flex;
+          margin-top: 8px;
+          border: 1px solid rgba(255,255,255,0.14);
+          border-radius: 9px;
+          overflow: hidden;
+        }
+        .jcSegment button {
+          flex: 1;
+          padding: 5px 4px;
+          font-size: 12px;
+          font-weight: 600;
+          background: transparent;
+          border: none;
+          color: #a1a1aa;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .jcSegment button + button { border-left: 1px solid rgba(255,255,255,0.14); }
+        .jcSegment button:hover { background: rgba(255,255,255,0.06); color: #e4e4e7; }
+        .jcSegment button.actif { background: rgba(255,255,255,0.14); color: #f4f4f5; }
         .jcCarteActions {
           display: flex;
           gap: 2px;
@@ -436,12 +487,28 @@ export function Historique({
         }
         .jcPuce:hover { background: rgba(255,255,255,0.06); color: #e4e4e7; }
         .jcGroupe {
-          font-size: 11px;
+          position: sticky;
+          top: 0;
+          z-index: 1;
+          background: #1f2125;
+          font-size: 12px;
           font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.04em;
-          color: #71717a;
-          padding: 10px 10px 4px;
+          letter-spacing: 0.06em;
+          color: #e4e4e7;
+          padding: 12px 10px 5px;
+          margin-bottom: 3px;
+          border-bottom: 1px solid rgba(255,255,255,0.14);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .jcGroupe::before {
+          content: "";
+          width: 3px;
+          height: 12px;
+          border-radius: 2px;
+          background: #2B8AD1;
         }
         .jcRecherche {
           width: 100%;
@@ -583,6 +650,28 @@ export function Historique({
         })}
       </div>
 
+      {/* Source : chat du dashboard, échanges ThunderAI, ou les deux */}
+      <div className="jcSegment" role="tablist" aria-label="Source">
+        {(
+          [
+            ["jardi", "💬 Jardi"],
+            ["thunderai", "✉️ Thunderbird"],
+            ["tous", "Tous"],
+          ] as [FiltreSource, string][]
+        ).map(([val, lib]) => (
+          <button
+            key={val}
+            type="button"
+            role="tab"
+            aria-selected={source === val}
+            className={source === val ? "actif" : undefined}
+            onClick={() => onSource(val)}
+          >
+            {lib}
+          </button>
+        ))}
+      </div>
+
       {/* Liste */}
       <div style={{ flex: 1, overflowY: "auto", marginTop: 8, marginRight: -4, paddingRight: 4 }}>
         {chargement && conversations.length === 0 && (
@@ -592,8 +681,12 @@ export function Historique({
           <div style={{ fontSize: 12, color: "#71717a", padding: 10, lineHeight: 1.5 }}>
             {enRecherche
               ? "Aucune conversation ne contient tous ces mots. Essaie un mot plus court."
+              : filtreAuteur && source === "thunderai"
+              ? "Les échanges ThunderAI n'ont pas d'auteur : retire le filtre par personne."
               : filtreAuteur
               ? `Aucune conversation de ${filtreAuteur}.`
+              : source === "thunderai"
+              ? "Aucun échange ThunderAI (conservation 60 jours)."
               : "Aucune conversation enregistrée."}
           </div>
         )}

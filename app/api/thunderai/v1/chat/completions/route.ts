@@ -32,6 +32,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { REGLES_JARDI, blocDate } from "../../../../claude/chat/regles-jardi";
 import { supabaseAdmin } from "@/lib/supabase";
+import { compteurUsage } from "@/lib/jardi-usage";
 
 // Les enchaînements d'outils dépassent facilement les 10 s par défaut.
 export const maxDuration = 300;
@@ -254,7 +255,12 @@ export async function POST(req: NextRequest) {
   // résultats et la réflexion transitent dans le flux Anthropic mais ne
   // concernent pas ThunderAI — pendant ce temps, l'extension attend simplement
   // les prochains tokens.
-  const lecteur = reponse.body.getReader();
+  // Comptage de l'usage au passage (27.08.2026) : tokens, outils, durée →
+  // `jardi_usage` (source « thunderai », sans auteur — l'extension ne se
+  // présente pas). Les octets sont relayés tels quels.
+  const lecteur = reponse.body
+    .pipeThrough(compteurUsage({ source: "thunderai", modele: MODELE }))
+    .getReader();
   const decodeur = new TextDecoder("utf-8");
   const encodeur = new TextEncoder();
 

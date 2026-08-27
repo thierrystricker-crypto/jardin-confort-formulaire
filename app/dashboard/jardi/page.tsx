@@ -33,7 +33,10 @@ import {
   apercuTexte,
   fmtDateRelative,
   type ConvResume,
+  type FiltreSource,
+  type SourceConv,
 } from "./historique";
+import { PanneauUsage } from "./usage";
 import {
   ChoixUtilisateur,
   SelecteurUtilisateur,
@@ -365,6 +368,11 @@ function construireContenu(texte: string, fichiers?: FichierJoint[]): string | B
 // volet superposé (et replié par défaut), au-dessus il est une colonne fixe.
 const LARGEUR_MOBILE = 900;
 const CLE_FILTRE_AUTEUR = "jardi-filtre-auteur";
+const CLE_SOURCE = "jardi-source";
+
+function lireSource(brut: string | null): FiltreSource {
+  return brut === "thunderai" || brut === "tous" ? brut : "jardi";
+}
 
 function estMobile(): boolean {
   return typeof window !== "undefined" && window.innerWidth < LARGEUR_MOBILE;
@@ -434,7 +442,13 @@ export default function PageChatClaude() {
   const [recentes, setRecentes] = useState<ConvResume[]>([]);
   const [recherche, setRecherche] = useState("");
   const [filtreAuteur, setFiltreAuteur] = useState("");
+  const [source, setSource] = useState<FiltreSource>("jardi");
   const [convId, setConvId] = useState<string | null>(null);
+  // Un échange ThunderAI ouvert dans le fil est en LECTURE : le premier message
+  // qu'on y ajoute crée une conversation Jardi neuve (l'échange d'origine reste
+  // intact dans `thunderai_echanges`).
+  const [convSource, setConvSource] = useState<SourceConv>("jardi");
+  const [panneauUsage, setPanneauUsage] = useState(false);
   const [panneauOuvert, setPanneauOuvert] = useState(true);
   const [mobile, setMobile] = useState(false);
   const [utilisateur, setUtilisateur] = useState<MembreEquipe | null>(null);
@@ -457,6 +471,8 @@ export default function PageChatClaude() {
   const rechercheRef = useRef<HTMLInputElement>(null);
   const convIdRef = useRef<string | null>(null);
   convIdRef.current = convId;
+  const convSourceRef = useRef<SourceConv>("jardi");
+  convSourceRef.current = convSource;
   const utilisateurRef = useRef<MembreEquipe | null>(null);
   utilisateurRef.current = utilisateur;
 
@@ -496,13 +512,14 @@ export default function PageChatClaude() {
   // (RPC jardi_conversations_lister). Un compteur de requête écarte les
   // réponses arrivées dans le désordre quand on tape vite.
   const requeteListeRef = useRef(0);
-  const chargerListe = useCallback(async (q: string, auteur: string) => {
+  const chargerListe = useCallback(async (q: string, auteur: string, src: FiltreSource) => {
     const n = ++requeteListeRef.current;
     setChargementListe(true);
     try {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
       if (auteur) params.set("auteur", auteur);
+      if (src !== "jardi") params.set("source", src);
       const res = await fetch(`/api/claude/conversations?${params.toString()}`);
       if (!res.ok || n !== requeteListeRef.current) return;
       const json = (await res.json()) as { conversations?: ConvResume[] };
@@ -533,9 +550,9 @@ export default function PageChatClaude() {
 
   // Rechargement à chaque changement de recherche (léger délai) ou de filtre.
   useEffect(() => {
-    const t = setTimeout(() => chargerListe(recherche, filtreAuteur), recherche ? 250 : 0);
+    const t = setTimeout(() => chargerListe(recherche, filtreAuteur, source), recherche ? 250 : 0);
     return () => clearTimeout(t);
-  }, [recherche, filtreAuteur, chargerListe]);
+  }, [recherche, filtreAuteur, source, chargerListe]);
 
   useEffect(() => {
     chargerRecentes(utilisateur);
@@ -544,11 +561,14 @@ export default function PageChatClaude() {
   // Adresse de la conversation ouverte : ?c=<id>. replaceState plutôt que le
   // routeur Next : aucune navigation, aucun rechargement, juste une adresse
   // qu'on peut copier ou retrouver dans l'historique du navigateur.
-  const majUrl = (id: string | null) => {
+  const majUrl = (id: string | null, src: SourceConv = "jardi") => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     if (id) url.searchParams.set("c", id);
     else url.searchParams.delete("c");
+    if (id && src === "thunderai") url.searchParams.set("s", "thunderai");
+    else url.searchParams.delete("s");
+    url.searchParams.delete("source");
     window.history.replaceState(null, "", url.toString());
   };
 
@@ -557,11 +577,15 @@ export default function PageChatClaude() {
     const u = lireUtilisateur();
     setUtilisateur(u);
     setDemanderUtilisateur(!u);
-    // Filtre d'auteur mémorisé (« Tous » par défaut : l'historique est commun).
+    // Filtre d'auteur et source mémorisés (« Tous » / « Jardi » par défaut :
+    // l'historique est commun). `?source=thunderai` dans l'adresse (ancienne
+    // page /dashboard/thunderai) force la source au chargement.
+    const params = new URLSearchParams(window.location.search);
     try {
       setFiltreAuteur(localStorage.getItem(CLE_FILTRE_AUTEUR) ?? "");
+      setSource(lireSource(params.get("source") ?? localStorage.getItem(CLE_SOURCE)));
     } catch {
-      /* ignoré */
+      setSource(lireSource(params.get("source")));
     }
     // Mobile : historique en volet superposé, replié par défaut.
     const m = estMobile();
@@ -570,8 +594,8 @@ export default function PageChatClaude() {
     const surRedim = () => setMobile(estMobile());
     window.addEventListener("resize", surRedim);
     // Conversation désignée dans l'adresse (lien collé, retour arrière, reprise).
-    const idUrl = new URLSearchParams(window.location.search).get("c");
-    if (idUrl) ouvrirConversation(idUrl);
+    const idUrl = params.get("c");
+    if (idUrl) ouvrirConversation(idUrl, params.get("s") === "thunderai" ? "thunderai" : "jardi");
     // Dictée : bouton affiché seulement si le navigateur la supporte (Chrome/Edge)
     setDicteeDispo(constructeurVocal() !== null);
     // ⚠️ Un fichier lâché À CÔTÉ de la zone de dépôt fait naviguer le navigateur
@@ -609,6 +633,15 @@ export default function PageChatClaude() {
     setFiltreAuteur(a);
     try {
       localStorage.setItem(CLE_FILTRE_AUTEUR, a);
+    } catch {
+      /* ignoré */
+    }
+  };
+
+  const changerSource = (s: FiltreSource) => {
+    setSource(s);
+    try {
+      localStorage.setItem(CLE_SOURCE, s);
     } catch {
       /* ignoré */
     }
@@ -663,7 +696,8 @@ export default function PageChatClaude() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            id: convIdRef.current ?? undefined,
+            // Un échange ThunderAI continué devient une conversation Jardi NEUVE.
+            id: convSourceRef.current === "jardi" ? convIdRef.current ?? undefined : undefined,
             auteur,
             messages: utiles.map(({ role, content, outils, fichiers: pj }) => ({
               role,
@@ -675,11 +709,12 @@ export default function PageChatClaude() {
         });
         const json = (await res.json().catch(() => null)) as { id?: string } | null;
         if (res.ok && json?.id) {
-          if (!convIdRef.current) {
+          if (!convIdRef.current || convSourceRef.current !== "jardi") {
             setConvId(json.id);
+            setConvSource("jardi");
             majUrl(json.id);
           }
-          chargerListe(recherche, filtreAuteur);
+          chargerListe(recherche, filtreAuteur, source);
           chargerRecentes(utilisateurRef.current);
         }
       } catch {
@@ -689,10 +724,12 @@ export default function PageChatClaude() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enCours]);
 
-  const ouvrirConversation = async (id: string) => {
+  const ouvrirConversation = async (id: string, src: SourceConv = "jardi") => {
     if (enCours) return;
     try {
-      const res = await fetch(`/api/claude/conversations?id=${encodeURIComponent(id)}`);
+      const res = await fetch(
+        `/api/claude/conversations?id=${encodeURIComponent(id)}${src === "thunderai" ? "&source=thunderai" : ""}`
+      );
       if (!res.ok) {
         // Lien périmé (conversation supprimée) : on nettoie l'adresse.
         if (res.status === 404) majUrl(null);
@@ -701,7 +738,8 @@ export default function PageChatClaude() {
       const json = (await res.json()) as { conversation?: { messages?: MessageAffiche[] } };
       setMessages(Array.isArray(json.conversation?.messages) ? json.conversation.messages : []);
       setConvId(id);
-      majUrl(id);
+      setConvSource(src);
+      majUrl(id, src);
       setFichiers([]);
       setErreurFichier(null);
       setLoinDuBas(false);
@@ -717,20 +755,24 @@ export default function PageChatClaude() {
     setFichiers([]);
     setErreurFichier(null);
     setConvId(null);
+    setConvSource("jardi");
     majUrl(null);
     if (estMobile()) setPanneauOuvert(false);
     zoneRef.current?.focus();
   };
 
-  const supprimerConversation = async (id: string) => {
-    if (!confirm("Supprimer cette conversation ?")) return;
+  const supprimerConversation = async (id: string, src: SourceConv = "jardi") => {
+    if (!confirm(src === "thunderai" ? "Supprimer cet échange ThunderAI ?" : "Supprimer cette conversation ?")) return;
     try {
-      await fetch(`/api/claude/conversations?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      await fetch(
+        `/api/claude/conversations?id=${encodeURIComponent(id)}${src === "thunderai" ? "&source=thunderai" : ""}`,
+        { method: "DELETE" }
+      );
     } catch {
       /* ignoré */
     }
     if (convIdRef.current === id) nouvelleConversation();
-    chargerListe(recherche, filtreAuteur);
+    chargerListe(recherche, filtreAuteur, source);
     chargerRecentes(utilisateurRef.current);
   };
 
@@ -865,7 +907,11 @@ export default function PageChatClaude() {
         method: "POST",
         headers: { "content-type": "application/json" },
         // `utilisateur` : Jardi sait à qui il parle (bloc système non caché).
-        body: JSON.stringify({ messages: historique, utilisateur: utilisateurRef.current }),
+        body: JSON.stringify({
+          messages: historique,
+          utilisateur: utilisateurRef.current,
+          conversation_id: convSourceRef.current === "jardi" ? convIdRef.current : null,
+        }),
       });
 
       if (!reponse.ok || !reponse.body) {
@@ -1084,8 +1130,10 @@ export default function PageChatClaude() {
               convId={convId}
               utilisateur={utilisateur}
               filtreAuteur={filtreAuteur}
+              source={source}
               recherche={recherche}
               onFiltreAuteur={changerFiltreAuteur}
+              onSource={changerSource}
               onRecherche={setRecherche}
               onOuvrir={ouvrirConversation}
               onNouvelle={nouvelleConversation}
@@ -1143,6 +1191,22 @@ export default function PageChatClaude() {
               à relire dans Thunderbird.
             </p>
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setPanneauUsage(true)}
+                title="Utilisation : requêtes, tokens, coût estimé"
+                style={{
+                  background: "none",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  borderRadius: 8,
+                  color: "#a1a1aa",
+                  cursor: "pointer",
+                  padding: "3px 9px",
+                  fontSize: 13,
+                }}
+              >
+                📊
+              </button>
               <Link
                 href="/dashboard"
                 style={{ color: "#7dd3fc", fontSize: 13, textDecoration: "none", whiteSpace: "nowrap" }}
@@ -1274,6 +1338,23 @@ export default function PageChatClaude() {
               </div>
             )}
 
+            {convSource === "thunderai" && messages.length > 0 && (
+              <div
+                style={{
+                  margin: "0 0 14px",
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  background: "rgba(217,119,87,0.12)",
+                  border: "1px solid rgba(217,119,87,0.35)",
+                  color: "#fdba74",
+                  fontSize: 13,
+                }}
+              >
+                ✉️ Échange passé par <strong>ThunderAI</strong> dans Thunderbird. Tu peux le
+                continuer ici : ta prochaine question ouvrira une conversation Jardi à ton nom,
+                l&apos;échange d&apos;origine reste tel quel.
+              </div>
+            )}
             {messages.map((m, i) => (
               <div
                 key={i}
@@ -1598,6 +1679,7 @@ export default function PageChatClaude() {
         </div>
       </div>
       {demanderUtilisateur && <ChoixUtilisateur onChoix={choisirUtilisateur} />}
+      {panneauUsage && <PanneauUsage onFermer={() => setPanneauUsage(false)} />}
     </div>
   );
 }
