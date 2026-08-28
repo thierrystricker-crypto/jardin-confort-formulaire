@@ -33,6 +33,15 @@ const RELANCE_JOURS = 7
 // n'est pas une to-do. On relance d'abord ce qui rapporte.
 const RELANCE_LIMITE = 10
 
+type Masque = {
+  cle: string
+  section: string
+  libelle: string | null
+  par: string | null
+  expire_le: string | null
+  created_at: string
+}
+
 type Section = {
   cle: string
   titre: string
@@ -200,6 +209,19 @@ export async function GET() {
     const erreur = retards.error || echeances.error || manquantes.error || offres.error || offresTotal.error
     if (erreur) return NextResponse.json({ error: erreur.message }, { status: 500 })
 
+    // Lignes marquées « traité » et encore masquées. Un masquage daté qui a
+    // expiré ne filtre plus : la ligne revient d'elle-même si la condition
+    // dure. C'est voulu — « traité » ne doit pas pouvoir enterrer un problème.
+    const { data: masquesBruts } = await supabaseAdmin
+      .from("v_todo_masques")
+      .select("cle, section, libelle, par, expire_le, created_at")
+      .eq("action", "masque")
+      .order("created_at", { ascending: false })
+    const maintenant = Date.now()
+    const masques = ((masquesBruts || []) as Masque[])
+      .filter(m => !m.expire_le || new Date(m.expire_le).getTime() > maintenant)
+    const cachees = new Set(masques.map(m => m.cle))
+
     const lignesRetard = (retards.data || []) as unknown as LigneSuivi[]
     const lignesEcheance = (echeances.data || []) as unknown as LigneSuivi[]
     const lignesManquantes = (manquantes.data || []) as unknown as LigneSuivi[]
@@ -261,15 +283,32 @@ export async function GET() {
       },
     ]
 
+    // Filtrage APRÈS construction : chaque section garde son `total` réel et
+    // annonce combien de lignes sont masquées, plutôt que de faire comme si
+    // elles n'avaient jamais existé.
+    const sectionsVisibles: Section[] = sections.map(s => {
+      const gardees = s.lignes.filter(l => !cachees.has(l.id))
+      const masquees = s.lignes.length - gardees.length
+      return {
+        ...s,
+        lignes: gardees,
+        compteur: s.borne ? gardees.length : gardees.length,
+        perimetre: masquees > 0
+          ? `${s.perimetre} ${masquees} ligne${masquees > 1 ? "s" : ""} marquée${masquees > 1 ? "s" : ""} « traité » et masquée${masquees > 1 ? "s" : ""}.`
+          : s.perimetre,
+      }
+    })
+
     return NextResponse.json({
       genere_le: new Date().toISOString(),
       // Le compteur du bandeau compte ce qui est RÉELLEMENT AFFICHÉ, pas les
       // totaux : additionner les 158 offres ouvertes donnait « 228 à traiter »,
       // un chiffre qui effraie sans rien dire de la journée. Le vrai arriéré
       // reste lisible section par section (`total`) et ci-dessous.
-      total_a_traiter: sections.reduce((s, x) => s + x.compteur, 0),
+      total_a_traiter: sectionsVisibles.reduce((s, x) => s + x.compteur, 0),
       total_arriere: sections.reduce((s, x) => s + x.total, 0),
-      sections,
+      sections: sectionsVisibles,
+      masques,
     })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

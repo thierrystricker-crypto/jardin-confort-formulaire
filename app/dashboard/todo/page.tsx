@@ -54,10 +54,19 @@ type Section = {
   // injoignable, par exemple). On ne dit JAMAIS « à jour » dans ce cas.
   indisponible?: string | null;
 };
+type Masque = {
+  cle: string;
+  section: string;
+  libelle: string | null;
+  par: string | null;
+  expire_le: string | null;
+  created_at: string;
+};
 type Reponse = {
   genere_le: string;
   total_a_traiter: number;
   sections: Section[];
+  masques?: Masque[];
 };
 
 // Ouvertes d'emblée : le mail, c'est le gros du travail quotidien. Le reste
@@ -91,6 +100,37 @@ export default function TodoPage() {
   // Panneau « direction » ouvert, et texte saisi, par ligne.
   const [consignes, setConsignes] = useState<Record<string, boolean>>({});
   const [directions, setDirections] = useState<Record<string, string>>({});
+  const [enCours, setEnCours] = useState<string | null>(null);
+  const [voletTraites, setVoletTraites] = useState(false);
+
+  // Qui marque : le prénom déjà choisi pour le chat Jardi, sur cet appareil.
+  // Pas de nouvelle question à l'utilisateur, pas de nouvelle clé.
+  const marquer = useCallback(async (
+    cle: string, section: string, libelle: string, action: "masque" | "remis"
+  ) => {
+    setEnCours(cle);
+    try {
+      let par: string | null = null;
+      try { par = localStorage.getItem("jardi-utilisateur"); } catch { /* stockage indisponible */ }
+      const res = await fetch("/api/todo/traitement", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cle, section, libelle, par, action }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setErreur(j.error || `Marquage refusé (${res.status})`);
+        return;
+      }
+      await charger();
+    } catch (e) {
+      setErreur(String(e));
+    } finally {
+      setEnCours(null);
+    }
+    // charger est stable (useCallback sans dépendance), la boucle est sûre.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const charger = useCallback(async () => {
     try {
@@ -261,8 +301,7 @@ export default function TodoPage() {
                             </div>
                           )}
 
-                          {(l.mail || long) && (
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
                               {long && (
                                 <button
                                   onClick={() => setDeplies(d => ({ ...d, [l.id]: !ouvert }))}
@@ -277,14 +316,21 @@ export default function TodoPage() {
                                   ✍️ Préparer une réponse avec Jardi
                                 </button>
                               )}
-                              {l.url && (
+                              {l.mail && l.url && (
                                 <a href={l.url} target="_blank" rel="noopener noreferrer"
                                   className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1 text-xs text-zinc-300 transition hover:bg-[#40454b]">
                                   📧 Ouvrir dans Thunderbird
                                 </a>
                               )}
+                              {/* Toujours disponible, sur toutes les sections.
+                                  Réversible : voir le volet « déjà traité ». */}
+                              <button
+                                disabled={enCours === l.id}
+                                onClick={() => marquer(l.id, s.cle, l.titre, "masque")}
+                                className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-40">
+                                {enCours === l.id ? "…" : s.cle === "offres_a_relancer" ? "✓ Relancée" : "✓ Traité"}
+                              </button>
                             </div>
-                          )}
 
                           {/* Direction donnée AVANT que Jardi ne réfléchisse :
                               une réponse préparée sans consigne part souvent
@@ -325,6 +371,45 @@ export default function TodoPage() {
           );
         })}
 
+
+        {/* Volet « déjà traité » : rien n'est irréversible, et on doit pouvoir
+            le voir. Un masquage daté expire tout seul (une condition qui dure
+            revient) ; un mail traité, lui, ne revient pas. */}
+        {(data?.masques?.length ?? 0) > 0 && (
+          <section className="rounded-2xl border border-white/10 bg-[#2a2d31]">
+            <button
+              onClick={() => setVoletTraites(v => !v)}
+              className="flex w-full items-center justify-between px-6 py-4 text-left">
+              <span className="text-sm font-medium text-zinc-300">
+                ✓ Déjà traité — {data?.masques?.length} ligne{(data?.masques?.length ?? 0) > 1 ? "s" : ""} masquée{(data?.masques?.length ?? 0) > 1 ? "s" : ""}
+              </span>
+              <span className="text-zinc-500">{voletTraites ? "▾" : "▸"}</span>
+            </button>
+            {voletTraites && (
+              <ul className="border-t border-white/5">
+                {data?.masques?.map(m => (
+                  <li key={m.cle} className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-6 py-3 last:border-0">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm text-zinc-300">{m.libelle || m.cle}</div>
+                      <div className="text-xs text-zinc-500">
+                        {m.par ? `${m.par} · ` : ""}{new Date(m.created_at).toLocaleString("fr-CH", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        {m.expire_le
+                          ? ` · revient le ${new Date(m.expire_le).toLocaleDateString("fr-CH")}`
+                          : " · ne revient pas"}
+                      </div>
+                    </div>
+                    <button
+                      disabled={enCours === m.cle}
+                      onClick={() => marquer(m.cle, m.section, m.libelle || m.cle, "remis")}
+                      className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1 text-xs text-zinc-300 transition hover:bg-[#40454b] disabled:opacity-40">
+                      {enCours === m.cle ? "…" : "↩ Remettre"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
       </div>
     </main>
   );
