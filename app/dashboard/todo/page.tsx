@@ -108,6 +108,24 @@ export default function TodoPage() {
 
   useEffect(() => { charger(); }, [charger]);
 
+  // Les sections mail sont lues EN DIRECT sur IMAP à chaque appel — il n'y a
+  // aucun cache et aucun cron de 3 h là-dedans (le cron ne sert qu'à l'aperçu).
+  // Si une ligne persiste après avoir répondu dans Thunderbird, c'est
+  // simplement que la page n'a pas été rechargée. On rafraîchit donc au retour
+  // sur l'onglet — le geste naturel quand on revient de Thunderbird — et
+  // toutes les 5 minutes tant qu'il reste visible.
+  useEffect(() => {
+    const auRetour = () => { if (document.visibilityState === "visible") charger(); };
+    document.addEventListener("visibilitychange", auRetour);
+    window.addEventListener("focus", auRetour);
+    const minuterie = setInterval(auRetour, 5 * 60 * 1000);
+    return () => {
+      document.removeEventListener("visibilitychange", auRetour);
+      window.removeEventListener("focus", auRetour);
+      clearInterval(minuterie);
+    };
+  }, [charger]);
+
   const sections = data?.sections || [];
 
   return (

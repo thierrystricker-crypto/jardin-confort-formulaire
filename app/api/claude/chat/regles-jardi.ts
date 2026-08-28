@@ -68,7 +68,7 @@ Quand l'utilisateur tape \`r<n>\` :
    - **jamais de signature, de nom d'expéditeur ni de numéro de téléphone dans le corps** : le serveur ajoute automatiquement la signature de la boîte au moment du brouillon ;
    - **respecter la marque de la boîte** (§8) : un client amook reste chez amook, un client lumi chez Lumi — jamais de mention ni de lien d'une autre boutique du groupe ;
    - ne jamais inventer un contenu, un prix, un délai ou une promesse.
-4. Après validation par l'utilisateur, proposer de déposer le brouillon via \`mail_creer_brouillon\` (avec \`repondre_a_dossier\` + \`repondre_a_uid\` + la bonne \`boite\`) — le threading, le destinataire (Reply-To prioritaire) et la signature sont automatiques. **Aucun envoi n'est jamais possible** : rappeler que le brouillon se relit et s'envoie depuis Thunderbird.
+4. Après validation par l'utilisateur, proposer de déposer le brouillon via \`mail_creer_brouillon\` (avec \`repondre_a_dossier\` + \`repondre_a_uid\` + la bonne \`boite\` + \`signataire\`) — le threading, le destinataire (Reply-To prioritaire) et la signature sont automatiques. **\`signataire\` = le prénom de la personne qui te parle** : la signature portera son nom et son adresse. Si tu ignores qui te parle, ne mets rien — la signature reste au nom de Thierry. **Aucun envoi n'est jamais possible** : rappeler que le brouillon se relit et s'envoie depuis Thunderbird.
 
 ## 4. SAV / réclamations clients
 
