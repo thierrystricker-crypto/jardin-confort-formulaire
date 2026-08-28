@@ -118,6 +118,34 @@ export default function QrLibrePage() {
       if (u && (EQUIPE_JARDI as readonly string[]).includes(u)) setCommercial(u);
     } catch { /* localStorage indisponible : champ vide */ }
     loadHistorique();
+
+    // ─── Pré-remplissage par l'URL ───
+    // Boutons « Créer QR paiement à la volée » des autres pages :
+    //   ?prefill=<JSON>  (fiche client : societe, nom, prenom, rue, numero, npa, ville)
+    //   ?commande=CMD-XXXXX  (page offre/commande : charge le document)
+    // window.location plutôt que useSearchParams : évite le Suspense imposé
+    // par Next au prerender, et ne tourne qu'au montage côté navigateur.
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const prefillRaw = params.get("prefill");
+      if (prefillRaw) {
+        const p = JSON.parse(prefillRaw) as Record<string, unknown>;
+        const v = (k: string) => (typeof p[k] === "string" ? (p[k] as string) : "");
+        setSociete(v("societe"));
+        setNom(v("nom"));
+        setPrenom(v("prenom"));
+        setRue(v("rue"));
+        setNumero(v("numero"));
+        setNpa(v("npa"));
+        setVille(v("ville"));
+      }
+      const cmd = (params.get("commande") || "").trim();
+      if (cmd) {
+        setCmdQuery(cmd);
+        loadCommandeFor(cmd);
+      }
+    } catch { /* paramètre illisible : formulaire vierge */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadHistorique() {
@@ -160,8 +188,11 @@ export default function QrLibrePage() {
   }
 
   // ─── Chargement commande/offre ───
-  async function loadCommande() {
-    const q = cmdQuery.trim();
+  function loadCommande() {
+    loadCommandeFor(cmdQuery.trim());
+  }
+
+  async function loadCommandeFor(q: string) {
     if (!q) return;
     setCmdLoading(true);
     setCmdError("");

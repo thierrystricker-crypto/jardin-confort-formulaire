@@ -1391,6 +1391,15 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                       <span className="relative">{qrGenerating ? "⏳ Génération QR…" : "🧾 Générer QR paiement"}</span>
                     </button>
                   )}
+                  {/* QR à montant libre : ouvre /dashboard/qr-libre pré-rempli
+                      avec ce document (adresse + total). Indépendant du QR figé
+                      ci-dessus — acompte partiel, solde après paiement magasin… */}
+                  <Link href={`/dashboard/qr-libre?commande=${encodeURIComponent(offre.numero_affiche || "")}`}
+                    target="_blank" rel="noopener noreferrer"
+                    title="Bulletin de paiement suisse pour un montant libre — acompte ou solde, indépendant du QR figé du document"
+                    className="inline-flex items-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/80 transition hover:bg-emerald-500/15">
+                    💳 QR à la volée
+                  </Link>
                   {isCommandeReelle && (
                     <>
                       {/* Fiche INITIALE : pièce d'archive, pas un document de

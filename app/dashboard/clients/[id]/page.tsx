@@ -574,6 +574,15 @@ function copyAddress(type: "facturation" | "livraison") {
               className="inline-flex items-center rounded-xl border border-[#2B8AD1]/40 bg-[#2B8AD1]/15 px-4 py-2 text-sm text-sky-300 hover:bg-[#2B8AD1]/25">
               + Nouvelle offre (brouillon)
             </Link>
+            <Link href={`/dashboard/qr-libre?prefill=${encodeURIComponent(JSON.stringify({
+              societe: client.societe || "", nom: client.nom, prenom: client.prenom || "",
+              rue: client.rue || "", numero: client.numero_rue || "",
+              npa: client.npa || "", ville: client.ville || "",
+            }))}`} target="_blank" rel="noopener noreferrer"
+              title="Bulletin de paiement suisse pour un montant libre — acompte ou solde, adresse pré-remplie"
+              className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-500/20">
+              💳 Créer QR paiement à la volée
+            </Link>
             <PrintAddressButton client={client} />
           </div>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
