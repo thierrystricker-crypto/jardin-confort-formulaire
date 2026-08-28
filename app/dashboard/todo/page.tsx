@@ -20,6 +20,9 @@ type Ligne = {
   badge: string | null;
   apercu?: string | null;
   mail?: { boite: string; dossier: string; uid: number };
+  // Conseillers en destinataire ou en copie, quand le mail leur est adressé
+  // nommément. Purement indicatif : on n'en trie rien.
+  pour?: string[];
 };
 
 // Longueur affichée tant que la ligne n'est pas dépliée. Au-delà, le bouton
@@ -29,8 +32,15 @@ const APERCU_COURT = 160;
 // Demande envoyée à Jardi par le bouton « Préparer une réponse ». Elle nomme
 // le message par sa boîte/dossier/UID et rappelle la règle : Jardi propose,
 // il ne dépose le brouillon qu'après validation. Aucun envoi n'est possible.
-function questionBrouillon(m: { boite: string; dossier: string; uid: number }) {
-  return `Prépare une proposition de réponse à ce mail : boîte ${m.boite}, dossier ${m.dossier}, UID ${m.uid}. Lis-le d'abord avec mail_lire, puis rédige la réponse selon les règles Jardi. Ne dépose le brouillon qu'après ma validation.`;
+function questionBrouillon(
+  m: { boite: string; dossier: string; uid: number },
+  direction?: string
+) {
+  const base = `Prépare une proposition de réponse à ce mail : boîte ${m.boite}, dossier ${m.dossier}, UID ${m.uid}. Lis-le d'abord avec mail_lire, puis rédige la réponse selon les règles Jardi. Ne dépose le brouillon qu'après ma validation.`;
+  const d = (direction || "").trim();
+  // La direction passe APRÈS la consigne et est annoncée comme prioritaire :
+  // c'est elle qui doit décider du fond de la réponse, pas Jardi tout seul.
+  return d ? `${base}\n\nDirection à suivre, elle prime sur ton interprétation du mail : ${d}` : base;
 }
 type Section = {
   cle: string;
@@ -78,6 +88,9 @@ export default function TodoPage() {
   const [chargement, setChargement] = useState(true);
   const [replies, setReplies] = useState<Record<string, boolean>>({});
   const [deplies, setDeplies] = useState<Record<string, boolean>>({});
+  // Panneau « direction » ouvert, et texte saisi, par ligne.
+  const [consignes, setConsignes] = useState<Record<string, boolean>>({});
+  const [directions, setDirections] = useState<Record<string, string>>({});
 
   const charger = useCallback(async () => {
     try {
@@ -191,7 +204,7 @@ export default function TodoPage() {
                 ) : s.lignes.length === 0 ? (
                   <div className="px-6 pb-6 text-sm text-zinc-500">Rien à traiter ici — c&apos;est à jour.</div>
                 ) : (
-                  <ul className="border-t border-white/5">
+                  <ul className="border-t border-white/5 pb-2">
                     {s.lignes.map(l => {
                       const ouvert = deplies[l.id] ?? false;
                       const long = (l.apercu?.length ?? 0) > APERCU_COURT;
@@ -201,25 +214,37 @@ export default function TodoPage() {
                             <div className="truncate font-medium text-zinc-100">{l.titre}</div>
                             <div className="truncate text-xs text-zinc-400">{l.detail}</div>
                           </div>
-                          {l.badge && (
-                            <span className={`inline-flex flex-shrink-0 items-center rounded-full border px-3 py-0.5 text-xs font-medium ${st.badge}`}>
-                              {l.badge}
-                            </span>
-                          )}
+                          <div className="flex flex-shrink-0 items-center gap-2">
+                            {l.pour?.map(p => (
+                              <span key={p} className="inline-flex items-center rounded-full border border-violet-500/30 bg-violet-500/15 px-2.5 py-0.5 text-xs font-medium text-violet-300"
+                                title="Ce message lui est adressé nommément (destinataire ou copie)">
+                                {p}
+                              </span>
+                            ))}
+                            {l.badge && (
+                              <span className={`inline-flex items-center rounded-full border px-3 py-0.5 text-xs font-medium ${st.badge}`}>
+                                {l.badge}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       );
+                      const consigneOuverte = consignes[l.id] ?? false;
                       return (
-                        <li key={l.id} className="border-b border-white/5 px-6 py-3 last:border-0 hover:bg-white/[0.03]">
+                        // Chaque mail est une carte à part : la fine ligne de
+                        // séparation ne suffisait plus une fois l'aperçu et les
+                        // boutons ajoutés (retour de Thierry, 28.08).
+                        <li key={l.id} className="mx-3 my-2 rounded-xl border border-white/10 bg-[#31353a]/50 p-4 transition hover:border-white/20">
                           {l.url ? <Link href={l.url} className="block" target={l.url.startsWith("http") ? "_blank" : undefined}>{contenu}</Link> : contenu}
 
                           {l.apercu && (
-                            <div className={`mt-2 rounded-xl bg-black/20 px-3 py-2 text-xs leading-relaxed text-zinc-400 ${ouvert ? "whitespace-pre-line" : ""}`}>
+                            <div className={`mt-3 rounded-lg bg-black/25 px-3 py-2 text-xs leading-relaxed text-zinc-400 ${ouvert ? "whitespace-pre-line" : ""}`}>
                               {ouvert ? l.apercu : l.apercu.slice(0, APERCU_COURT) + (long ? "…" : "")}
                             </div>
                           )}
 
                           {(l.mail || long) && (
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
                               {long && (
                                 <button
                                   onClick={() => setDeplies(d => ({ ...d, [l.id]: !ouvert }))}
@@ -228,13 +253,48 @@ export default function TodoPage() {
                                 </button>
                               )}
                               {l.mail && (
-                                <Link
-                                  href={`/dashboard/jardi?q=${encodeURIComponent(questionBrouillon(l.mail))}`}
-                                  target="_blank" rel="noopener noreferrer"
+                                <button
+                                  onClick={() => setConsignes(c => ({ ...c, [l.id]: !consigneOuverte }))}
                                   className="rounded-lg border border-sky-500/30 bg-sky-500/15 px-3 py-1 text-xs text-sky-300 transition hover:bg-sky-500/25">
-                                  ✍️ Préparer une réponse
-                                </Link>
+                                  ✍️ Préparer une réponse avec Jardi
+                                </button>
                               )}
+                              {l.url && (
+                                <a href={l.url} target="_blank" rel="noopener noreferrer"
+                                  className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1 text-xs text-zinc-300 transition hover:bg-[#40454b]">
+                                  📧 Ouvrir dans Thunderbird
+                                </a>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Direction donnée AVANT que Jardi ne réfléchisse :
+                              une réponse préparée sans consigne part souvent
+                              dans la mauvaise direction, et on la jette. */}
+                          {l.mail && consigneOuverte && (
+                            <div className="mt-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+                              <label className="block text-xs text-zinc-400" htmlFor={`dir-${l.id}`}>
+                                Une direction pour Jardi — facultatif, mais elle prime sur son interprétation du mail.
+                              </label>
+                              <textarea
+                                id={`dir-${l.id}`}
+                                value={directions[l.id] ?? ""}
+                                onChange={e => setDirections(d => ({ ...d, [l.id]: e.target.value }))}
+                                rows={2}
+                                placeholder="ex. : article en rupture jusqu'en octobre, propose le modèle gris en remplacement"
+                                className="mt-2 w-full resize-y rounded-lg border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-sky-500/40 focus:outline-none"
+                              />
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <Link
+                                  href={`/dashboard/jardi?q=${encodeURIComponent(questionBrouillon(l.mail, directions[l.id]))}`}
+                                  target="_blank" rel="noopener noreferrer"
+                                  className="rounded-lg border border-sky-500/40 bg-sky-500/20 px-3 py-1 text-xs font-medium text-sky-200 transition hover:bg-sky-500/30">
+                                  Envoyer à Jardi →
+                                </Link>
+                                <span className="text-xs text-zinc-500">
+                                  Laisse vide pour le laisser décider. Jardi propose, il ne dépose le brouillon qu&apos;après ta validation.
+                                </span>
+                              </div>
                             </div>
                           )}
                         </li>

@@ -55,6 +55,7 @@ type Ligne = {
   // les premières lignes du message, et de quoi demander un brouillon à Jardi.
   apercu?: string | null
   mail?: { boite: string; dossier: string; uid: number }
+  pour?: string[]
 }
 
 type LigneSuivi = {
