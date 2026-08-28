@@ -14,6 +14,14 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 
+// Les sections mail viennent du connecteur jardi-mail : ni le non-lu ni le
+// « répondu » ne sont dans l'index Supabase — ce sont des flags IMAP, et seul
+// ce projet-là a les mots de passe des boîtes.
+export const maxDuration = 60
+const JARDI_MAIL_URL = process.env.JARDI_MAIL_URL || "https://jardi-mail-mcp.vercel.app"
+const JARDI_MAIL_TOKEN = process.env.CLAUDE_CHAT_MCP_TOKEN
+const TIMEOUT_MAIL_MS = 30000
+
 // Règle de relance : reprise TELLE QUELLE du dashboard principal
 // (app/dashboard/page.tsx, computeStats) — offre active de 7 jours ou plus.
 const RELANCE_JOURS = 7
@@ -33,6 +41,9 @@ type Section = {
   borne: boolean
   perimetre: string
   lignes: Ligne[]
+  // Renseigné quand la section n'a PAS pu être calculée. Sans ce champ, une
+  // section mail en échec s'afficherait « à jour » en vert — un mensonge.
+  indisponible?: string | null
 }
 type Ligne = {
   id: string
@@ -121,11 +132,41 @@ function ligneSuivi(l: LigneSuivi, badge: string | null): Ligne {
   }
 }
 
+// Sections mail. Ne fait jamais échouer la page : en cas de panne du
+// connecteur (IMAP lent, jeton absent, déploiement en cours), on rend une
+// section explicitement INDISPONIBLE plutôt qu'une section vide.
+async function sectionsMail(): Promise<Section[]> {
+  const enPanne = (raison: string): Section[] => [{
+    cle: "mails_non_lus",
+    titre: "Mails à traiter",
+    compteur: 0, total: 0, borne: false,
+    perimetre: "Boîtes contact@ et info@, via le connecteur jardi-mail.",
+    lignes: [],
+    indisponible: raison,
+  }]
+
+  if (!JARDI_MAIL_TOKEN) return enPanne("jeton CLAUDE_CHAT_MCP_TOKEN absent de l'environnement")
+  try {
+    const res = await fetch(`${JARDI_MAIL_URL}/api/todo-mails`, {
+      headers: { Authorization: `Bearer ${JARDI_MAIL_TOKEN}` },
+      signal: AbortSignal.timeout(TIMEOUT_MAIL_MS),
+      cache: "no-store",
+    })
+    if (!res.ok) return enPanne(`connecteur jardi-mail : ${res.status}`)
+    const json = await res.json()
+    const recues = (json?.sections || []) as Section[]
+    return recues.length ? recues : enPanne("réponse vide du connecteur")
+  } catch (e) {
+    return enPanne(`connecteur jardi-mail injoignable (${String(e)})`)
+  }
+}
+
 export async function GET() {
   try {
     const depuis = isoIlYa(RELANCE_JOURS)
 
-    const [retards, echeances, manquantes, offres, offresTotal] = await Promise.all([
+    const [mails, retards, echeances, manquantes, offres, offresTotal] = await Promise.all([
+      sectionsMail(),
       supabaseAdmin.from("v_suivi_delais").select(COLONNES_SUIVI)
         .eq("statut", "en_cours").eq("alarme_retard", true)
         .order("jours_retard", { ascending: false }),
@@ -160,7 +201,10 @@ export async function GET() {
     const lignesOffres = (offres.data || []) as unknown as LigneOffre[]
     const totalOffres = offresTotal.count ?? lignesOffres.length
 
+    // Ordre voulu par Thierry (28.08) : le mail d'abord, c'est le gros du
+    // travail quotidien. Le reste suit par urgence.
     const sections: Section[] = [
+      ...mails,
       {
         cle: "retards",
         titre: "Retards fournisseurs",
@@ -214,7 +258,12 @@ export async function GET() {
 
     return NextResponse.json({
       genere_le: new Date().toISOString(),
-      total_a_traiter: sections.reduce((s, x) => s + x.total, 0),
+      // Le compteur du bandeau compte ce qui est RÉELLEMENT AFFICHÉ, pas les
+      // totaux : additionner les 158 offres ouvertes donnait « 228 à traiter »,
+      // un chiffre qui effraie sans rien dire de la journée. Le vrai arriéré
+      // reste lisible section par section (`total`) et ci-dessous.
+      total_a_traiter: sections.reduce((s, x) => s + x.compteur, 0),
+      total_arriere: sections.reduce((s, x) => s + x.total, 0),
       sections,
     })
   } catch (err) {

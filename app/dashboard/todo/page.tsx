@@ -27,6 +27,9 @@ type Section = {
   borne: boolean;
   perimetre: string;
   lignes: Ligne[];
+  // Renseigné quand la section n'a pas pu être calculée (connecteur mail
+  // injoignable, par exemple). On ne dit JAMAIS « à jour » dans ce cas.
+  indisponible?: string | null;
 };
 type Reponse = {
   genere_le: string;
@@ -34,7 +37,15 @@ type Reponse = {
   sections: Section[];
 };
 
+// Ouvertes d'emblée : le mail, c'est le gros du travail quotidien. Le reste
+// est replié — voir quatre listes déployées d'un coup décourage avant d'avoir
+// commencé (retour de Thierry, 28.08).
+const SECTIONS_OUVERTES = ["mails_non_lus", "sav", "formulaires"];
+
 const STYLES: Record<string, { icone: string; badge: string; accent: string }> = {
+  mails_non_lus:            { icone: "✉️", badge: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30", accent: "border-indigo-500/30" },
+  sav:                      { icone: "🛠", badge: "bg-orange-500/15 text-orange-300 border-orange-500/30", accent: "border-orange-500/30" },
+  formulaires:              { icone: "📝", badge: "bg-teal-500/15 text-teal-300 border-teal-500/30",       accent: "border-teal-500/30" },
   retards:                  { icone: "🔴", badge: "bg-rose-500/15 text-rose-300 border-rose-500/30",     accent: "border-rose-500/30" },
   echeances_proches:        { icone: "⏱",  badge: "bg-amber-500/15 text-amber-300 border-amber-500/30",  accent: "border-amber-500/25" },
   confirmations_manquantes: { icone: "❓", badge: "bg-amber-500/15 text-amber-300 border-amber-500/30",  accent: "border-amber-500/25" },
@@ -101,15 +112,16 @@ export default function TodoPage() {
 
         {/* RÉSUMÉ */}
         {sections.length > 0 && (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
             {sections.map(s => {
               const st = STYLES[s.cle] || DEFAUT;
               return (
                 <a key={s.cle} href={`#${s.cle}`}
                   className={`rounded-2xl border bg-[#2a2d31] p-4 transition hover:bg-[#31353a] ${s.compteur > 0 ? st.accent : "border-white/10"}`}>
                   <div className="text-xs uppercase tracking-wide text-zinc-500">{st.icone} {s.titre}</div>
-                  <div className={`mt-1 text-2xl font-semibold ${s.compteur > 0 ? "text-zinc-100" : "text-zinc-500"}`}>
-                    {s.borne ? `${s.compteur} / ${s.total}` : s.total}
+                  <div className={`mt-1 text-2xl font-semibold ${
+                    s.indisponible ? "text-amber-300" : s.compteur > 0 ? "text-zinc-100" : "text-zinc-500"}`}>
+                    {s.indisponible ? "?" : s.borne ? `${s.compteur} / ${s.total}` : s.total}
                   </div>
                 </a>
               );
@@ -132,7 +144,7 @@ export default function TodoPage() {
         {/* SECTIONS */}
         {sections.map(s => {
           const st = STYLES[s.cle] || DEFAUT;
-          const replie = replies[s.cle] ?? false;
+          const replie = replies[s.cle] ?? !SECTIONS_OUVERTES.includes(s.cle);
           return (
             <section key={s.cle} id={s.cle}
               className={`rounded-2xl border bg-[#2a2d31] ${s.compteur > 0 ? st.accent : "border-white/10"}`}>
@@ -143,8 +155,11 @@ export default function TodoPage() {
                   <div className="flex items-center gap-3 text-lg font-semibold">
                     <span className="text-xl">{st.icone}</span>
                     <span>{s.titre}</span>
-                    <span className={`inline-flex items-center rounded-full border px-3 py-0.5 text-xs font-bold ${s.compteur > 0 ? st.badge : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"}`}>
-                      {s.compteur === 0 ? "à jour" : s.borne ? `${s.compteur} affichées sur ${s.total}` : s.total}
+                    <span className={`inline-flex items-center rounded-full border px-3 py-0.5 text-xs font-bold ${
+                      s.indisponible ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                      : s.compteur > 0 ? st.badge
+                      : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"}`}>
+                      {s.indisponible ? "indisponible" : s.compteur === 0 ? "à jour" : s.borne ? `${s.compteur} affichées sur ${s.total}` : s.total}
                     </span>
                   </div>
                   {/* Le périmètre, toujours visible : un compteur sans son périmètre
@@ -155,8 +170,12 @@ export default function TodoPage() {
               </button>
 
               {!replie && (
-                s.lignes.length === 0 ? (
-                  <div className="px-6 pb-6 text-sm text-zinc-500">Rien à traiter ici — c'est à jour.</div>
+                s.indisponible ? (
+                  <div className="px-6 pb-6 text-sm text-amber-300/90">
+                    Section non calculée : {s.indisponible}. Ce n&apos;est PAS « rien à traiter » — on ne sait pas.
+                  </div>
+                ) : s.lignes.length === 0 ? (
+                  <div className="px-6 pb-6 text-sm text-zinc-500">Rien à traiter ici — c&apos;est à jour.</div>
                 ) : (
                   <ul className="border-t border-white/5">
                     {s.lignes.map(l => {
@@ -186,11 +205,6 @@ export default function TodoPage() {
           );
         })}
 
-        {/* Rappel : les trois sections mail arrivent ensuite (spec §2.1-2.3). */}
-        <div className="rounded-2xl border border-white/10 bg-[#2a2d31]/60 px-6 py-4 text-xs text-zinc-500">
-          À venir : mails non lus, SAV et formulaires en attente de réponse — ils passent par le
-          connecteur jardi-mail, pas par la base.
-        </div>
       </div>
     </main>
   );
