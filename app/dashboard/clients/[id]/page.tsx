@@ -544,7 +544,13 @@ function FilsMailsBlock({ clientId }: { clientId: number }) {
                               <span className="text-zinc-600">· {m.boite}{m.dossier ? ` / ${m.dossier}` : ""}</span>
                             )}
                           </div>
-                          {m.apercu && <div className="mt-1 text-sm text-zinc-300">{m.apercu}</div>}
+                          {m.apercu ? (
+                            <div className="mt-1 text-sm text-zinc-300">{m.apercu}</div>
+                          ) : (
+                            <div className="mt-1 text-sm italic text-zinc-600">
+                              (pas d&apos;aperçu disponible — ouvrir le mail dans Thunderbird)
+                            </div>
+                          )}
                           {m.thunderbird && (
                             <a href={m.thunderbird}
                               className="mt-1 inline-block text-xs text-sky-400 hover:underline">
