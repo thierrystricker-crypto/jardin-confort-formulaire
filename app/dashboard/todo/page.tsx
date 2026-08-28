@@ -325,11 +325,17 @@ export default function TodoPage() {
                               )}
                               {/* Toujours disponible, sur toutes les sections.
                                   Réversible : voir le volet « déjà traité ». */}
+                              {/* Bouton NEUTRE et libellé à l'infinitif : en vert
+                                  avec « ✓ Traité », il se lisait comme un badge
+                                  d'état (« cette ligne est traitée ») au lieu
+                                  d'une action. Le vert est réservé aux états
+                                  dans le reste du dashboard. */}
                               <button
                                 disabled={enCours === l.id}
                                 onClick={() => marquer(l.id, s.cle, l.titre, "masque")}
-                                className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-40">
-                                {enCours === l.id ? "…" : s.cle === "offres_a_relancer" ? "✓ Relancée" : "✓ Traité"}
+                                title="Retire la ligne de la liste. Réversible : volet « Déjà traité » en bas de page."
+                                className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1 text-xs text-zinc-300 transition hover:bg-[#40454b] hover:text-zinc-100 disabled:opacity-40">
+                                {enCours === l.id ? "…" : s.cle === "offres_a_relancer" ? "☑ Marquer comme relancée" : "☑ Marquer comme traité"}
                               </button>
                             </div>
 
