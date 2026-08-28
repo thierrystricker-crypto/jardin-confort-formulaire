@@ -51,6 +51,10 @@ type Ligne = {
   detail: string
   url: string | null
   badge: string | null
+  // Renseignés seulement pour les lignes MAIL (rendues par le connecteur) :
+  // les premières lignes du message, et de quoi demander un brouillon à Jardi.
+  apercu?: string | null
+  mail?: { boite: string; dossier: string; uid: number }
 }
 
 type LigneSuivi = {

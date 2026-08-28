@@ -1048,6 +1048,24 @@ export default function PageChatClaude() {
     }
   };
 
+  // Question passée dans l'adresse (?q=…) : le bouton « Préparer une réponse »
+  // de la to-do ouvre Jardi avec la demande déjà écrite, et elle part seule.
+  // Le ref garde le tir unique (StrictMode rejoue les effets en dev) et on
+  // retire ?q= de l'adresse : un rafraîchissement ne doit pas relancer la
+  // même demande.
+  const questionUrlFaite = useRef(false);
+  useEffect(() => {
+    if (questionUrlFaite.current) return;
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (!q) return;
+    questionUrlFaite.current = true;
+    const adresse = new URL(window.location.href);
+    adresse.searchParams.delete("q");
+    window.history.replaceState({}, "", adresse.toString());
+    envoyer(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const surTouche = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();

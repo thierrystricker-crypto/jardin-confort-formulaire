@@ -18,7 +18,20 @@ type Ligne = {
   detail: string;
   url: string | null;
   badge: string | null;
+  apercu?: string | null;
+  mail?: { boite: string; dossier: string; uid: number };
 };
+
+// Longueur affichée tant que la ligne n'est pas dépliée. Au-delà, le bouton
+// « ▾ plus » montre tout ce que l'index a gardé (jusqu'à 1200 caractères).
+const APERCU_COURT = 160;
+
+// Demande envoyée à Jardi par le bouton « Préparer une réponse ». Elle nomme
+// le message par sa boîte/dossier/UID et rappelle la règle : Jardi propose,
+// il ne dépose le brouillon qu'après validation. Aucun envoi n'est possible.
+function questionBrouillon(m: { boite: string; dossier: string; uid: number }) {
+  return `Prépare une proposition de réponse à ce mail : boîte ${m.boite}, dossier ${m.dossier}, UID ${m.uid}. Lis-le d'abord avec mail_lire, puis rédige la réponse selon les règles Jardi. Ne dépose le brouillon qu'après ma validation.`;
+}
 type Section = {
   cle: string;
   titre: string;
@@ -64,6 +77,7 @@ export default function TodoPage() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
   const [replies, setReplies] = useState<Record<string, boolean>>({});
+  const [deplies, setDeplies] = useState<Record<string, boolean>>({});
 
   const charger = useCallback(async () => {
     try {
@@ -179,8 +193,10 @@ export default function TodoPage() {
                 ) : (
                   <ul className="border-t border-white/5">
                     {s.lignes.map(l => {
+                      const ouvert = deplies[l.id] ?? false;
+                      const long = (l.apercu?.length ?? 0) > APERCU_COURT;
                       const contenu = (
-                        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-6 py-3">
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                           <div className="min-w-0">
                             <div className="truncate font-medium text-zinc-100">{l.titre}</div>
                             <div className="truncate text-xs text-zinc-400">{l.detail}</div>
@@ -193,8 +209,34 @@ export default function TodoPage() {
                         </div>
                       );
                       return (
-                        <li key={l.id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.03]">
-                          {l.url ? <Link href={l.url} className="block">{contenu}</Link> : contenu}
+                        <li key={l.id} className="border-b border-white/5 px-6 py-3 last:border-0 hover:bg-white/[0.03]">
+                          {l.url ? <Link href={l.url} className="block" target={l.url.startsWith("http") ? "_blank" : undefined}>{contenu}</Link> : contenu}
+
+                          {l.apercu && (
+                            <div className={`mt-2 rounded-xl bg-black/20 px-3 py-2 text-xs leading-relaxed text-zinc-400 ${ouvert ? "whitespace-pre-line" : ""}`}>
+                              {ouvert ? l.apercu : l.apercu.slice(0, APERCU_COURT) + (long ? "…" : "")}
+                            </div>
+                          )}
+
+                          {(l.mail || long) && (
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              {long && (
+                                <button
+                                  onClick={() => setDeplies(d => ({ ...d, [l.id]: !ouvert }))}
+                                  className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1 text-xs text-zinc-300 transition hover:bg-[#40454b]">
+                                  {ouvert ? "▴ moins" : "▾ plus"}
+                                </button>
+                              )}
+                              {l.mail && (
+                                <Link
+                                  href={`/dashboard/jardi?q=${encodeURIComponent(questionBrouillon(l.mail))}`}
+                                  target="_blank" rel="noopener noreferrer"
+                                  className="rounded-lg border border-sky-500/30 bg-sky-500/15 px-3 py-1 text-xs text-sky-300 transition hover:bg-sky-500/25">
+                                  ✍️ Préparer une réponse
+                                </Link>
+                              )}
+                            </div>
+                          )}
                         </li>
                       );
                     })}
