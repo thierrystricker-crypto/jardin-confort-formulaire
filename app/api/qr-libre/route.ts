@@ -404,21 +404,27 @@ export async function GET(request: NextRequest) {
         "slug, type_document, numero_affiche, statut, date_document, payment_mode, total_ttc, " +
         "client_societe, client_nom, client_prenom, client_rue, client_numero, client_npa, client_ville, data"
 
+      // NB : champs est une string composée — supabase-js ne peut pas en
+      // inférer le type de ligne (il retomberait sur GenericStringError et
+      // le build TypeScript échoue). On repasse par un cast explicite.
+      type DocRow = Record<string, unknown>
+
       // 1. Correspondance exacte sur le numéro affiché (CMD-80923, DEV-2026-748)
-      let { data: doc } = await supabaseAdmin
+      const exact = await supabaseAdmin
         .from("offres").select(champs)
         .ilike("numero_affiche", q)
         .order("created_at", { ascending: false })
         .limit(1).maybeSingle()
+      let doc = (exact.data as DocRow | null) ?? null
 
       // 2. Repli : numéro de commande ou d'offre (préférer la commande, plus récente)
       if (!doc) {
-        const res = await supabaseAdmin
+        const repli = await supabaseAdmin
           .from("offres").select(champs)
           .or(`numero_commande.ilike.%${q}%,numero_offre.ilike.%${q}%`)
           .order("created_at", { ascending: false })
           .limit(1).maybeSingle()
-        doc = res.data
+        doc = (repli.data as DocRow | null) ?? null
       }
 
       if (!doc) {
