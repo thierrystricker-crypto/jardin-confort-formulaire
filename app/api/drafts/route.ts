@@ -53,24 +53,25 @@ export async function POST(request: NextRequest) {
     const slug = makeSlug(numeroAffiche, true);      // "dra-001-x7k2m"
 
     // ─── Calcul des totaux ───
-    // Si le brouillon a au moins une ligne, on calcule normalement via computeTotals.
-    // Sinon (brouillon vide créé depuis "Nouveau"), tous les totaux sont à 0.
-    // computeTotals attend une structure data complète (lines, services, enabledServices,
-    // servicePrices, etc.) qui n'existe pas sur un brouillon vierge.
-    const hasLines = Array.isArray(data.lines) && data.lines.length > 0;
-    const totals = hasLines
-      ? computeTotals(data)
-      : {
-          subTotal: 0,
-          discountValue: 0,
-          serviceTotal: 0,
-          roundingValue: 0,
-          tvaAmount: 0,
-          finalTotal: 0,
-        };
-    const nbArticles = hasLines
-      ? data.lines.filter((l: { type: string }) => l.type !== "comment").length
-      : 0;
+    // TOUJOURS calculer via computeTotals, même sans ligne d'article : un
+    // document « services uniquement » (ex. réparation facturée en prestation,
+    // cf. CMD-80923) a un total réel alors que lines est vide. On normalise
+    // les champs que computeTotals attend, car un brouillon vierge créé
+    // depuis « Nouveau » arrive sans structure complète.
+    const safeLines = Array.isArray(data.lines) ? data.lines : [];
+    const totals = computeTotals({
+      ...data,
+      lines: safeLines,
+      enabledServices: data.enabledServices || {},
+      servicePrices: data.servicePrices || {},
+      clientType: data.clientType || "Privé (prix TTC)",
+      discount: data.discount || "0",
+      discountPercent: data.discountPercent || "0",
+      manualRounding: data.manualRounding || "",
+    });
+    const nbArticles = safeLines.filter(
+      (l: { type: string }) => l.type !== "comment"
+    ).length;
 
     // ─── Construction de la ligne à insérer ───
     const row = {

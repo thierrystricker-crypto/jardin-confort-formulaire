@@ -551,7 +551,7 @@ function copyAddress(type: "facturation" | "livraison") {
     </main>
   )
 
-  const nomComplet = [client.prenom, client.nom].filter(Boolean).join(" ") || client.societe || "—"
+  const nomComplet = [client.nom, client.prenom].filter(Boolean).join(" ") || client.societe || "—"
   const caTotal = offres.filter(o => o.type_document === "Commande" || o.statut === "Acceptée").reduce((s, o) => s + (o.total_ttc || 0), 0)
   const caWinbiz = factures.reduce((s, f) => s + (f.montant || 0), 0)
 

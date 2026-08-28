@@ -132,20 +132,23 @@ export async function PUT(
     }
 
     // ─── Calcul des totaux (même logique que POST) ───
-    const hasLines = Array.isArray(data.lines) && data.lines.length > 0;
-    const totals = hasLines
-      ? computeTotals(data)
-      : {
-          subTotal: 0,
-          discountValue: 0,
-          serviceTotal: 0,
-          roundingValue: 0,
-          tvaAmount: 0,
-          finalTotal: 0,
-        };
-    const nbArticles = hasLines
-      ? data.lines.filter((l: { type: string }) => l.type !== "comment").length
-      : 0;
+    // TOUJOURS calculer via computeTotals, même sans ligne d'article : un
+    // document « services uniquement » a un total réel alors que lines est
+    // vide (fix CMD-80923). Champs normalisés pour un brouillon incomplet.
+    const safeLines = Array.isArray(data.lines) ? data.lines : [];
+    const totals = computeTotals({
+      ...data,
+      lines: safeLines,
+      enabledServices: data.enabledServices || {},
+      servicePrices: data.servicePrices || {},
+      clientType: data.clientType || "Privé (prix TTC)",
+      discount: data.discount || "0",
+      discountPercent: data.discountPercent || "0",
+      manualRounding: data.manualRounding || "",
+    });
+    const nbArticles = safeLines.filter(
+      (l: { type: string }) => l.type !== "comment"
+    ).length;
 
     // ─── Construction de la ligne d'update ───
     // Note : on N'INCLUT PAS slug, numero_draft, numero_affiche, type_document,
