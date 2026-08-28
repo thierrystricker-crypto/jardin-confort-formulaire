@@ -21,6 +21,9 @@ export const maxDuration = 60
 const JARDI_MAIL_URL = process.env.JARDI_MAIL_URL || "https://jardi-mail-mcp.vercel.app"
 const JARDI_MAIL_TOKEN = process.env.CLAUDE_CHAT_MCP_TOKEN
 const TIMEOUT_MAIL_MS = 30000
+// Combien de lignes masquées le volet « déjà traité » montre. Le filtrage,
+// lui, porte toujours sur la totalité.
+const MASQUES_AFFICHES = 50
 
 // Règle de relance : reprise TELLE QUELLE du dashboard principal
 // (app/dashboard/page.tsx, computeStats) — offre active de 7 jours ou plus.
@@ -218,9 +221,16 @@ export async function GET() {
       .eq("action", "masque")
       .order("created_at", { ascending: false })
     const maintenant = Date.now()
-    const masques = ((masquesBruts || []) as Masque[])
+    const masquesActifs = ((masquesBruts || []) as Masque[])
       .filter(m => !m.expire_le || new Date(m.expire_le).getTime() > maintenant)
-    const cachees = new Set(masques.map(m => m.cle))
+    // TOUS les masquages actifs servent à filtrer — sinon une ligne masquée
+    // réapparaîtrait dès qu'elle sort de la fenêtre d'affichage.
+    const cachees = new Set(masquesActifs.map(m => m.cle))
+    // Mais le volet « déjà traité » n'en montre que les plus récents : un mail
+    // est masqué DÉFINITIVEMENT, donc sans cette borne le volet grossirait
+    // sans fin et la réponse avec lui.
+    const masques = masquesActifs.slice(0, MASQUES_AFFICHES)
+    const masquesTotal = masquesActifs.length
 
     const lignesRetard = (retards.data || []) as unknown as LigneSuivi[]
     const lignesEcheance = (echeances.data || []) as unknown as LigneSuivi[]
@@ -309,6 +319,7 @@ export async function GET() {
       total_arriere: sections.reduce((s, x) => s + x.total, 0),
       sections: sectionsVisibles,
       masques,
+      masques_total: masquesTotal,
     })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

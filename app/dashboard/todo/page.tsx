@@ -67,6 +67,7 @@ type Reponse = {
   total_a_traiter: number;
   sections: Section[];
   masques?: Masque[];
+  masques_total?: number;
 };
 
 // Ouvertes d'emblée : le mail, c'est le gros du travail quotidien. Le reste
@@ -381,7 +382,12 @@ export default function TodoPage() {
               onClick={() => setVoletTraites(v => !v)}
               className="flex w-full items-center justify-between px-6 py-4 text-left">
               <span className="text-sm font-medium text-zinc-300">
-                ✓ Déjà traité — {data?.masques?.length} ligne{(data?.masques?.length ?? 0) > 1 ? "s" : ""} masquée{(data?.masques?.length ?? 0) > 1 ? "s" : ""}
+                ✓ Déjà traité — {data?.masques_total ?? data?.masques?.length} ligne{(data?.masques_total ?? 0) > 1 ? "s" : ""} masquée{(data?.masques_total ?? 0) > 1 ? "s" : ""}
+                {(data?.masques_total ?? 0) > (data?.masques?.length ?? 0) && (
+                  <span className="ml-2 font-normal text-zinc-500">
+                    ({data?.masques?.length} plus récentes affichées)
+                  </span>
+                )}
               </span>
               <span className="text-zinc-500">{voletTraites ? "▾" : "▸"}</span>
             </button>
