@@ -543,6 +543,7 @@ export default function DashboardPage() {
             <div className="flex gap-3 flex-wrap">
               <Link href="/drafts/nouveau" target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-2xl bg-[#2B8AD1] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#2478b8]">+ Nouvelle offre (brouillon)</Link>
               <NotificationsButton/>
+              <Link href="/dashboard/todo" className="inline-flex items-center rounded-2xl border border-indigo-500/30 bg-indigo-500/15 px-4 py-3 text-sm text-indigo-300 transition hover:bg-indigo-500/25" title="Ce qui attend d'être traité : retards, échéances, confirmations manquantes, offres à relancer">☑️ To-do du jour</Link>
               <Link href="/dashboard/jardi" target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-2xl border border-sky-500/30 bg-sky-500/15 px-4 py-3 text-sm text-sky-300 transition hover:bg-sky-500/25">💬 Jardi</Link>
               <Link href="/dashboard/clients" className="inline-flex items-center rounded-2xl border border-white/10 bg-[#2a2d31] px-4 py-3 text-sm text-zinc-300 transition hover:bg-[#34383d]">👥 Clients</Link>
               <Link href="/dashboard/arrivages" className="inline-flex items-center rounded-2xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-300 transition hover:bg-emerald-500/20" title="Réception des marchandises par article et par quantité — scan de la fiche de travail">📦 Arrivages</Link>
