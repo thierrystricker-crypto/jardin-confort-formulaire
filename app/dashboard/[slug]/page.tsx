@@ -10,6 +10,7 @@ import StockMovementsBlock from "@/components/StockMovementsBlock";
 import AnnexesBlock from "@/components/AnnexesBlock";
 import ArrivagesBlock from "@/components/ArrivagesBlock";
 import SuiviDelaisBlock from "@/components/SuiviDelaisBlock";
+import FilsMailsCard from "@/components/FilsMailsCard";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -1899,6 +1900,14 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
             )}
             {isCommandeReelle && (
               <ArrivagesBlock boutique="magasin" numero={offre.numero_affiche} />
+            )}
+
+            {/* Fils de discussion mail du client (chantier fiche client, 29.08) */}
+            {offre.client_email && (
+              <FilsMailsCard
+                source={`/api/fils-mails?email=${encodeURIComponent(offre.client_email)}`}
+                note={`Tous les échanges mail avec ${offre.client_email} — rattachés au client, pas forcément à cette commande précisément.`}
+              />
             )}
 
             <AnnexesBlock
