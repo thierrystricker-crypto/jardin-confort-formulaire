@@ -1111,7 +1111,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 {totals.discountValue > 0 && <tr><td className="ft-pt-label">Après remise</td><td className="ft-pt-value">{formatMoney(subTotal - discountValue)}</td></tr>}
                 {activeServices.length > 0 && (
                   <>
-                    <tr><td className="ft-pt-label">Services</td><td className="ft-pt-value">{formatMoney(totals.serviceTotal)}</td></tr>
+                    <tr><td className="ft-pt-label">Services</td><td className="ft-pt-value" style={{fontSize:11, fontStyle:"italic", color:"#888"}}>inclus</td></tr>
                     {activeServices.map((srv, i) => (
                       <tr key={i}><td className="ft-pt-sub">↳ {srv.label}</td><td className="ft-pt-value" style={{fontSize:10.5}}>{srv.amount === 0 ? "Offert" : formatMoney(srv.amount)}</td></tr>
                     ))}

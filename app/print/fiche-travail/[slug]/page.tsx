@@ -1503,7 +1503,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                   <>
                     <tr>
                       <td className="pt-label">Services</td>
-                      <td className="pt-value">{formatMoney(totals.serviceTotal)}</td>
+                      <td className="pt-value" style={{fontSize:11, fontStyle:"italic", color:"#888"}}>inclus</td>
                     </tr>
                     {activeServices.map((srv, i) => (
                       <tr key={i}>
