@@ -173,6 +173,9 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [saveStatus,setSaveStatus]=useState("")
   const [saveKind,setSaveKind]=useState<"success"|"error"|"info">("info")
   const [pdfUrl,setPdfUrl]=useState<string|null>(null)
+  // Nudge « lien plutôt que PDF » (29.08.2026) : voir les boutons Pages web / Documents PDF
+  const [lienCopie,setLienCopie]=useState(false)
+  const [pdfRappel,setPdfRappel]=useState(false)
   // Chantier « PDF de commande toujours à jour » (23.08.2026)
   const [pdfSnapshotAt,setPdfSnapshotAt]=useState<string|null>(null)
   const [pdfInitialUrl,setPdfInitialUrl]=useState<string|null>(null)
@@ -1285,6 +1288,22 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                   Pages web <span className="ml-1 text-[10px] font-normal normal-case text-zinc-500">à consulter / partager</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Nudge « lien plutôt que PDF » (29.08.2026) : pour une OFFRE,
+                      la page vivante est LE bon envoi client — stock et version
+                      toujours à jour. Le PDF, photo à l'instant T, est rétrogradé
+                      en « archive » dans le groupe Documents PDF. */}
+                  {isTypeOffre && (
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(urlPrint)
+                        setLienCopie(true)
+                        window.setTimeout(() => setLienCopie(false), 2500)
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border-2 border-sky-400/70 bg-sky-500/25 px-4 py-2 text-sm font-bold text-sky-100 shadow-[0_0_14px_rgba(56,189,248,0.35)] transition hover:bg-sky-500/40"
+                      title="Copie le lien de la page de l'offre — vivante, toujours à jour, stock en temps réel. C'est ce lien qu'on envoie au client, pas un PDF.">
+                      {lienCopie ? "✓ Lien copié — collez-le dans votre mail" : "🔗 Copier le lien client"}
+                    </button>
+                  )}
                   {!isCommandeDirecte && (
                     <a href={urlPublique} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20">
@@ -1334,13 +1353,25 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                       Une offre modifiée puis rouverte montrait l'ancien PDF.
                       Même endpoint que l'ancien bouton « Générer offre PDF » ;
                       le PDF client reste généré sans badge de stock. */}
-                  <button onClick={ouvrirPdfAJour} disabled={pdfOpening}
+                  <button onClick={() => { if (isTypeOffre) setPdfRappel(true); ouvrirPdfAJour() }} disabled={pdfOpening}
                     title={isTypeOffre
-                      ? "Régénère le PDF depuis la page offre client, puis l'ouvre — toujours la version courante"
+                      ? "Régénère le PDF depuis la page offre client, puis l'ouvre. Pour l'envoi au client, préférez le lien de la page — le PDF est une photo qui périme."
                       : "Régénère le PDF depuis la page commande client, puis l'ouvre — toujours la version courante"}
-                    className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
-                    {pdfOpening ? "📄 Génération…" : isTypeOffre ? "📄 Offre PDF" : "📄 Commande PDF"}
+                    className={isTypeOffre
+                      ? "inline-flex items-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/70 transition hover:bg-emerald-500/15 disabled:opacity-50"
+                      : "inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"}>
+                    {pdfOpening ? "📄 Génération…" : isTypeOffre ? "📄 Offre PDF (archive)" : "📄 Commande PDF"}
                   </button>
+                  {pdfRappel && isTypeOffre && (
+                    <div className="flex w-full items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
+                      <span>💡 Ce PDF est une photo à l&apos;instant T. Pour le client, préférez le lien de la page — toujours à jour.</span>
+                      <button onClick={() => { navigator.clipboard.writeText(urlPrint); setLienCopie(true); window.setTimeout(() => setLienCopie(false), 2500) }}
+                        className="rounded-md border border-sky-400/40 bg-sky-500/20 px-2 py-1 font-semibold text-sky-100 hover:bg-sky-500/30">
+                        {lienCopie ? "✓ Copié" : "🔗 Copier le lien"}
+                      </button>
+                      <button onClick={() => setPdfRappel(false)} className="ml-auto text-sky-300/60 hover:text-sky-200" title="Fermer">✕</button>
+                    </div>
+                  )}
                   {/* Pour une COMMANDE : le montant et le débiteur peuvent avoir
                       changé (révision, correction) — on régénère avant d'ouvrir. */}
                   {!isTypeOffre ? (
