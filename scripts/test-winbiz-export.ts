@@ -126,13 +126,21 @@ const lignesRef53990 = REF_53990.split("\n").filter((l) => l !== "");
 
 function champs(l: string): string[] { return l.split(";"); }
 
-/** Compare deux lignes champ à champ, en exemptant les index donnés (0-based). */
+/** Compare deux lignes champ à champ sur la longueur de la RÉFÉRENCE, en
+ *  exemptant les index donnés (0-based). Depuis le 30.08, les lignes générées
+ *  sont étendues à 135 champs (134 = code du commercial, 135 = votre
+ *  référence) : l'extension doit être vide partout ailleurs. */
 function comparerLigne(nom: string, gen: string, ref: string, exemptes: number[]) {
   const g = champs(gen), r = champs(ref);
-  assert.equal(g.length, r.length, `${nom} : ${g.length} champs générés vs ${r.length} dans la référence`);
+  assert.equal(g.length, 135, `${nom} : ${g.length} champs générés au lieu de 135 (extension 134/135)`);
   for (let i = 0; i < r.length; i++) {
     if (exemptes.includes(i)) continue;
+    if (i === 4 || i === 18) continue; // champs 5 (Notre réf) et 19 (Notes) : divergences voulues du 30.08, testées à part
     assert.equal(g[i], r[i], `${nom} : champ ${i + 1} — généré « ${g[i]} » vs référence « ${r[i]} »`);
+  }
+  for (let i = r.length; i < g.length; i++) {
+    if (i === 133 || i === 134) continue; // champs 134/135
+    assert.equal(g[i], "", `${nom} : champ ${i + 1} de l'extension devrait être vide`);
   }
 }
 
@@ -187,8 +195,15 @@ ok("aucun fragment des données du client dans les champs 21–47 d'aucune ligne
 });
 
 console.log("── Test 3 : gabarits reproduits au caractère près (54063) ──");
-ok("ligne d'en-tête IDENTIQUE à la référence, au caractère près", () => {
-  assert.equal(lignesGen[0], lignesRef54063[0]);
+ok("en-tête : identique à la référence hors champ 5 (Notre réf) et champ 12 (rendu à <AUTO>)", () => {
+  const g = champs(lignesGen[0]), r = champs(lignesRef54063[0]);
+  assert.equal(g.length, r.length);
+  for (let i = 0; i < r.length; i++) {
+    if (i === 4 || i === 11 || i === 18) continue;
+    assert.equal(g[i], r[i], `en-tête champ ${i + 1}`);
+  }
+  assert.equal(g[4], "CMD-54063");  // champ 5 « Notre référence » — lettres permises (C(250))
+  assert.equal(g[11], "<AUTO>");    // champ 12 = Compte d'escompte, plus jamais les initiales
 });
 ok("ligne adresse : préfixe 1–47 identique, suffixe identique hors coordonnées", () => {
   comparerLigne("adresse", lignesGen[1], lignesRef54063[1], [I_DESC]);
@@ -197,9 +212,9 @@ ok("ligne article : identique à la référence hors n°, description, quantité
   // notre 1er article (n=2) vs le 1er article de la référence (n=4)
   comparerLigne("article", lignesGen[2], lignesRef54063[3], [I_NUM_LIGNE, I_DESC, I_QTE, I_PRIX]);
 });
-ok("ligne sous-total IDENTIQUE à la référence, au caractère près", () => {
+ok("ligne sous-total identique à la référence sur ses 129 champs (hors champ 5, extension à part)", () => {
   const genST = lignesGen.find((l) => champs(l)[I_NUM_LIGNE] === "100")!;
-  assert.equal(genST, lignesRef54063[10]);
+  comparerLigne("sous-total", genST, lignesRef54063[10]!, []);
 });
 ok("ligne rabais (n=200) : gabarit identique hors description et montant", () => {
   const genRab = lignesGen.find((l) => champs(l)[I_NUM_LIGNE] === "200")!;
@@ -218,8 +233,13 @@ console.log("── Test 4 : 53990 — rabais %, service offert, arrondi, titres
 const gen53990 = buildWinbizCsv(CMD_53990, REPLI, "20260418_171612_9638");
 assert(gen53990.ok, (gen53990 as { erreur?: string }).erreur ?? "");
 const lignes53990 = gen53990.contentUtf8.split("\n").filter((l) => l !== "");
-ok("en-tête 53990 identique à la référence au caractère près", () => {
-  assert.equal(lignes53990[0], lignesRef53990[0]);
+ok("en-tête 53990 identique à la référence hors champs 5, 12 et 19", () => {
+  const g = champs(lignes53990[0]), r = champs(lignesRef53990[0]);
+  for (let i = 0; i < r.length; i++) {
+    if (i === 4 || i === 11 || i === 18) continue;
+    assert.equal(g[i], r[i], `en-tête champ ${i + 1}`);
+  }
+  assert.equal(g[4], "CMD-53990");
 });
 ok("le rabais 10 % émet −355.8 exactement (jamais d'équilibrage −358 façon Make)", () => {
   const rab = lignes53990.find((l) => champs(l)[I_NUM_LIGNE] === "200")!;
@@ -352,6 +372,65 @@ ok("le service custom émet le libellé de servicePrices.custom_label", () => {
   const svc = r.contentUtf8.split("\n").filter((l) => l !== "").find((l) => champs(l)[I_NUM_LIGNE] === "202")!;
   assert(champs(svc)[I_DESC].includes("FORFAIT A/R DEPLACEMENT"));
   assert.equal(champs(svc)[I_PRIX], "119");
+});
+
+console.log("── Test 10 bis : champs Document 134/135 (relevés à l'import du 30.08) ──");
+ok("champ 134 = code du commercial sur toutes les lignes de contenu (MG pour Michel Gédéon)", () => {
+  for (const l of lignesGen.slice(1)) assert.equal(champs(l)[133], "MG");
+});
+ok("champ 135 = « Votre référence » de la commande", () => {
+  const data = printData({
+    reference: "REF-CLIENT-42",
+    lines: [art("shopify-1", "Table", "333", 1, 500)],
+  });
+  const r = buildWinbizCsv({ numeroCommande: "CMD-6", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
+  assert(r.ok, (r as { erreur?: string }).erreur ?? "");
+  for (const l of r.contentUtf8.split("\n").filter((x) => x !== "").slice(1)) {
+    assert.equal(champs(l)[134], "REF-CLIENT-42");
+  }
+});
+ok("champ 5 (Notre référence) = numéro CMD complet sur l'en-tête ET le préfixe des lignes", () => {
+  for (const l of lignesGen) assert.equal(champs(l)[4], "CMD-54063");
+});
+ok("vendeur inconnu → champ 134 vide + warning (jamais un code inventé)", () => {
+  const data = printData({
+    commercial: "Personne Inconnue",
+    lines: [art("shopify-1", "Table", "333", 1, 500)],
+  });
+  const r = buildWinbizCsv({ numeroCommande: "CMD-7", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
+  assert(r.ok, (r as { erreur?: string }).erreur ?? "");
+  const artLigne = r.contentUtf8.split("\n").filter((x) => x !== "").find((l) => champs(l)[48] === "1")!;
+  assert.equal(champs(artLigne)[133], "");
+  assert(r.ok && r.warnings.some((w) => w.includes("commercial laissé vide")));
+});
+
+console.log("── Test 10 ter : champ 19 Notes (remarques + notes internes, demande du 30.08) ──");
+ok("remarques et notes internes de la commande arrivent au champ 19, étiquetées", () => {
+  const data = printData({
+    remarks: "Livraison souhaitée avant Pâques",
+    lines: [art("shopify-1", "Table", "333", 1, 500)],
+  });
+  (data as unknown as Record<string, unknown>).notesInternes = "acompte de 200 payé cash au magasin";
+  const r = buildWinbizCsv({ numeroCommande: "CMD-8", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
+  assert(r.ok, (r as { erreur?: string }).erreur ?? "");
+  for (const l of r.contentUtf8.split("\n").filter((x) => x !== "")) {
+    const notes = champs(l)[18]!;
+    assert(notes.includes("Remarques: Livraison souhaitée avant Pâques"), notes);
+    assert(notes.includes("Interne: acompte de 200 payé cash au magasin"), notes);
+  }
+});
+ok("sans notes, le champ 19 reste vide ; notes trop longues → tronquées à 250 + warning", () => {
+  assert.equal(champs(lignesGen[0])[18], "");
+  const data = printData({
+    remarks: "x".repeat(300),
+    lines: [art("shopify-1", "Table", "333", 1, 500)],
+  });
+  const r = buildWinbizCsv({ numeroCommande: "CMD-9", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
+  assert(r.ok, (r as { erreur?: string }).erreur ?? "");
+  const notes = champs(r.contentUtf8.split("\n")[0]!)[18]!;
+  assert.equal(notes.length, 250);
+  assert(notes.endsWith("..."));
+  assert(r.ok && r.warnings.some((w) => w.includes("tronquées à 250")));
 });
 
 console.log("── Test 11 : centimes entiers, formats de montants ──");

@@ -223,3 +223,61 @@ Rappel chantier 2 : un déploiement doit être **postérieur** aux variables pou
    apikey [229253], en-tête x-make-apikey) ; variables Vercel posées par Thierry.
 6. Smoke test preview : CMD-80666 → fichier dans le dossier **TEST** ; puis tests d'import T1–T9
    dans WinBiz, sur documents et client de test, avant toute production
+
+---
+
+## Session 1 (suite) — 30.08.2026 : premier import RÉEL dans WinBiz, et ses retours
+
+**Le circuit complet a été validé de bout en bout** : bouton (preview) → génération → trace
+`winbiz_exports` v1 `depose` → dépôt dans `Exports_Winbiz_App_TEST` (vérifié par l'API Drive) →
+fichier contrôlé octet par octet (cp1252 réel, LF, champ 47 = 1, invariant 193.50 au centime) →
+**import dans WinBiz par Thierry, réussi**.
+
+### Ce que l'import de test a tranché (captures + PDF à l'appui)
+
+- **T1 (encodage) : cp1252 VALIDÉ** — accents parfaits dans WinBiz (« Société », « extérieur »).
+- **T3 (ligne rabais) : variante Make VALIDÉE** — Rabais 10 % à −21.59, TVA 8.10 % Incl., total et
+  TVA (14.50) justes. « Les lignes de rabais semblent très bien » (Thierry).
+- **T7 (moitié « protection ») : champ 47 = 1 VALIDÉ** — la fiche 999 s'appelle toujours
+  « Import Import », rien n'a été écrasé. Reste l'autre moitié : l'attribution sur un vrai code.
+
+### Les 4 champs vides relevés par Thierry — et la découverte au passage
+
+Recherche dans la doc officielle (champs 1–159) avant tout patch :
+
+- 🔴 **Le champ 12 n'est PAS le vendeur : c'est le « Compte d'escompte »** (doc officielle). Le guide
+  historique et le flux Make y écrivaient MG/TS **pour rien** — c'est pour ça que la colonne
+  Commercial restait vide à l'import. Le vrai champ est le **134 « Code du commercial » C(20) »**
+  (section Document, porté par les lignes).
+- **Champ 5 « Référence » C(250)** = « Notre référence » à l'écran → désormais le **numéro CMD
+  complet** (lettres permises, seule la numérotation du champ 1 est numérique).
+- **Champ 135 « Votre référence » C(250)** → la référence saisie sur la commande (`data.reference`).
+- **« Expédition » n'existe pas dans le format d'import** (champs 1–159 relevés) — limite à
+  connaître ; le champ 142 « Délai de livraison » N(4) existe si un jour on veut y mettre des jours.
+
+**Patch du module** (42 tests verts, tsc 0 erreur) : champ 5 posé sur l'en-tête ET le préfixe de
+toutes les lignes ; **lignes étendues à 135 champs** (les longueurs étaient déjà variables dans les
+fichiers validés : 88/91/99/129) avec champ 134 = initiales du vendeur (vide + warning si inconnu —
+jamais un code inventé) et champ 135 = référence ; **champ 12 rendu à `<AUTO>`** (plus jamais les
+initiales dans un champ de compte d'escompte). Les tests de gabarit comparent toujours au caractère
+près sur la longueur de la référence, en n'exemptant que le champ 5 (divergence voulue, testée à
+part) ; l'extension doit être vide hors 134/135.
+
+⚠️ **À re-vérifier au prochain import de test** (le champ 134 est un CODE de commercial WinBiz — il
+faut que TS/MG/BC… existent dans la liste des commerciaux WinBiz, sinon le champ restera vide ou
+sera refusé) : ré-importer un fichier v2 et contrôler Commercial, Notre référence, Votre référence —
+et que la fiche 999 est toujours intacte.
+
+### Compléments du 30.08 (retours de Thierry, même session)
+
+- **Notes de la commande → champ 19 « Notes » C(250)** de l'en-tête et du préfixe : `Remarques: … |
+  Interne: …` (remarques visibles client + notes internes), étiquetées, tronquées à 250 avec
+  warning. La comptable les voit dans WinBiz et peut les supprimer. À contrôler au prochain import :
+  où WinBiz les affiche, et qu'elles ne partent PAS sur la facture imprimée du client.
+- **« Expédition » : champ inexistant dans le format d'import** — re-vérifié dans la doc officielle
+  (aucun champ expédition/livraison/transport sur les 159). La liste de valeurs pré-enregistrées de
+  WinBiz (Emporté de notre magasin, Livraison par transporteur, Poste…) ne se remplit qu'à la main —
+  ou le jour de l'API. Limite actée. (Piste voisine non exploitée : champ 140 « Code de la condition
+  de paiement » — possible de mapper le paymentMode si les conditions WinBiz ont des codes connus ;
+  non fait, à décider.)
+- Suite de tests : **44 verts**.

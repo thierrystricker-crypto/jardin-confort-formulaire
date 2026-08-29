@@ -55,8 +55,11 @@ const REF_SUFFIXE_SOUS_TOTAL =
 // Index (0-based) des champs variables — DANS LE PRÉFIXE (47 champs)
 const IDX_NUMERO = 0;        // champ 1
 const IDX_DATE = 2;          // champ 3
+const IDX_REFERENCE = 4;     // champ 5 « Référence » C(250) → « Notre référence » à l'écran
+                             // (relevé doc officielle + import de test du 30.08)
 const IDX_TOTAL = 5;         // champ 6
-const IDX_VENDEUR = 11;      // champ 12 (ligne d'en-tête uniquement)
+const IDX_NOTES = 18;        // champ 19 « Notes » C(250) — remarques + notes internes de la
+                             // commande, supprimables à la main dans WinBiz (demande du 30.08)
 const IDX_CODE_CLIENT = 19;  // champ 20
 const IDX_ADR_SOCIETE = 21;  // champ 22  ┐
 const IDX_ADR_NOM = 22;      // champ 23  │ champs d'adresse 22–28 :
@@ -77,6 +80,14 @@ const SFX_DATE = 5;          // champ 52
 const SFX_QTE = 6;           // champ 53
 const SFX_PRIX = 7;          // champ 54
 const SFX_TVA_INCLUSE = 15;  // champ 62 : 1 = TTC incluse, 2 = HT exclue
+
+// Champs de la section « Document » de la doc officielle, portés par les
+// LIGNES (au-delà des gabarits Make, qui s'arrêtaient à 99/129 champs) :
+// relevés le 30.08 après l'import de test — le guide historique mettait le
+// vendeur au champ 12, qui est en réalité le « Compte d'escompte ».
+const CHAMP_COMMERCIAL = 134;   // « Code du commercial » C(20)
+const CHAMP_VOTRE_REF = 135;    // « Votre référence » C(250)
+const LONGUEUR_LIGNE_ETENDUE = 135;
 
 // ── Vendeurs : nom complet → initiales Winbiz ──
 // Table héritée du flux Make + arbitrage Thierry 29.08 (Brice → BC).
@@ -331,13 +342,36 @@ export function buildWinbizCsv(
     };
   }
 
-  // 3. Vendeur ────────────────────────────────────────────────────────────
+  // 3. Vendeur → champ 134 « Code du commercial » (doc officielle, relevée le
+  // 30.08 après l'import de test : le guide historique le mettait au champ 12,
+  // qui est en réalité le « Compte d'escompte » — d'où la colonne Commercial
+  // restée vide à l'import).
   const cleVendeur = (d.commercial || "")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().trim();
-  const vendeur = VENDEURS[cleVendeur] ?? "<AUTO>";
-  if (vendeur === "<AUTO>" && (d.commercial || "").trim() !== "") {
-    warnings.push(`Vendeur « ${d.commercial} » inconnu de la table d'initiales — émis en <AUTO>.`);
+  const vendeur = VENDEURS[cleVendeur] ?? "";
+  if (vendeur === "" && (d.commercial || "").trim() !== "") {
+    warnings.push(`Vendeur « ${d.commercial} » inconnu de la table d'initiales — champ commercial laissé vide.`);
+  }
+
+  // « Notre référence » (champ 5) = le numéro CMD complet, lettres permises
+  // (champ C(250)) ; « Votre référence » (champ 135) = la référence saisie
+  // sur la commande. Demandes de Thierry du 30.08 après l'import de test.
+  const notreRef = champSain(cmd.numeroCommande || "").texte;
+  const votreRef = champSain(d.reference || "").texte;
+
+  // Champ 19 « Notes » C(250) : remarques (visibles client) + notes internes
+  // de la commande — la comptable les voit dans WinBiz et peut les supprimer.
+  const notesInternes = typeof (d as Record<string, unknown>).notesInternes === "string"
+    ? ((d as Record<string, unknown>).notesInternes as string) : "";
+  const notesParts = [
+    (d.remarks || "").trim() ? `Remarques: ${d.remarks.trim()}` : "",
+    notesInternes.trim() ? `Interne: ${notesInternes.trim()}` : "",
+  ].filter(Boolean);
+  let notesDoc = champSain(notesParts.join(" | ")).texte;
+  if (notesDoc.length > 250) {
+    notesDoc = notesDoc.slice(0, 247) + "...";
+    warnings.push("Notes de la commande tronquées à 250 caractères (limite du champ 19 WinBiz).");
   }
 
   // 4. Préfixe commun (champs 1–47) ───────────────────────────────────────
@@ -354,6 +388,8 @@ export function buildWinbizCsv(
   prefixe[IDX_ADR_NPA] = adr.npa;
   prefixe[IDX_ADR_VILLE] = adr.ville;
   prefixe[IDX_MAJ_ADRESSE] = "1"; // ← le verrou. Ne JAMAIS laisser vide (défaut 0 = écrasement).
+  prefixe[IDX_REFERENCE] = notreRef; // champ 5 « Notre référence » = CMD-XXXXX
+  prefixe[IDX_NOTES] = notesDoc;
   prefixe[IDX_TOTAL] = fmtMontant(cts(totals.totalAfterRounding)); // total connu dès ici
 
   // 5. Les lignes de contenu, en centimes entiers ─────────────────────────
@@ -506,11 +542,28 @@ export function buildWinbizCsv(
   const entete = REF_ENTETE.split(";");
   entete[IDX_NUMERO] = numeroWinbiz;
   entete[IDX_DATE] = date;
+  entete[IDX_REFERENCE] = notreRef;
+  entete[IDX_NOTES] = notesDoc;
   entete[IDX_TOTAL] = fmtMontant(totalRefCts);
-  entete[IDX_VENDEUR] = vendeur;
+  // champ 12 = « Compte d'escompte » (doc officielle) — le gabarit Make y
+  // écrivait les initiales du vendeur, sans effet. Rendu à <AUTO> ; le vendeur
+  // part au champ 134 de chaque ligne.
+  entete[11] = "<AUTO>";
   entete[IDX_CODE_CLIENT] = codeClient;
 
-  const contenu = [entete.join(";"), ...lignes.map((l) => l.texte)].join("\n") + "\n\n";
+  // Extension des lignes aux champs « Document » 134 (code du commercial) et
+  // 135 (votre référence) — au-delà des gabarits Make, qui s'arrêtaient à
+  // 99/129 champs. Les longueurs de ligne étant variables dans les fichiers
+  // validés (88/91/99/129), l'extension est sûre ; vérifiée à l'import du 30.08.
+  const etendre = (texte: string): string => {
+    const f = texte.split(";");
+    while (f.length < LONGUEUR_LIGNE_ETENDUE) f.push("");
+    f[CHAMP_COMMERCIAL - 1] = vendeur;
+    f[CHAMP_VOTRE_REF - 1] = votreRef;
+    return f.join(";");
+  };
+
+  const contenu = [entete.join(";"), ...lignes.map((l) => etendre(l.texte))].join("\n") + "\n\n";
   // ↑ LF + ligne vide finale : relevé sur les fichiers réellement importés
   // (le cadrage v2 disait CRLF — les fichiers de référence sont en LF).
 
