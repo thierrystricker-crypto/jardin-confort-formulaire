@@ -218,11 +218,10 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         if (res.ok) {
           const json = await res.json()
           const url = (json.offre as Record<string,unknown>)?.pdf_url as string|null
-          if (url) { setPdfUrl(frais(url)); setPdfGenerating(false); return }
+          if (url) { setPdfUrl(frais(url)); return }
         }
       } catch { /* ignore */ }
     }
-    setPdfGenerating(false)
   }
 
   useEffect(()=>{
@@ -241,7 +240,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
         if (existingPdfUrl) {
           setPdfUrl(frais(existingPdfUrl))
         } else {
-          setPdfGenerating(true)
           pollPdf(s)
         }
         setPdfSnapshotAt(((o as unknown as Record<string,unknown>).pdf_snapshot_at as string|null) || null)
