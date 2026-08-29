@@ -111,6 +111,7 @@ type ResultItem = {
   image2: string;
   image3: string;
   delaiLivraison: string; // ← délai basé sur les tags
+  orderUnit: number | null; // ← vente par multiple de N pièces (tag produit orderunitN)
 };
 
 let cachedAdminToken: string | null = null;
@@ -278,6 +279,24 @@ function getDelaiFromTags(tags: string[]): string {
   return '';
 }
 
+// ── Décoder le tag orderunitN (vente par multiple) ──
+// Côté webshop, une app bloque la vente à la pièce des produits taggés
+// orderunit2 / orderunit4 / orderunit6 / orderunit8 (tag PRODUIT, minuscules,
+// relevé sur la boutique le 29.08.2026). On relaie le nombre tel quel : c'est
+// le formulaire qui applique la règle (qté par pas de N, phrase client).
+// Null = aucune contrainte. Le pattern accepte tout N à 1–2 chiffres ≥ 2 pour
+// couvrir un futur orderunit3 ou orderunit10 sans retouche ici.
+function getOrderUnitFromTags(tags: string[]): number | null {
+  for (const tag of tags) {
+    const m = /^orderunit(\d{1,2})$/.exec(tag.trim().toLowerCase());
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n >= 2) return n;
+    }
+  }
+  return null;
+}
+
 // Métachamp de VARIANTE "fournisseur.delai_semaines" ("2-3", "10-12"…) : le délai
 // client FINAL, acheminement compris, sans mot d'unité (boutique trilingue).
 // Il PRIME sur les tags depuis la publication du thème le 23.08.2026.
@@ -298,6 +317,7 @@ function buildStorefrontItems(products: ShopifyProduct[], words: string[]): Resu
     const productImages = product.images?.nodes ?? [];
     const variants = product.variants?.nodes ?? [];
     const delaiLivraison = getDelaiFromTags(product.tags ?? []);
+    const orderUnit = getOrderUnitFromTags(product.tags ?? []);
 
     return variants
       .filter((variant) => {
@@ -327,6 +347,7 @@ function buildStorefrontItems(products: ShopifyProduct[], words: string[]): Resu
           image2: productImages[2]?.url || '',
           image3: productImages[3]?.url || '',
           delaiLivraison,
+          orderUnit,
         };
       });
   });

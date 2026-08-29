@@ -47,6 +47,7 @@ type QuoteLine = {
   stock?: number | "sur_commande" | null;
   lineDiscount?: number;
   delaiLivraison?: string;
+  orderUnit?: number;   // vente par multiple de N pièces (tag orderunitN), posé à l'ajout de la ligne
 };
 
 type OffreRow = {
@@ -987,6 +988,9 @@ useEffect(() => {
                         <td style={{ padding: "12px 8px", verticalAlign: "middle" }}>
                           <div style={{ fontWeight: 600, color: C.text, fontSize: 15 }}>{line.title}</div>
                           {line.sku && <div style={{ fontSize: 13, color: C.grey, marginTop: 1 }}>Réf. {line.sku}</div>}
+                          {(line.orderUnit || 0) > 1 && (
+                            <div style={{ fontSize: 12, color: C.grey, marginTop: 2, fontStyle: "italic" }}>Cet article se vend par multiple de {line.orderUnit} pièces dans la même couleur</div>
+                          )}
                           {(line.lineDiscount || 0) > 0 && (() => {
                             const lineSubtotal = line.qty * line.unitPrice;
                             const pct = lineSubtotal > 0 ? (line.lineDiscount! / lineSubtotal) * 100 : 0;

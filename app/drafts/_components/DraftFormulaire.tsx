@@ -31,6 +31,7 @@ type ShopifyItem = {
   image2: string;
   image3: string;
   delaiLivraison?: string;
+  orderUnit?: number | null;
 };
 
 // Badge de stock du picker (P1-47).
@@ -65,6 +66,7 @@ type QuoteLine = {
   shopifyLocked?: boolean;
   shopifyVariantId?: string;      // gid variante Shopify — matching stock fiable (SKU non unique)
   delaiLivraison?: string;        // « 2–3 semaines » — écrit par refreshStock, figé J0 sur une commande
+  orderUnit?: number;             // vente par multiple de N pièces (tag orderunitN) — mémorisé à l'ajout, jamais relu
   // ── Lignes média uniquement ──
   mediaUrl?: string;
   mediaSize?: "small" | "medium" | "large";
@@ -668,6 +670,8 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
     const price = parseFloat(item.price) || 0
     const compareAt = item.compareAtPrice ? parseFloat(item.compareAtPrice) : 0
     const hasPromo = compareAt > price
+    // Vente par multiple (tag orderunitN) : la ligne démarre à N, pas à 1.
+    const orderUnit = item.orderUnit && item.orderUnit > 1 ? item.orderUnit : undefined
     setLines((c) => [...c, {
       id,
       type: "product",
@@ -676,13 +680,14 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
       sku: item.sku,
       title: item.variant,
       unitPrice: hasPromo ? compareAt : price,
-      qty: 1,
+      qty: orderUnit ?? 1,
       stock: stockVal,
       lineDiscount: hasPromo ? Math.round((compareAt - price) * 100) / 100 : 0,
       lineDiscountPerUnit: hasPromo ? Math.round((compareAt - price) * 100) / 100 : 0,
       shopifyLocked: true,
       inventoryPolicy: item.inventoryPolicy === "DENY" ? "DENY" : "CONTINUE",
       delaiLivraison: item.delaiLivraison || undefined,
+      orderUnit,
     }]);
     highlightAdded(id);
     setFlashProductId(item.id);
@@ -2255,6 +2260,9 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                               && item.delaiLivraison && item.delaiLivraison !== "Sur commande" && (
                               <div className="jc-shopify-delai">Sur commande ✓ Délai {item.delaiLivraison}</div>
                             )}
+                            {item.orderUnit && item.orderUnit > 1 ? (
+                              <div className="jc-shopify-orderunit">Vente par {item.orderUnit} pièces (même couleur)</div>
+                            ) : null}
                           </div>
 
                           {/* Bouton ajouter */}
@@ -2510,7 +2518,19 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                                 return;
                               }
                               updateLine(line.id, { qty: raw });
+                            }} onBlur={(e) => {
+                              // Vente par multiple (tag orderunitN) : on laisse taper librement,
+                              // puis on arrondit au multiple SUPÉRIEUR quand le champ est quitté.
+                              const u = line.orderUnit && line.orderUnit > 1 ? line.orderUnit : 0;
+                              if (!u) return;
+                              const raw = Math.max(1, parseInt(e.target.value || "1", 10));
+                              const rounded = Math.ceil(raw / u) * u;
+                              const cap = revisionMode && inheritedQty.has(line.id) ? (inheritedQty.get(line.id) as number) : Infinity;
+                              if (rounded !== raw) updateLine(line.id, { qty: Math.min(rounded, cap) });
                             }} onFocus={(e) => e.currentTarget.select()} />
+                            {line.orderUnit && line.orderUnit > 1 ? (
+                              <div className="jc-qty-orderunit">par {line.orderUnit}</div>
+                            ) : null}
                           </td>
                           <td style={{ paddingLeft: 12 }}>
                             <input
@@ -2538,6 +2558,9 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                               readOnly={isLocked}
                               title={isLocked ? "🔒 Titre Shopify verrouillé — utilisez « Dupliquer comme modèle »" : undefined}
                             />
+                            {line.orderUnit && line.orderUnit > 1 ? (
+                              <div className="jc-line-orderunit">Cet article se vend par multiple de {line.orderUnit} pièces dans la même couleur</div>
+                            ) : null}
                           </td>
                           <td>
                             <div className="jc-price-cell">
@@ -2964,6 +2987,9 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                                   && item.delaiLivraison && item.delaiLivraison !== "Sur commande" && (
                                   <div style={{ fontSize: 10, opacity: 0.72, marginTop: 2 }}>{item.delaiLivraison}</div>
                                 )}
+                                {item.orderUnit && item.orderUnit > 1 ? (
+                                  <div style={{ fontSize: 10, fontWeight: 600, color: "#3b82f6", marginTop: 2 }}>Vente par {item.orderUnit} pièces (même couleur)</div>
+                                ) : null}
                               </div>
                               <button onClick={(e) => { e.stopPropagation(); addShopifyItem(item); }}
                                 style={{ flexShrink: 0, background: "var(--accent)", color: "white", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 18, cursor: "pointer" }}>+</button>
@@ -3849,6 +3875,15 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
           border-radius: 4px;
           padding: 3px 6px;
         }
+        .jc-shopify-orderunit {
+          margin-top: 4px;
+          font-size: 11px; font-weight: 700;
+          color: #3b82f6;
+          background: rgba(59,130,246,0.10);
+          border: 1px solid rgba(59,130,246,0.25);
+          border-radius: 4px;
+          padding: 3px 6px;
+        }
 
         /* Adresse livraison */
         .jc-livr-toggle { padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: rgba(255,255,255,0.02); }
@@ -3894,6 +3929,14 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
         .jc-line-delai {
           color: var(--text-muted); font-size: 10px; line-height: 1.25;
           margin-top: 3px; white-space: normal; word-break: normal;
+        }
+        .jc-line-orderunit {
+          color: var(--text-muted); font-size: 10px; line-height: 1.3;
+          margin-top: 3px; white-space: normal; font-style: italic;
+        }
+        .jc-qty-orderunit {
+          color: var(--text-muted); font-size: 9px; text-align: center;
+          margin-top: 2px; white-space: nowrap;
         }
         .jc-critical-wrap { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
         .jc-critical-badge {

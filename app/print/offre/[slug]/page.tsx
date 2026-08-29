@@ -209,6 +209,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         .td-total { text-align: right; vertical-align: middle; white-space: nowrap; font-weight: 700; color: ${BLACK}; }
         .item-title { font-weight: 700; color: ${BLACK}; line-height: 1.35; }
         .item-sku { font-size: 11px; color: #777; margin-top: 2px; font-weight: 400; }
+        .item-orderunit { font-size: 10.5px; color: #777; font-style: italic; margin-top: 2px; }
         .item-discount { font-size: 11px; color: #2a8a2a; margin-top: 3px; }
         .tr-comment td { background: #eef4fb !important; }
         .td-comment { padding: 6px 10px !important; font-style: italic; color: #445 !important; font-size: 12px; }
@@ -451,6 +452,9 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                   <td className="td-desc">
                     <div className="item-title">{line.title}</div>
                     {line.sku && <div className="item-sku">{line.sku}</div>}
+                    {(line.orderUnit || 0) > 1 && (
+                      <div className="item-orderunit">Cet article se vend par multiple de {line.orderUnit} pièces dans la même couleur</div>
+                    )}
                     {(line.lineDiscount || 0) > 0 && (() => {
                       const lineSubtotal = line.qty * line.unitPrice;
                       const pct = lineSubtotal > 0 ? (line.lineDiscount! / lineSubtotal) * 100 : 0;
