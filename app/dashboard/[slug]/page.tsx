@@ -1793,7 +1793,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                 <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
                   <h2 className="text-xl font-semibold flex items-center gap-2">
                     Aperçu offre
-                    <span className="text-xs font-normal text-emerald-300/70 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5" title="Le stock est rechargé à chaque ouverture, contrairement au PDF figé">
+                    <span className="text-xs font-normal text-emerald-300/70 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5" title="Le stock est rechargé à chaque ouverture de la page — le PDF, lui, est une photo à l'instant de sa génération">
                       🔄 Stock dynamique
                     </span>
                   </h2>
@@ -1817,13 +1817,15 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                       title="Ouvrir la page en plein écran">
                       ⛶ Plein écran
                     </a>
-                    {pdfUrl && (
-                      <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
-                        className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/20"
-                        title="Télécharger le PDF figé">
-                        📄 PDF
-                      </a>
-                    )}
+                    {/* Même régénération que le bouton « Offre PDF (archive) » :
+                        l'ancien lien ouvrait le fichier Storage tel quel, avec un
+                        libellé « figé » trompeur — un PDF d'offre n'est pas une
+                        preuve, c'est une photo qui périme (29.08.2026). */}
+                    <button onClick={ouvrirPdfAJour} disabled={pdfOpening}
+                      className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+                      title="Régénère le PDF depuis la page offre, puis l'ouvre — toujours la version courante">
+                      {pdfOpening ? "📄 Génération…" : "📄 PDF"}
+                    </button>
                   </div>
                 </div>
                 <div className="overflow-hidden rounded-2xl border border-white/10 bg-white">
