@@ -447,10 +447,33 @@ export function buildWinbizCsv(
     });
   }
 
+  // 5a bis. Ligne texte « Conseiller / Expédition » (demandes du 30.08) : le
+  // champ 134 « Code du commercial » reste émis, mais il suppose des codes de
+  // commerciaux définis dans WinBiz — ils ne le sont pas (le flux Make n'y
+  // arrivait pas non plus) ; et le format d'import n'a AUCUN champ Expédition.
+  // Les deux partent donc en texte libre, juste sous la ligne d'adresse, sur
+  // le même gabarit nu (sans champs TVA).
+  const deliveryMode = typeof (d as Record<string, unknown>).deliveryMode === "string"
+    ? ((d as Record<string, unknown>).deliveryMode as string).trim() : "";
+  const infosDoc = [
+    (d.commercial || "").trim() ? `Conseiller: ${d.commercial.trim()}${vendeur ? ` (${vendeur})` : ""}` : "",
+    deliveryMode ? `Expédition: ${deliveryMode}` : "",
+  ].filter(Boolean);
+  let n = 2;
+  if (infosDoc.length > 0) {
+    lignes.push({
+      texte: ligneDepuisGabarit(prefixe, REF_SUFFIXE_ADRESSE, {
+        [SFX_NUM]: String(n),
+        [SFX_DESC]: champSain(infosDoc.join(" | ")).texte,
+      }),
+      montantCts: 0,
+    });
+    n++;
+  }
+
   // 5b. Articles et commentaires, dans l'ordre du document. Les lignes media
   // sont exclues (comme du sous-total) ; les lignes comment deviennent des
   // lignes texte type 2.
-  let n = 2;
   for (const l of d.lines as QuoteLine[]) {
     if (l.type === "media") continue;
     if (n >= 100) {

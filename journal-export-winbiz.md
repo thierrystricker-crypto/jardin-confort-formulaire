@@ -281,3 +281,19 @@ et que la fiche 999 est toujours intacte.
   de paiement » — possible de mapper le paymentMode si les conditions WinBiz ont des codes connus ;
   non fait, à décider.)
 - Suite de tests : **44 verts**.
+
+### Import v2 (30.08) : Notre référence ✓ — Commercial toujours vide → ligne texte
+
+L'import v2 a confirmé **Notre référence** (champ 5 ✓). Le **Commercial reste vide** : le champ 134
+attend des codes de commerciaux définis dans WinBiz, qui n'existent pas — et Thierry se souvient que
+**le flux Make n'y arrivait pas non plus**. Solution retenue (proposée par Thierry) : le conseiller
+part AUSSI en **ligne texte libre n° 2, juste sous la ligne d'adresse** — « Conseiller: Michel
+Gédéon (MG) » — sur le gabarit texte nu (sans champs TVA). Le champ 134 reste émis : il s'activera
+tout seul si des codes de commerciaux sont un jour créés dans WinBiz.
+« Expédition » : définitivement acté comme absent du format d'import — **le mode de livraison de la
+commande (`deliveryMode`) part sur la même ligne texte** : « Conseiller: … (TS) | Expédition:
+Livraison à domicile ».
+**Adresse de facturation confirmée comme seule source** (PS de Thierry du 30.08) : c'était déjà le
+cas par construction — les champs racine du document SONT la facturation, les champs `livr*` ne sont
+jamais lus — désormais verrouillé par un test dédié (aucun fragment de l'adresse de livraison ne
+peut apparaître dans le fichier). **46 tests verts.**

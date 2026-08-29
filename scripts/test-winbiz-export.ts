@@ -208,9 +208,23 @@ ok("en-tête : identique à la référence hors champ 5 (Notre réf) et champ 12
 ok("ligne adresse : préfixe 1–47 identique, suffixe identique hors coordonnées", () => {
   comparerLigne("adresse", lignesGen[1], lignesRef54063[1], [I_DESC]);
 });
+ok("ligne Conseiller/Expédition : texte libre type 2 juste sous l'adresse (demandes du 30.08)", () => {
+  const f = champs(lignesGen[2]);
+  assert.equal(f[47], "2");   // n = 2, juste après la ligne adresse
+  assert.equal(f[48], "2");   // type texte
+  assert.equal(f[I_DESC], "Conseiller: Michel Gédéon (MG)");
+  // avec un mode de livraison, l'expédition s'ajoute sur la même ligne
+  const data = printData({ lines: [art("shopify-1", "Table", "333", 1, 500)] });
+  (data as unknown as Record<string, unknown>).deliveryMode = "Livraison à domicile";
+  const r = buildWinbizCsv({ numeroCommande: "CMD-10", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
+  assert(r.ok, (r as { erreur?: string }).erreur ?? "");
+  const ligne2 = r.contentUtf8.split("\n").filter((x) => x !== "")[2]!;
+  assert.equal(champs(ligne2)[I_DESC], "Conseiller: Michel Gédéon (MG) | Expédition: Livraison à domicile");
+});
 ok("ligne article : identique à la référence hors n°, description, quantité, prix", () => {
-  // notre 1er article (n=2) vs le 1er article de la référence (n=4)
-  comparerLigne("article", lignesGen[2], lignesRef54063[3], [I_NUM_LIGNE, I_DESC, I_QTE, I_PRIX]);
+  // notre 1er article vs le 1er article de la référence (n=4)
+  const premierArticle = lignesGen.find((l) => champs(l)[48] === "1")!;
+  comparerLigne("article", premierArticle, lignesRef54063[3], [I_NUM_LIGNE, I_DESC, I_QTE, I_PRIX]);
 });
 ok("ligne sous-total identique à la référence sur ses 129 champs (hors champ 5, extension à part)", () => {
   const genST = lignesGen.find((l) => champs(l)[I_NUM_LIGNE] === "100")!;
@@ -431,6 +445,32 @@ ok("sans notes, le champ 19 reste vide ; notes trop longues → tronquées à 25
   assert.equal(notes.length, 250);
   assert(notes.endsWith("..."));
   assert(r.ok && r.warnings.some((w) => w.includes("tronquées à 250")));
+});
+
+console.log("── Test 10 quater : adresse de FACTURATION, jamais celle de livraison (PS du 30.08) ──");
+ok("livraison différente → le fichier porte l'adresse de facturation, rien de la livraison", () => {
+  const data = printData({
+    nom: "FACTURE", prenom: "Client", rue: "Rue de la Facturation", numero: "10",
+    npa: "1095", ville: "Lutry",
+    livrDiff: true,
+    livrNom: "CHANTIER", livrPrenom: "Livraison", livrRue: "Route du Chantier",
+    livrNumero: "99", livrNpa: "1400", livrVille: "Yverdon",
+    lines: [art("shopify-1", "Table", "333", 1, 500)],
+  });
+  const r = buildWinbizCsv(
+    { numeroCommande: "CMD-11", dateDocument: "2026-08-30", totalTtcColonne: 500, data },
+    { type: "code", code: "777", source: "nom_prenom_npa", libelle: "test" },
+    RUN_ID
+  );
+  assert(r.ok, (r as { erreur?: string }).erreur ?? "");
+  const contenu = r.contentUtf8;
+  const adr = champs(contenu.split("\n").filter((x) => x !== "")[1]!);
+  assert.equal(adr[22], '"FACTURE"');
+  assert.equal(adr[24], '"Rue de la Facturation 10"');
+  assert.equal(adr[26], '"1095"');
+  for (const frag of ["CHANTIER", "Chantier", "Yverdon", "1400"]) {
+    assert(!contenu.includes(frag), `fragment de l'adresse de livraison dans le fichier : ${frag}`);
+  }
 });
 
 console.log("── Test 11 : centimes entiers, formats de montants ──");
