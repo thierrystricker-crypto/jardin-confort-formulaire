@@ -155,12 +155,71 @@ montent (payload mesuré : **0,83 Mo**).
 Python indépendant du matin. Typecheck `tsc --noEmit` strict : **0 erreur** (routes et page comprises,
 types Next/React 16.2.3 / 19.2.4).
 
+### Smoke test étape 3 — fait le 29.08 au soir
+
+Upload du fichier réel depuis la preview : aperçu conforme (8 664 → 6 837, codes 35/1000 signalés),
+chargement OK, **contre-vérifié en base** : 6 837 fiches exercice 2026, fiche témoin 1003 propre
+(espace de tête retiré, accents intacts — 661 villes accentuées), zéro fiche sans code, zéro 35/1000.
+
+📌 **Précision de Thierry (29.08 au soir) : l'export Winbiz contient TOUTES les adresses, pas
+seulement celles du dernier exercice — il ne peut pas être filtré par exercice.** Conséquence : le
+champ « exercice » de l'écran n'est pas un filtre mais une **étiquette de fraîcheur** (l'exercice
+ouvert dans Winbiz au moment de l'export) — ce que l'écran disait déjà. Charger tout est voulu (plus
+de fiches matchables). Question dérivée pour **T7** : si l'export porte un code global par fiche, la
+contrainte « codes par exercice » est peut-être plus douce que le cadrage le supposait.
+
+---
+
+## Session 1 (suite) — 29.08.2026 : étape 4, la route d'export et le dépôt Drive
+
+**`app/api/offres/[slug]/export-winbiz/route.ts`** (typecheck strict 0 erreur) :
+
+- **GET** = l'état pour le bouton, à blanc : attribution prévue (« sera attribuée à {code} {nom} » /
+  « partira sur le client 999 ({raison}) »), fraîcheur du fichier clients, exports passés, drapeau
+  « révisée OU corrigée depuis le dernier export » (arbitrage du 29.08 — les deux comptent),
+  `webhook_configure`. Aucune écriture.
+- **POST** = génération (module pur, invariant bloquant) → **trace d'abord** (`winbiz_exports`,
+  `version = max+1`, l'UNIQUE ferme la course entre deux clics) → dépôt webhook → statut
+  `genere → depose | erreur` avec l'erreur consignée. **Statut de réponse du webhook LU** (un 401 ne
+  lève pas d'exception — leçon du chantier 2). `sha256` du contenu cp1252 dans `contenu_hash`.
+- **Fichier clients d'un autre exercice que la commande → repli 999 « sans fichier »**, jamais de
+  match sur un fichier périmé (le pire des modes de panne, cadrage §6.2.4). Fraîcheur > 30 jours →
+  avertissement non bloquant.
+- **Preview → dossier de TEST** : le payload part avec `test: true` dès que `VERCEL_ENV ≠ production`.
+  Impossible de déposer un fichier de test dans le dossier de production depuis une preview.
+
+**Côté Make et Drive (créés par le connecteur, le 29.08)** :
+
+- Dossiers Drive **`Exports_Winbiz_App`** (prod) et **`Exports_Winbiz_App_TEST`**, neufs, à la racine
+  du Drive `direction@`. ⚠️ Relevé au passage dans le blueprint de référence : le flux Make
+  historique déposait ses bizexdoc **dans `Factures_winbiz`** — le dossier du flux inverse. Le
+  dossier dédié n'était pas un luxe.
+- Webhook **« JC - Depot Winbiz »** (id 3629839, `gateway-webhook`) — **sans clé API à la création**
+  (l'API Make ne crée pas de clés) : ⚠️ **à fermer par Thierry dans l'interface Make avant le premier
+  test** — Webhooks → JC - Depot Winbiz → API key auth, créer une clé NEUVE (jamais celle de la
+  validation d'offre), en-tête `x-make-apikey`.
+- Scénario **« JC - Depot Winbiz (app -> Drive) »** (id 7153710, **actif**) : webhook → routeur →
+  2 dépôts Drive. Sécurité dans le bon sens : **seul un `test: false` explicite va en production**,
+  tout le reste (test true, champ absent, valeur inattendue) part dans le dossier TEST.
+
+**Variables Vercel à créer (Production + Preview + Development)** : `WINBIZ_DRIVE_WEBHOOK_URL` (l'URL
+du webhook, visible dans Make) et `WINBIZ_DRIVE_API_KEY` (la valeur de la clé créée ci-dessus).
+Rappel chantier 2 : un déploiement doit être **postérieur** aux variables pour les voir.
+
 ### Prochaines étapes
 
 1. ✅ ~~lib pur + tests (38)~~
 2. ✅ ~~Migrations SQL Editor + contrôle~~
-3. ✅ ~~Upload fichier clients + matcher (19 tests)~~ — smoke test preview à faire au premier upload réel
-4. Route `POST /api/offres/[slug]/export-winbiz` + webhook Make « Dépôt Winbiz »
-   (`WINBIZ_DRIVE_WEBHOOK_URL` + `WINBIZ_DRIVE_API_KEY`, dossier « Exports_Winbiz_App », test distinct)
-5. Le bouton (3 états, révisions + corrections, attribution affichée avant confirmation)
-6. Tests d'import T1–T9 dans WinBiz, sur documents et client de test, avant toute production
+3. ✅ ~~Upload fichier clients + matcher (19 tests) + smoke test réel~~
+4. ✅ ~~Route export + scénario Make + dossiers Drive~~ — reste la clé webhook + les 2 variables
+   Vercel (Thierry), puis smoke test preview sur CMD-80666 (dossier TEST)
+5. ✅ ~~Le bouton~~ — `components/ExportWinbizBlock.tsx` (composant autonome, patron
+   RevisionsHistoryBlock) + **2 lignes additives** dans `app/dashboard/[slug]/page.tsx` (import +
+   insertion, ancres uniques vérifiées, diff contrôlé — le garde-fou auto-save du dépôt n'est pas
+   dans ce fichier, rien d'autre n'a bougé). Les 3 états du cadrage §7.7 : jamais exporté / exporté
+   v{n} avec ré-export confirmé / ⚠️ révisée-corrigée depuis l'export. Attribution TOUJOURS affichée
+   avant confirmation, avertissements restitués, badge Pro HT, historique des versions.
+   Webhook « JC - Depot Winbiz » **verrouillé par clé** (vérifié par l'API le 29.08 au soir :
+   apikey [229253], en-tête x-make-apikey) ; variables Vercel posées par Thierry.
+6. Smoke test preview : CMD-80666 → fichier dans le dossier **TEST** ; puis tests d'import T1–T9
+   dans WinBiz, sur documents et client de test, avant toute production
