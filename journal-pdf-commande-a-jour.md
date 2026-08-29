@@ -132,9 +132,14 @@ Le PDF cesse d'être un artefact figé et devient un rendu, toujours frais.
 
 ## 6. Reste à faire
 
-- [ ] **Rattrapage one-shot** après merge : régénérer les ~70 PDF périmés, les QR
-      des 56 commandes révisées (+ celles aux coordonnées corrigées par le passé)
-      et les fiches courantes existantes des dossiers touchés. ~130-180 appels
-      pdf.co, à lancer en surveillant.
+- [x] **Rattrapage one-shot — FAIT le 29.08.2026** via `scripts/rattrapage-documents.mjs` :
+      149/149 régénérations réussies (79 PDF, 64 QR, 6 fiches courantes) sur la
+      liste fermée de 80 dossiers extraite le 24.08. Vérifié en base : les 79
+      cibles PDF portent un `pdf_snapshot_at` du jour, 0 restant ; 85 archives
+      `_initial.pdf` créées au passage. Incident de parcours documenté : le
+      script vise l'URL de `NEXT_PUBLIC_APP_URL` — avec le `.env.local` de dev
+      il tape `localhost:3000` ; poser `$env:NEXT_PUBLIC_APP_URL` sur la prod
+      avant de lancer. 4 échecs pdf.co transitoires, tous passés à la relance
+      (reprise via `rattrapage-log.json`, non commité).
 - [ ] Backlog éventuel : purge du cache/liens dans les mails déjà envoyés — les
       liens nus vers Storage peuvent servir 1 h de cache après une régénération.
