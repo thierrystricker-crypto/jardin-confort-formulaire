@@ -663,10 +663,10 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         }}>
           <div style={{flex:1}}>
             <div style={{fontSize:13, fontWeight:700, color:"#0a1551", marginBottom:4}}>
-              ✍️ Signature électronique disponible
+              ✍️ Signez votre offre en ligne
             </div>
             <div style={{fontSize:11, color:"#5e678f", lineHeight:1.6, marginBottom:10}}>
-              Vous pouvez valider et signer cette offre directement en ligne depuis votre smartphone ou ordinateur, sans impression nécessaire.
+              Validez et signez cette offre en quelques secondes depuis votre smartphone ou votre ordinateur, sans rien imprimer : cliquez sur le bouton ci-dessous, ou scannez le QR code si vous lisez ce document sur papier.
             </div>
             <a href={validationUrl}
               target="_blank"
@@ -694,7 +694,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
               alt="QR Code validation"
               style={{width:110, height:110, borderRadius:8, border:"1px solid #c7dff5"}}
             />
-            <div style={{fontSize:9, color:"#5e678f", marginTop:4}}>Scanner pour valider</div>
+            <div style={{fontSize:9, color:"#5e678f", marginTop:4}}>Scanner pour signer</div>
           </div>
         </div>
         )}
