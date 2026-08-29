@@ -173,7 +173,6 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [saveStatus,setSaveStatus]=useState("")
   const [saveKind,setSaveKind]=useState<"success"|"error"|"info">("info")
   const [pdfUrl,setPdfUrl]=useState<string|null>(null)
-  const [pdfGenerating,setPdfGenerating]=useState(false)
   // Chantier « PDF de commande toujours à jour » (23.08.2026)
   const [pdfSnapshotAt,setPdfSnapshotAt]=useState<string|null>(null)
   const [pdfInitialUrl,setPdfInitialUrl]=useState<string|null>(null)
@@ -330,18 +329,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     load()
   },[params])
 
-  async function generatePdf() {
-    if(!slug) return
-    setPdfGenerating(true)
-    try {
-      const res=await fetch(`/api/offres/${slug}/pdf`,{method:"POST"})
-      const json=await res.json()
-      if(res.ok && json.pdf_url) setPdfUrl(json.pdf_url)
-    } catch { /* ignore */ }
-    finally { setPdfGenerating(false) }
-  }
-
-  // ─── Ouvrir le PDF de commande en le régénérant d'abord ───────────────
+  // ─── Ouvrir le PDF (offre OU commande) en le régénérant d'abord ───────
   // Chantier « PDF de commande toujours à jour » (23.08.2026).
   // Le PDF Storage n'est plus considéré comme frais : on le régénère à
   // l'instant où quelqu'un veut l'envoyer, puis on ouvre le fichier obtenu.
@@ -1342,31 +1330,19 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                   Documents PDF <span className="ml-1 text-[10px] font-normal normal-case text-zinc-500">à télécharger / archiver</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Chantier « PDF de commande toujours à jour » (23.08.2026) :
-                      pour une COMMANDE, ce bouton régénère puis ouvre — jamais
-                      le fichier Storage périmé. Une offre garde le lien direct. */}
-                  {!isTypeOffre ? (
-                    <button onClick={ouvrirPdfAJour} disabled={pdfOpening}
-                      title="Régénère le PDF depuis la page commande client, puis l'ouvre — toujours la version courante"
-                      className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
-                      {pdfOpening ? "📄 Génération…" : "📄 Commande PDF"}
-                    </button>
-                  ) : pdfUrl ? (
-                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download
-                      className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20">
-                      📄 Offre PDF
-                    </a>
-                  ) : (
-                    <button onClick={generatePdf} disabled={pdfGenerating}
-                      className="relative inline-flex items-center overflow-hidden rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/70 transition hover:bg-emerald-500/15 disabled:opacity-80">
-                      {pdfGenerating && (
-                        <span className="absolute inset-0 overflow-hidden rounded-xl">
-                          <span className="absolute inset-y-0 left-0 animate-[progress_8s_ease-in-out_forwards] bg-emerald-500/30" />
-                        </span>
-                      )}
-                      <span className="relative">{pdfGenerating ? "📄 Génération…" : "📄 Générer offre PDF"}</span>
-                    </button>
-                  )}
+                  {/* Chantier « PDF de commande toujours à jour » (23.08.2026),
+                      étendu aux OFFRES le 29.08.2026 : offre comme commande, on
+                      régénère puis on ouvre — jamais le fichier Storage périmé.
+                      Une offre modifiée puis rouverte montrait l'ancien PDF.
+                      Même endpoint que l'ancien bouton « Générer offre PDF » ;
+                      le PDF client reste généré sans badge de stock. */}
+                  <button onClick={ouvrirPdfAJour} disabled={pdfOpening}
+                    title={isTypeOffre
+                      ? "Régénère le PDF depuis la page offre client, puis l'ouvre — toujours la version courante"
+                      : "Régénère le PDF depuis la page commande client, puis l'ouvre — toujours la version courante"}
+                    className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
+                    {pdfOpening ? "📄 Génération…" : isTypeOffre ? "📄 Offre PDF" : "📄 Commande PDF"}
+                  </button>
                   {/* Pour une COMMANDE : le montant et le débiteur peuvent avoir
                       changé (révision, correction) — on régénère avant d'ouvrir. */}
                   {!isTypeOffre ? (
