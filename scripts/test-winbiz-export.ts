@@ -180,7 +180,7 @@ ok("champ 20 émis = 999 en repli, sur toutes les lignes", () => {
 
 console.log("── Test 2 (DEUXIÈME test du chantier) : repli 999 → champs 22–28 sans données client ──");
 ok("les champs 22–28 portent exactement les placeholders historiques", () => {
-  const f = champs(lignesGen[1]);
+  const f = champs(lignesGen[2]);
   assert.deepEqual(f.slice(21, 28), ['"Société SA"', '"Nom"', '"Prenom"', '"Rue"', "", '"Npa"', '"Ville"']);
 });
 ok("aucun fragment des données du client dans les champs 21–47 d'aucune ligne en repli", () => {
@@ -202,15 +202,21 @@ ok("en-tête : identique à la référence hors champ 5 (Notre réf) et champ 12
     if (i === 4 || i === 11 || i === 18) continue;
     assert.equal(g[i], r[i], `en-tête champ ${i + 1}`);
   }
-  assert.equal(g[4], "CMD-54063");  // champ 5 « Notre référence » — lettres permises (C(250))
+  assert.equal(g[4], "CMD-54063 du 18.04.2026");  // champ 5 : la date de COMMANDE survit au changement de date de facture
   assert.equal(g[11], "<AUTO>");    // champ 12 = Compte d'escompte, plus jamais les initiales
 });
-ok("ligne adresse : préfixe 1–47 identique, suffixe identique hors coordonnées", () => {
-  comparerLigne("adresse", lignesGen[1], lignesRef54063[1], [I_DESC]);
+ok("ligne 1 : « CMD-54063 du 18.04.2026 », texte sans prix, tout en haut (demande du 30.08)", () => {
+  const f = champs(lignesGen[1]);
+  assert.equal(f[47], "1");
+  assert.equal(f[48], "2"); // texte
+  assert.equal(f[I_DESC], "CMD-54063 du 18.04.2026");
+});
+ok("ligne adresse (n=2) : préfixe 1–47 identique, suffixe identique hors coordonnées et n°", () => {
+  comparerLigne("adresse", lignesGen[2], lignesRef54063[1], [I_DESC, I_NUM_LIGNE]);
 });
 ok("ligne Conseiller/Expédition : texte libre type 2 juste sous l'adresse (demandes du 30.08)", () => {
-  const f = champs(lignesGen[2]);
-  assert.equal(f[47], "2");   // n = 2, juste après la ligne adresse
+  const f = champs(lignesGen[3]);
+  assert.equal(f[47], "3");   // n = 3, juste après la ligne adresse
   assert.equal(f[48], "2");   // type texte
   assert.equal(f[I_DESC], "Conseiller: Michel Gédéon (MG)");
   // avec un mode de livraison, l'expédition s'ajoute sur la même ligne
@@ -218,8 +224,8 @@ ok("ligne Conseiller/Expédition : texte libre type 2 juste sous l'adresse (dema
   (data as unknown as Record<string, unknown>).deliveryMode = "Livraison à domicile";
   const r = buildWinbizCsv({ numeroCommande: "CMD-10", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
-  const ligne2 = r.contentUtf8.split("\n").filter((x) => x !== "")[2]!;
-  assert.equal(champs(ligne2)[I_DESC], "Conseiller: Michel Gédéon (MG) | Expédition: Livraison à domicile");
+  const ligne3 = r.contentUtf8.split("\n").filter((x) => x !== "")[3]!;
+  assert.equal(champs(ligne3)[I_DESC], "Conseiller: Michel Gédéon (MG) | Expédition: Livraison à domicile");
 });
 ok("ligne article : identique à la référence hors n°, description, quantité, prix", () => {
   // notre 1er article vs le 1er article de la référence (n=4)
@@ -253,7 +259,7 @@ ok("en-tête 53990 identique à la référence hors champs 5, 12 et 19", () => {
     if (i === 4 || i === 11 || i === 18) continue;
     assert.equal(g[i], r[i], `en-tête champ ${i + 1}`);
   }
-  assert.equal(g[4], "CMD-53990");
+  assert.equal(g[4], "CMD-53990 du 18.04.2026");
 });
 ok("le rabais 10 % émet −355.8 exactement (jamais d'équilibrage −358 façon Make)", () => {
   const rab = lignes53990.find((l) => champs(l)[I_NUM_LIGNE] === "200")!;
@@ -354,6 +360,7 @@ ok("prix BRUT au champ 54, rabais au champ 67, total net au champ 57, descriptio
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   const ligne = r.contentUtf8.split("\n").filter((l) => l !== "").find((l) => champs(l)[48] === "1")!;
   const f = champs(ligne);
+  assert.equal(f[I_DESC], "Fauteuil soldé / Art. 222"); // titre / Art. SKU (demande du 30.08)
   assert.equal(f[I_PRIX], "549");            // prix BRUT
   assert.equal(f[66], "100");                // champ 67 : montant de remise (2 × 50)
   assert.equal(f[56], "998");                // champ 57 : montant total net de la ligne
@@ -415,8 +422,8 @@ ok("champ 135 = « Votre référence » de la commande", () => {
     assert.equal(champs(l)[134], "REF-CLIENT-42");
   }
 });
-ok("champ 5 (Notre référence) = numéro CMD complet sur l'en-tête ET le préfixe des lignes", () => {
-  for (const l of lignesGen) assert.equal(champs(l)[4], "CMD-54063");
+ok("champ 5 (Notre référence) = « CMD du date » sur l'en-tête ET le préfixe des lignes", () => {
+  for (const l of lignesGen) assert.equal(champs(l)[4], "CMD-54063 du 18.04.2026");
 });
 ok("vendeur inconnu → champ 134 vide + warning (jamais un code inventé)", () => {
   const data = printData({
@@ -430,8 +437,8 @@ ok("vendeur inconnu → champ 134 vide + warning (jamais un code inventé)", () 
   assert(r.ok && r.warnings.some((w) => w.includes("commercial laissé vide")));
 });
 
-console.log("── Test 10 ter : champ 19 Notes (remarques + notes internes, demande du 30.08) ──");
-ok("remarques et notes internes de la commande arrivent au champ 19, étiquetées", () => {
+console.log("── Test 10 ter : notes en ligne texte de FIN de document (demande du 30.08) ──");
+ok("remarques + notes internes → dernière ligne texte n=220, champ 19 laissé vide", () => {
   const data = printData({
     remarks: "Livraison souhaitée avant Pâques",
     lines: [art("shopify-1", "Table", "333", 1, 500)],
@@ -439,23 +446,26 @@ ok("remarques et notes internes de la commande arrivent au champ 19, étiquetée
   (data as unknown as Record<string, unknown>).notesInternes = "acompte de 200 payé cash au magasin";
   const r = buildWinbizCsv({ numeroCommande: "CMD-8", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
-  for (const l of r.contentUtf8.split("\n").filter((x) => x !== "")) {
-    const notes = champs(l)[18]!;
-    assert(notes.includes("Remarques: Livraison souhaitée avant Pâques"), notes);
-    assert(notes.includes("Interne: acompte de 200 payé cash au magasin"), notes);
-  }
+  const ls = r.contentUtf8.split("\n").filter((x) => x !== "");
+  const derniere = ls[ls.length - 1]!;
+  const f = champs(derniere);
+  assert.equal(f[47], "220");  // après l'arrondi (210)
+  assert.equal(f[48], "2");    // texte
+  assert(f[I_DESC].includes("Remarques: Livraison souhaitée avant Pâques"));
+  assert(f[I_DESC].includes("Interne: acompte de 200 payé cash au magasin"));
+  for (const l of ls) assert.equal(champs(l)[18], "", "champ 19 doit rester vide (pied de page invisible)");
 });
-ok("sans notes, le champ 19 reste vide ; notes trop longues → tronquées à 250 + warning", () => {
-  assert.equal(champs(lignesGen[0])[18], "");
+ok("sans notes, pas de ligne 220 ; notes trop longues → tronquées à 250 + warning", () => {
+  assert(!lignesGen.some((l) => champs(l)[47] === "220"));
   const data = printData({
     remarks: "x".repeat(300),
     lines: [art("shopify-1", "Table", "333", 1, 500)],
   });
   const r = buildWinbizCsv({ numeroCommande: "CMD-9", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
-  const notes = champs(r.contentUtf8.split("\n")[0]!)[18]!;
+  const ls = r.contentUtf8.split("\n").filter((x) => x !== "");
+  const notes = champs(ls[ls.length - 1]!)[I_DESC]!;
   assert.equal(notes.length, 250);
-  assert(notes.endsWith("..."));
   assert(r.ok && r.warnings.some((w) => w.includes("tronquées à 250")));
 });
 

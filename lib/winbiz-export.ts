@@ -58,8 +58,6 @@ const IDX_DATE = 2;          // champ 3
 const IDX_REFERENCE = 4;     // champ 5 « Référence » C(250) → « Notre référence » à l'écran
                              // (relevé doc officielle + import de test du 30.08)
 const IDX_TOTAL = 5;         // champ 6
-const IDX_NOTES = 18;        // champ 19 « Notes » C(250) — remarques + notes internes de la
-                             // commande, supprimables à la main dans WinBiz (demande du 30.08)
 const IDX_CODE_CLIENT = 19;  // champ 20
 const IDX_ADR_SOCIETE = 21;  // champ 22  ┐
 const IDX_ADR_NOM = 22;      // champ 23  │ champs d'adresse 22–28 :
@@ -358,14 +356,16 @@ export function buildWinbizCsv(
     warnings.push(`Vendeur « ${d.commercial} » inconnu de la table d'initiales — champ commercial laissé vide.`);
   }
 
-  // « Notre référence » (champ 5) = le numéro CMD complet, lettres permises
-  // (champ C(250)) ; « Votre référence » (champ 135) = la référence saisie
-  // sur la commande. Demandes de Thierry du 30.08 après l'import de test.
-  const notreRef = champSain(cmd.numeroCommande || "").texte;
+  // « Notre référence » (champ 5) = « CMD-XXXXX du JJ.MM.AAAA » : la comptable
+  // change la date de la facture à la date d'envoi — la date de COMMANDE doit
+  // survivre quelque part (demande du 30.08). « Votre référence » (champ 135)
+  // = la référence saisie sur la commande.
+  const notreRef = champSain(`${cmd.numeroCommande || ""} du ${date}`).texte;
   const votreRef = champSain(d.reference || "").texte;
 
-  // Champ 19 « Notes » C(250) : remarques (visibles client) + notes internes
-  // de la commande — la comptable les voit dans WinBiz et peut les supprimer.
+  // Remarques + notes internes de la commande → ligne TEXTE en FIN de document
+  // (le champ 19 « Notes » s'affichait en pied de page, invisible — retour de
+  // Thierry du 30.08 : « la preuve, je ne l'avais pas vu »).
   const notesInternes = typeof (d as Record<string, unknown>).notesInternes === "string"
     ? ((d as Record<string, unknown>).notesInternes as string) : "";
   const notesParts = [
@@ -375,7 +375,7 @@ export function buildWinbizCsv(
   let notesDoc = champSain(notesParts.join(" | ")).texte;
   if (notesDoc.length > 250) {
     notesDoc = notesDoc.slice(0, 247) + "...";
-    warnings.push("Notes de la commande tronquées à 250 caractères (limite du champ 19 WinBiz).");
+    warnings.push("Notes de la commande tronquées à 250 caractères (limite d'une description de ligne WinBiz).");
   }
 
   // 4. Préfixe commun (champs 1–47) ───────────────────────────────────────
@@ -392,8 +392,7 @@ export function buildWinbizCsv(
   prefixe[IDX_ADR_NPA] = adr.npa;
   prefixe[IDX_ADR_VILLE] = adr.ville;
   prefixe[IDX_MAJ_ADRESSE] = "1"; // ← le verrou. Ne JAMAIS laisser vide (défaut 0 = écrasement).
-  prefixe[IDX_REFERENCE] = notreRef; // champ 5 « Notre référence » = CMD-XXXXX
-  prefixe[IDX_NOTES] = notesDoc;
+  prefixe[IDX_REFERENCE] = notreRef; // champ 5 « Notre référence » = CMD-XXXXX du date
   prefixe[IDX_TOTAL] = fmtMontant(cts(totals.totalAfterRounding)); // total connu dès ici
 
   // 5. Les lignes de contenu, en centimes entiers ─────────────────────────
@@ -438,7 +437,18 @@ export function buildWinbizCsv(
     lignes.push({ texte, montantCts: 0 });
   };
 
-  // 5a. Ligne adresse à plat (n = 1) — émise dans TOUS les cas : c'est la
+  // 5a-0. Toute première ligne (n = 1) : « CMD-XXXXX du JJ.MM.AAAA », sans
+  // prix — la date de commande visible en tête du document, qui survit au
+  // changement de date de facture par la comptable (demande du 30.08).
+  lignes.push({
+    texte: ligneDepuisGabarit(prefixe, REF_SUFFIXE_ADRESSE, {
+      [SFX_NUM]: "1",
+      [SFX_DESC]: champSain(`${cmd.numeroCommande} du ${date}`).texte,
+    }),
+    montantCts: 0,
+  });
+
+  // 5a. Ligne adresse à plat (n = 2) — émise dans TOUS les cas : c'est la
   // vérification à l'écran de la comptable, et la trace si le match était faux.
   const coord = [
     d.societe ? `Société: ${d.societe}` : "",
@@ -453,7 +463,7 @@ export function buildWinbizCsv(
     const { texte: coordSaine } = champSain(coord);
     lignes.push({
       texte: ligneDepuisGabarit(prefixe, REF_SUFFIXE_ADRESSE, {
-        [SFX_NUM]: "1",
+        [SFX_NUM]: "2",
         [SFX_DESC]: coordSaine,
       }),
       montantCts: 0,
@@ -472,7 +482,7 @@ export function buildWinbizCsv(
     (d.commercial || "").trim() ? `Conseiller: ${d.commercial.trim()}${vendeur ? ` (${vendeur})` : ""}` : "",
     deliveryMode ? `Expédition: ${deliveryMode}` : "",
   ].filter(Boolean);
-  let n = 2;
+  let n = 3;
   if (infosDoc.length > 0) {
     lignes.push({
       texte: ligneDepuisGabarit(prefixe, REF_SUFFIXE_ADRESSE, {
@@ -507,7 +517,13 @@ export function buildWinbizCsv(
     // Rabais de ligne : encodage NATIF depuis le 30.08 (retour de Thierry sur
     // l'import 80936 — la mention texte encombrait un document client). Prix
     // BRUT au champ 54, montant du rabais au champ 67, total net au champ 57.
-    const desc = [l.title, l.sku].filter((s) => (s || "").trim()).join(" ");
+    // Description : « titre / Art. SKU » — le numéro d'article séparé et
+    // étiqueté (demande du 30.08 : « Fermob Cadiz Bridge / Stéréo gris argile
+    // A5ST / Art. 8702A5ST »).
+    const skuPropre = (l.sku || "").trim();
+    const desc = [(l.title || "").trim(), skuPropre ? `Art. ${skuPropre}` : ""]
+      .filter(Boolean)
+      .join(" / ");
     pousserArticle(n, desc, qte, prixCts, rabaisLigneCts);
     n++;
   }
@@ -546,6 +562,17 @@ export function buildWinbizCsv(
     pousserArticle(210, "Arrondi", 1, arrondiCts);
   }
 
+  // 5g. Les notes de la commande, en dernière ligne texte (n = 220)
+  if (notesDoc !== "") {
+    lignes.push({
+      texte: ligneDepuisGabarit(prefixe, REF_SUFFIXE_ADRESSE, {
+        [SFX_NUM]: "220",
+        [SFX_DESC]: notesDoc,
+      }),
+      montantCts: 0,
+    });
+  }
+
   // 6. 🔴 INVARIANT BLOQUANT ──────────────────────────────────────────────
   if (sommeCts !== totalRefCts) {
     return {
@@ -563,7 +590,6 @@ export function buildWinbizCsv(
   entete[IDX_NUMERO] = numeroWinbiz;
   entete[IDX_DATE] = date;
   entete[IDX_REFERENCE] = notreRef;
-  entete[IDX_NOTES] = notesDoc;
   entete[IDX_TOTAL] = fmtMontant(totalRefCts);
   // champ 12 = « Compte d'escompte » (doc officielle) — le gabarit Make y
   // écrivait les initiales du vendeur, sans effet. Rendu à <AUTO> ; le vendeur

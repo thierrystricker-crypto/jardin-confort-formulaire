@@ -311,5 +311,25 @@ au champ 57, champ 56 laissé à 0, description propre**. Les francs sont exacts
 cauchemar », le vieux flux Make avait renoncé et tout avalé dans l'équilibrage) portait sur le
 **pourcentage** ; le montant + total explicite ne demande aucun recalcul à WinBiz. Le refus
 « rabais non divisible par la quantité » n'a plus lieu d'être (le rabais est un montant de LIGNE).
-⚠️ **T2 se tranche à l'import de test suivant** : si le décompte WinBiz est faux, repli immédiat
-sur « prix net, description propre » (une substitution). **47 tests verts.**
+
+### ✅ T2 VALIDÉ à l'import (30.08, facture 80936 v2)
+
+Prix bruts affichés, **colonne % remplie par WinBiz lui-même** (calculée depuis le montant — on
+n'envoie jamais de %), montants nets et total 6'777.00 justes, TVA juste. « Super les rabais !!! »
+(Thierry). Un rabais en francs quelconque (100.— sans % rond) marche par construction.
+
+### Derniers réglages de présentation (30.08, retours sur la facture 80936 v2)
+
+- **Notes : le champ 19 s'affiche en pied de page — invisible** (« la preuve, je ne l'avais pas
+  vu »). Retiré. Les remarques + notes internes partent en **dernière ligne texte n = 220** (après
+  l'arrondi 210), même gabarit nu que la ligne Conseiller. Tronquées à 250 (limite de description).
+- **Ligne d'ouverture n = 1 : « CMD-XXXXX du JJ.MM.AAAA »**, texte sans prix, tout en haut —
+  l'adresse passe en n = 2, Conseiller/Expédition en n = 3.
+- **Notre référence (champ 5) = « CMD-XXXXX du JJ.MM.AAAA »** : la comptable change la date de la
+  facture à la date d'envoi — la **date de commande** doit survivre. Elle vit désormais aux deux
+  endroits (champ 5 + ligne 1).
+
+- **Description d'article : « titre / Art. SKU »** — le numéro d'article séparé et étiqueté
+  (« Fermob Cadiz Bridge / Stéréo gris argile A5ST / Art. 8702A5ST »).
+
+**48 tests verts.**
