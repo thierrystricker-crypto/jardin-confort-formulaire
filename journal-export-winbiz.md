@@ -337,3 +337,16 @@ n'envoie jamais de %), montants nets et total 6'777.00 justes, TVA juste. « Sup
   Placée entre l'arrondi (210) et les notes (220).
 
 **51 tests verts.**
+
+### Import final de contrôle (31.08) : présentation validée — et un piège WinBiz de plus
+
+L'import du fichier v3 complet (ligne CMD+date en tête, « / Art. », récap CHF 3470.00, remarques en
+fin de corps) est **validé par Thierry** (« bravo c'est en ordre »).
+
+🔴 **Piège découvert en chemin — à consigner au doc 04 via le bilan : importer un numéro de document
+déjà existant ne REMPLACE PAS le document dans WinBiz, silencieusement.** Deux imports successifs de
+la facture 80936 (v2 puis v3) ont laissé le document v2 en place : le PDF réimprimé montrait
+l'ancienne présentation sans aucune erreur visible. Diagnostic fait par le contenu (le pied de page
+venait du champ 19, vide dans le fichier v3 — impossible qu'il en sorte). **Procédure comptable :
+avant de réimporter une nouvelle version d'un document, supprimer l'ancienne facture dans WinBiz.**
+Même famille que T4 (collision de numérotation) — à valider avec la comptable.
