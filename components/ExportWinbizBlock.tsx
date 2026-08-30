@@ -25,6 +25,7 @@ type Attribution =
 
 type ExportRow = {
   version: number;
+  commande_version: number | null;
   created_at: string;
   statut: string;
   client_code: string | null;
@@ -37,6 +38,7 @@ type ExportRow = {
 type EtatExport = {
   numero_commande: string | null;
   exercice: number;
+  commande_version: number;
   attribution: Attribution;
   fichier_clients: { exercice: number; importe_le: string } | null;
   avertissements: string[];
@@ -50,6 +52,7 @@ type ResultatPost = {
   run_id: string;
   filename: string;
   version: number;
+  commande_version: number;
   statut: string;
   erreur: string | null;
   attribution: string;
@@ -154,7 +157,7 @@ export default function ExportWinbizBlock({ commandeSlug }: Props) {
       {etat.modifiee_depuis_export && dernier && (
         <div className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
           ⚠️ Commande {etat.modifiee_depuis_export.type} le {fmtDate(etat.modifiee_depuis_export.date)},
-          APRÈS l&apos;export v{dernier.version} — le fichier déposé ne reflète plus le document.
+          APRÈS l&apos;export {dernier.version} — le fichier déposé ne reflète plus le document.
         </div>
       )}
 
@@ -190,12 +193,12 @@ export default function ExportWinbizBlock({ commandeSlug }: Props) {
             disabled={!etat.webhook_configure || envoi}
             className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-medium hover:bg-sky-500 disabled:opacity-50"
           >
-            {dernier ? `↻ Ré-exporter (v${dernier.version + 1})` : "Exporter vers WinBiz"}
+            {dernier ? `↻ Ré-exporter (export ${dernier.version + 1})` : "Exporter vers WinBiz"}
           </button>
         ) : (
           <>
             <span className="text-sm text-zinc-300">
-              Confirmer l&apos;export {dernier ? `v${dernier.version + 1}` : ""} —{" "}
+              Confirmer l&apos;export {dernier ? `${dernier.version + 1}` : ""} de la commande V{etat.commande_version} —{" "}
               {attribue
                 ? `client ${(etat.attribution as { code: string }).code}`
                 : "client 999"} ?
@@ -218,8 +221,9 @@ export default function ExportWinbizBlock({ commandeSlug }: Props) {
         )}
         {dernier && !confirme && (
           <span className="text-sm text-zinc-400">
-            ✓ Exporté le {fmtDate(dernier.created_at)} (v{dernier.version}
-            {dernier.statut !== "depose" && <> — {dernier.statut === "erreur" ? "⚠️ dépôt en erreur" : dernier.statut}</>})
+            ✓ Export {dernier.version} le {fmtDate(dernier.created_at)}
+            {dernier.commande_version != null && <> — commande V{dernier.commande_version}</>}
+            {dernier.statut !== "depose" && <> — {dernier.statut === "erreur" ? "⚠️ dépôt en erreur" : dernier.statut}</>}
           </span>
         )}
       </div>
@@ -230,9 +234,9 @@ export default function ExportWinbizBlock({ commandeSlug }: Props) {
           ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
           : "border-rose-500/30 bg-rose-500/10 text-rose-200"}`}>
           {resultat.statut === "depose" ? (
-            <>✅ v{resultat.version} déposée{resultat.test ? " dans le dossier de TEST" : ""} — {resultat.filename} — {resultat.attribution}</>
+            <>✅ Export {resultat.version} (commande V{resultat.commande_version}) déposé{resultat.test ? " dans le dossier de TEST" : ""} — {resultat.filename} — {resultat.attribution}</>
           ) : (
-            <>⚠️ v{resultat.version} générée mais dépôt en erreur : {resultat.erreur}</>
+            <>⚠️ Export {resultat.version} généré mais dépôt en erreur : {resultat.erreur}</>
           )}
           {resultat.warnings.length > 0 && (
             <ul className="mt-2 list-inside list-disc text-xs opacity-80">
@@ -252,7 +256,8 @@ export default function ExportWinbizBlock({ commandeSlug }: Props) {
           <ul className="space-y-1 text-xs text-zinc-400">
             {etat.exports.map((e) => (
               <li key={e.version}>
-                v{e.version} — {fmtDate(e.created_at)} — {e.statut}
+                Export {e.version} — {fmtDate(e.created_at)} — {e.statut}
+                {" — "}{e.commande_version != null ? `commande V${e.commande_version}` : "commande V?"}
                 {e.client_code && <> — client {e.client_code}</>} — CHF {Number(e.montant).toFixed(2)}
                 {e.erreur && <span className="text-rose-300"> — {e.erreur}</span>}
               </li>

@@ -62,13 +62,15 @@ type OffreRowMin = {
 type Etat = {
   offre: OffreRowMin;
   exercice: number;
+  /** version vivante de la commande : MAX(version_num des révisions) + 1 (doc 03 §2) */
+  commandeVersion: number;
   attribution: MatchResultat;
   exerciceFichier: number | null;
   fichierImporteLe: string | null;
   avertissements: string[];
   exportsPasses: Array<{
-    version: number; created_at: string; statut: string; client_code: string | null;
-    filename: string; run_id: string; montant: number; erreur: string | null;
+    version: number; commande_version: number | null; created_at: string; statut: string;
+    client_code: string | null; filename: string; run_id: string; montant: number; erreur: string | null;
   }>;
   modifieeDepuis: { type: "révision" | "correction"; date: string } | null;
 };
@@ -137,10 +139,19 @@ async function chargerEtat(slug: string): Promise<Etat | { erreur: string; statu
     );
   }
 
+  // ── Version vivante de la commande (le « · Vn » des révisions, doc 03 §2) ──
+  const { data: revMax } = await supabaseAdmin
+    .from("commandes_revisions")
+    .select("version_num")
+    .eq("commande_slug", slug)
+    .order("version_num", { ascending: false })
+    .limit(1);
+  const commandeVersion = ((revMax?.[0] as { version_num?: number } | undefined)?.version_num ?? 0) + 1;
+
   // ── Exports passés ──
   const { data: exportsPasses } = await supabaseAdmin
     .from("winbiz_exports")
-    .select("version, created_at, statut, client_code, filename, run_id, montant, erreur")
+    .select("version, commande_version, created_at, statut, client_code, filename, run_id, montant, erreur")
     .eq("commande_slug", slug)
     .order("version", { ascending: false });
 
@@ -173,6 +184,7 @@ async function chargerEtat(slug: string): Promise<Etat | { erreur: string; statu
   return {
     offre: o,
     exercice,
+    commandeVersion,
     attribution,
     exerciceFichier: fichier?.exercice ?? null,
     fichierImporteLe: fichier?.importe_le ?? null,
@@ -196,6 +208,7 @@ export async function GET(
     return NextResponse.json({
       numero_commande: etat.offre.numero_commande,
       exercice: etat.exercice,
+      commande_version: etat.commandeVersion,
       attribution: etat.attribution,
       fichier_clients: etat.exerciceFichier
         ? { exercice: etat.exerciceFichier, importe_le: etat.fichierImporteLe }
@@ -247,6 +260,7 @@ export async function POST(
         numeroCommande: o.numero_commande || "",
         dateDocument: o.date_document || o.data.date,
         totalTtcColonne: o.total_ttc == null ? null : Number(o.total_ttc),
+        commandeVersion: etat.commandeVersion,
         data: o.data,
       },
       attribution,
@@ -282,6 +296,7 @@ export async function POST(
         pro_ht: resultat.proHt,
         contenu_hash: contenuHash,
         version,
+        commande_version: etat.commandeVersion,
         client_code: resultat.clientCode,
         match_type: matchType,
         match_detail: matchDetail,
@@ -335,6 +350,7 @@ export async function POST(
         run_id: runId,
         filename: resultat.filename,
         version,
+        commande_version: etat.commandeVersion,
         statut: statutFinal,
         erreur: erreurDepot,
         attribution: matchDetail,

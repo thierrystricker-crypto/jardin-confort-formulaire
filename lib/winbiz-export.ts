@@ -121,6 +121,8 @@ export type WinbizCommandeInput = {
   dateDocument: string;
   /** offres.total_ttc — contrôle croisé bloquant avec le recalcul */
   totalTtcColonne: number | null;
+  /** version vivante de la commande (MAX(version_num des révisions) + 1 ; 1 = jamais révisée) */
+  commandeVersion: number;
   /** offres.data — source de vérité */
   data: PrintData;
 };
@@ -242,8 +244,10 @@ function segmentFichier(v: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
-export function nomFichier(numeroWinbiz: string, societe: string, nom: string, prenom: string, runId: string): string {
-  const parts = ["bizexdoc_facture_winbiz", numeroWinbiz, segmentFichier(societe), segmentFichier(nom), segmentFichier(prenom), runId];
+export function nomFichier(numeroWinbiz: string, commandeVersion: number, societe: string, nom: string, prenom: string, runId: string): string {
+  // V{n} = version de la COMMANDE (révisions), pas le n° d'export — retour du 31.08 :
+  // la comptable doit savoir de quelle version du document le fichier est la photo.
+  const parts = ["bizexdoc_facture_winbiz", numeroWinbiz, `V${commandeVersion}`, segmentFichier(societe), segmentFichier(nom), segmentFichier(prenom), runId];
   return parts.filter((p) => p !== "").join("_") + ".csv";
 }
 
@@ -640,7 +644,7 @@ export function buildWinbizCsv(
 
   return {
     ok: true,
-    filename: nomFichier(numeroWinbiz, d.societe, d.nom, d.prenom, runId),
+    filename: nomFichier(numeroWinbiz, Math.max(1, Math.trunc(cmd.commandeVersion || 1)), d.societe, d.nom, d.prenom, runId),
     contentUtf8: contenu,
     contentCp1252: bytes,
     warnings,

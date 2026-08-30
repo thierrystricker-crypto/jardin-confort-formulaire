@@ -77,6 +77,7 @@ const CMD_54063: WinbizCommandeInput = {
   numeroCommande: "CMD-54063",
   dateDocument: "2026-04-18",
   totalTtcColonne: 1974.0,
+  commandeVersion: 1,
   data: printData({
     nom: "BERTHONZOZ", prenom: "TRISTAN", rue: "Route de CLEMENTY", numero: "67",
     npa: "1260", ville: "NYON", email: "tristan.berthonzoz@me.co", telephone1: "078.753.02.22",
@@ -101,6 +102,7 @@ const CMD_53990: WinbizCommandeInput = {
   numeroCommande: "CMD-53990",
   dateDocument: "2026-04-18",
   totalTtcColonne: 3200.0,
+  commandeVersion: 1,
   data: printData({
     offerNumber: "CMD-53990",
     nom: "DOMS", prenom: "Jean-Pierre", rue: "Route d'ANTAGNES,", numero: "13",
@@ -222,7 +224,7 @@ ok("ligne Conseiller/Expédition : texte libre type 2 juste sous l'adresse (dema
   // avec un mode de livraison, l'expédition s'ajoute sur la même ligne
   const data = printData({ lines: [art("shopify-1", "Table", "333", 1, 500)] });
   (data as unknown as Record<string, unknown>).deliveryMode = "Livraison à domicile";
-  const r = buildWinbizCsv({ numeroCommande: "CMD-10", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
+  const r = buildWinbizCsv({ numeroCommande: "CMD-10", dateDocument: "2026-08-30", totalTtcColonne: 500, commandeVersion: 1, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   const ligne3 = r.contentUtf8.split("\n").filter((x) => x !== "")[3]!;
   assert.equal(champs(ligne3)[I_DESC], "Conseiller: Michel Gédéon (MG) | Expédition: Livraison à domicile");
@@ -313,7 +315,7 @@ ok("rabais de ligne non divisible par la quantité : accepté (montant de LIGNE 
   const data = printData({
     lines: [art("shopify-1", "X", "1", 3, 100, { lineDiscount: 1.0, lineDiscountPerUnit: 1 / 3 })],
   });
-  const r = buildWinbizCsv({ numeroCommande: "CMD-1", dateDocument: "2026-08-29", totalTtcColonne: 299, data }, REPLI, RUN_ID);
+  const r = buildWinbizCsv({ numeroCommande: "CMD-1", dateDocument: "2026-08-29", totalTtcColonne: 299, commandeVersion: 1, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   const ligne = r.contentUtf8.split("\n").filter((x) => x !== "").find((l) => champs(l)[48] === "1")!;
   assert.equal(champs(ligne)[66], "1");    // champ 67 : montant de remise
@@ -333,7 +335,7 @@ const proData = printData({
   clientType: "Pro (prix HT)",
   lines: [art("shopify-1", "Table pro", "111", 1, 1000)],
 });
-const genPro = buildWinbizCsv({ numeroCommande: "CMD-2", dateDocument: "2026-08-29", totalTtcColonne: 1081, data: proData }, REPLI, RUN_ID);
+const genPro = buildWinbizCsv({ numeroCommande: "CMD-2", dateDocument: "2026-08-29", totalTtcColonne: 1081, commandeVersion: 1, data: proData }, REPLI, RUN_ID);
 ok("document Pro accepté, flag proHt, warning T9 présent", () => {
   assert(genPro.ok, (genPro as { erreur?: string }).erreur ?? "");
   assert((genPro as { proHt: boolean }).proHt === true);
@@ -356,7 +358,7 @@ ok("prix BRUT au champ 54, rabais au champ 67, total net au champ 57, descriptio
   const data = printData({
     lines: [art("shopify-1", "Fauteuil soldé", "222", 2, 549, { lineDiscount: 100, lineDiscountPerUnit: 50 })],
   });
-  const r = buildWinbizCsv({ numeroCommande: "CMD-3", dateDocument: "2026-08-29", totalTtcColonne: 998, data }, REPLI, RUN_ID);
+  const r = buildWinbizCsv({ numeroCommande: "CMD-3", dateDocument: "2026-08-29", totalTtcColonne: 998, commandeVersion: 1, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   const ligne = r.contentUtf8.split("\n").filter((l) => l !== "").find((l) => champs(l)[48] === "1")!;
   const f = champs(ligne);
@@ -385,7 +387,7 @@ ok("ligne comment émise en type 2, ligne media absente du fichier", () => {
       { id: "m1", type: "media", sku: "", title: "LOGO_FERMOB_INTERNE", unitPrice: 0, qty: 0, mediaUrl: "x" } as QuoteLine,
     ],
   });
-  const r = buildWinbizCsv({ numeroCommande: "CMD-4", dateDocument: "2026-08-29", totalTtcColonne: 500, data }, REPLI, RUN_ID);
+  const r = buildWinbizCsv({ numeroCommande: "CMD-4", dateDocument: "2026-08-29", totalTtcColonne: 500, commandeVersion: 1, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   const ls = r.contentUtf8.split("\n").filter((l) => l !== "");
   const comment = ls.find((l) => champs(l)[I_DESC] === "Ensemble terrasse sud")!;
@@ -400,7 +402,7 @@ ok("le service custom émet le libellé de servicePrices.custom_label", () => {
     enabledServices: { custom: true },
     servicePrices: { custom: "119", custom_label: "FORFAIT A/R DEPLACEMENT & INSTALATION " },
   });
-  const r = buildWinbizCsv({ numeroCommande: "CMD-5", dateDocument: "2026-08-29", totalTtcColonne: 419, data }, REPLI, RUN_ID);
+  const r = buildWinbizCsv({ numeroCommande: "CMD-5", dateDocument: "2026-08-29", totalTtcColonne: 419, commandeVersion: 1, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   const svc = r.contentUtf8.split("\n").filter((l) => l !== "").find((l) => champs(l)[I_NUM_LIGNE] === "202")!;
   assert(champs(svc)[I_DESC].includes("FORFAIT A/R DEPLACEMENT"));
@@ -416,7 +418,7 @@ ok("champ 135 = « Votre référence » de la commande", () => {
     reference: "REF-CLIENT-42",
     lines: [art("shopify-1", "Table", "333", 1, 500)],
   });
-  const r = buildWinbizCsv({ numeroCommande: "CMD-6", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
+  const r = buildWinbizCsv({ numeroCommande: "CMD-6", dateDocument: "2026-08-30", totalTtcColonne: 500, commandeVersion: 1, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   for (const l of r.contentUtf8.split("\n").filter((x) => x !== "").slice(1)) {
     assert.equal(champs(l)[134], "REF-CLIENT-42");
@@ -430,7 +432,7 @@ ok("vendeur inconnu → champ 134 vide + warning (jamais un code inventé)", () 
     commercial: "Personne Inconnue",
     lines: [art("shopify-1", "Table", "333", 1, 500)],
   });
-  const r = buildWinbizCsv({ numeroCommande: "CMD-7", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
+  const r = buildWinbizCsv({ numeroCommande: "CMD-7", dateDocument: "2026-08-30", totalTtcColonne: 500, commandeVersion: 1, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   const artLigne = r.contentUtf8.split("\n").filter((x) => x !== "").find((l) => champs(l)[48] === "1")!;
   assert.equal(champs(artLigne)[133], "");
@@ -444,7 +446,7 @@ ok("remarques + notes internes → dernière ligne texte n=220, champ 19 laissé
     lines: [art("shopify-1", "Table", "333", 1, 500)],
   });
   (data as unknown as Record<string, unknown>).notesInternes = "acompte de 200 payé cash au magasin";
-  const r = buildWinbizCsv({ numeroCommande: "CMD-8", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
+  const r = buildWinbizCsv({ numeroCommande: "CMD-8", dateDocument: "2026-08-30", totalTtcColonne: 500, commandeVersion: 1, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   const ls = r.contentUtf8.split("\n").filter((x) => x !== "");
   const derniere = ls[ls.length - 1]!;
@@ -461,7 +463,7 @@ ok("sans notes, pas de ligne 220 ; notes trop longues → tronquées à 250 + wa
     remarks: "x".repeat(300),
     lines: [art("shopify-1", "Table", "333", 1, 500)],
   });
-  const r = buildWinbizCsv({ numeroCommande: "CMD-9", dateDocument: "2026-08-30", totalTtcColonne: 500, data }, REPLI, RUN_ID);
+  const r = buildWinbizCsv({ numeroCommande: "CMD-9", dateDocument: "2026-08-30", totalTtcColonne: 500, commandeVersion: 1, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   const ls = r.contentUtf8.split("\n").filter((x) => x !== "");
   const notes = champs(ls[ls.length - 1]!)[I_DESC]!;
@@ -480,7 +482,7 @@ ok("livraison différente → le fichier porte l'adresse de facturation, rien de
     lines: [art("shopify-1", "Table", "333", 1, 500)],
   });
   const r = buildWinbizCsv(
-    { numeroCommande: "CMD-11", dateDocument: "2026-08-30", totalTtcColonne: 500, data },
+    { numeroCommande: "CMD-11", dateDocument: "2026-08-30", totalTtcColonne: 500, commandeVersion: 1, data },
     { type: "code", code: "777", source: "nom_prenom_npa", libelle: "test" },
     RUN_ID
   );
@@ -506,7 +508,7 @@ ok("rabais de ligne >= 2 % du total → ligne texte « Montant total des rabais 
     manualRounding: "-0.50",
   });
   // total = 1098-100 + 500-60 - 0.50 = 1437.50 ; rabais récap = 160 + 0.50 = 160.50 (11 %)
-  const r = buildWinbizCsv({ numeroCommande: "CMD-12", dateDocument: "2026-08-30", totalTtcColonne: 1437.5, data }, REPLI, RUN_ID);
+  const r = buildWinbizCsv({ numeroCommande: "CMD-12", dateDocument: "2026-08-30", totalTtcColonne: 1437.5, commandeVersion: 1, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   const ls = r.contentUtf8.split("\n").filter((x) => x !== "");
   const recap = ls.find((l) => champs(l)[47] === "215")!;
@@ -523,7 +525,7 @@ ok("rabais < 2 % du total → pas de ligne récap (on ne s'en vante pas)", () =>
     lines: [art("shopify-1", "Fauteuil", "111", 1, 1000, { lineDiscount: 10, lineDiscountPerUnit: 10 })],
   });
   // rabais 10 sur total 990 = 1.01 % → rien
-  const r = buildWinbizCsv({ numeroCommande: "CMD-13", dateDocument: "2026-08-30", totalTtcColonne: 990, data }, REPLI, RUN_ID);
+  const r = buildWinbizCsv({ numeroCommande: "CMD-13", dateDocument: "2026-08-30", totalTtcColonne: 990, commandeVersion: 1, data }, REPLI, RUN_ID);
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   assert(!r.contentUtf8.includes("Montant total des rabais"));
 });
@@ -569,11 +571,12 @@ ok("le contenu cp1252 du fichier 54063 se décode à l'identique", () => {
 });
 
 console.log("── Test 13 : nom de fichier assaini (les espaces du modèle Make ne sont pas repris) ──");
-ok("nomFichier sans espaces ni accents", () => {
-  const f = nomFichier("54063", "", "BERTHONZOZ", "TRISTAN", RUN_ID);
-  assert.equal(f, "bizexdoc_facture_winbiz_54063_BERTHONZOZ_TRISTAN_20260418_174613_7613.csv");
+ok("nomFichier sans espaces ni accents, avec la VERSION DE LA COMMANDE (retour du 31.08)", () => {
+  const f = nomFichier("54063", 1, "", "BERTHONZOZ", "TRISTAN", RUN_ID);
+  assert.equal(f, "bizexdoc_facture_winbiz_54063_V1_BERTHONZOZ_TRISTAN_20260418_174613_7613.csv");
   assert(!/\s/.test(f));
-  const g = nomFichier("80936", "Café de l'Étoile SA", "Müller", "Jean-Luc", RUN_ID);
+  const g = nomFichier("80936", 3, "Café de l'Étoile SA", "Müller", "Jean-Luc", RUN_ID);
+  assert(g.includes("_V3_"), g);
   assert(!/[ éèàüö']/.test(g), g);
 });
 ok("dates : ISO → JJ.MM.AAAA, jamais l'inverse", () => {
