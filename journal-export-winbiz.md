@@ -363,3 +363,45 @@ l'ancienne présentation sans aucune erreur visible. Diagnostic fait par le cont
 venait du champ 19, vide dans le fichier v3 — impossible qu'il en sorte). **Procédure comptable :
 avant de réimporter une nouvelle version d'un document, supprimer l'ancienne facture dans WinBiz.**
 Même famille que T4 (collision de numérotation) — à valider avec la comptable.
+
+## Session 2 — 30.08.2026 : page « Comptabilité » (liste des exports, fichiers, ré-export)
+
+Demande de Thierry : une page pour la comptable listant les commandes exportées, les noms de
+fichiers, un lien vers chaque fichier, la possibilité de ré-exporter, avec une recherche en haut.
+
+**Le « lien vers le fichier » : archive en base plutôt que lien Drive.** Objection de Thierry : le
+fichier sera déplacé (dossier WinBiz) → lien mort. Décision : `winbiz_exports` archive désormais le
+fichier lui-même (`contenu_base64`, ~10 Ko par export), et le bouton « Télécharger » renvoie **les
+octets déposés le jour de l'export**, sha256 recontrôlé contre `contenu_hash`. Jamais une
+régénération : si la commande a été révisée depuis, une régénération produirait un fichier différent
+de celui importé dans WinBiz, sans que rien ne le signale. Le Drive reste le canal de dépôt, la base
+devient la référence. (Note : un lien Drive par identifiant survit à un déplacement entre dossiers
+Drive — il ne meurt qu'à la suppression ; on pourra l'ajouter en bonus via Make plus tard.)
+
+Livré (branche `feat/page-comptabilite`) :
+
+- **Migration `012-winbiz-export-contenu.sql`** (SQL Editor, idempotente) : `contenu_base64 text` +
+  `contenu_taille int` générée (permet à la liste de savoir si l'archive existe sans la rapatrier).
+  ⚠️ À exécuter AVANT tout export depuis la preview : la route POST insère la colonne.
+- **`api/offres/[slug]/export-winbiz` (POST)** : une ligne — `contenu_base64` dans l'insert de la
+  trace (le base64 existait déjà pour le webhook).
+- **`api/winbiz-exports` (GET ?q=)** : liste, tri du plus récent, 200 max. Recherche sur
+  n° de commande / nom de fichier / code client (winbiz_exports) ET nom / prénom / société
+  (`offres.data`, via les slugs). Lecture seule.
+- **`api/winbiz-exports/[id]/fichier` (GET)** : téléchargement de l'archive, `Content-Type text/csv;
+  charset=windows-1252`, 404 explicite pour les exports antérieurs à la migration.
+- **`/dashboard/comptabilite`** : recherche (délai 300 ms), case « dernier export de chaque commande
+  seulement » (cochée par défaut), tableau (date + export N / commande V + auteur, n° de commande →
+  page commande, client, code Winbiz — 999 surligné « à réassigner », montant, statut, fichier +
+  Télécharger, Ré-exporter). Le ré-export appelle le GET dry-run puis affiche **attribution, version
+  de la commande, export précédent, bandeau « modifiée depuis »** avant le bouton Confirmer → même
+  POST que la carte. Bouton « 🏦 Fichier clients Winbiz ▾ » en haut : déplie le chargement du fichier
+  clients DANS la page (point d'entrée unique pour la comptable).
+- **`components/WinbizAdressesCard.tsx`** : la logique de chargement (SheetJS, aperçu, POST, état des
+  exercices) sortie de la page winbiz-adresses en composant partagé ; la page ne garde que son
+  en-tête. Aucun changement de comportement.
+- **Dashboard** : un lien « 🧾 Comptabilité » (ligne additive après « Remise en stock »).
+
+Vérifié : tsc strict 0 erreur sur les fichiers du chantier, 51 + 19 tests verts. Smoke test preview
+à faire : recherche, téléchargement d'un export ≥ migration 012, ré-export depuis la page (dossier
+TEST), export antérieur → « fichier sur le Drive ».
