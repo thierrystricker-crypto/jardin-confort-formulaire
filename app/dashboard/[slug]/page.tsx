@@ -11,6 +11,7 @@ import AnnexesBlock from "@/components/AnnexesBlock";
 import ArrivagesBlock from "@/components/ArrivagesBlock";
 import SuiviDelaisBlock from "@/components/SuiviDelaisBlock";
 import FilsMailsCard from "@/components/FilsMailsCard";
+import ExportWinbizBlock from "@/components/ExportWinbizBlock";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -1700,6 +1701,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
 
 <CorrectionsHistoryBlock entityType={offre.type_document === "Commande" ? "commande" : "offre"} entitySlug={slug} />
 {offre.type_document === "Commande" && <RevisionsHistoryBlock commandeSlug={slug} />}
+{offre.type_document === "Commande" && <ExportWinbizBlock commandeSlug={slug} />}
 
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
               <div className="mb-3 flex items-start justify-between gap-3 flex-wrap">
