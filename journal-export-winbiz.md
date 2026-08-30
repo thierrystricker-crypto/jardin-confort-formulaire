@@ -343,6 +343,19 @@ n'envoie jamais de %), montants nets et total 6'777.00 justes, TVA juste. « Sup
 L'import du fichier v3 complet (ligne CMD+date en tête, « / Art. », récap CHF 3470.00, remarques en
 fin de corps) est **validé par Thierry** (« bravo c'est en ordre »).
 
+### 31.08 au soir — distinguer le n° d'EXPORT de la VERSION de la commande
+
+Retour de Thierry après le merge : la carte affichait « v1, v2, v3 » — des numéros d'**export** que
+tout le monde lirait comme des **versions de la commande** (le « · Vn » des révisions). Correctif :
+
+- **Migration `011-winbiz-export-version-commande.sql`** (SQL Editor) : colonne
+  `winbiz_exports.commande_version` = version vivante au moment de l'export
+  (MAX(version_num des révisions) + 1 ; NULL sur les exports antérieurs).
+- **Nom de fichier** : `bizexdoc_facture_winbiz_{numero}_V{version}_…` — la comptable voit de quelle
+  version du document le fichier est la photo.
+- **Carte** : « Export 1, 2, 3… » (plus jamais « v ») + « commande V{n} » partout — bouton,
+  confirmation, résultat, historique. Anciennes lignes sans version → « commande V? ».
+
 🔴 **Piège découvert en chemin — à consigner au doc 04 via le bilan : importer un numéro de document
 déjà existant ne REMPLACE PAS le document dans WinBiz, silencieusement.** Deux imports successifs de
 la facture 80936 (v2 puis v3) ont laissé le document v2 en place : le PDF réimprimé montrait
