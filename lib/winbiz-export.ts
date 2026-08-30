@@ -399,6 +399,8 @@ export function buildWinbizCsv(
   type LigneEmise = { texte: string; montantCts: number };
   const lignes: LigneEmise[] = [];
   let sommeCts = 0;
+  // cumul des rabais de ligne pour la ligne récapitulative n = 215 (demande du 30.08)
+  let rabaisLignesCts = 0;
 
   const pousserArticle = (
     num: number, desc: string, qte: number, prixCts: number, rabaisLigneCts = 0
@@ -524,6 +526,7 @@ export function buildWinbizCsv(
     const desc = [(l.title || "").trim(), skuPropre ? `Art. ${skuPropre}` : ""]
       .filter(Boolean)
       .join(" / ");
+    rabaisLignesCts += rabaisLigneCts;
     pousserArticle(n, desc, qte, prixCts, rabaisLigneCts);
     n++;
   }
@@ -560,6 +563,21 @@ export function buildWinbizCsv(
   const arrondiCts = cts(totals.roundingValue);
   if (arrondiCts !== 0) {
     pousserArticle(210, "Arrondi", 1, arrondiCts);
+  }
+
+  // 5f bis. Récapitulatif des rabais de ligne (n = 215) — demande du 30.08 :
+  // les rabais de ligne natifs ne s'affichent qu'en % par ligne ; une ligne
+  // texte donne le montant total (rabais de ligne + arrondi). Émise SEULEMENT
+  // si ce total atteint 2 % de la commande — en dessous, on ne s'en vante pas.
+  const totalRabaisRecapCts = rabaisLignesCts + Math.abs(arrondiCts);
+  if (totalRabaisRecapCts > 0 && totalRabaisRecapCts * 100 >= 2 * totalRefCts) {
+    lignes.push({
+      texte: ligneDepuisGabarit(prefixe, REF_SUFFIXE_ADRESSE, {
+        [SFX_NUM]: "215",
+        [SFX_DESC]: `Montant total des rabais sur la commande: CHF ${(totalRabaisRecapCts / 100).toFixed(2)}`,
+      }),
+      montantCts: 0,
+    });
   }
 
   // 5g. Les notes de la commande, en dernière ligne texte (n = 220)

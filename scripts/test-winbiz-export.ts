@@ -495,6 +495,43 @@ ok("livraison différente → le fichier porte l'adresse de facturation, rien de
   }
 });
 
+console.log("── Test 10 quinquies : ligne récap des rabais (n=215, seuil 2 %) ──");
+ok("rabais de ligne >= 2 % du total → ligne texte « Montant total des rabais » avant les notes", () => {
+  const data = printData({
+    remarks: "Merci",
+    lines: [
+      art("shopify-1", "Fauteuil", "111", 2, 549, { lineDiscount: 100, lineDiscountPerUnit: 50 }),
+      art("shopify-2", "Table", "222", 1, 500, { lineDiscount: 60, lineDiscountPerUnit: 60 }),
+    ],
+    manualRounding: "-0.50",
+  });
+  // total = 1098-100 + 500-60 - 0.50 = 1437.50 ; rabais récap = 160 + 0.50 = 160.50 (11 %)
+  const r = buildWinbizCsv({ numeroCommande: "CMD-12", dateDocument: "2026-08-30", totalTtcColonne: 1437.5, data }, REPLI, RUN_ID);
+  assert(r.ok, (r as { erreur?: string }).erreur ?? "");
+  const ls = r.contentUtf8.split("\n").filter((x) => x !== "");
+  const recap = ls.find((l) => champs(l)[47] === "215")!;
+  assert(recap, "ligne 215 absente");
+  assert.equal(champs(recap)[48], "2");
+  assert.equal(champs(recap)[50], "Montant total des rabais sur la commande: CHF 160.50");
+  // ordre : 215 avant les notes (220)
+  const i215 = ls.findIndex((l) => champs(l)[47] === "215");
+  const i220 = ls.findIndex((l) => champs(l)[47] === "220");
+  assert(i215 < i220);
+});
+ok("rabais < 2 % du total → pas de ligne récap (on ne s'en vante pas)", () => {
+  const data = printData({
+    lines: [art("shopify-1", "Fauteuil", "111", 1, 1000, { lineDiscount: 10, lineDiscountPerUnit: 10 })],
+  });
+  // rabais 10 sur total 990 = 1.01 % → rien
+  const r = buildWinbizCsv({ numeroCommande: "CMD-13", dateDocument: "2026-08-30", totalTtcColonne: 990, data }, REPLI, RUN_ID);
+  assert(r.ok, (r as { erreur?: string }).erreur ?? "");
+  assert(!r.contentUtf8.includes("Montant total des rabais"));
+});
+ok("le rabais GLOBAL (ligne 200 visible) ne compte pas dans le récap ; l'arrondi si", () => {
+  // 53990 : rabais global 10 % (ligne 200 déjà visible), arrondi -2.20 seul au récap → 0.07 % → rien
+  assert(!gen53990.ok || !gen53990.contentUtf8.includes("Montant total des rabais"));
+});
+
 console.log("── Test 11 : centimes entiers, formats de montants ──");
 ok("fmtMontant : 1974, 163.9, 97.55, -355.8 — jamais de 23.0999…", () => {
   assert.equal(fmtMontant(197400), "1974");

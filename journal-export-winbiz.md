@@ -331,5 +331,9 @@ n'envoie jamais de %), montants nets et total 6'777.00 justes, TVA juste. « Sup
 
 - **Description d'article : « titre / Art. SKU »** — le numéro d'article séparé et étiqueté
   (« Fermob Cadiz Bridge / Stéréo gris argile A5ST / Art. 8702A5ST »).
+- **Ligne récap des rabais (n = 215)** : « Montant total des rabais sur la commande: CHF X.XX » =
+  rabais de ligne + arrondi (le rabais GLOBAL a déjà sa ligne 200 visible, il n'est pas recompté).
+  Émise **seulement si ce total atteint 2 % de la commande** — en dessous, on ne s'en vante pas.
+  Placée entre l'arrondi (210) et les notes (220).
 
-**48 tests verts.**
+**51 tests verts.**
