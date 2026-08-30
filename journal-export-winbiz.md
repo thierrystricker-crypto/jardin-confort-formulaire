@@ -297,3 +297,19 @@ Livraison à domicile ».
 cas par construction — les champs racine du document SONT la facturation, les champs `livr*` ne sont
 jamais lus — désormais verrouillé par un test dédié (aucun fragment de l'adresse de livraison ne
 peut apparaître dans le fichier). **46 tests verts.**
+
+### Rabais de ligne : passage à l'encodage NATIF — c'est le test T2, en cours
+
+Retour de Thierry sur l'import 80936 : la présentation « prix net + mention (dont rabais X/pce,
+prix brut Y) » encombre un document qui part au client, colonne % vide. Doc officielle relevée :
+**champ 56 « Remise % » N(7,6)** ET **champ 67 « Montant de remise » N(13,2)**, plus champ 57
+« Montant total de la ligne » N(12,2).
+
+Encodage retenu (v3) : **prix BRUT au champ 54, montant du rabais au champ 67, total net explicite
+au champ 57, champ 56 laissé à 0, description propre**. Les francs sont exacts, les % des
+étiquettes (D5) — et le cauchemar historique documenté (guide + souvenir de Thierry : « un
+cauchemar », le vieux flux Make avait renoncé et tout avalé dans l'équilibrage) portait sur le
+**pourcentage** ; le montant + total explicite ne demande aucun recalcul à WinBiz. Le refus
+« rabais non divisible par la quantité » n'a plus lieu d'être (le rabais est un montant de LIGNE).
+⚠️ **T2 se tranche à l'import de test suivant** : si le décompte WinBiz est faux, repli immédiat
+sur « prix net, description propre » (une substitution). **47 tests verts.**

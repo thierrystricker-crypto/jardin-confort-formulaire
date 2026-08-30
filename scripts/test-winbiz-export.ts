@@ -303,12 +303,15 @@ ok("total_ttc divergent → PAS de fichier, erreur explicite", () => {
   const r = buildWinbizCsv({ ...CMD_54063, totalTtcColonne: 1980 }, REPLI, RUN_ID);
   assert(!r.ok && /total_ttc/.test((r as { erreur: string }).erreur));
 });
-ok("rabais de ligne non divisible par la quantité en centimes → refus", () => {
+ok("rabais de ligne non divisible par la quantité : accepté (montant de LIGNE natif, champ 67)", () => {
   const data = printData({
     lines: [art("shopify-1", "X", "1", 3, 100, { lineDiscount: 1.0, lineDiscountPerUnit: 1 / 3 })],
   });
-  const r = buildWinbizCsv({ numeroCommande: "CMD-1", dateDocument: "2026-08-29", totalTtcColonne: null, data }, REPLI, RUN_ID);
-  assert(!r.ok && /divisible/.test((r as { erreur: string }).erreur));
+  const r = buildWinbizCsv({ numeroCommande: "CMD-1", dateDocument: "2026-08-29", totalTtcColonne: 299, data }, REPLI, RUN_ID);
+  assert(r.ok, (r as { erreur?: string }).erreur ?? "");
+  const ligne = r.contentUtf8.split("\n").filter((x) => x !== "").find((l) => champs(l)[48] === "1")!;
+  assert.equal(champs(ligne)[66], "1");    // champ 67 : montant de remise
+  assert.equal(champs(ligne)[56], "299");  // champ 57 : total net de la ligne
 });
 ok("numéro non numérique après retrait du préfixe → refus", () => {
   const r = buildWinbizCsv({ ...CMD_54063, numeroCommande: "CMD-80X95" }, REPLI, RUN_ID);
@@ -342,8 +345,8 @@ ok("Privé TTC garde champ 62 = 1", () => {
   assert.equal(champs(artLigne)[I_TVA_INCL], "1");
 });
 
-console.log("── Test 8 : rabais de ligne → prix net émis + mention, champ remise laissé à 0 ──");
-ok("prix unitaire net, mention (dont rabais …), champ 56 = 0", () => {
+console.log("── Test 8 : rabais de ligne NATIF (champ 67 montant + champ 57 total) — T2 en cours ──");
+ok("prix BRUT au champ 54, rabais au champ 67, total net au champ 57, description propre", () => {
   const data = printData({
     lines: [art("shopify-1", "Fauteuil soldé", "222", 2, 549, { lineDiscount: 100, lineDiscountPerUnit: 50 })],
   });
@@ -351,10 +354,19 @@ ok("prix unitaire net, mention (dont rabais …), champ 56 = 0", () => {
   assert(r.ok, (r as { erreur?: string }).erreur ?? "");
   const ligne = r.contentUtf8.split("\n").filter((l) => l !== "").find((l) => champs(l)[48] === "1")!;
   const f = champs(ligne);
-  assert.equal(f[I_PRIX], "499");
-  assert(f[I_DESC].includes("dont rabais 50/pce"), f[I_DESC]);
-  assert(f[I_DESC].includes("prix brut 549"));
-  assert.equal(f[55], "0"); // champ 56 : remise Winbiz jamais utilisée tant que T2 n'est pas validé
+  assert.equal(f[I_PRIX], "549");            // prix BRUT
+  assert.equal(f[66], "100");                // champ 67 : montant de remise (2 × 50)
+  assert.equal(f[56], "998");                // champ 57 : montant total net de la ligne
+  assert.equal(f[55], "0");                  // champ 56 : remise % jamais utilisée (les francs sont exacts)
+  assert(!f[I_DESC].includes("rabais"), f[I_DESC]); // description propre, sans mention
+  // l'invariant tient toujours : la somme émise reste le net
+  assert(r.ok && r.montant === 998);
+});
+ok("ligne SANS rabais : champs 57 et 67 restent vides (gabarit de référence intact)", () => {
+  const premierArticle = lignesGen.find((l) => champs(l)[48] === "1")!;
+  const f = champs(premierArticle);
+  assert.equal(f[56], "");
+  assert.equal(f[66], "");
 });
 
 console.log("── Test 9 : commentaires → lignes texte, media exclues ──");

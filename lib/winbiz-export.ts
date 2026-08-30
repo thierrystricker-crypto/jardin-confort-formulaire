@@ -80,6 +80,10 @@ const SFX_DATE = 5;          // champ 52
 const SFX_QTE = 6;           // champ 53
 const SFX_PRIX = 7;          // champ 54
 const SFX_TVA_INCLUSE = 15;  // champ 62 : 1 = TTC incluse, 2 = HT exclue
+const SFX_MONTANT_LIGNE = 10; // champ 57 « Montant total de la ligne » N(12,2)
+const SFX_RABAIS_MONTANT = 20; // champ 67 « Montant de remise » N(13,2) — le rabais de ligne NATIF
+                               // (relevé doc officielle du 30.08 ; le champ 56 « Remise % » existe
+                               // aussi mais les francs sont exacts, les % des étiquettes — D5)
 
 // Champs de la section « Document » de la doc officielle, portés par les
 // LIGNES (au-delà des gabarits Make, qui s'arrêtaient à 99/129 champs) :
@@ -398,20 +402,29 @@ export function buildWinbizCsv(
   let sommeCts = 0;
 
   const pousserArticle = (
-    num: number, desc: string, qte: number, prixCts: number
+    num: number, desc: string, qte: number, prixCts: number, rabaisLigneCts = 0
   ) => {
     const { texte: descSaine, modifie } = champSain(desc);
     if (modifie) warnings.push(`Ligne ${num} : point-virgule ou saut de ligne remplacé dans « ${descSaine.slice(0, 40)}… ».`);
-    const texte = ligneDepuisGabarit(prefixe, REF_SUFFIXE_ARTICLE, {
+    const netLigneCts = qte * prixCts - rabaisLigneCts;
+    const subst: Record<number, string> = {
       [SFX_NUM]: String(num),
       [SFX_DESC]: descSaine,
       [SFX_DATE]: date,
       [SFX_QTE]: String(qte),
-      [SFX_PRIX]: fmtMontant(prixCts),
+      [SFX_PRIX]: fmtMontant(prixCts), // prix BRUT — le rabais vit au champ 67
       [SFX_TVA_INCLUSE]: flagTva,
-    });
-    lignes.push({ texte, montantCts: qte * prixCts });
-    sommeCts += qte * prixCts;
+    };
+    if (rabaisLigneCts !== 0) {
+      // Rabais de ligne NATIF (champ 67, montant) + montant total explicite
+      // (champ 57) pour que WinBiz n'ait rien à recalculer. Le champ 56
+      // « Remise % » reste à 0 : les francs sont exacts, les % des étiquettes.
+      subst[SFX_RABAIS_MONTANT] = fmtMontant(rabaisLigneCts);
+      subst[SFX_MONTANT_LIGNE] = fmtMontant(netLigneCts);
+    }
+    const texte = ligneDepuisGabarit(prefixe, REF_SUFFIXE_ARTICLE, subst);
+    lignes.push({ texte, montantCts: netLigneCts });
+    sommeCts += netLigneCts;
   };
 
   const pousserTexte = (num: number, texte0: string) => {
@@ -491,27 +504,11 @@ export function buildWinbizCsv(
     }
     const prixCts = cts(l.unitPrice || 0);
     const rabaisLigneCts = cts(l.lineDiscount || 0);
-    let desc = [l.title, l.sku].filter((s) => (s || "").trim()).join(" ");
-    let prixNetCts = prixCts;
-    if (rabaisLigneCts !== 0) {
-      // §5.3 : prix unitaire NET émis, champ remise laissé à 0 (T2 non validé),
-      // mention explicite dans la description.
-      if (rabaisLigneCts % qte !== 0) {
-        // le rabais total ne se répartit pas en centimes entiers par pièce :
-        // on refuse plutôt que d'émettre un détail qui ne retombe pas juste.
-        return {
-          ok: false,
-          erreur:
-            `Ligne « ${(l.title || "").slice(0, 40)} » : rabais de ligne ${fmtMontant(rabaisLigneCts)} CHF ` +
-            `non divisible par la quantité ${qte} en centimes entiers. Pas de fichier.`,
-          warnings,
-        };
-      }
-      const rabaisParPieceCts = rabaisLigneCts / qte;
-      prixNetCts = prixCts - rabaisParPieceCts;
-      desc += ` (dont rabais ${fmtMontant(rabaisParPieceCts)}/pce, prix brut ${fmtMontant(prixCts)})`;
-    }
-    pousserArticle(n, desc, qte, prixNetCts);
+    // Rabais de ligne : encodage NATIF depuis le 30.08 (retour de Thierry sur
+    // l'import 80936 — la mention texte encombrait un document client). Prix
+    // BRUT au champ 54, montant du rabais au champ 67, total net au champ 57.
+    const desc = [l.title, l.sku].filter((s) => (s || "").trim()).join(" ");
+    pousserArticle(n, desc, qte, prixCts, rabaisLigneCts);
     n++;
   }
 
