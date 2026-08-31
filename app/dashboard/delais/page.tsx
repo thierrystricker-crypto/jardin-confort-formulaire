@@ -429,7 +429,7 @@ export default function DelaisPage() {
                 return (
                 <React.Fragment key={l.id}>
                   <tr onClick={() => ouvrirChrono(l)}
-                    className={`cursor-pointer transition hover:bg-[#31353b] ${dansGroupeOuvert ? (groupe._premiere ? "border-t-2 border-t-sky-400/60" : "border-t border-white/5") : groupe._premiere ? "border-t-2 border-white/15" : "border-t border-white/5"} ${dansGroupeOuvert ? "bg-[#26292d]" : l.alarme_retard ? "bg-rose-500/5" : ""} ${groupe._correspond || dansGroupeOuvert ? "" : "opacity-50"}`}>
+                    className={`cursor-pointer transition hover:bg-[#31353b] ${dansGroupeOuvert ? (groupe._premiere ? "border-t-2 border-t-sky-400/60" : "border-t border-white/5") : groupe._premiere ? "border-t-2 border-white/15" : "border-t border-white/5"} ${dansGroupeOuvert ? "bg-[#26292d]" : l.alarme_retard ? "bg-rose-500/5" : ""} ${groupe._correspond || dansGroupeOuvert ? "" : "opacity-50"} ${l.statut !== "en_cours" && !dansGroupeOuvert ? "opacity-60" : ""}`}>
                     <td className={`px-4 py-3 font-medium ${dansGroupeOuvert ? "border-l-4 border-l-sky-400/60" : ""}`}>
                       {groupe._premiere ? (
                         <>
@@ -481,7 +481,14 @@ export default function DelaisPage() {
                       ) : <span className="text-zinc-600">—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${etape.cls}`}>{etape.label}</span>
+                      {l.statut !== "en_cours" ? (
+                        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-violet-500/25 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-violet-200"
+                          title="Commande client déjà expédiée/livrée — plus rien à attendre du fournisseur pour cette ligne">
+                          📤 Déjà envoyé au client
+                        </span>
+                      ) : (
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${etape.cls}`}>{etape.label}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {l.nb_lignes ? (
