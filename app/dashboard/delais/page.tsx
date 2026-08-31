@@ -250,7 +250,23 @@ export default function DelaisPage() {
   // correspondent pas elles-mêmes sont affichées atténuées.
   const visibles = useMemo(() => {
     const correspond = (l: Ligne) => {
-      if (!voirEnStock && l.etape === "en_stock" && l.statut === "en_cours") return false;
+      // La recherche PRIME SUR TOUT (31.08, leçon JAR-13339) : un numéro,
+      // un client ou une réf fournisseur tapés cherchent dans TOUTES les
+      // lignes — en stock, livrées, toutes étapes, tous filtres ignorés.
+      // Sinon une recherche précise répond « rien » alors que la commande
+      // existe, masquée par un filtre qu'on ne voit pas.
+      if (recherche.trim()) {
+        const q = recherche.trim().toLowerCase();
+        return l.numero_commande.toLowerCase().includes(q) ||
+               nomClient(l).toLowerCase().includes(q) ||
+               (l.ref_fournisseur || "").toLowerCase().includes(q);
+      }
+      // « En stock » ne masque JAMAIS une ligne qui porte un événement
+      // fournisseur en attente de validation (31.08) : stock censé complet
+      // + facture/confirmation fournisseur reçue = contradiction à montrer,
+      // pas à cacher (JAR-13339 : article finalement manquant, recommandé
+      // chez Fermob, facture arrivée en a_valider — ligne restée invisible).
+      if (!voirEnStock && l.etape === "en_stock" && l.statut === "en_cours" && !(l.nb_a_valider > 0)) return false;
       if (marque !== "toutes" && l.marque !== marque) return false;
       if (boutique !== "toutes" && l.boutique !== boutique) return false;
       if (suiviesSeules && !l.marque_suivie) return false;
@@ -260,12 +276,6 @@ export default function DelaisPage() {
       else if (filtre === "delai_manquant" && !l.alarme_delai_manquant) return false;
       else if (filtre === "a_valider" && !(l.nb_a_valider > 0)) return false;
       else if (filtre === "parties" && !(["facturee","expediee","partiellement_expediee"].includes(l.etape) && l.statut === "en_cours")) return false;
-      if (recherche.trim()) {
-        const q = recherche.trim().toLowerCase();
-        if (!(l.numero_commande.toLowerCase().includes(q) ||
-              nomClient(l).toLowerCase().includes(q) ||
-              (l.ref_fournisseur || "").toLowerCase().includes(q))) return false;
-      }
       return true;
     };
     // Groupes = commande (boutique + numéro), gardés si une ligne correspond.
@@ -370,7 +380,7 @@ export default function DelaisPage() {
           </label>
           <label className="inline-flex cursor-pointer items-center gap-2 text-zinc-300" title="Commandes entièrement en stock à la commande : rien à attendre d'un fournisseur. Elles sortent du tableau à la livraison (fulfilled) — une vieille ligne ici est probablement une livraison jamais marquée.">
             <input type="checkbox" checked={voirEnStock} onChange={e => setVoirEnStock(e.target.checked)} className="h-4 w-4 accent-sky-400"/>
-            Voir les commandes en stock <span className="text-xs text-zinc-500">({lignes.filter(l => l.etape === "en_stock" && l.statut === "en_cours").length} masquées)</span>
+            Voir les commandes en stock <span className="text-xs text-zinc-500">({lignes.filter(l => l.etape === "en_stock" && l.statut === "en_cours" && !(l.nb_a_valider > 0)).length} masquées)</span>
           </label>
           <Link href="/dashboard/arrivages" className="inline-flex items-center rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/25" title="Réception par article et par quantité — scan de la fiche de travail">📦 Arrivages</Link>
         </div>
@@ -379,7 +389,7 @@ export default function DelaisPage() {
 
         {/* Tableau principal */}
         <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#2a2d31]">
-          <div className="px-4 pt-3 text-xs text-zinc-500">{visibles.length} ligne(s) — filtre : {filtre}{marque !== "toutes" ? ` · ${marque}` : ""}{boutique !== "toutes" ? ` · ${boutique}` : ""}</div>
+          <div className="px-4 pt-3 text-xs text-zinc-500">{visibles.length} ligne(s) — {recherche.trim() ? `recherche « ${recherche.trim()} » (toutes lignes, filtres ignorés)` : `filtre : ${filtre}${marque !== "toutes" ? ` · ${marque}` : ""}${boutique !== "toutes" ? ` · ${boutique}` : ""}`}</div>
           <table className="w-full min-w-[1400px] text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-zinc-500">
@@ -419,7 +429,7 @@ export default function DelaisPage() {
                 return (
                 <React.Fragment key={l.id}>
                   <tr onClick={() => ouvrirChrono(l)}
-                    className={`cursor-pointer transition hover:bg-[#31353b] ${dansGroupeOuvert ? (groupe._premiere ? "border-t-2 border-t-sky-400/60" : "border-t border-white/5") : groupe._premiere ? "border-t-2 border-white/15" : "border-t border-white/5"} ${dansGroupeOuvert ? "bg-[#26292d]" : l.alarme_retard ? "bg-rose-500/5" : ""} ${groupe._correspond || dansGroupeOuvert ? "" : "opacity-50"}`}>
+                    className={`cursor-pointer transition hover:bg-[#31353b] ${dansGroupeOuvert ? (groupe._premiere ? "border-t-2 border-t-sky-400/60" : "border-t border-white/5") : groupe._premiere ? "border-t-2 border-white/15" : "border-t border-white/5"} ${dansGroupeOuvert ? "bg-[#26292d]" : l.alarme_retard ? "bg-rose-500/5" : ""} ${groupe._correspond || dansGroupeOuvert ? "" : "opacity-50"} ${l.statut !== "en_cours" && !dansGroupeOuvert ? "opacity-60" : ""}`}>
                     <td className={`px-4 py-3 font-medium ${dansGroupeOuvert ? "border-l-4 border-l-sky-400/60" : ""}`}>
                       {groupe._premiere ? (
                         <>
@@ -471,7 +481,14 @@ export default function DelaisPage() {
                       ) : <span className="text-zinc-600">—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${etape.cls}`}>{etape.label}</span>
+                      {l.statut !== "en_cours" ? (
+                        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-violet-500/25 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-violet-200"
+                          title="Commande client déjà expédiée/livrée — plus rien à attendre du fournisseur pour cette ligne">
+                          📤 Déjà envoyé au client
+                        </span>
+                      ) : (
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${etape.cls}`}>{etape.label}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {l.nb_lignes ? (
@@ -613,7 +630,7 @@ export default function DelaisPage() {
               )});
               })()}
               {!visibles.length && (
-                <tr><td colSpan={13} className="px-4 py-8 text-center text-sm text-zinc-500">Aucune ligne pour ce filtre.</td></tr>
+                <tr><td colSpan={13} className="px-4 py-8 text-center text-sm text-zinc-500">{recherche.trim() ? "Aucune commande au suivi ne correspond à cette recherche (toutes lignes confondues, livrées comprises)." : "Aucune ligne pour ce filtre."}</td></tr>
               )}
             </tbody>
           </table>

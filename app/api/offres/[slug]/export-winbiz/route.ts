@@ -282,6 +282,9 @@ export async function POST(
     //    ferme la course entre deux clics simultanés.
     const version = (etat.exportsPasses[0]?.version ?? 0) + 1;
     const contenuHash = createHash("sha256").update(resultat.contentCp1252).digest("hex");
+    // Archive fidèle du fichier (migration 012) : la page comptabilité renvoie
+    // ces octets-là, jamais une régénération qui pourrait différer du dépôt.
+    const contenuBase64 = Buffer.from(resultat.contentCp1252).toString("base64");
 
     const { data: ligne, error: insError } = await supabaseAdmin
       .from("winbiz_exports")
@@ -295,6 +298,7 @@ export async function POST(
         montant: resultat.montant,
         pro_ht: resultat.proHt,
         contenu_hash: contenuHash,
+        contenu_base64: contenuBase64,
         version,
         commande_version: etat.commandeVersion,
         client_code: resultat.clientCode,
@@ -315,7 +319,6 @@ export async function POST(
     }
 
     // 3. Dépôt Drive via le webhook Make — statut de réponse LU, jamais ignoré.
-    const contenuBase64 = Buffer.from(resultat.contentCp1252).toString("base64");
     let statutFinal: "depose" | "erreur" = "depose";
     let erreurDepot: string | null = null;
     try {
