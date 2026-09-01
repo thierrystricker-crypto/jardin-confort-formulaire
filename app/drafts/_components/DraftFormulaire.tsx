@@ -178,6 +178,39 @@ function sanitizePhoneInternational(raw: string) {
 
 function sanitizeNpa(v: string) { return v.replace(/[^\d]/g, "").slice(0, 4); }
 
+// Client sans e-mail (01.09.2026).
+// L'e-mail est obligatoire ET sert de clé de rattachement au dossier client
+// (api/clients/[id] cherche les documents par client_email en priorité, avant
+// nom+npa). Une adresse bidon partagée entre deux clients fusionne donc leurs
+// dossiers sans aucun signal — décision D7 : « vide se voit, faux ne se voit pas ».
+// D'où ce générateur : une adresse unique PAR CLIENT, reconnaissable au premier
+// coup d'œil, sur notre domaine. Le préfixe fixe SANS_EMAIL_PREFIXE est le
+// contrat : c'est lui que Make (filtre d'envoi), les pages d'impression ou la
+// To-do pourront tester plus tard. Ne pas le changer sans repasser sur ces
+// consommateurs.
+const SANS_EMAIL_PREFIXE = "sans-email.";
+const SANS_EMAIL_DOMAINE = "jardinconfort.ch";
+
+function slugPourEmail(v: string) {
+  return v
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // accents
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")                          // tout le reste → tiret
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+}
+
+function genererEmailSansContact(nom: string, npa: string): string {
+  const base = [slugPourEmail(nom), sanitizeNpa(npa)].filter(Boolean).join("-");
+  // Jeton court : deux homonymes du même NPA ne doivent jamais partager l'adresse.
+  const jeton = Math.random().toString(36).slice(2, 6).padEnd(4, "0");
+  return `${SANS_EMAIL_PREFIXE}${base ? base + "-" : ""}${jeton}@${SANS_EMAIL_DOMAINE}`;
+}
+
+function estEmailSansContact(email: string | null | undefined): boolean {
+  return !!email && email.trim().toLowerCase().startsWith(SANS_EMAIL_PREFIXE);
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -1917,11 +1950,28 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
               <input autoComplete="new-password" placeholder="+33 6 12 34 56 78, +49 30 12345…" value={telephone2} onChange={(e) => setTelephone2(sanitizePhoneInternational(e.target.value))} />
             </div>
             <div className="jc-field jc-field-with-autocomplete" style={{position:"relative"}}>
-              <label>Email *</label>
+              <label style={{display:"flex", alignItems:"center", justifyContent:"space-between", gap:8}}>
+                <span>Email *</span>
+                {!email.trim() && (
+                  <button type="button" className="jc-btn jc-btn-ghost" style={{fontSize:11, padding:"2px 8px"}}
+                    disabled={!nom.trim()}
+                    title={nom.trim()
+                      ? "Le client ne veut pas donner d'e-mail : génère une adresse interne unique, propre à ce client"
+                      : "Saisir d'abord le nom du client"}
+                    onClick={() => { setEmail(genererEmailSansContact(nom, npa)); setClientSuggestions([]); }}>
+                    Client sans e-mail
+                  </button>
+                )}
+              </label>
               <input autoComplete="new-password" className={missingRequired.email ? "jc-error" : ""} type="email" value={email}
                 onChange={(e) => onClientFieldChange(e.target.value, "email", setEmail)}
                 onKeyDown={handleClientKeyDown}
                 placeholder="jean@exemple.ch" />
+              {estEmailSansContact(email) && (
+                <div className="jc-label-hint" style={{marginTop:4}}>
+                  Adresse interne générée : ce client ne recevra aucun mail. À remplacer par la vraie adresse si le client la donne.
+                </div>
+              )}
               {clientSuggestions.length > 0 && clientSearchField === "email" && (
                 <div className="jc-client-dropdown">
                   <button className="jc-client-dropdown-close" onClick={forceCloseDropdown} title="Fermer (Esc)">✕</button>
