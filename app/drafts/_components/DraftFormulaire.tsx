@@ -682,7 +682,11 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
       unitPrice: hasPromo ? compareAt : price,
       qty: orderUnit ?? 1,
       stock: stockVal,
-      lineDiscount: hasPromo ? Math.round((compareAt - price) * 100) / 100 : 0,
+      // Le rabais TOTAL de la ligne suit la quantité de départ : une ligne qui
+      // démarre à N pièces (orderUnit) part avec N × le rabais unitaire.
+      // Corrigé le 01.09.2026 — avant, une promo sur un article « par 2 »
+      // affichait le rabais d'une seule pièce (7.7% au lieu de 15%).
+      lineDiscount: hasPromo ? Math.round((compareAt - price) * (orderUnit ?? 1) * 100) / 100 : 0,
       lineDiscountPerUnit: hasPromo ? Math.round((compareAt - price) * 100) / 100 : 0,
       shopifyLocked: true,
       inventoryPolicy: item.inventoryPolicy === "DENY" ? "DENY" : "CONTINUE",
