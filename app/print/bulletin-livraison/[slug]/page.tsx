@@ -360,9 +360,14 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
         .bl-btn.save:hover { background: #15803d; }
         .bl-bar input.bl-mention { background: #2a2d31; color: #fff; border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 7px 10px; font-size: 13px; width: 230px; font-family: inherit; }
         .bl-bar input.bl-mention::placeholder { color: #71717a; }
-        .bl-bar label.bl-date { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #a1a1aa; }
-        .bl-bar input.bl-date { background: #2a2d31; color: #fff; border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 6px 8px; font-size: 13px; font-family: inherit; color-scheme: dark; }
-        .bl-bar input.bl-date.invalid { border-color: #f87171; background: #3b1d1d; }
+        /* Date du bulletin, éditable EN PLACE dans l'en-tête (écran seulement) :
+           cadre pointillé bleu = « cliquable », le clic ouvre le calendrier. */
+        input.bl-date-inline { font-family: inherit; font-size: 12px; line-height: 1.35; color: ${BLACK}; background: #f0f7ff; border: 1.5px dashed ${THEME}; border-radius: 5px; padding: 1px 6px; cursor: pointer; width: 132px; }
+        input.bl-date-inline:hover { background: #e0efff; }
+        input.bl-date-inline:focus { outline: 2px solid ${THEME}; outline-offset: 1px; }
+        input.bl-date-inline.invalid { border-color: #dc2626; background: #fef2f2; color: #991b1b; }
+        input.bl-date-inline::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .7; }
+        .bl-date-hint { display: block; font-size: 10px; color: #64748b; font-weight: 400; margin-top: 1px; }
         .bl-banner { max-width: 794px; margin: 12px auto -8px; padding: 10px 14px; border-radius: 8px; font-size: 13px; }
         .bl-banner.ok { background: #ecfdf5; border: 1px solid #6ee7b7; color: #065f46; }
         .bl-banner.ko { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
@@ -471,11 +476,6 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
               {saved.length > 0 && <> · déjà {saved.length} bulletin{saved.length > 1 ? "s" : ""} enregistré{saved.length > 1 ? "s" : ""}</>}
               {modifie && <span style={{color:"#fbbf24"}}> · modifié</span>}
             </span>
-            <label className="bl-date" title="Date d'envoi imprimée sur le bulletin. Indépendante de la date de commande, mais jamais avant elle.">
-              Date du bulletin
-              <input className={`bl-date ${dateInvalide ? "invalid" : ""}`} type="date" value={dateBulletin}
-                min={dateCommandeIso || undefined} onChange={(e) => setDateBulletin(e.target.value)} />
-            </label>
             <input className="bl-mention" value={mention} onChange={(e) => setMention(e.target.value)}
               placeholder="Mention (ex. Livraison partielle 1/2)" maxLength={120}
               title="Imprimée sous le titre du bulletin. Vide = rien n'apparaît." />
@@ -542,8 +542,25 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
                   <tr><td className="doc-meta-label">Référence</td><td>{data.reference}</td></tr>
                 )}
                 <tr><td className="doc-meta-label">Date de commande</td><td>{formatDate(data.date)}</td></tr>
-                {dateBulletin && (
-                  <tr><td className="doc-meta-label">Date du bulletin</td><td>{formatDate(dateBulletin)}</td></tr>
+                {(editable || dateBulletin) && (
+                  <tr>
+                    <td className="doc-meta-label">Date du bulletin</td>
+                    <td>
+                      {editable ? (
+                        <>
+                          <span className="bl-only-screen">
+                            <input className={`bl-date-inline ${dateInvalide ? "invalid" : ""}`} type="date" value={dateBulletin}
+                              min={dateCommandeIso || undefined}
+                              onChange={(e) => setDateBulletin(e.target.value)}
+                              onClick={(e) => { try { (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.(); } catch { /* navigateur sans showPicker */ } }}
+                              title="Date d'envoi imprimée sur le bulletin. Indépendante de la date de commande, mais jamais avant elle. Cliquer pour choisir." />
+                            <span className="bl-date-hint">✎ cliquer pour modifier</span>
+                          </span>
+                          <span className="bl-only-print">{formatDate(dateBulletin)}</span>
+                        </>
+                      ) : formatDate(dateBulletin)}
+                    </td>
+                  </tr>
                 )}
                 <tr><td className="doc-meta-label">Commercial</td><td>{data.commercial}</td></tr>
                 {data.leadTime && (
