@@ -1,6 +1,7 @@
 # Journal — Bulletin de livraison à la volée
 
-> Session du **02.09.2026** (Cowork). Branche `feature/bulletin-livraison-volee`.
+> Session du **02.09.2026** (Cowork). Branche `feature/bulletin-livraison-volee`,
+> **mergée en prod le 02.09.2026** après smoke test sur preview.
 > Ce journal est la source détaillée du chantier. La consolidation vers les docs
 > projet (01, 02, 04, 05, 06) se fait dans la conversation de consolidation — ce
 > chantier n'y écrit pas.
@@ -142,6 +143,26 @@ d'envoi) sont **deux choses sans lien** — sauf que la seconde ne peut **jamais
   qui rétro-remplit les bulletins de test avec leur jour de création.
 - La carte du dashboard affiche la date du bulletin (l'horodatage
   d'enregistrement reste en `title`).
+- **Éditée EN PLACE dans l'en-tête du document** (demande de Thierry après
+  test) : cadre pointillé bleu « cliquer pour modifier », `showPicker()` au
+  clic ouvre le calendrier natif. Texte simple à l'impression et dans le PDF.
+  Un seul endroit pour l'éditer — le champ n'est pas dans la barre.
+
+### 3.7 Piège preview découvert au premier test — `NEXT_PUBLIC_APP_URL`
+
+`NEXT_PUBLIC_APP_URL` vaut la **production** sur toutes les cibles Vercel,
+preview comprise. Conséquences :
+- Tous les boutons « Documents » de `/dashboard/[slug]` (🚚, 📦, 🗂, jeu
+  complet, page commande client…) ouvrent la **prod** depuis une preview. On
+  croit tester la preview, on regarde la prod. **Préexistant, non corrigé ici**
+  — à remonter au backlog (liens relatifs).
+- `fiche-travail-pdf` fait rendre par pdf.co la page de **prod** depuis une
+  preview. Invisible tant que la page existe en prod à l'identique ; faux dès
+  qu'une preview change le template.
+Correctifs de ce chantier, limités à son périmètre : la carte
+`BulletinsLivraisonBlock` utilise des **liens relatifs**, et la route POST
+prend l'**origine de la requête** (`x-forwarded-host`) quand
+`VERCEL_ENV === "preview"`, `APP_URL` sinon.
 
 Piège évité : `new Date().toISOString().slice(0,10)` donne la veille après
 22 h (heure de Zurich → UTC). La date du jour est construite en local.
@@ -152,7 +173,7 @@ Piège évité : `new Date().toISOString().slice(0,10)` donne la veille après
 
 | Fichier | Nature |
 |---|---|
-| `app/print/bulletin-livraison/[slug]/page.tsx` | **Réécrit** (405 → ~640 l.) — le template imprimé est conservé à l'identique |
+| `app/print/bulletin-livraison/[slug]/page.tsx` | **Réécrit** (405 → ~680 l.) — le template imprimé est conservé à l'identique, plus « Date de commande » / « Date du bulletin » |
 | `app/api/bulletins-livraison/route.ts` | Nouveau |
 | `app/api/bulletins-livraison/[id]/route.ts` | Nouveau |
 | `components/BulletinsLivraisonBlock.tsx` | Nouveau |
