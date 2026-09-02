@@ -7,6 +7,7 @@ import CorrectionDrawer from "@/components/CorrectionDrawer";
 import CorrectionsHistoryBlock from "@/components/CorrectionsHistoryBlock";
 import RevisionsHistoryBlock from "@/components/RevisionsHistoryBlock";
 import StockMovementsBlock from "@/components/StockMovementsBlock";
+import BulletinsLivraisonBlock from "@/components/BulletinsLivraisonBlock";
 import AnnexesBlock from "@/components/AnnexesBlock";
 import ArrivagesBlock from "@/components/ArrivagesBlock";
 import SuiviDelaisBlock from "@/components/SuiviDelaisBlock";
@@ -1319,7 +1320,7 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                     <>
                       <a href={`${APP_URL}/print/bulletin-livraison/${offre.slug}`} target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-300 transition hover:bg-sky-500/20"
-                        title="Bulletin de livraison sans prix (à joindre au colis)">
+                        title="Bulletin de livraison sans prix (à joindre au colis). Modifiable à l'écran : envoi partiel, quantités, lignes ajoutées — la commande n'est jamais modifiée.">
                         🚚 Bulletin livraison
                       </a>
                       <a href={`${APP_URL}/print/page-garde-colis/${offre.slug}`} target="_blank" rel="noopener noreferrer"
@@ -1533,6 +1534,9 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
             </div>
 
             {isCommandeReelle && <StockMovementsBlock slug={slug} />}
+
+            {/* Bulletins de livraison enregistrés (envois partiels, lignes ajoutées) — 02.09.2026 */}
+            {isCommandeReelle && <BulletinsLivraisonBlock slug={slug} />}
 
             {/* PROBABILITÉ DE CLOSING */}
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
