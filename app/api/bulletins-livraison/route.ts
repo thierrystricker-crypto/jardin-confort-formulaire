@@ -36,6 +36,7 @@ export type BulletinLine = {
 }
 
 const MAX_LINES = 200
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_TITLE = 500
 
 function nettoyerLignes(brut: unknown): BulletinLine[] {
@@ -67,9 +68,26 @@ function nettoyerLignes(brut: unknown): BulletinLine[] {
   return out
 }
 
-async function genererPdf(slug: string, bulletinId: string, fileName: string): Promise<{ buffer: ArrayBuffer | null; error?: string }> {
+// Base URL de la page que pdf.co va rendre.
+// ⚠️ NEXT_PUBLIC_APP_URL vaut la PRODUCTION sur toutes les cibles Vercel, preview
+// comprise. fiche-travail-pdf l'utilise tel quel : sur une preview, pdf.co rend
+// donc la page de prod — invisible tant que la page existe en prod. Ici, en
+// preview, la page /print/bulletin-livraison ?bulletin= n'existe PAS encore en
+// prod : le PDF sortirait complet, faux, sans erreur. D'où l'origine de la
+// requête quand VERCEL_ENV === "preview". En prod, comportement identique aux
+// autres routes.
+function baseUrlRendu(request: NextRequest): string {
+  if (process.env.VERCEL_ENV === "preview") {
+    const host = request.headers.get("x-forwarded-host") || request.headers.get("host")
+    const proto = request.headers.get("x-forwarded-proto") || "https"
+    if (host) return `${proto}://${host}`
+  }
+  return APP_URL
+}
+
+async function genererPdf(baseUrl: string, slug: string, bulletinId: string, fileName: string): Promise<{ buffer: ArrayBuffer | null; error?: string }> {
   const jcToken = encodeURIComponent(process.env.DASHBOARD_SESSION_SECRET || "")
-  const printUrl = `${APP_URL}/print/bulletin-livraison/${slug}?bulletin=${bulletinId}&jc_token=${jcToken}`
+  const printUrl = `${baseUrl}/print/bulletin-livraison/${slug}?bulletin=${bulletinId}&jc_token=${jcToken}`
 
   const pdfcoRes = await fetch("https://api.pdf.co/v1/pdf/convert/from/url", {
     method: "POST",
@@ -103,7 +121,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from("bulletins_livraison")
-    .select("id, offre_slug, numero_affiche, numero_bulletin, mention, lines, nb_lignes, nb_pieces, pdf_url, pdf_erreur, cree_par, created_at")
+    .select("id, offre_slug, numero_affiche, numero_bulletin, mention, date_bulletin, lines, nb_lignes, nb_pieces, pdf_url, pdf_erreur, cree_par, created_at")
     .eq("offre_slug", slug)
     .order("numero_bulletin", { ascending: false })
 
@@ -122,6 +140,8 @@ export async function POST(request: NextRequest) {
 
     const mention = typeof body.mention === "string" ? body.mention.trim().slice(0, 120) : ""
     const creePar = typeof body.cree_par === "string" ? body.cree_par.trim().slice(0, 60) : ""
+    const dateBulletin = typeof body.date_bulletin === "string" && DATE_RE.test(body.date_bulletin) ? body.date_bulletin : ""
+    if (!dateBulletin) return NextResponse.json({ error: "date_bulletin manquante ou invalide (AAAA-MM-JJ)" }, { status: 400 })
     const lines = nettoyerLignes(body.lines)
     const articles = lines.filter((l) => l.type === "product" || l.type === "custom")
     if (articles.length === 0) {
@@ -131,12 +151,18 @@ export async function POST(request: NextRequest) {
     // 1. La commande doit exister et être une VRAIE commande (CMD-XXXXX)
     const { data: offre, error: readError } = await supabaseAdmin
       .from("offres")
-      .select("slug, numero_affiche, type_document")
+      .select("slug, numero_affiche, type_document, date_document")
       .eq("slug", slug)
       .single()
     if (readError || !offre) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
     if (offre.type_document !== "Commande") {
       return NextResponse.json({ error: "Un bulletin de livraison ne s'établit que sur une commande" }, { status: 400 })
+    }
+    // Règle métier (Thierry, 02.09) : la date du bulletin est indépendante de la
+    // date de commande, mais ne peut JAMAIS lui être antérieure.
+    const dateCommande = typeof offre.date_document === "string" ? offre.date_document.slice(0, 10) : ""
+    if (dateCommande && dateBulletin < dateCommande) {
+      return NextResponse.json({ error: `La date du bulletin (${dateBulletin}) est antérieure à la date de commande (${dateCommande})` }, { status: 400 })
     }
 
     // 2. Numéro du bulletin dans la commande (index unique → un doublon
@@ -157,6 +183,7 @@ export async function POST(request: NextRequest) {
         numero_affiche: offre.numero_affiche || null,
         numero_bulletin: numeroBulletin,
         mention: mention || null,
+        date_bulletin: dateBulletin,
         lines,
         nb_lignes: articles.length,
         nb_pieces: nbPieces,
@@ -175,7 +202,7 @@ export async function POST(request: NextRequest) {
     }
 
     const fileName = `bulletin-${slug}-${numeroBulletin}.pdf`
-    const { buffer, error: pdfError } = await genererPdf(slug, row.id, fileName)
+    const { buffer, error: pdfError } = await genererPdf(baseUrlRendu(request), slug, row.id, fileName)
     if (!buffer) {
       await supabaseAdmin.from("bulletins_livraison").update({ pdf_erreur: pdfError || "pdf.co" }).eq("id", row.id)
       return NextResponse.json({ error: "Génération PDF échouée : " + pdfError, bulletin: { ...row, pdf_url: null } }, { status: 502 })

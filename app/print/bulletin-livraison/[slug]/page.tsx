@@ -73,6 +73,7 @@ type SavedBulletin = {
   nb_lignes: number;
   nb_pieces: number;
   pdf_url: string | null;
+  date_bulletin: string | null;
   created_at: string;
 };
 
@@ -114,6 +115,12 @@ function fromSavedLine(l: SavedLine, i: number): BLine {
 
 const isArticle = (l: { type: BLine["type"] }) => l.type === "product" || l.type === "custom";
 
+// Date locale au format YYYY-MM-DD (pas toISOString : décalage UTC le soir)
+function aujourdhuiIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export default function PrintBulletinLivraisonSlug({ params }: { params: Promise<{ slug: string }> }) {
   const [slug, setSlug] = useState("");
   const [data, setData] = useState<PrintData>(EMPTY);
@@ -123,6 +130,9 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
   // ── Édition ──
   const [lines, setLines] = useState<BLine[]>([]);
   const [mention, setMention] = useState("");
+  // Date du bulletin (= date d'envoi). SANS lien avec la date de commande,
+  // sauf une règle : jamais antérieure à celle-ci. Pré-remplie à aujourd'hui.
+  const [dateBulletin, setDateBulletin] = useState(aujourdhuiIso());
   const [saved, setSaved] = useState<SavedBulletin[]>([]);            // historique de la commande
   const [viewing, setViewing] = useState<SavedBulletin | null>(null); // mode ?bulletin=<id> (lecture seule)
   const [showAdd, setShowAdd] = useState(false);
@@ -186,6 +196,7 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
             if (b) {
               setViewing(b);
               setMention(b.mention || "");
+              if (b.date_bulletin) setDateBulletin(b.date_bulletin);
               setLines((b.lines || []).map(fromSavedLine));
             }
           }
@@ -213,6 +224,9 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
   const articlesTotal = lines.filter(isArticle).length;
   const piecesVisibles = articlesVisibles.reduce((s, l) => s + l.qty, 0);
   const modifie = lines.some((l) => l.removed || l.added || (isArticle(l) && l.qty !== l.qtyOrig)) || mention.trim() !== "";
+  // Date de commande au format YYYY-MM-DD (borne basse de la date du bulletin)
+  const dateCommandeIso = (data.date || "").slice(0, 10);
+  const dateInvalide = !!dateBulletin && !!dateCommandeIso && dateBulletin < dateCommandeIso;
 
   // « Reste à livrer » : quantité d'origine − ce qui figure déjà sur les
   // bulletins enregistrés (par sourceId). Les lignes ajoutées aux bulletins
@@ -265,11 +279,14 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
   async function enregistrerPdf() {
     if (saving) return;
     if (articlesVisibles.length === 0) { setSaveResult({ ok: false, msg: "Le bulletin ne contient aucun article." }); return; }
+    if (!dateBulletin) { setSaveResult({ ok: false, msg: "Indiquez la date du bulletin." }); return; }
+    if (dateInvalide) { setSaveResult({ ok: false, msg: `La date du bulletin ne peut pas être antérieure à la date de commande (${formatDate(data.date)}).` }); return; }
     setSaving(true); setSaveResult(null);
     try {
       const payload = {
         slug,
         mention: mention.trim(),
+        date_bulletin: dateBulletin,
         lines: visibles.map((l) => ({
           sourceId: l.sourceId, type: l.type, sku: l.sku, title: l.title, qty: l.qty,
           image: l.image, mediaUrl: l.mediaUrl, mediaSize: l.mediaSize, mediaSource: l.mediaSource,
@@ -343,6 +360,9 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
         .bl-btn.save:hover { background: #15803d; }
         .bl-bar input.bl-mention { background: #2a2d31; color: #fff; border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 7px 10px; font-size: 13px; width: 230px; font-family: inherit; }
         .bl-bar input.bl-mention::placeholder { color: #71717a; }
+        .bl-bar label.bl-date { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #a1a1aa; }
+        .bl-bar input.bl-date { background: #2a2d31; color: #fff; border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 6px 8px; font-size: 13px; font-family: inherit; color-scheme: dark; }
+        .bl-bar input.bl-date.invalid { border-color: #f87171; background: #3b1d1d; }
         .bl-banner { max-width: 794px; margin: 12px auto -8px; padding: 10px 14px; border-radius: 8px; font-size: 13px; }
         .bl-banner.ok { background: #ecfdf5; border: 1px solid #6ee7b7; color: #065f46; }
         .bl-banner.ko { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
@@ -451,6 +471,11 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
               {saved.length > 0 && <> · déjà {saved.length} bulletin{saved.length > 1 ? "s" : ""} enregistré{saved.length > 1 ? "s" : ""}</>}
               {modifie && <span style={{color:"#fbbf24"}}> · modifié</span>}
             </span>
+            <label className="bl-date" title="Date d'envoi imprimée sur le bulletin. Indépendante de la date de commande, mais jamais avant elle.">
+              Date du bulletin
+              <input className={`bl-date ${dateInvalide ? "invalid" : ""}`} type="date" value={dateBulletin}
+                min={dateCommandeIso || undefined} onChange={(e) => setDateBulletin(e.target.value)} />
+            </label>
             <input className="bl-mention" value={mention} onChange={(e) => setMention(e.target.value)}
               placeholder="Mention (ex. Livraison partielle 1/2)" maxLength={120}
               title="Imprimée sous le titre du bulletin. Vide = rien n'apparaît." />
@@ -461,7 +486,7 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
             <button className="bl-btn" onClick={() => setShowAdd((v) => !v)}>＋ Ajouter une ligne</button>
             <button className="bl-btn" onClick={toutRemettre} disabled={!modifie} title="Revient à la commande d'origine">↺ Tout remettre</button>
             <button className="bl-btn primary" onClick={() => window.print()}>🖨 Imprimer</button>
-            <button className="bl-btn save" onClick={enregistrerPdf} disabled={saving || articlesVisibles.length === 0}
+            <button className="bl-btn save" onClick={enregistrerPdf} disabled={saving || articlesVisibles.length === 0 || dateInvalide || !dateBulletin}
               title="Enregistre ce bulletin dans l'historique de la commande et génère son PDF (~10 s)">
               {saving ? "⏳ Génération…" : "💾 Enregistrer en PDF"}
             </button>
@@ -484,6 +509,11 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
           {saveResult.ok ? "✅ " : "⚠️ "}{saveResult.msg}
           {saveResult.url && <> — <a href={saveResult.url} target="_blank" rel="noopener noreferrer">Ouvrir le PDF</a></>}
           {saveResult.ok && <> · Il apparaît maintenant sur la fiche de la commande.</>}
+        </div>
+      )}
+      {editable && dateInvalide && (
+        <div className="bl-banner ko">
+          ⚠️ La date du bulletin ({formatDate(dateBulletin)}) est antérieure à la date de commande ({formatDate(data.date)}). Un bulletin ne peut pas précéder sa commande.
         </div>
       )}
       {editable && saved.length === 0 && !modifie && (
@@ -511,7 +541,10 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
                 {data.reference && (
                   <tr><td className="doc-meta-label">Référence</td><td>{data.reference}</td></tr>
                 )}
-                <tr><td className="doc-meta-label">Date</td><td>{formatDate(data.date)}</td></tr>
+                <tr><td className="doc-meta-label">Date de commande</td><td>{formatDate(data.date)}</td></tr>
+                {dateBulletin && (
+                  <tr><td className="doc-meta-label">Date du bulletin</td><td>{formatDate(dateBulletin)}</td></tr>
+                )}
                 <tr><td className="doc-meta-label">Commercial</td><td>{data.commercial}</td></tr>
                 {data.leadTime && (
                   <tr><td className="doc-meta-label">Délai de livraison</td><td>{data.leadTime}</td></tr>

@@ -21,12 +21,14 @@ type Bulletin = {
   nb_pieces: number;
   pdf_url: string | null;
   pdf_erreur: string | null;
+  date_bulletin: string | null;
   cree_par: string | null;
   created_at: string;
 };
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch";
-
+function fmtDateJour(iso: string) {
+  try { return new Date(iso + "T00:00:00").toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" }); } catch { return iso; }
+}
 function fmtDateHeure(iso: string) {
   try {
     return new Date(iso).toLocaleString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -59,7 +61,10 @@ export default function BulletinsLivraisonBlock({ slug }: { slug: string }) {
     return () => document.removeEventListener("visibilitychange", onFocus);
   }, [load]);
 
-  const urlEditeur = `${APP_URL}/print/bulletin-livraison/${slug}`;
+  // Lien RELATIF, volontairement : NEXT_PUBLIC_APP_URL vaut la prod même sur
+  // une preview Vercel, et un lien absolu y ouvrirait la page de PRODUCTION
+  // (piège constaté le 02.09 sur les autres boutons Documents du dashboard).
+  const urlEditeur = `/print/bulletin-livraison/${slug}`;
 
   return (
     <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
@@ -90,7 +95,7 @@ export default function BulletinsLivraisonBlock({ slug }: { slug: string }) {
             <thead className="bg-black/20 text-left text-xs text-zinc-400 uppercase">
               <tr>
                 <th className="px-3 py-2">N°</th>
-                <th className="px-3 py-2">Date</th>
+                <th className="px-3 py-2">Date du bulletin</th>
                 <th className="px-3 py-2">Mention</th>
                 <th className="px-3 py-2 text-center">Articles</th>
                 <th className="px-3 py-2 text-center">Pièces</th>
@@ -101,7 +106,7 @@ export default function BulletinsLivraisonBlock({ slug }: { slug: string }) {
               {bulletins.map((b, idx) => (
                 <tr key={b.id} className={`border-t border-white/5 ${idx % 2 === 0 ? "bg-white/[0.02]" : ""}`}>
                   <td className="px-3 py-2 font-semibold text-zinc-200">{b.numero_bulletin}</td>
-                  <td className="px-3 py-2 text-xs text-zinc-400">{fmtDateHeure(b.created_at)}</td>
+                  <td className="px-3 py-2 text-xs text-zinc-300" title={"Enregistré le " + fmtDateHeure(b.created_at)}>{b.date_bulletin ? fmtDateJour(b.date_bulletin) : fmtDateHeure(b.created_at)}</td>
                   <td className="px-3 py-2 text-zinc-300 text-xs">{b.mention || <span className="text-zinc-600">—</span>}</td>
                   <td className="px-3 py-2 text-center text-zinc-300">{b.nb_lignes}</td>
                   <td className="px-3 py-2 text-center text-zinc-300">{b.nb_pieces}</td>

@@ -127,6 +127,25 @@ commandes réelles seulement. Liste : n°, date, mention, articles, pièces,
 existe même vide, avec une phrase qui explique la fonction. Elle se recharge au
 retour sur l'onglet (l'éditeur s'ouvre dans un autre onglet).
 
+### 3.6 Date du bulletin (ajout après le premier test, même jour)
+
+**Règle de Thierry :** la date de commande et la date du bulletin (= date
+d'envoi) sont **deux choses sans lien** — sauf que la seconde ne peut **jamais**
+être antérieure à la première.
+
+- En-tête imprimé : « Date de commande » (figée, non éditable) et « Date du
+  bulletin » (champ date dans la barre, pré-rempli à **aujourd'hui**, borne
+  `min` = date de commande).
+- Vérification **des deux côtés** : la page bloque le bouton et affiche un
+  bandeau rouge ; la route POST relit `offres.date_document` et refuse en 400.
+- Colonne `date_bulletin date` — migration **`docs/sql/014-bulletins-livraison-date.sql`**,
+  qui rétro-remplit les bulletins de test avec leur jour de création.
+- La carte du dashboard affiche la date du bulletin (l'horodatage
+  d'enregistrement reste en `title`).
+
+Piège évité : `new Date().toISOString().slice(0,10)` donne la veille après
+22 h (heure de Zurich → UTC). La date du jour est construite en local.
+
 ---
 
 ## 4. Fichiers touchés
@@ -140,6 +159,7 @@ retour sur l'onglet (l'éditeur s'ouvre dans un autre onglet).
 | `app/dashboard/[slug]/page.tsx` | +1 import, +1 rendu de carte, 1 `title` précisé |
 | `proxy.ts` | +7 lignes, additives |
 | `docs/sql/013-bulletins-livraison.sql` | Nouveau — **à exécuter à la main** |
+| `docs/sql/014-bulletins-livraison-date.sql` | Nouveau — **à exécuter à la main**, après 013 |
 
 Aucun fichier sanctuarisé touché. Aucune colonne existante touchée.
 

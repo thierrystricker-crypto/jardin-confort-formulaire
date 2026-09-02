@@ -20,7 +20,7 @@ export async function GET(
 
   const { data, error } = await supabaseAdmin
     .from("bulletins_livraison")
-    .select("id, offre_slug, numero_affiche, numero_bulletin, mention, lines, nb_lignes, nb_pieces, pdf_url, created_at")
+    .select("id, offre_slug, numero_affiche, numero_bulletin, mention, date_bulletin, lines, nb_lignes, nb_pieces, pdf_url, created_at")
     .eq("id", id)
     .single()
 
