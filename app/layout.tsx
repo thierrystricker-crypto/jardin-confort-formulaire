@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     siteName: "Jardin-Confort",
     title: "Jardin-Confort",
     description: "Jardin-Confort SA, Lutry — offres, commandes et suivi client.",
-    images: [{ url: "/icon.png", width: 512, height: 512 }],
+    images: [{ url: "/og-picto.png", width: 512, height: 512 }],
   },
 };
 
