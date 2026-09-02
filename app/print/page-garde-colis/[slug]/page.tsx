@@ -5,6 +5,12 @@
 //  A4 minimaliste : adresse retour Jardin-Confort à gauche (vertical),
 //  adresse client en haut à droite, infos commande en bas à gauche.
 //  Uniquement pour les commandes internes (CMD-XXXXX)
+//
+//  02.09.2026 — ÉDITABLE À L'ÉCRAN avant impression : chaque ligne de
+//  l'adresse (société, nom, complément, rue, NPA ville) et la ligne « Accès »
+//  se corrigent en place (adresse du voisin, du bureau, un c/o…). Choix
+//  Livraison / Facturation quand les deux diffèrent. Rien n'est enregistré :
+//  la commande n'est jamais modifiée, on corrige, on imprime.
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from "react";
@@ -31,10 +37,50 @@ const EMPTY: PrintData = {
   deliveryMode: "Livraison à domicile",
 } as any;
 
+// Les 5 lignes de l'adresse, telles qu'imprimées (une chaîne par ligne)
+type Adresse = { societe: string; nom: string; complement: string; rue: string; npaVille: string };
+type SourceAdresse = "livraison" | "facturation";
+
+function joindre(...parts: Array<string | undefined>): string {
+  return parts.map((p) => (p || "").trim()).filter(Boolean).join(" ");
+}
+
+function adresseDepuis(data: PrintData, source: SourceAdresse): Adresse {
+  if (source === "livraison") {
+    return {
+      societe: data.livrSociete || "",
+      nom: joindre(data.livrNom, data.livrPrenom),
+      complement: data.livr_complement_nom || "",
+      rue: joindre(data.livrRue, data.livrNumero),
+      npaVille: joindre(data.livrNpa, data.livrVille),
+    };
+  }
+  return {
+    societe: data.societe || "",
+    nom: joindre(data.nom, data.prenom),
+    complement: data.complement_nom || "",
+    rue: joindre(data.rue, data.numero),
+    npaVille: joindre(data.npa, data.ville),
+  };
+}
+
+const LIGNES: Array<{ key: keyof Adresse; placeholder: string; bold?: boolean }> = [
+  { key: "societe",    placeholder: "Société (facultatif)" },
+  { key: "nom",        placeholder: "Nom Prénom", bold: true },
+  { key: "complement", placeholder: "Complément : c/o, voisin, étage… (facultatif)" },
+  { key: "rue",        placeholder: "Rue et numéro" },
+  { key: "npaVille",   placeholder: "NPA Ville" },
+];
+
 export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ slug: string }> }) {
   const [data, setData] = useState<PrintData>(EMPTY);
   const [ready, setReady] = useState(false);
   const [numeroAffiche, setNumeroAffiche] = useState("");
+
+  // ── Édition (écran seulement, jamais enregistré) ──
+  const [source, setSource] = useState<SourceAdresse>("facturation");
+  const [adresse, setAdresse] = useState<Adresse>({ societe: "", nom: "", complement: "", rue: "", npaVille: "" });
+  const [acces, setAcces] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -46,11 +92,13 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
           const offreData = json.offre?.data;
           if (offreData) {
             setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber || slug);
-            setData({
-              ...EMPTY,
-              ...offreData,
-              customerNumber: json.offre?.numero_client || "",
-            });
+            const d: PrintData = { ...EMPTY, ...offreData, customerNumber: json.offre?.numero_client || "" };
+            setData(d);
+            // Comme avant : livraison prioritaire si différente (et pas « À l'emporter »)
+            const src: SourceAdresse = (d as any).deliveryMode !== "À l'emporter" && d.livrDiff ? "livraison" : "facturation";
+            setSource(src);
+            setAdresse(adresseDepuis(d, src));
+            setAcces((d as any).accesLivraison || "");
           }
         }
       } catch (e) {
@@ -63,16 +111,13 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
 
   if (!ready) return <div style={{padding:40, textAlign:"center", color:GREY}}>Chargement…</div>;
 
-  // Détermine quelle adresse afficher (livraison prioritaire si différente)
-  const showLivrDiff = (data as any).deliveryMode !== "À l'emporter" && data.livrDiff;
-  const addrSociete = showLivrDiff ? data.livrSociete : data.societe;
-  const addrNom = showLivrDiff ? data.livrNom : data.nom;
-  const addrPrenom = showLivrDiff ? data.livrPrenom : data.prenom;
-  const addrComplementNom = showLivrDiff ? data.livr_complement_nom : data.complement_nom;
-  const addrRue = showLivrDiff ? data.livrRue : data.rue;
-  const addrNumero = showLivrDiff ? data.livrNumero : data.numero;
-  const addrNpa = showLivrDiff ? data.livrNpa : data.npa;
-  const addrVille = showLivrDiff ? data.livrVille : data.ville;
+  const aDeuxAdresses = (data as any).deliveryMode !== "À l'emporter" && data.livrDiff;
+  const adresseOrigine = adresseDepuis(data, source);
+  const modifie = LIGNES.some((l) => adresse[l.key] !== adresseOrigine[l.key]) || acces !== ((data as any).accesLivraison || "");
+  const setLigne = (key: keyof Adresse, v: string) => setAdresse((a) => ({ ...a, [key]: v }));
+  const choisirSource = (s: SourceAdresse) => { setSource(s); setAdresse(adresseDepuis(data, s)); };
+  const toutRemettre = () => { setAdresse(adresseDepuis(data, source)); setAcces((data as any).accesLivraison || ""); };
+  const montrerAcces = (data as any).deliveryMode !== "À l'emporter";
 
   return (
     <>
@@ -92,20 +137,38 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
         @media screen {
           .doc-wrap {
             max-width: 794px;
-            margin: 0 auto;
+            margin: 64px auto 0;
             padding: 30px;
             box-shadow: 0 0 20px rgba(0,0,0,0.08);
             min-height: 1000px;
             position: relative;
           }
-          .print-btn {
-            position: fixed; top: 16px; right: 16px; z-index: 100;
-            background: ${THEME}; color: white; border: 0;
-            padding: 10px 20px; border-radius: 6px;
-            font-size: 14px; font-weight: 700; cursor: pointer;
-          }
         }
-        @media print { .print-btn { display: none !important; } }
+
+        /* ── Barre d'édition (écran seulement) ── */
+        .pg-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: #1f2226; color: #e5e7eb; display: flex; align-items: center; gap: 8px; padding: 8px 14px; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+        .pg-bar .pg-info { font-size: 12px; color: #a1a1aa; margin-right: auto; }
+        .pg-bar .pg-info b { color: #fff; }
+        .pg-btn { border: 1px solid rgba(255,255,255,.15); background: #34383d; color: #e5e7eb; padding: 7px 12px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit; }
+        .pg-btn:hover { background: #40454b; }
+        .pg-btn:disabled { opacity: .45; cursor: default; }
+        .pg-btn.primary { background: ${THEME}; border-color: ${THEME}; color: white; }
+        .pg-seg { display: inline-flex; border: 1px solid rgba(255,255,255,.15); border-radius: 8px; overflow: hidden; }
+        .pg-seg button { border: 0; background: #2a2d31; color: #a1a1aa; padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .pg-seg button.on { background: ${THEME}; color: white; }
+
+        /* ── Champs éditables en place (écran seulement) ── */
+        .pg-field { display: block; width: 100%; font-family: inherit; color: ${BLACK}; background: #f0f7ff; border: 1.5px dashed ${THEME}; border-radius: 6px; padding: 2px 8px; margin: 2px 0; }
+        .pg-field:hover { background: #e0efff; }
+        .pg-field:focus { outline: 2px solid ${THEME}; outline-offset: 1px; }
+        .pg-field::placeholder { color: #94a3b8; font-weight: 400; font-style: italic; font-size: 14px; }
+        .pg-field.empty { background: #f8fafc; border-color: #cbd5e1; }
+        .pg-hint { font-size: 11px; color: #64748b; margin-top: 6px; }
+        .pg-only-print { display: none; }
+        @media print {
+          .pg-bar, .pg-only-screen, .pg-hint { display: none !important; }
+          .pg-only-print { display: block; }
+        }
 
         /* Ligne du haut : logo+retour à gauche, adresse client à droite */
         .top-row {
@@ -128,25 +191,13 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
           max-height: 200px;
           object-fit: contain;
         }
-        .return-addr {
-          font-size: 11px;
-          color: ${GREY};
-          line-height: 1.4;
-          /* Texte vertical façon adresse retour postale */
-          writing-mode: vertical-rl;
-          transform: rotate(180deg);
-          text-orientation: mixed;
-          padding: 4px 0;
-          font-weight: 600;
-          letter-spacing: 0.02em;
-          white-space: nowrap;
-        }
 
         /* Adresse client : grande taille, droite, position style fenêtre enveloppe */
         .client-addr {
           flex: 0 0 auto;
           padding: 12px 24px;
           min-width: 90mm;
+          max-width: 110mm;
           margin-top: 30mm;
         }
         .client-addr-line {
@@ -174,6 +225,7 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
           line-height: 1.7;
         }
         .order-info-line strong { font-weight: 700; }
+        .pg-acces { font-size: 14px; font-style: italic; color: ${GREY}; min-height: 2.4em; resize: vertical; line-height: 1.5; }
 
         /* Trait décoratif */
         .accent-bar {
@@ -184,7 +236,21 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
         }
       `}</style>
 
-      <button className="print-btn" onClick={() => window.print()}>🖨 Imprimer</button>
+      {/* ── BARRE (écran uniquement) ── */}
+      <div className="pg-bar">
+        <span className="pg-info">
+          Page de garde <b>{numeroAffiche || data.offerNumber}</b> · l&apos;adresse se corrige directement sur la page
+          {modifie && <span style={{color:"#fbbf24"}}> · modifiée (rien n&apos;est enregistré)</span>}
+        </span>
+        {aDeuxAdresses && (
+          <span className="pg-seg" title="Quelle adresse de la commande prendre comme base">
+            <button className={source === "livraison" ? "on" : ""} onClick={() => choisirSource("livraison")}>Livraison</button>
+            <button className={source === "facturation" ? "on" : ""} onClick={() => choisirSource("facturation")}>Facturation</button>
+          </span>
+        )}
+        <button className="pg-btn" onClick={toutRemettre} disabled={!modifie} title="Revient à l'adresse de la commande">↺ Tout remettre</button>
+        <button className="pg-btn primary" onClick={() => window.print()}>🖨 Imprimer</button>
+      </div>
 
       <div className="doc-wrap">
 
@@ -197,11 +263,22 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
           </div>
 
           <div className="client-addr">
-            {addrSociete && <div className="client-addr-line">{addrSociete}</div>}
-            <div className="client-addr-name">{addrNom} {addrPrenom}</div>
-            {addrComplementNom && <div className="client-addr-line">{addrComplementNom}</div>}
-            {addrRue && <div className="client-addr-line">{addrRue} {addrNumero}</div>}
-            {addrNpa && <div className="client-addr-line">{addrNpa} {addrVille}</div>}
+            {/* Écran : une ligne = un champ, même vide (pour pouvoir en ajouter une) */}
+            <div className="pg-only-screen">
+              {LIGNES.map((l) => (
+                <input key={l.key}
+                  className={`pg-field ${l.bold ? "client-addr-name" : "client-addr-line"} ${adresse[l.key] ? "" : "empty"}`}
+                  value={adresse[l.key]} placeholder={l.placeholder} maxLength={80}
+                  onChange={(e) => setLigne(l.key, e.target.value)} />
+              ))}
+              <div className="pg-hint">✎ Cliquez une ligne pour la corriger — voisin, bureau, c/o… Les lignes vides ne s&apos;impriment pas.</div>
+            </div>
+            {/* Impression : texte, comme avant */}
+            <div className="pg-only-print">
+              {LIGNES.map((l) => adresse[l.key].trim() ? (
+                <div key={l.key} className={l.bold ? "client-addr-name" : "client-addr-line"}>{adresse[l.key].trim()}</div>
+              ) : null)}
+            </div>
           </div>
         </div>
 
@@ -226,10 +303,20 @@ export default function PrintPageGardeColisSlug({ params }: { params: Promise<{ 
               <strong>Commercial :</strong> {data.commercial}
             </div>
           )}
-          {(data as any).accesLivraison && (data as any).deliveryMode !== "À l'emporter" && (
-            <div className="order-info-line" style={{fontStyle:"italic", color:GREY, marginTop: 6}}>
-              <strong style={{color:BLACK}}>Accès :</strong> {(data as any).accesLivraison}
-            </div>
+          {montrerAcces && (
+            <>
+              <div className="pg-only-screen" style={{marginTop: 6}}>
+                <div className="order-info-line"><strong>Accès :</strong></div>
+                <textarea className="pg-field pg-acces" value={acces} maxLength={300} rows={2}
+                  placeholder="Consigne pour le livreur : étage, code, « déposer chez le voisin »… (facultatif)"
+                  onChange={(e) => setAcces(e.target.value)} />
+              </div>
+              {acces.trim() && (
+                <div className="pg-only-print order-info-line" style={{fontStyle:"italic", color:GREY, marginTop: 6, whiteSpace: "pre-wrap"}}>
+                  <strong style={{color:BLACK, fontStyle:"normal"}}>Accès :</strong> {acces.trim()}
+                </div>
+              )}
+            </>
           )}
         </div>
 

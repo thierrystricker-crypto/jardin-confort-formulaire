@@ -226,3 +226,29 @@ s'applique pas.
 - **Concurrence** : deux enregistrements simultanés sur la même commande se
   disputent `numero_bulletin` ; l'index unique fait échouer le second avec un
   message clair. Pas de reprise automatique — volontairement, le cas est rare.
+
+---
+
+## 7. Chantier frère, même jour — page de garde colis éditable
+
+**Demande :** pouvoir corriger « un petit quelque chose » avant d'imprimer la
+page de garde (`/print/page-garde-colis/[slug]`) : adresse du voisin, du bureau,
+un c/o.
+
+**Livré** (un seul fichier réécrit, `app/print/page-garde-colis/[slug]/page.tsx`,
+aucune base, aucun enregistrement) :
+- Les 5 lignes de l'adresse (société, nom, complément, rue + n°, NPA ville)
+  sont des champs éditables en place, cadre pointillé bleu, **y compris les
+  lignes vides** pour pouvoir en ajouter une. Les lignes vides ne s'impriment pas.
+- Sélecteur **Livraison / Facturation** dans la barre quand la commande a deux
+  adresses (la règle d'origine « livraison prioritaire si différente » reste le
+  choix par défaut). « ↺ Tout remettre ».
+- La ligne **Accès** est un champ texte libre (« déposer chez le voisin »).
+- Impression : texte pur, identique à l'ancien rendu. `.pg-only-screen` /
+  `.pg-only-print`, même motif que le bulletin.
+- Rien n'écrit dans `offres` ; une correction ici est volontairement éphémère —
+  si l'adresse est fausse **durablement**, c'est une correction tracée du
+  document (CorrectionDrawer), pas cette page.
+
+Non touché : `page-garde-client/[id]` (depuis la fiche client) et la copie
+`pg-` de `/print/all`. À remonter en P3 si le même besoin s'y présente.
