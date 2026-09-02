@@ -129,7 +129,14 @@ export function proxy(req: NextRequest) {
 
   // pdf.co doit pouvoir rendre les pages /print internes (fiche de travail)
   // pour générer les PDFs. Jeton passé en query par fiche-travail-pdf/route.ts.
-  if (secret && pathname.startsWith("/print/")) {
+  //
+  // 02.09.2026 — même jeton accepté sur GET /api/bulletins-livraison/<id> :
+  // la page /print/bulletin-livraison/[slug]?bulletin=<id>, rendue par pdf.co
+  // sans cookie, relit le bulletin enregistré par cette API et lui transmet
+  // le jc_token reçu. Lecture seule d'un uuid, aucun prix. Rien d'autre.
+  const estLectureBulletin =
+    method === "GET" && /^\/api\/bulletins-livraison\/[0-9a-f-]{36}$/i.test(pathname);
+  if (secret && (pathname.startsWith("/print/") || estLectureBulletin)) {
     const jcToken = req.nextUrl.searchParams.get("jc_token");
     if (jcToken && jcToken === secret) {
       return NextResponse.next();
