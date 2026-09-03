@@ -59,6 +59,11 @@ function estRoutePublique(pathname: string, method: string): boolean {
   // Le GET reste interne (consommé par le dashboard, qui a le cookie).
   if (pathname === "/api/make-health" && method === "POST") return true;
 
+  // Webhook Wallee relayé par Make (chantier « Acompte payé visible », 03.09.2026) :
+  // service externe, sans cookie. Pas ouvert pour autant : la route vérifie
+  // elle-même `Authorization: Bearer $WALLEE_WEBHOOK_SECRET` et refuse tout le reste.
+  if (pathname === "/api/wallee-webhook" && method === "POST") return true;
+
   // /api/offres/[slug] :
   //   • GET (racine)   → lecture de l'offre par le client         → PUBLIC
   //   • /valider       → validation de l'offre par le client      → PUBLIC

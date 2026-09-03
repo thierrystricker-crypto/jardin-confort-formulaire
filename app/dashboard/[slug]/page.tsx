@@ -11,6 +11,7 @@ import BulletinsLivraisonBlock from "@/components/BulletinsLivraisonBlock";
 import AnnexesBlock from "@/components/AnnexesBlock";
 import ArrivagesBlock from "@/components/ArrivagesBlock";
 import SuiviDelaisBlock from "@/components/SuiviDelaisBlock";
+import AcompteWalleeBadge from "@/components/AcompteWalleeBadge";
 import FilsMailsCard from "@/components/FilsMailsCard";
 import ExportWinbizBlock from "@/components/ExportWinbizBlock";
 
@@ -1225,6 +1226,9 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                           {probabilite==="forte"?"🟢 Forte":probabilite==="moyenne"?"🟡 Moyenne":"🔴 Faible"}
                         </span>
                       )}
+                      {/* Acompte réconcilié par Wallee (03.09.2026) : le composant ne rend
+                          rien tant qu'aucun paiement FULFILL n'existe pour ce numéro */}
+                      <AcompteWalleeBadge numero={offre.numero_affiche} />
                       {/* Livraison (commandes magasin) — équivalent du fulfilled Shopify */}
                       {offre.type_document==="Commande"&&(
                         offre.statut_livraison==="livree" ? (
