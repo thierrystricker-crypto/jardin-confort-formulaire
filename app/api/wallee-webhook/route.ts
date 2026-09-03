@@ -68,7 +68,9 @@ export async function POST(req: NextRequest) {
   const secret = process.env.WALLEE_WEBHOOK_SECRET;
   const enTete = req.headers.get("authorization");
   if (!secret || enTete !== "Bearer " + secret) {
-    return NextResponse.json({ error: "Accès non autorisé" }, { status: 401 });
+    // Message distinct de celui du proxy : un 401 « Accès non autorisé » vient du
+    // verrou (route pas ouverte), celui-ci vient de la route (secret absent/faux).
+    return NextResponse.json({ error: "Secret webhook absent ou invalide" }, { status: 401 });
   }
 
   try {
