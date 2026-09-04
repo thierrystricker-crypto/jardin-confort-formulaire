@@ -28,8 +28,14 @@
 //  - merchantReference = numero_affiche : c'est la clé que le webhook et le badge
 //    relisent. ⚠️ numero_affiche n'est pas unique (doublons connus sur DEV-) :
 //    on n'accepte ici que les type_document = "Commande".
-//  - Moyens de paiement : TOUS ceux du space (pas d'allowedPaymentMethodConfigurations).
-//    Le space 48617 est partagé avec le webshop : aucun réglage au niveau du space.
+//  - Moyens de paiement : VIREMENT QR SEUL (allowedPaymentMethodConfigurations =
+//    [243711]). Décidé le 04.09.2026 après un incident : en laissant tous les
+//    moyens du space, le client pouvait choisir « Facture » (connecteur QR-Facture,
+//    paiement après livraison), que Wallee passe en FULFILL immédiatement → badge
+//    « Acompte reçu » allumé sans un centime encaissé (CMD-80953). Les autres
+//    moyens (TWINT, PostFinance, PayPal) viendront par un second bouton, avec une
+//    liste explicite qui n'inclura jamais la facture. Le space 48617 est partagé
+//    avec le webshop : aucun réglage au niveau du space.
 //  - Mails Wallee coupés PAR TRANSACTION (emailsDisabled = true), jamais dans le space.
 //  - billingAddress structurée (obligatoire pour le QR-bill). Le SDK n'a pas de
 //    champ « numéro » séparé : rue + numéro vont dans `street`, comme sur le
@@ -56,6 +62,12 @@ import {
 import type { Transaction, TransactionCreate } from "wallee";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch";
+
+// Configuration de moyen de paiement « Virement bancaire avec facture QR »
+// (PostFinance) du space 48617 — relevée dans le portail Wallee. Seul moyen
+// autorisé sur les transactions créées ici. Surchargeable par variable Vercel
+// si l'id venait à changer.
+const METHODE_VIREMENT_QR = enNombre(process.env.WALLEE_METHODE_VIREMENT_QR) ?? 243711;
 
 // États Wallee (cf. TransactionState du SDK) regroupés pour l'UI.
 const ETATS_ECHEC = new Set(["FAILED", "VOIDED", "DECLINE"]);
@@ -302,6 +314,7 @@ export async function POST(req: NextRequest) {
       language: "fr-CH",
       merchantReference: numero,
       invoiceMerchantReference: numero,
+      allowedPaymentMethodConfigurations: [METHODE_VIREMENT_QR],
       emailsDisabled: true,
       customerEmailAddress: emailClient,
       successUrl: `${APP_URL}/offre/${slug}`,

@@ -153,7 +153,7 @@ export default function WalleeLienPaiement({ slug }: { slug: string }) {
     return (
       <>
         <button onClick={() => creer(false)} disabled={busy}
-          title="Crée la transaction chez Wallee (montant de l'acompte du document, tous moyens de paiement du space, mails Wallee coupés) et ouvre la page de paiement"
+          title="Crée la transaction chez Wallee (montant de l'acompte du document, virement QR uniquement, mails Wallee coupés) et ouvre la page de paiement"
           className={BTN}>
           {busy ? "⏳ Création Wallee…" : "💠 Créer lien de paiement Wallee"}
         </button>
