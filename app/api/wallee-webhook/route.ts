@@ -110,7 +110,14 @@ export async function POST(req: NextRequest) {
     // ─── 4. Relecture de la transaction chez Wallee ───
     DefaultConfig.httpBearerAuth = new HttpBearerAuth(userId, authKey);
     const service = new TransactionsService(DefaultConfig);
-    const tx = await service.getPaymentTransactionsId({ id: entityId, space: spaceId });
+    // ⚠️ L'API 5.x ne renvoie les objets liés QUE si on les demande (`expand`) :
+    // sans lui, paymentConnectorConfiguration est vide et le filtre 4 bis ne voit
+    // rien — c'est ce qui a laissé passer le rejeu du 04.09 au soir.
+    const tx = await service.getPaymentTransactionsId({
+      id: entityId,
+      space: spaceId,
+      expand: new Set(["paymentConnectorConfiguration"]),
+    });
 
     // Second niveau : la source fait foi.
     const etatWallee = String(tx.state ?? "").toUpperCase();
@@ -128,19 +135,30 @@ export async function POST(req: NextRequest) {
     const connecteur = tx.paymentConnectorConfiguration;
     const nomConnecteur = String(connecteur?.name ?? "");
     const nomMethode = String(connecteur?.paymentMethodConfiguration?.name ?? "");
+    const methodeId = connecteur?.paymentMethodConfiguration?.id ?? null;
     const estFactureSansPaiement =
       /QR-Facture/i.test(nomConnecteur) || /^Facture$/i.test(nomMethode.trim());
     if (estFactureSansPaiement) {
       console.warn("wallee-webhook: FULFILL sur facture sans paiement ignoré", {
-        entityId,
-        connecteur: nomConnecteur,
-        methode: nomMethode,
-        methodeId: connecteur?.paymentMethodConfiguration?.id ?? null,
+        entityId, connecteur: nomConnecteur, methode: nomMethode, methodeId,
       });
-      return NextResponse.json({ success: true, ignored: `facture-sans-paiement:${connecteur?.paymentMethodConfiguration?.id ?? "?"}` });
+      return NextResponse.json({ success: true, ignored: `facture-sans-paiement:${methodeId ?? "?"}` });
     }
 
     const merchantReference = (tx.merchantReference ?? "").trim();
+
+    // ─── 4 ter. Filet de sécurité, indépendant de `expand` ───
+    // Une transaction de l'APP (référence CMD-/DEV-) porte toujours une liste
+    // explicite de moyens autorisés depuis le hotfix du 04.09 (virement QR seul).
+    // Si le connecteur n'est pas lisible ET que la transaction est ouverte à tous
+    // les moyens, on ne peut pas savoir si le FULFILL vient d'une facture : on
+    // s'abstient, en 200 — mieux vaut un badge en retard qu'un badge menteur.
+    const estReferenceApp = /^(CMD|DEV)-/i.test(merchantReference);
+    const moyensAutorises = tx.allowedPaymentMethodConfigurations ?? [];
+    if (estReferenceApp && !nomConnecteur && moyensAutorises.length === 0) {
+      console.warn("wallee-webhook: FULFILL sans connecteur lisible sur transaction ouverte à tous les moyens — ignoré", { entityId, merchantReference });
+      return NextResponse.json({ success: true, ignored: "connecteur-inconnu-tous-moyens" });
+    }
     const montant = tx.completedAmount ?? tx.authorizationAmount ?? null;
     const devise = tx.currency ?? "CHF";
     const paidAt =
@@ -175,7 +193,8 @@ export async function POST(req: NextRequest) {
               customerEmailAddress: tx.customerEmailAddress ?? null,
               connecteur: nomConnecteur || null,
               methode: nomMethode || null,
-              methodeId: connecteur?.paymentMethodConfiguration?.id ?? null,
+              methodeId,
+              allowedPaymentMethodConfigurations: moyensAutorises,
             },
           },
         },
