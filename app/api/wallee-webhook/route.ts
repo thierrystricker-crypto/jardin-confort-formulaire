@@ -16,7 +16,9 @@
 //    verts dans le portail mais l'argent n'est PAS arrivé → ignorés, en 200
 //    pour que Make ne réessaie pas. Le filtre est appliqué deux fois : sur le
 //    payload, puis sur la transaction relue (on ne fait confiance qu'à la
-//    source).
+//    source). Troisième filtre depuis le 04.09.2026 : un FULFILL obtenu via le
+//    connecteur « QR-Facture » (paiement sur facture) n'est PAS un encaissement
+//    et est ignoré — voir l'étape 4 bis.
 //  - Idempotence : upsert sur wallee_transaction_id (UNIQUE). Un même FULFILL
 //    renvoyé deux fois n'écrit qu'une ligne.
 //  - N'écrit JAMAIS dans offres. Aucune logique métier dans Make.
@@ -116,6 +118,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, ignored: `wallee:${etatWallee || "?"}` });
     }
 
+    // ─── 4 bis. Troisième niveau : FULFILL n'atteste un encaissement QUE pour un
+    // moyen de paiement réel. Le connecteur « QR-Facture (PostFinance) » (paiement
+    // sur facture, après livraison) passe la transaction en FULFILL DÈS QUE le
+    // client choisit « Facture » — sans qu'un centime soit arrivé. Vécu le
+    // 04.09.2026 sur CMD-80953 : badge « Acompte reçu » allumé à tort.
+    // Le virement QR, lui, reste en COMPLETED jusqu'au rapprochement bancaire ;
+    // carte / TWINT / PayPal ne passent en FULFILL qu'après autorisation réelle.
+    const connecteur = tx.paymentConnectorConfiguration;
+    const nomConnecteur = String(connecteur?.name ?? "");
+    const nomMethode = String(connecteur?.paymentMethodConfiguration?.name ?? "");
+    const estFactureSansPaiement =
+      /QR-Facture/i.test(nomConnecteur) || /^Facture$/i.test(nomMethode.trim());
+    if (estFactureSansPaiement) {
+      console.warn("wallee-webhook: FULFILL sur facture sans paiement ignoré", {
+        entityId,
+        connecteur: nomConnecteur,
+        methode: nomMethode,
+        methodeId: connecteur?.paymentMethodConfiguration?.id ?? null,
+      });
+      return NextResponse.json({ success: true, ignored: `facture-sans-paiement:${connecteur?.paymentMethodConfiguration?.id ?? "?"}` });
+    }
+
     const merchantReference = (tx.merchantReference ?? "").trim();
     const montant = tx.completedAmount ?? tx.authorizationAmount ?? null;
     const devise = tx.currency ?? "CHF";
@@ -149,6 +173,9 @@ export async function POST(req: NextRequest) {
               currency: tx.currency ?? null,
               completedOn: tx.completedOn ?? null,
               customerEmailAddress: tx.customerEmailAddress ?? null,
+              connecteur: nomConnecteur || null,
+              methode: nomMethode || null,
+              methodeId: connecteur?.paymentMethodConfiguration?.id ?? null,
             },
           },
         },
