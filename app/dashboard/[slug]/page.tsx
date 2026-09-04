@@ -12,6 +12,7 @@ import AnnexesBlock from "@/components/AnnexesBlock";
 import ArrivagesBlock from "@/components/ArrivagesBlock";
 import SuiviDelaisBlock from "@/components/SuiviDelaisBlock";
 import AcompteWalleeBadge from "@/components/AcompteWalleeBadge";
+import WalleeLienPaiement from "@/components/WalleeLienPaiement";
 import FilsMailsCard from "@/components/FilsMailsCard";
 import ExportWinbizBlock from "@/components/ExportWinbizBlock";
 
@@ -1411,6 +1412,11 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                     className="inline-flex items-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/80 transition hover:bg-emerald-500/15">
                     💳 QR à la volée
                   </Link>
+                  {/* Lien de paiement Wallee (04.09.2026) — usage MANUEL pour tester
+                      l'amont du badge « Acompte reçu ». Le QR ci-dessus n'est pas
+                      touché ; les flux client ne sont pas touchés. Le composant
+                      fetch lui-même (/api/wallee-transactions). */}
+                  {isCommandeReelle && <WalleeLienPaiement slug={offre.slug} />}
                   {isCommandeReelle && (
                     <>
                       {/* Fiche INITIALE : pièce d'archive, pas un document de
