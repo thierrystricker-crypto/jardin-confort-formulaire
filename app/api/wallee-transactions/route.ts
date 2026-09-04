@@ -69,6 +69,10 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confor
 // si l'id venait à changer.
 const METHODE_VIREMENT_QR = enNombre(process.env.WALLEE_METHODE_VIREMENT_QR) ?? 243711;
 
+// Taux de TVA suisse (taux normal, 8.1 % depuis 2024) : le total_ttc des documents
+// est TTC, la facture Wallee doit le dire. Surchargeable par variable Vercel.
+const TAUX_TVA = enNombre(process.env.WALLEE_TAUX_TVA) ?? 8.1;
+
 // États Wallee (cf. TransactionState du SDK) regroupés pour l'UI.
 const ETATS_ECHEC = new Set(["FAILED", "VOIDED", "DECLINE"]);
 const ETATS_PAYABLES = new Set(["PENDING", "CONFIRMED"]);
@@ -335,6 +339,10 @@ export async function POST(req: NextRequest) {
           name: `${libelle} — ${numero}`,
           quantity: 1,
           amountIncludingTax: montant,
+          // TVA INCLUSE dans le montant (total_ttc du document) : sans cette ligne,
+          // la facture Wallee affichait « 0 % » et « TOTAL HT » = TTC (vu le 04.09).
+          // Wallee calcule la part de TVA à partir du taux ; le montant ne change pas.
+          taxes: new Set([{ rate: TAUX_TVA, title: "TVA" }]),
           type: LineItemType.Product,
           shippingRequired: false,
         },

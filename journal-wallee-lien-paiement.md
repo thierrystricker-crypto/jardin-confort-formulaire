@@ -58,6 +58,17 @@ Transaction `587401300` créée : référence `CMD-80666`, 193.50 CHF, `fr-CH`, 
 - Une seule transaction vivante par commande ; nouvelle création uniquement après échec terminal, ou `force` si le montant du document a changé.
 - Ligne témoin `587401300` laissée dans `transactions_wallee`.
 
+## Réglages Wallee faits à la main le 04.09 (soir, après le merge)
+
+Tout ceci vit dans le portail Wallee, pas dans le dépôt — consigné ici pour qu'on sache que ça existe.
+
+- **Modèle de document « Facture » publié** (Paramètres → Personnalisation → Ressources, éditeur versionné : snapshot « Initial » de 2023 remplacé par la version du 04.09). Seule modification du Twig `document/template/payment/invoice.twig` : `{% block instantPayment %}{% endblock %}` — le lien « payer en ligne » et le petit QR disparaissent. Réglages *Document* : logo Jardin-Confort, devise « CHF 1,00 », informations du document réduites à 6 (référence de commande, date de la facture, à payer au plus tard le, montant impayé, mode de paiement, n° TVA). ⚠️ Un modèle « Jardin-Confort — QR-facture app » a été ajouté sous Facture, mais il pointe sur le **même** `invoice.twig` que le défaut : ce n'est pas une copie distincte.
+- **Une seule page : impossible.** Le bulletin QR (page 2) est fusionné par le connecteur PostFinance après le rendu ; il n'existe ni dans `payment-receipts.twig` (qui n'est que le tableau des paiements reçus) ni dans `processor/`. Aucun réglage ne le déplace. Deux pages = présentation standard des QR-factures.
+- **Connecteur `#338569` « Virement bancaire avec facture QR »** (méthode 243711) : délai de paiement **10 → 30 jours** ; à décocher : rappels de paiement, frais de relance, « code QR + lien » (source du lien dans le PDF). Les cases d'e-mails à l'acheteur restent cochées : neutralisées par transaction (`emailsDisabled`), prouvé sur trois transactions. ⚠️ Ne pas confondre avec `#352449` « QR-Facture (PostFinance) » (méthode 255090 = « Facture », exclue).
+- **TVA** : la route envoie désormais `taxes: [{ rate: 8.1, title: "TVA" }]` (incluse, montant inchangé) — commit à venir ; sans cela la facture Wallee affichait 0 % et un total HT égal au TTC. Ne s'applique qu'aux transactions créées après déploiement. Pour un acompte de 50 %, afficher la TVA = usage suisse, à confirmer avec la compta.
+- **Reste à faire dans le portail** : adresse du space (ligne d'expéditeur « Lutry Suisse, Switzerland » en double, nom de personne) — *Paramètres → Espace → Adresse*.
+- **Preuve de bout en bout en attente** : transaction `587970306` (CMD-80947, **1.00 CHF**) à payer réellement avec sa QR-facture ; le rapprochement (1-2 jours ouvrés) doit allumer le badge sur CMD-80947 sans intervention.
+
 ## Prochain chantier — « Bascule des flux client » (cadrage à écrire)
 
 1. Tester `postPaymentTransactionsIdProcessWithoutInteraction` sur une transaction QR seul : si ça produit la facture sans clic client, créer la transaction à la conversion (dans `after()` de `valider`, non bloquant, avec création à la demande en filet sur la page de confirmation).
