@@ -165,6 +165,8 @@ export default function WalleeLienPaiement({ slug }: { slug: string }) {
   const { texte, classe } = libelleEtat(courante.state);
   const enEchec = ETATS_ECHEC.has(courante.state);
   const payable = courante.state === "PENDING" || courante.state === "CONFIRMED";
+  // La QR-facture Wallee existe dès que le client a validé le virement QR.
+  const factureDisponible = ["AUTHORIZED", "COMPLETED", "FULFILL"].includes(courante.state);
   const montantTx = Number(courante.montant);
   const montantDiffere = Number.isFinite(montantTx) && Math.abs(montantTx - etat.montant_document) >= 0.005;
   const anciennes = etat.transactions.length - 1;
@@ -190,6 +192,13 @@ export default function WalleeLienPaiement({ slug }: { slug: string }) {
             {copie ? "✓ Lien copié" : "🔗 Copier le lien"}
           </button>
         </>
+      )}
+      {factureDisponible && (
+        <a href={`/api/wallee-transactions?slug=${encodeURIComponent(slug)}&document=facture`}
+          target="_blank" rel="noopener noreferrer" className={BTN}
+          title="Le PDF « Facture » rendu par Wallee, avec le bulletin QR suisse — à joindre au mail du client (les mails Wallee sont coupés)">
+          📄 QR-facture Wallee
+        </a>
       )}
       {enEchec && (
         <button onClick={() => creer(false)} disabled={busy} className={BTN} title="Crée une nouvelle transaction (l'ancienne reste dans l'historique)">

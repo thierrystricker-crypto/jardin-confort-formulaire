@@ -14,6 +14,12 @@
 //                           de la plus récente chez Wallee si elle n'est pas
 //                           terminale ; régénère l'URL de page si elle est encore
 //                           payable.
+//  - GET  ?slug=cmd-…&document=facture : le PDF « Facture » rendu par Wallee
+//                           (bulletin QR suisse inclus) pour la transaction la
+//                           plus récente. Existe dès que le client a validé le
+//                           virement QR (AUTHORIZED/COMPLETED) — c'est le seul
+//                           canal par lequel il peut recevoir le bulletin, les
+//                           mails Wallee étant coupés. Servi tel quel, jamais stocké.
 //
 // Règles :
 //  - Montant et débiteur : REPRODUITS À L'IDENTIQUE de app/api/offres/[slug]/qr
@@ -110,7 +116,11 @@ function debiteurDocument(offre: OffreDoc) {
   const societe = ((offre.client_societe as string) || "").trim();
   const udName = (societe || personneNom || "Client").toString().slice(0, 70);
   const udStreet = ((offre.client_rue as string) || "Rue inconnue").slice(0, 70);
-  const udNumber = ((d.numero as string) || "1").slice(0, 16);
+  // ⚠️ Pas le repli « 1 » du QR ici : chez pdf4me il va dans un champ « numéro »
+  // séparé, alors que Wallee n'a qu'un champ `street` — le « 1 » s'imprimait
+  // collé à la rue (« Chemin des Viards 2 1 », vu sur la facture du 04.09).
+  // Même assemblage que le bulletin HTML du QR : [rue, numero].filter(Boolean).
+  const udNumber = (typeof d.numero === "string" ? d.numero.trim() : "").slice(0, 16);
   const udPostalCode = ((offre.client_npa as string) || "0000").slice(0, 16);
   const udCity = ((offre.client_ville as string) || "Suisse").slice(0, 35);
   return {
@@ -118,8 +128,6 @@ function debiteurDocument(offre: OffreDoc) {
     prenom: typeof offre.client_prenom === "string" ? offre.client_prenom.trim() : "",
     nom: typeof offre.client_nom === "string" ? offre.client_nom.trim() : "",
     udName,
-    // Le QR joint rue + numéro sur une ligne (generateQrPageHtml : [rue, numero].join(" ")).
-    // Le SDK Wallee n'a qu'un champ `street` : même assemblage.
     street: [udStreet, udNumber].filter(Boolean).join(" "),
     postcode: udPostalCode,
     city: udCity,
@@ -186,6 +194,26 @@ export async function GET(req: NextRequest) {
     const offre = await lireCommande(slug);
     if (!offre) return NextResponse.json({ error: "Document introuvable" }, { status: 404 });
     const { montant: montantDoc } = montantDocument(offre);
+
+    // ─── Variante : le PDF « Facture » de Wallee (QR-facture) ───
+    if ((req.nextUrl.searchParams.get("document") || "") === "facture") {
+      const w = serviceWallee();
+      if (!w) return NextResponse.json({ error: "Configuration Wallee incomplète" }, { status: 500 });
+      const derniere = (await lignesDuSlug(slug))[0];
+      if (!derniere) return NextResponse.json({ error: "Aucune transaction Wallee pour ce document" }, { status: 404 });
+      const doc = await w.service.getPaymentTransactionsIdInvoiceDocument({ id: derniere.wallee_transaction_id, space: w.spaceId });
+      if (!doc?.data) return NextResponse.json({ error: "Wallee n'a pas (encore) de facture pour cette transaction" }, { status: 404 });
+      const pdf = Buffer.from(doc.data, "base64");
+      const nom = `QR-facture_${derniere.merchant_reference}_${derniere.wallee_transaction_id}.pdf`;
+      return new NextResponse(pdf, {
+        status: 200,
+        headers: {
+          "Content-Type": doc.mimeType || "application/pdf",
+          "Content-Disposition": `inline; filename="${nom}"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
 
     let lignes = await lignesDuSlug(slug);
     let paymentPageUrl: string | null = null;
