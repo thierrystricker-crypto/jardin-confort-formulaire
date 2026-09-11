@@ -19,6 +19,22 @@ import type { RechercheDelaiRow, StockListShopifyInfo } from "@/lib/supabase-web
 
 type Ligne = RechercheDelaiRow & { shopify?: StockListShopifyInfo };
 
+// Le miroir stocke "gid://shopify/ProductVariant/40918274244743" ; la route
+// Shopify indexe par l'id numérique. On ramène tout au numérique.
+function cleVariante(id: string | number | null | undefined): string {
+  if (id === null || id === undefined) return "";
+  return String(id).split("/").pop() || "";
+}
+
+// Statut fournisseur lisible : "EN_STOCK" → "En stock chez Glatz". Sans ça,
+// un vendeur lit "EN STOCK" et croit que l'article est en rayon à Lutry.
+function libelleStatutFournisseur(statut: string | null, fournisseur: string): string {
+  if (!statut) return "";
+  const s = statut.replace(/_/g, " ").toLowerCase();
+  const libelle = s.charAt(0).toUpperCase() + s.slice(1);
+  return `${libelle} chez ${fournisseur}`;
+}
+
 function fmtDate(iso: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -100,7 +116,7 @@ export default function StockListPage() {
         if (!resS.ok || id !== requeteEnCours.current) return; // sans Shopify, la liste reste utilisable
         const infos = (jsonS.infos || {}) as Record<string, StockListShopifyInfo>;
         setRows((prev) => prev.map((l) => {
-          const info = l.variant_id !== null && l.variant_id !== undefined ? infos[String(l.variant_id)] : undefined;
+          const info = infos[cleVariante(l.variant_id)];
           return info ? { ...l, shopify: info } : l;
         }));
       } catch (e) {
@@ -145,7 +161,7 @@ export default function StockListPage() {
           <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
             <span>Un clic sur une ligne ouvre la fiche produit (boutique, ou admin Shopify si brouillon). Ctrl+clic : nouvel onglet.</span>
             {cherche && !loading && (
-              <span>{rows.length} résultat{rows.length > 1 ? "s" : ""}{tronque ? " — affichage limité à 50, précise la recherche" : ""}</span>
+              <span>{rows.length} résultat{rows.length > 1 ? "s" : ""}{tronque ? " — affichage limité à 300, précise la recherche" : ""}</span>
             )}
           </div>
         </div>
@@ -170,7 +186,7 @@ export default function StockListPage() {
                   <th className="px-3 py-3">Fiche</th>
                   <th className="px-3 py-3 text-right" title="Stock Jardin Confort (miroir Shopify)">Stock JC</th>
                   <th className="px-3 py-3 text-right" title="Stock chez le fournisseur (dernier relevé)">Stock fourn.</th>
-                  <th className="px-3 py-3">Statut fourn.</th>
+                  <th className="px-3 py-3">Chez le fournisseur</th>
                   <th className="px-3 py-3">Dispo dès</th>
                   <th className="px-3 py-3 text-right" title="Acheminement fournisseur → Lutry, en semaines">Transport</th>
                   <th className="px-3 py-3 text-right bg-sky-500/10 text-sky-300" title="Délai à annoncer au client, en semaines (transport compris)">Délai client</th>
@@ -197,7 +213,10 @@ export default function StockListPage() {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="font-medium text-zinc-100">{l.titre || <span className="italic text-zinc-500">Titre inconnu (relevé fournisseur)</span>}</div>
+                        <div className="font-medium text-zinc-100">
+                          {l.titre || <span className="italic text-zinc-500">Titre inconnu (relevé fournisseur)</span>}
+                          {l.shopify?.varianteTitre && <span className="ml-2 font-normal text-sky-200/80">{l.shopify.varianteTitre}</span>}
+                        </div>
                         <div className="text-xs text-zinc-500"><span className="font-mono text-zinc-400">{l.sku}</span> · {l.fournisseur}</div>
                       </td>
                       <td className="px-3 py-2"><BadgeFiche statut={l.statut_fiche} /></td>
@@ -208,7 +227,11 @@ export default function StockListPage() {
                           <div className="text-[10px] text-zinc-600" title="Date du dernier relevé fournisseur">relevé {fmtDateHeure(l.releve_fournisseur_le)}</div>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-zinc-300">{l.statut_fournisseur || <span className="text-zinc-600">—</span>}</td>
+                      <td className="px-3 py-2 text-zinc-300">
+                        {l.statut_fournisseur
+                          ? <span className={l.statut_fournisseur === "EN_STOCK" ? "text-emerald-300" : ""}>{libelleStatutFournisseur(l.statut_fournisseur, l.fournisseur)}</span>
+                          : <span className="text-zinc-600">—</span>}
+                      </td>
                       <td className="px-3 py-2 tabular-nums text-zinc-300">{fmtDate(l.date_dispo_fournisseur) || <span className="text-zinc-600">—</span>}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-zinc-300">{l.transport_semaines !== null ? `${l.transport_semaines} sem.` : <span className="text-zinc-600">—</span>}</td>
                       <td className="px-3 py-2 text-right bg-sky-500/10"><DelaiClient plage={l.delai_client_semaines} /></td>

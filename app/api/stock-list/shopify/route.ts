@@ -9,7 +9,9 @@
 // Lecture seule. Réutilise shopifyAdminGraphQL (Client Credentials, même
 // version d'API que le reste de l'app).
 //
-// Renvoie : { infos: { [variantId]: { imageUrl, onlineStoreUrl, adminUrl } } }
+// Renvoie : { infos: { [variantId]: { varianteTitre, imageUrl, onlineStoreUrl, adminUrl } } }
+// La clé est l'id numérique de la variante ; le client normalise de son côté
+// (le miroir stocke les gid complets "gid://shopify/ProductVariant/…").
 
 import { NextRequest, NextResponse } from "next/server";
 import { shopifyAdminGraphQL } from "@/lib/shopify-stock";
@@ -17,10 +19,12 @@ import type { StockListShopifyInfo } from "@/lib/supabase-webshop";
 
 export const dynamic = "force-dynamic";
 
-const MAX_IDS = 100;
+const MAX_IDS = 300;   // = limite de la recherche
+const PAR_APPEL = 250; // plafond Shopify pour nodes(ids)
 
 type NodeVariant = {
   id: string;
+  title: string | null;
   image: { url: string } | null;
   product: {
     legacyResourceId: string;
@@ -60,6 +64,7 @@ export async function POST(request: NextRequest) {
         nodes(ids: $ids) {
           ... on ProductVariant {
             id
+            title
             image { url(transform: { maxWidth: 160, maxHeight: 160 }) }
             product {
               legacyResourceId
@@ -71,14 +76,20 @@ export async function POST(request: NextRequest) {
       }
     `;
 
-    const data = await shopifyAdminGraphQL<{ nodes: NodeVariant[] }>(query, { ids });
     const base = adminBase();
+    const nodes: NodeVariant[] = [];
+    for (let i = 0; i < ids.length; i += PAR_APPEL) {
+      const data = await shopifyAdminGraphQL<{ nodes: NodeVariant[] }>(query, { ids: ids.slice(i, i + PAR_APPEL) });
+      nodes.push(...(data.nodes || []));
+    }
 
     const infos: Record<string, StockListShopifyInfo> = {};
-    for (const node of data.nodes || []) {
+    for (const node of nodes) {
       if (!node) continue;
       const produit = node.product;
+      const titre = (node.title || "").trim();
       infos[legacyId(node.id)] = {
+        varianteTitre: titre && titre !== "Default Title" ? titre : null,
         imageUrl: node.image?.url || produit?.featuredMedia?.preview?.image?.url || null,
         onlineStoreUrl: produit?.onlineStoreUrl || null,
         adminUrl: base && produit ? `${base}/products/${produit.legacyResourceId}` : null,

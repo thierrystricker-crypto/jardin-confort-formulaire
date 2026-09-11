@@ -16,7 +16,7 @@ import { supabaseWebshop, webshopConfigure, type RechercheDelaiRow } from "@/lib
 
 export const dynamic = "force-dynamic";
 
-const LIMITE = 50;
+const LIMITE = 300;
 
 export async function GET(request: NextRequest) {
   try {

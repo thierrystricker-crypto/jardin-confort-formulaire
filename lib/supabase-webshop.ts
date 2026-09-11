@@ -45,6 +45,7 @@ export type RechercheDelaiRow = {
 // Complément Shopify d'une ligne (image, lien boutique, lien admin) — rendu par
 // POST /api/stock-list/shopify.
 export type StockListShopifyInfo = {
+  varianteTitre: string | null;   // ex. "260x260cm / 605 Clay" (null si "Default Title")
   imageUrl: string | null;
   onlineStoreUrl: string | null;
   adminUrl: string | null;
