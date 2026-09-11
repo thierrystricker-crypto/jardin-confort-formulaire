@@ -90,7 +90,7 @@ export default function StockListPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [cherche, setCherche] = useState(false); // au moins une recherche lancée
-  const [fournisseurs, setFournisseurs] = useState<{ nom: string; actif: boolean; dernierReleve: string | null; nbSku: number }[]>([]);
+  const [fournisseurs, setFournisseurs] = useState<{ nom: string; actif: boolean; dernierReleve: string | null; nbSku: number; verdict: string | null; motif: string | null }[]>([]);
   const requeteEnCours = useRef(0);
 
   // Bandeau : quels fournisseurs sont couverts par la synchro.
@@ -174,18 +174,25 @@ export default function StockListPage() {
             <div className="flex flex-wrap gap-2">
               {fournisseurs.map((f) => {
                 const age = f.dernierReleve ? (Date.now() - new Date(f.dernierReleve).getTime()) / 86400000 : Infinity;
-                const frais = age <= 2;
+                const verdict = (f.verdict || "").toLowerCase();
+                const echec = Boolean(verdict) && verdict !== "ok" && verdict !== "observation";
+                const observation = verdict === "observation" || !f.actif;
+                const frais = age <= 2 && !echec;
+                const cadre = echec
+                  ? "border-rose-500/40 bg-rose-500/10"
+                  : frais ? "border-emerald-500/25 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/10";
+                const infobulle = [
+                  `${f.nbSku} références relevées`,
+                  f.motif || (observation ? "Mode observation : stock relevé chaque jour, mais aucune modification poussée vers Shopify" : ""),
+                ].filter(Boolean).join(" — ");
                 return (
-                  <div
-                    key={f.nom}
-                    title={`${f.nbSku} références relevées`}
-                    className={`rounded-xl border px-3 py-1.5 leading-tight ${frais ? "border-emerald-500/25 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/10"}`}
-                  >
+                  <div key={f.nom} title={infobulle} className={`rounded-xl border px-3 py-1.5 leading-tight ${cadre}`}>
                     <div className="text-xs font-semibold uppercase tracking-wide text-zinc-200">
                       {f.nom}
-                      {!f.actif && <span className="ml-1.5 rounded bg-zinc-500/20 px-1 text-[9px] font-normal normal-case tracking-normal text-zinc-400" title="Mode observation : stock relevé chaque jour, mais aucune modification poussée vers Shopify">observation</span>}
+                      {echec && <span className="ml-1.5 rounded bg-rose-500/20 px-1 text-[9px] font-normal normal-case tracking-normal text-rose-300">{f.verdict}</span>}
+                      {!echec && observation && <span className="ml-1.5 rounded bg-zinc-500/20 px-1 text-[9px] font-normal normal-case tracking-normal text-zinc-400">observation</span>}
                     </div>
-                    <div className={`text-[11px] ${frais ? "text-emerald-300/80" : "text-amber-300"}`}>
+                    <div className={`text-[11px] ${echec ? "text-rose-300" : frais ? "text-emerald-300/80" : "text-amber-300"}`}>
                       {f.dernierReleve ? `sync ${fmtDate(f.dernierReleve)}` : "jamais relevé"}
                     </div>
                   </div>
