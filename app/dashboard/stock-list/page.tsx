@@ -19,7 +19,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useFiltresMemorises } from "@/lib/liste-navigation";
-import type { RechercheDelaiRow, StockListShopifyInfo } from "@/lib/supabase-webshop";
+import type { RechercheDelaiRow, StockListShopifyInfo, DispoFournisseur } from "@/lib/supabase-webshop";
 
 type Ligne = RechercheDelaiRow & { shopify?: StockListShopifyInfo };
 
@@ -40,23 +40,20 @@ function cleVariante(id: string | number | null | undefined): string {
   return String(id).split("/").pop() || "";
 }
 
-// Statut fournisseur lisible : "EN_STOCK" → "En stock chez Glatz". Sans ça,
-// un vendeur lit "EN STOCK" et croit que l'article est en rayon à Lutry.
-function libelleStatutFournisseur(statut: string | null, fournisseur: string): string {
-  if (!statut) return "";
-  const s = statut.replace(/_/g, " ").toLowerCase();
-  const libelle = s.charAt(0).toUpperCase() + s.slice(1);
-  return `${libelle} chez ${fournisseur}`;
-}
+// Disponibilité fournisseur UNIFORMISÉE (calculée par la vue à partir du
+// vocabulaire de chaque fournisseur). Libellé + couleur uniques pour les
+// vendeurs ; le statut brut reste dans l'info-bulle.
+const DISPO: Record<DispoFournisseur, { libelle: string; cls: string; ordre: number }> = {
+  EN_STOCK:     { libelle: "En stock",     cls: "text-emerald-300", ordre: 0 },
+  REASSORT:     { libelle: "Réassort",     cls: "text-amber-300",   ordre: 1 },
+  SUR_COMMANDE: { libelle: "Sur commande", cls: "text-amber-300",   ordre: 2 },
+  NON_LIVRABLE: { libelle: "Non livrable", cls: "text-rose-400",    ordre: 3 },
+  INCONNU:      { libelle: "Inconnu",      cls: "text-zinc-500",    ordre: 4 },
+};
 
-// Couleur du statut fournisseur : vert = dispo, orange = à produire / en
-// commande, rouge = épuisé / sorti. Le reste en neutre.
-function couleurStatutFournisseur(statut: string): string {
-  const s = statut.toUpperCase();
-  if (s === "EN_STOCK" || s === "STOCK" || s === "DELAI COURT") return "text-emerald-300";
-  if (s === "SOLD_OUT" || s === "SORTIE" || s === "RUPTURE" || s === "EPUISE") return "text-rose-400";
-  if (s === "A_PRODUIRE" || s === "COMMANDE" || s === "PRODUCTION") return "text-amber-300";
-  return "text-zinc-300";
+function libelleDispo(l: Ligne): string {
+  if (!l.dispo_fournisseur) return "";
+  return `${DISPO[l.dispo_fournisseur].libelle} chez ${l.fournisseur}`;
 }
 
 function fmtDate(iso: string | null) {
@@ -110,13 +107,10 @@ function delaiMax(plage: string | null): number {
   return m && m.length ? Number(m[m.length - 1]) : Infinity;
 }
 
-const STATUTS_NON_LIVRABLES = new Set(["SOLD_OUT", "SORTIE", "RUPTURE", "EPUISE", "PHASEOUT", "PHASE_OUT", "ARRET", "FIN_DE_SERIE"]);
-
 function estNonLivrable(l: Ligne): boolean {
-  const s = (l.statut_fournisseur || "").toUpperCase();
-  if (STATUTS_NON_LIVRABLES.has(s)) return true;
-  // Rien chez nous, rien chez le fournisseur, aucun délai annonçable
-  return (l.stock_jc ?? 0) <= 0 && (l.stock_fournisseur ?? 0) <= 0 && !l.delai_client_semaines;
+  if (l.dispo_fournisseur === "NON_LIVRABLE") return true;
+  // Rien chez nous, rien d'annonçable chez le fournisseur
+  return (l.stock_jc ?? 0) <= 0 && !l.delai_client_semaines && l.dispo_fournisseur !== "EN_STOCK";
 }
 
 type FiltresRapides = {
@@ -131,7 +125,7 @@ const FILTRES_DEFAUT: FiltresRapides = { stockJC: false, stockFourn: false, dela
 
 function passeFiltres(l: Ligne, f: FiltresRapides): boolean {
   if (f.stockJC && (l.stock_jc ?? 0) <= 0) return false;
-  if (f.stockFourn && (l.stock_fournisseur ?? 0) <= 0) return false;
+  if (f.stockFourn && l.dispo_fournisseur !== "EN_STOCK") return false;
   if (f.delaiCourt && delaiMax(l.delai_client_semaines) > 4) return false;
   if (f.masquerNonLivrables && estNonLivrable(l)) return false;
   if (f.actives && l.statut_fiche !== "ACTIVE") return false;
@@ -146,7 +140,7 @@ function valeurTri(l: Ligne, cle: CleTri): string | number {
     case "fiche": return l.statut_fiche === "ACTIVE" ? 0 : l.statut_fiche === "DRAFT" ? 1 : l.statut_fiche === "ARCHIVED" ? 2 : 3;
     case "stock_jc": return l.stock_jc ?? -1;
     case "stock_fournisseur": return l.stock_fournisseur ?? -1;
-    case "statut_fournisseur": return (l.statut_fournisseur || "\uffff").toLowerCase();
+    case "statut_fournisseur": return l.dispo_fournisseur ? DISPO[l.dispo_fournisseur].ordre : 9;
     case "dispo": return l.date_dispo_fournisseur || "9999-99-99";
     case "transport": return l.transport_semaines ?? Infinity;
     case "delai": return delaiMin(l.delai_client_semaines);
@@ -344,7 +338,7 @@ export default function StockListPage() {
                 const choisi = marque === f.nom;
                 // Cartes sur fond blanc : les logos sont dessinés pour ça.
                 const cadre = choisi
-                  ? "border-sky-400 bg-white ring-2 ring-sky-400/60 shadow-lg shadow-sky-500/20"
+                  ? "border-sky-500 bg-sky-100 ring-4 ring-sky-500 ring-offset-2 ring-offset-[#1f2125] shadow-lg shadow-sky-500/30"
                   : echec
                     ? "border-rose-400 bg-white hover:bg-rose-50"
                     : frais ? "border-white/60 bg-white hover:bg-zinc-100" : "border-amber-400 bg-white hover:bg-amber-50";
@@ -408,9 +402,9 @@ export default function StockListPage() {
             <span className="text-zinc-500">Filtres :</span>
             {([
               ["stockJC", "En stock Jardin Confort", "stock_jc > 0"],
-              ["stockFourn", "En stock chez le fournisseur", "stock fournisseur > 0"],
+              ["stockFourn", "En stock chez le fournisseur", "disponibilité fournisseur = en stock (quantité ou statut)"],
               ["delaiCourt", "Délai ≤ 4 sem.", "borne haute du délai client ≤ 4 semaines"],
-              ["masquerNonLivrables", "Masquer les non livrables", "sold out / sortie / rupture, ou rien nulle part et aucun délai"],
+              ["masquerNonLivrables", "Masquer les non livrables", "sold out / sortie / rupture / non commandable, ou rien nulle part et aucun délai"],
               ["actives", "Fiches actives", "statut de fiche ACTIVE seulement"],
               ["horsShopify", "Hors Shopify", "relevé fournisseur sans fiche dans la boutique — à créer"],
             ] as [keyof FiltresRapides, string, string][]).map(([cle, libelle, aide]) => {
@@ -538,8 +532,8 @@ export default function StockListPage() {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        {l.statut_fournisseur
-                          ? <span className={couleurStatutFournisseur(l.statut_fournisseur)}>{libelleStatutFournisseur(l.statut_fournisseur, l.fournisseur)}</span>
+                        {l.dispo_fournisseur
+                          ? <span className={DISPO[l.dispo_fournisseur].cls} title={l.statut_fournisseur ? `Statut ${l.fournisseur} : ${l.statut_fournisseur}` : "Déduit de la quantité relevée"}>{libelleDispo(l)}</span>
                           : <span className="text-zinc-600">—</span>}
                       </td>
                       <td className="px-3 py-2 tabular-nums text-zinc-300">{fmtDate(l.date_dispo_fournisseur) || <span className="text-zinc-600">—</span>}</td>
