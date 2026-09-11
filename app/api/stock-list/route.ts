@@ -6,7 +6,7 @@
 // pas encore créés dans Shopify. Source : vue v_recherche_delai du Supabase
 // WEBSHOP (lib/supabase-webshop.ts), qui calcule déjà le délai client.
 //
-// Lecture seule. Ne pas confondre avec /api/delais (suivi des délais des
+// Lecture seule (vues v_recherche_delai + v_fournisseur_sync). Ne pas confondre avec /api/delais (suivi des délais des
 // commandes en cours, Supabase de l'app).
 //
 // Renvoie : { rows: RechercheDelaiRow[], count, tronque }
@@ -20,6 +20,25 @@ const LIMITE = 300;
 
 export async function GET(request: NextRequest) {
   try {
+    // Branche légère : ?fournisseurs=1 → fournisseurs synchronisés et date du
+    // dernier relevé (bandeau en tête de page). Vue v_fournisseur_sync, hors ZZ-.
+    if (request.nextUrl.searchParams.has("fournisseurs")) {
+      if (!webshopConfigure) return NextResponse.json({ fournisseurs: [] });
+      const { data, error } = await supabaseWebshop
+        .from("v_fournisseur_sync")
+        .select("fournisseur, actif, dernier_releve, nb_sku")
+        .order("fournisseur", { ascending: true });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({
+        fournisseurs: (data || []).map((f) => ({
+          nom: f.fournisseur as string,
+          actif: Boolean(f.actif),   // false = observation : relevé quotidien, mais rien n'est poussé vers Shopify
+          dernierReleve: (f.dernier_releve as string | null) ?? null,
+          nbSku: Number(f.nb_sku ?? 0),
+        })),
+      });
+    }
+
     const q = (request.nextUrl.searchParams.get("q") || "").trim();
 
     // Moins de 2 caractères : on ne cherche pas (trop de bruit)

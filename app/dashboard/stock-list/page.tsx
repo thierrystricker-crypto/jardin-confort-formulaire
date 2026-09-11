@@ -14,7 +14,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { clicLigne, clicMilieuLigne, useFiltresMemorises } from "@/lib/liste-navigation";
+import { useFiltresMemorises } from "@/lib/liste-navigation";
 import type { RechercheDelaiRow, StockListShopifyInfo } from "@/lib/supabase-webshop";
 
 type Ligne = RechercheDelaiRow & { shopify?: StockListShopifyInfo };
@@ -33,6 +33,16 @@ function libelleStatutFournisseur(statut: string | null, fournisseur: string): s
   const s = statut.replace(/_/g, " ").toLowerCase();
   const libelle = s.charAt(0).toUpperCase() + s.slice(1);
   return `${libelle} chez ${fournisseur}`;
+}
+
+// Couleur du statut fournisseur : vert = dispo, orange = à produire / en
+// commande, rouge = épuisé / sorti. Le reste en neutre.
+function couleurStatutFournisseur(statut: string): string {
+  const s = statut.toUpperCase();
+  if (s === "EN_STOCK" || s === "STOCK" || s === "DELAI COURT") return "text-emerald-300";
+  if (s === "SOLD_OUT" || s === "SORTIE" || s === "RUPTURE" || s === "EPUISE") return "text-rose-400";
+  if (s === "A_PRODUIRE" || s === "COMMANDE" || s === "PRODUCTION") return "text-amber-300";
+  return "text-zinc-300";
 }
 
 function fmtDate(iso: string | null) {
@@ -80,7 +90,16 @@ export default function StockListPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [cherche, setCherche] = useState(false); // au moins une recherche lancée
+  const [fournisseurs, setFournisseurs] = useState<{ nom: string; actif: boolean; dernierReleve: string | null; nbSku: number }[]>([]);
   const requeteEnCours = useRef(0);
+
+  // Bandeau : quels fournisseurs sont couverts par la synchro.
+  useEffect(() => {
+    fetch("/api/stock-list?fournisseurs=1")
+      .then((r) => r.json())
+      .then((j) => setFournisseurs(j.fournisseurs || []))
+      .catch(() => { /* bandeau facultatif */ });
+  }, []);
 
   useFiltresMemorises("stock-list-filtres", { q }, (v) => {
     if (typeof v.q === "string") setQ(v.q);
@@ -149,6 +168,33 @@ export default function StockListPage() {
           </Link>
         </div>
 
+        {fournisseurs.length > 0 && (
+          <div className="mb-5">
+            <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Stocks fournisseurs synchronisés</div>
+            <div className="flex flex-wrap gap-2">
+              {fournisseurs.map((f) => {
+                const age = f.dernierReleve ? (Date.now() - new Date(f.dernierReleve).getTime()) / 86400000 : Infinity;
+                const frais = age <= 2;
+                return (
+                  <div
+                    key={f.nom}
+                    title={`${f.nbSku} références relevées`}
+                    className={`rounded-xl border px-3 py-1.5 leading-tight ${frais ? "border-emerald-500/25 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/10"}`}
+                  >
+                    <div className="text-xs font-semibold uppercase tracking-wide text-zinc-200">
+                      {f.nom}
+                      {!f.actif && <span className="ml-1.5 rounded bg-zinc-500/20 px-1 text-[9px] font-normal normal-case tracking-normal text-zinc-400" title="Mode observation : stock relevé chaque jour, mais aucune modification poussée vers Shopify">observation</span>}
+                    </div>
+                    <div className={`text-[11px] ${frais ? "text-emerald-300/80" : "text-amber-300"}`}>
+                      {f.dernierReleve ? `sync ${fmtDate(f.dernierReleve)}` : "jamais relevé"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="mb-4">
           <input
             type="search"
@@ -159,7 +205,7 @@ export default function StockListPage() {
             className="w-full rounded-2xl border border-white/10 bg-[#2a2d31] px-5 py-3.5 text-base text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-sky-500/50"
           />
           <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-            <span>Un clic sur une ligne ouvre la fiche produit (boutique, ou admin Shopify si brouillon). Ctrl+clic : nouvel onglet.</span>
+            <span>Un clic sur une ligne ouvre la variante dans un nouvel onglet (boutique, ou admin Shopify si brouillon).</span>
             {cherche && !loading && (
               <span>{rows.length} résultat{rows.length > 1 ? "s" : ""}{tronque ? " — affichage limité à 300, précise la recherche" : ""}</span>
             )}
@@ -199,15 +245,14 @@ export default function StockListPage() {
                   return (
                     <tr
                       key={`${l.fournisseur}|${l.sku}`}
-                      onClick={(e) => { if (url) clicLigne(url, e); }}
-                      onAuxClick={(e) => { if (url) clicMilieuLigne(url, e); }}
+                      onClick={() => { if (url) window.open(url, "_blank", "noopener,noreferrer"); }}
                       title={cliquable ? (l.shopify?.onlineStoreUrl ? "Ouvrir la fiche sur la boutique" : "Fiche non publiée — ouvrir dans l'admin Shopify") : "Article absent de Shopify : pas de fiche à ouvrir"}
                       className={`border-b border-white/5 ${cliquable ? "cursor-pointer hover:bg-white/5" : "cursor-default"}`}
                     >
                       <td className="px-3 py-2">
                         {l.shopify?.imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={l.shopify.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover bg-white/5" loading="lazy" />
+                          <img src={l.shopify.imageUrl} alt="" className="h-10 w-10 rounded-lg object-contain bg-white" loading="lazy" />
                         ) : (
                           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5 text-zinc-600">🪑</div>
                         )}
@@ -229,7 +274,7 @@ export default function StockListPage() {
                       </td>
                       <td className="px-3 py-2 text-zinc-300">
                         {l.statut_fournisseur
-                          ? <span className={l.statut_fournisseur === "EN_STOCK" ? "text-emerald-300" : ""}>{libelleStatutFournisseur(l.statut_fournisseur, l.fournisseur)}</span>
+                          ? <span className={couleurStatutFournisseur(l.statut_fournisseur)}>{libelleStatutFournisseur(l.statut_fournisseur, l.fournisseur)}</span>
                           : <span className="text-zinc-600">—</span>}
                       </td>
                       <td className="px-3 py-2 tabular-nums text-zinc-300">{fmtDate(l.date_dispo_fournisseur) || <span className="text-zinc-600">—</span>}</td>
