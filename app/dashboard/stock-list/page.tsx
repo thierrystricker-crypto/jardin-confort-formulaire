@@ -11,6 +11,10 @@
 // Délai client (dernière colonne, mise en évidence) : calculé par la vue —
 // plage delai_config si elle existe, sinon date de dispo + transport, sinon
 // transport seul si stock fournisseur > 0, sinon vide.
+//
+// Les lignes ne sont PAS cliquables (le texte doit rester sélectionnable) :
+// trois petits boutons par ligne — copier le SKU, copier le titre, ouvrir la
+// variante dans un nouvel onglet.
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -18,6 +22,16 @@ import { useFiltresMemorises } from "@/lib/liste-navigation";
 import type { RechercheDelaiRow, StockListShopifyInfo } from "@/lib/supabase-webshop";
 
 type Ligne = RechercheDelaiRow & { shopify?: StockListShopifyInfo };
+
+type FournisseurSync = {
+  nom: string;
+  logoUrl: string | null;
+  actif: boolean;            // false = observation : relevé quotidien, rien poussé vers Shopify
+  dernierReleve: string | null;
+  nbSku: number;
+  verdict: string | null;    // ok · observation · echec…
+  motif: string | null;
+};
 
 // Le miroir stocke "gid://shopify/ProductVariant/40918274244743" ; la route
 // Shopify indexe par l'id numérique. On ramène tout au numérique.
@@ -83,15 +97,50 @@ function DelaiClient({ plage }: { plage: string | null }) {
   return <span className="text-lg font-semibold text-sky-300">{plage} <span className="text-xs font-normal text-sky-300/70">sem.</span></span>;
 }
 
+// ─── Petits boutons d'action (icônes SVG, pas de dépendance) ───
+const ICONE_COPIER = (
+  <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+    <path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
+  </svg>
+);
+const ICONE_OUVRIR = (
+  <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M9 3h4v4M13 3 7.5 8.5" />
+    <path d="M11 9.5V12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2.5" />
+  </svg>
+);
+
+function BoutonAction({ titre, onClick, actif, enfant, href }: {
+  titre: string; onClick?: () => void; actif?: boolean; enfant: React.ReactNode; href?: string;
+}) {
+  const cls = `inline-flex h-6 w-6 items-center justify-center rounded-md border transition ${
+    actif
+      ? "border-emerald-500/40 bg-emerald-500/20 text-emerald-300"
+      : "border-white/10 bg-white/5 text-zinc-400 hover:border-sky-500/40 hover:bg-sky-500/15 hover:text-sky-300"
+  }`;
+  if (href) {
+    return <a href={href} target="_blank" rel="noopener noreferrer" title={titre} className={cls}>{enfant}</a>;
+  }
+  return <button type="button" title={titre} onClick={onClick} className={cls}>{enfant}</button>;
+}
+
 export default function StockListPage() {
   const [q, setQ] = useState("");
+  const [marque, setMarque] = useState<string>(""); // filtre fournisseur (carte du bandeau)
   const [rows, setRows] = useState<Ligne[]>([]);
   const [tronque, setTronque] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [cherche, setCherche] = useState(false); // au moins une recherche lancée
-  const [fournisseurs, setFournisseurs] = useState<{ nom: string; actif: boolean; dernierReleve: string | null; nbSku: number; verdict: string | null; motif: string | null }[]>([]);
+  const [fournisseurs, setFournisseurs] = useState<FournisseurSync[]>([]);
+  const [copie, setCopie] = useState<string>(""); // clé du dernier élément copié (feedback 1,5 s)
   const requeteEnCours = useRef(0);
+
+  useFiltresMemorises("stock-list-filtres", { q, marque }, (v) => {
+    if (typeof v.q === "string") setQ(v.q);
+    if (typeof v.marque === "string") setMarque(v.marque);
+  });
 
   // Bandeau : quels fournisseurs sont couverts par la synchro.
   useEffect(() => {
@@ -101,14 +150,11 @@ export default function StockListPage() {
       .catch(() => { /* bandeau facultatif */ });
   }, []);
 
-  useFiltresMemorises("stock-list-filtres", { q }, (v) => {
-    if (typeof v.q === "string") setQ(v.q);
-  });
-
   // Recherche avec debounce 300 ms ; les réponses en retard sont ignorées.
+  const rechercheActive = q.trim().length >= 2 || marque !== "";
   useEffect(() => {
     const terme = q.trim();
-    if (terme.length < 2) {
+    if (terme.length < 2 && !marque) {
       setRows([]); setTronque(false); setError(""); setLoading(false); setCherche(false);
       return;
     }
@@ -116,7 +162,10 @@ export default function StockListPage() {
     const timer = setTimeout(async () => {
       setLoading(true); setError("");
       try {
-        const res = await fetch(`/api/stock-list?q=${encodeURIComponent(terme)}`);
+        const params = new URLSearchParams();
+        if (terme.length >= 2) params.set("q", terme);
+        if (marque) params.set("fournisseur", marque);
+        const res = await fetch(`/api/stock-list?${params.toString()}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
         if (id !== requeteEnCours.current) return;
@@ -144,7 +193,17 @@ export default function StockListPage() {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [q]);
+  }, [q, marque]);
+
+  async function copier(cle: string, texte: string) {
+    try {
+      await navigator.clipboard.writeText(texte);
+      setCopie(cle);
+      setTimeout(() => setCopie((c) => (c === cle ? "" : c)), 1500);
+    } catch {
+      /* presse-papiers indisponible (http, permissions) : on ne bloque pas */
+    }
+  }
 
   function urlLigne(l: Ligne): string | null {
     if (!l.shopify) return null;
@@ -168,9 +227,17 @@ export default function StockListPage() {
           </Link>
         </div>
 
+        {/* Bandeau des fournisseurs synchronisés — chaque carte est un filtre */}
         {fournisseurs.length > 0 && (
           <div className="mb-5">
-            <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Stocks fournisseurs synchronisés</div>
+            <div className="mb-2 flex items-center gap-3 text-xs uppercase tracking-wide text-zinc-500">
+              <span>Stocks fournisseurs synchronisés</span>
+              {marque && (
+                <button type="button" onClick={() => setMarque("")} className="normal-case tracking-normal text-sky-300 hover:underline">
+                  ✕ retirer le filtre {marque}
+                </button>
+              )}
+            </div>
             <div className="flex flex-wrap gap-2">
               {fournisseurs.map((f) => {
                 const age = f.dernierReleve ? (Date.now() - new Date(f.dernierReleve).getTime()) / 86400000 : Infinity;
@@ -178,24 +245,40 @@ export default function StockListPage() {
                 const echec = Boolean(verdict) && verdict !== "ok" && verdict !== "observation";
                 const observation = verdict === "observation" || !f.actif;
                 const frais = age <= 2 && !echec;
-                const cadre = echec
-                  ? "border-rose-500/40 bg-rose-500/10"
-                  : frais ? "border-emerald-500/25 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/10";
+                const choisi = marque === f.nom;
+                const cadre = choisi
+                  ? "border-sky-400 bg-sky-500/20 ring-2 ring-sky-400/40"
+                  : echec
+                    ? "border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/15"
+                    : frais ? "border-emerald-500/25 bg-emerald-500/5 hover:bg-emerald-500/10" : "border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/15";
                 const infobulle = [
+                  f.nom,
                   `${f.nbSku} références relevées`,
                   f.motif || (observation ? "Mode observation : stock relevé chaque jour, mais aucune modification poussée vers Shopify" : ""),
+                  choisi ? "Cliquer pour retirer le filtre" : "Cliquer pour ne voir que cette marque",
                 ].filter(Boolean).join(" — ");
                 return (
-                  <div key={f.nom} title={infobulle} className={`rounded-xl border px-3 py-1.5 leading-tight ${cadre}`}>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-zinc-200">
-                      {f.nom}
-                      {echec && <span className="ml-1.5 rounded bg-rose-500/20 px-1 text-[9px] font-normal normal-case tracking-normal text-rose-300">{f.verdict}</span>}
-                      {!echec && observation && <span className="ml-1.5 rounded bg-zinc-500/20 px-1 text-[9px] font-normal normal-case tracking-normal text-zinc-400">observation</span>}
+                  <button
+                    key={f.nom}
+                    type="button"
+                    title={infobulle}
+                    onClick={() => setMarque(choisi ? "" : f.nom)}
+                    className={`rounded-xl border px-3 py-2 text-left leading-tight transition ${cadre}`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      {f.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={f.logoUrl} alt={f.nom} className="h-5 max-w-[88px] rounded bg-white object-contain px-1 py-0.5" loading="lazy" />
+                      ) : (
+                        <span className="text-xs font-semibold uppercase tracking-wide text-zinc-200">{f.nom}</span>
+                      )}
+                      {echec && <span className="rounded bg-rose-500/20 px-1 text-[9px] text-rose-300">{f.verdict}</span>}
+                      {!echec && observation && <span className="rounded bg-zinc-500/20 px-1 text-[9px] text-zinc-400">observation</span>}
                     </div>
-                    <div className={`text-[11px] ${echec ? "text-rose-300" : frais ? "text-emerald-300/80" : "text-amber-300"}`}>
+                    <div className={`mt-1 text-[11px] ${echec ? "text-rose-300" : frais ? "text-emerald-300/80" : "text-amber-300"}`}>
                       {f.dernierReleve ? `sync ${fmtDate(f.dernierReleve)}` : "jamais relevé"}
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -208,11 +291,11 @@ export default function StockListPage() {
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Référence, SKU ou titre de l'article (2 caractères min.)…"
+            placeholder={marque ? `Chercher dans ${marque} (ou laisser vide pour tout voir)…` : "Référence, SKU ou titre de l'article (2 caractères min.)…"}
             className="w-full rounded-2xl border border-white/10 bg-[#2a2d31] px-5 py-3.5 text-base text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-sky-500/50"
           />
           <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-            <span>Un clic sur une ligne ouvre la variante dans un nouvel onglet (boutique, ou admin Shopify si brouillon).</span>
+            <span>Boutons de ligne : copier le SKU, copier le titre, ouvrir la variante dans un nouvel onglet (boutique, ou admin Shopify si brouillon).</span>
             {cherche && !loading && (
               <span>{rows.length} résultat{rows.length > 1 ? "s" : ""}{tronque ? " — affichage limité à 300, précise la recherche" : ""}</span>
             )}
@@ -223,18 +306,21 @@ export default function StockListPage() {
           <div className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">{error}</div>
         )}
 
-        {q.trim().length < 2 ? (
-          <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-8 text-center text-zinc-400">Tape une référence ou un titre pour chercher.</div>
+        {!rechercheActive ? (
+          <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-8 text-center text-zinc-400">Tape une référence ou un titre, ou clique une marque ci-dessus.</div>
         ) : loading && rows.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-8 text-center text-zinc-400">Recherche…</div>
         ) : cherche && rows.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-8 text-center text-zinc-400">Aucun article ne correspond à « {q.trim()} ».</div>
+          <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-8 text-center text-zinc-400">
+            Aucun article ne correspond{q.trim() ? ` à « ${q.trim()} »` : ""}{marque ? ` chez ${marque}` : ""}.
+          </div>
         ) : (
           <div className={`overflow-x-auto rounded-2xl border border-white/10 bg-[#2a2d31] transition ${loading ? "opacity-60" : ""}`}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-zinc-500">
                   <th className="px-3 py-3 w-14"></th>
+                  <th className="px-3 py-3">SKU</th>
                   <th className="px-3 py-3">Article</th>
                   <th className="px-3 py-3">Fiche</th>
                   <th className="px-3 py-3 text-right" title="Stock Jardin Confort (miroir Shopify)">Stock JC</th>
@@ -248,14 +334,10 @@ export default function StockListPage() {
               <tbody>
                 {rows.map((l) => {
                   const url = urlLigne(l);
-                  const cliquable = Boolean(url);
+                  const cle = `${l.fournisseur}|${l.sku}`;
+                  const titreComplet = [l.titre, l.shopify?.varianteTitre].filter(Boolean).join(" — ");
                   return (
-                    <tr
-                      key={`${l.fournisseur}|${l.sku}`}
-                      onClick={() => { if (url) window.open(url, "_blank", "noopener,noreferrer"); }}
-                      title={cliquable ? (l.shopify?.onlineStoreUrl ? "Ouvrir la fiche sur la boutique" : "Fiche non publiée — ouvrir dans l'admin Shopify") : "Article absent de Shopify : pas de fiche à ouvrir"}
-                      className={`border-b border-white/5 ${cliquable ? "cursor-pointer hover:bg-white/5" : "cursor-default"}`}
-                    >
+                    <tr key={cle} className="group border-b border-white/5 hover:bg-white/[0.03]">
                       <td className="px-3 py-2">
                         {l.shopify?.imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -264,12 +346,44 @@ export default function StockListPage() {
                           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5 text-zinc-600">🪑</div>
                         )}
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="font-medium text-zinc-100">
-                          {l.titre || <span className="italic text-zinc-500">Titre inconnu (relevé fournisseur)</span>}
-                          {l.shopify?.varianteTitre && <span className="ml-2 font-normal text-sky-200/80">{l.shopify.varianteTitre}</span>}
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-zinc-200 select-all">{l.sku}</span>
+                          <BoutonAction
+                            titre={copie === `sku:${cle}` ? "Copié !" : "Copier le SKU"}
+                            actif={copie === `sku:${cle}`}
+                            onClick={() => copier(`sku:${cle}`, l.sku)}
+                            enfant={ICONE_COPIER}
+                          />
                         </div>
-                        <div className="text-xs text-zinc-500"><span className="font-mono text-zinc-400">{l.sku}</span> · {l.fournisseur}</div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-start gap-1.5">
+                          <div className="min-w-0">
+                            <div className="font-medium text-zinc-100">
+                              {l.titre || <span className="italic text-zinc-500">Titre inconnu (relevé fournisseur)</span>}
+                              {l.shopify?.varianteTitre && <span className="ml-2 font-normal text-sky-200/80">{l.shopify.varianteTitre}</span>}
+                            </div>
+                            <div className="text-xs text-zinc-500">{l.fournisseur}</div>
+                          </div>
+                          <div className="ml-auto flex shrink-0 items-center gap-1 opacity-40 transition group-hover:opacity-100">
+                            {titreComplet && (
+                              <BoutonAction
+                                titre={copie === `titre:${cle}` ? "Copié !" : "Copier le titre"}
+                                actif={copie === `titre:${cle}`}
+                                onClick={() => copier(`titre:${cle}`, titreComplet)}
+                                enfant={ICONE_COPIER}
+                              />
+                            )}
+                            {url && (
+                              <BoutonAction
+                                titre={l.shopify?.onlineStoreUrl ? "Ouvrir la variante sur la boutique" : "Fiche non publiée — ouvrir dans l'admin Shopify"}
+                                href={url}
+                                enfant={ICONE_OUVRIR}
+                              />
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-2"><BadgeFiche statut={l.statut_fiche} /></td>
                       <td className="px-3 py-2 text-right tabular-nums"><Stock n={l.stock_jc} /></td>
@@ -279,7 +393,7 @@ export default function StockListPage() {
                           <div className="text-[10px] text-zinc-600" title="Date du dernier relevé fournisseur">relevé {fmtDateHeure(l.releve_fournisseur_le)}</div>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-zinc-300">
+                      <td className="px-3 py-2">
                         {l.statut_fournisseur
                           ? <span className={couleurStatutFournisseur(l.statut_fournisseur)}>{libelleStatutFournisseur(l.statut_fournisseur, l.fournisseur)}</span>
                           : <span className="text-zinc-600">—</span>}
