@@ -18,7 +18,10 @@ export async function GET(request: NextRequest) {
   try {
     const statut = (request.nextUrl.searchParams.get("statut") || "ouverte").trim();
     let requete = supabaseAdmin.from("listes_achat").select(COLONNES);
-    if (statut !== "toutes") requete = requete.eq("statut", statut);
+    // « ouverte » = les listes ouvertes + TOUS les modèles non archivés : un
+    // modèle reste proposé même s'il a servi (il n'est jamais consommé).
+    if (statut === "ouverte") requete = requete.or("statut.eq.ouverte,and(est_modele.eq.true,statut.neq.archivee)");
+    else if (statut !== "toutes") requete = requete.eq("statut", statut);
     const { data, error } = await requete
       .order("est_modele", { ascending: false })
       .order("updated_at", { ascending: false })

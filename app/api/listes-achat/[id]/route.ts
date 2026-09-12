@@ -42,7 +42,11 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
       maj.nb_articles = nbArticles(lignes);
     }
     if (body.notes !== undefined) maj.notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 2000) || null : null;
-    if (typeof body.est_modele === "boolean") maj.est_modele = body.est_modele;
+    if (typeof body.est_modele === "boolean") {
+      maj.est_modele = body.est_modele;
+      // Devenir modèle rouvre la liste : un modèle n'est jamais « transformé »
+      if (body.est_modele) maj.statut = "ouverte";
+    }
     if (body.statut === "ouverte" || body.statut === "archivee") maj.statut = body.statut; // 'transformee' passe par /brouillon
 
     const { data, error } = await supabaseAdmin.from("listes_achat").update(maj).eq("id", id).select(COLONNES).single();
