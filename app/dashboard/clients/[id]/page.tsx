@@ -8,6 +8,7 @@ import PrintAddressButton from "@/components/PrintAddressButton";
 import EmailBadge from "@/components/EmailBadge";
 import ArrivagesClientCard from "@/components/ArrivagesClientCard";
 import FilsMailsCard from "@/components/FilsMailsCard";
+import RetourDashboard from "@/components/RetourDashboard";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -558,12 +559,12 @@ function copyAddress(type: "facturation" | "livraison") {
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       <div className="mx-auto max-w-[1400px] space-y-6">
+        <RetourDashboard />
 
         {/* HEADER */}
         <div className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <Link href="/dashboard/clients" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">← Fichier clients</Link>
-            <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">📊 Dashboard</Link>
             <Link href={`/drafts/nouveau?prefill=${encodeURIComponent(JSON.stringify({
               nom: client.nom, prenom: client.prenom || "", societe: client.societe || "",
               complement_nom: client.complement_nom || "",

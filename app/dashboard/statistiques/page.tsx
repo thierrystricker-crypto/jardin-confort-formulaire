@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import RetourDashboard from "@/components/RetourDashboard";
 
 // ─── Palette (validée sur la surface #2a2d31) ───
 const C_SERIE      = "#3987e5"; // période courante
@@ -525,11 +526,11 @@ export default function StatistiquesPage() {
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       <div className="mx-auto max-w-[1500px] space-y-5">
+        <RetourDashboard />
 
         {/* En-tête */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <Link href="/dashboard" className="text-sm text-[#5BB3F0] hover:underline">← Retour au dashboard</Link>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight">📊 Statistiques</h1>
             <p className="mt-1 text-sm text-zinc-400">
               {donnees ? `${LIBELLES_SOURCE[donnees.source]} · ${donnees.bornes.courant.libelle}` : "Chargement…"}

@@ -17,6 +17,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import WinbizAdressesCard from "@/components/WinbizAdressesCard";
+import RetourDashboard from "@/components/RetourDashboard";
 
 type ExportRow = {
   id: number;
@@ -180,6 +181,7 @@ export default function ComptabilitePage() {
   return (
     <main className="min-h-screen bg-[#1f2125]">
       <div className="mx-auto max-w-6xl px-4 py-8 text-zinc-100">
+        <RetourDashboard />
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">🧾 Comptabilité — exports Winbiz</h1>
@@ -198,7 +200,6 @@ export default function ComptabilitePage() {
             >
               🏦 Fichier clients Winbiz {fichierClientsOuvert ? "▴" : "▾"}
             </button>
-            <Link href="/dashboard" className="text-sm text-zinc-400 hover:text-zinc-200">← Dashboard</Link>
           </div>
         </div>
 

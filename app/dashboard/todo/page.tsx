@@ -11,6 +11,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import RetourDashboard from "@/components/RetourDashboard";
 
 type Ligne = {
   id: string;
@@ -172,11 +173,11 @@ export default function TodoPage() {
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       <div className="mx-auto max-w-[1200px] space-y-6">
+        <RetourDashboard />
 
         {/* HEADER */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">← Dashboard</Link>
             <h1 className="flex items-center gap-3 text-2xl font-semibold">
               ☑️ To-do du jour
               {data && data.total_a_traiter > 0 && (

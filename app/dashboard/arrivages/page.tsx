@@ -16,6 +16,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { CommandeArrivage, Candidat, LigneArrivage } from "@/lib/arrivages";
+import RetourDashboard from "@/components/RetourDashboard";
 
 type Html5QrcodeInstance = {
   start: (
@@ -229,6 +230,9 @@ export default function ArrivagesPage() {
   return (
     <main className="min-h-screen bg-[#1f2125] px-3 py-4 text-zinc-100 sm:px-6 sm:py-6">
       <div className="mx-auto max-w-[1100px] space-y-4">
+        <RetourDashboard>
+          <Link href="/dashboard/delais" className={`${btnGris} px-4 py-2 text-sm`}>⏱ Délais</Link>
+        </RetourDashboard>
 
         {/* En-tête */}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -242,8 +246,6 @@ export default function ArrivagesPage() {
           <div className="flex items-center gap-2">
             <input value={saisiPar} onChange={e => setSaisiPar(e.target.value)} placeholder="Qui reçoit ? (prénom)"
               className="w-40 rounded-xl border border-white/10 bg-[#2a2d31] px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"/>
-            <Link href="/dashboard/delais" className={`${btnGris} px-4 py-2 text-sm`}>⏱ Délais</Link>
-            <Link href="/dashboard" className={`${btnGris} px-4 py-2 text-sm`}>← Dashboard</Link>
           </div>
         </div>
 

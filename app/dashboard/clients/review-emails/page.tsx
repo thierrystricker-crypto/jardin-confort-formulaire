@@ -12,6 +12,7 @@
 
 import React, { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
+import RetourDashboard from "@/components/RetourDashboard";
 
 type EmailStatus =
   | "verified"
@@ -141,6 +142,7 @@ export default function ReviewEmailsPage() {
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       <div className="mx-auto max-w-[1400px] space-y-6">
+        <RetourDashboard />
         {/* HEADER */}
         <div className="flex flex-wrap items-center gap-4">
           <Link
