@@ -465,10 +465,25 @@ export default function StockListPage() {
           </div>
         ) : (
           <div className={`overflow-x-auto rounded-2xl border border-white/10 bg-[#2a2d31] transition ${loading ? "opacity-60" : ""}`}>
-            <table className="w-full text-sm">
+            {/* table-fixed + colgroup : largeurs stables, la colonne Article prend tout
+                le reste ; sans ça les titres se cassaient sur 5 lignes et la vignette
+                se faisait écraser à quelques pixels. */}
+            <table className="w-full min-w-[1180px] table-fixed text-sm">
+              <colgroup>
+                <col className="w-[60px]" />
+                <col className="w-[170px]" />
+                <col />
+                <col className="w-[92px]" />
+                <col className="w-[84px]" />
+                <col className="w-[104px]" />
+                <col className="w-[210px]" />
+                <col className="w-[100px]" />
+                <col className="w-[92px]" />
+                <col className="w-[118px]" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-zinc-500">
-                  <th className="px-3 py-3 w-14"></th>
+                  <th className="px-3 py-3"></th>
                   <EnTete cle="sku" tri={tri} onClick={trierPar}>SKU</EnTete>
                   <EnTete cle="titre" tri={tri} onClick={trierPar}>Article</EnTete>
                   <EnTete cle="fiche" tri={tri} onClick={trierPar}>Fiche</EnTete>
@@ -487,13 +502,15 @@ export default function StockListPage() {
                   const titreComplet = [l.titre, l.shopify?.varianteTitre].filter(Boolean).join(" — ");
                   return (
                     <tr key={cle} className="group border-b border-white/5 hover:bg-white/[0.03]">
-                      <td className="px-3 py-2">
-                        {l.shopify?.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={l.shopify.imageUrl} alt="" className="h-10 w-10 rounded-lg object-contain bg-white" loading="lazy" />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5 text-zinc-600">🪑</div>
-                        )}
+                      <td className="px-2 py-2">
+                        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-white">
+                          {l.shopify?.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={l.shopify.imageUrl} alt="" className="h-full w-full object-contain" loading="lazy" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-white/5 text-zinc-600">🪑</div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
@@ -509,7 +526,7 @@ export default function StockListPage() {
                       <td className="px-3 py-2">
                         <div className="flex items-start gap-1.5">
                           <div className="min-w-0">
-                            <div className="font-medium text-zinc-100">
+                            <div className="font-medium leading-snug text-zinc-100">
                               {l.titre || <span className="italic text-zinc-500">Titre inconnu (relevé fournisseur)</span>}
                               {l.shopify?.varianteTitre && <span className="ml-2 font-normal text-sky-200/80">{l.shopify.varianteTitre}</span>}
                             </div>
