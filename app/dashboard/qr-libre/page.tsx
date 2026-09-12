@@ -12,8 +12,8 @@
 // Génération via /api/qr-libre (chaîne pdf.co → pdf4me, comme le QR commande).
 
 import React, { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { EQUIPE_JARDI, CLE_UTILISATEUR } from "@/lib/jardi-equipe";
+import RetourDashboard from "@/components/RetourDashboard";
 
 type ClientHit = {
   id: number;
@@ -281,6 +281,7 @@ export default function QrLibrePage() {
   return (
     <main className="min-h-screen bg-[#1f2125]">
       <div className="mx-auto max-w-4xl px-4 py-8 text-zinc-100">
+        <RetourDashboard />
 
         {/* HEADER */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -291,9 +292,6 @@ export default function QrLibrePage() {
               indépendant du QR figé d&apos;une commande.
             </p>
           </div>
-          <Link href="/dashboard" className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-200 transition hover:bg-[#40454b]">
-            ← Dashboard
-          </Link>
         </div>
 
         {/* RÉSULTAT */}

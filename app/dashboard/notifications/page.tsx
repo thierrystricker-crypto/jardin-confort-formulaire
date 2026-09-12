@@ -4,6 +4,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import RetourDashboard from "@/components/RetourDashboard";
 
 type Notification = {
   id: number;
@@ -168,11 +169,11 @@ export default function NotificationsPage() {
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       <div className="mx-auto max-w-[1400px] space-y-6">
+        <RetourDashboard />
 
         {/* HEADER */}
         <div className="flex flex-wrap items-center gap-3 justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]">← Dashboard</Link>
             <h1 className="text-2xl font-semibold flex items-center gap-3">
               🔔 Centre de notifications
               {unreadCount > 0 && (

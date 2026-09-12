@@ -22,6 +22,7 @@ import { useFiltresMemorises } from "@/lib/liste-navigation";
 import type { RechercheDelaiRow, StockListShopifyInfo, DispoFournisseur } from "@/lib/supabase-webshop";
 import ListeAchatPanneau from "@/components/ListeAchatPanneau";
 import { CLE_PANIER, PANIER_VIDE, cleLigne, type LigneListe, type PanierLocal } from "@/lib/listes-achat";
+import RetourDashboard from "@/components/RetourDashboard";
 
 type Ligne = RechercheDelaiRow & { shopify?: StockListShopifyInfo };
 
@@ -402,6 +403,7 @@ export default function StockListPage() {
       {/* Pleine largeur (plafond 1 900 px) : la page est un outil de tableau, elle doit
           profiter des grands écrans du magasin. */}
       <div className="mx-auto max-w-[1900px] px-4 pb-28 pt-8 text-zinc-100 lg:px-6">
+        <RetourDashboard />
         <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-semibold">🔎 Stock list</h1>
@@ -411,9 +413,6 @@ export default function StockListPage() {
               <Link href="/dashboard/delais" className="text-sky-300 hover:underline">→ Délais des commandes en cours</Link>
             </p>
           </div>
-          <Link href="/dashboard" className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-200 transition hover:bg-[#40454b]">
-            ← Dashboard
-          </Link>
         </div>
 
         {/* Bandeau des fournisseurs synchronisés — chaque carte est un filtre */}

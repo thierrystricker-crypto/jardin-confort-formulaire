@@ -12,6 +12,7 @@ import Link from "next/link";
 import { EQUIPE_JARDI, CLE_UTILISATEUR, normaliserMembre } from "@/lib/jardi-equipe";
 import type { ListeAchat, LigneListe } from "@/lib/listes-achat";
 import ListeAchatLignes from "@/components/ListeAchatLignes";
+import RetourDashboard from "@/components/RetourDashboard";
 
 type Onglet = "ouverte" | "modeles" | "transformee" | "archivee";
 
@@ -84,6 +85,7 @@ export default function ListesAchatPage() {
   return (
     <main className="min-h-screen bg-[#1f2125]">
       <div className="mx-auto max-w-6xl px-4 py-8 text-zinc-100">
+        <RetourDashboard />
         <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-semibold">🛒 Listes d&apos;achat</h1>
@@ -96,7 +98,6 @@ export default function ListesAchatPage() {
               <option value="">Qui es-tu ?</option>
               {EQUIPE_JARDI.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
-            <Link href="/dashboard" className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-200 transition hover:bg-[#40454b]">← Dashboard</Link>
           </div>
         </div>
 

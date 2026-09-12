@@ -2,8 +2,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import type { BrandLogo } from "@/lib/media-line-types";
+import RetourDashboard from "@/components/RetourDashboard";
 
 export default function BrandLogosAdminPage() {
   const [logos, setLogos] = useState<BrandLogo[]>([]);
@@ -91,9 +91,9 @@ export default function BrandLogosAdminPage() {
   return (
     <div className="bl-page">
       <div className="bl-container">
+        <RetourDashboard />
         <div className="bl-header">
           <div>
-            <Link href="/dashboard" className="bl-back">← Dashboard</Link>
             <h1 className="bl-title">🖼️ Logos de marques</h1>
             <p className="bl-subtitle">
               Bibliothèque des logos disponibles dans le formulaire d&apos;offre

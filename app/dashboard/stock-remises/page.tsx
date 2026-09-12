@@ -9,6 +9,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import RetourDashboard from "@/components/RetourDashboard";
 
 type Remise = {
   id: number;
@@ -91,6 +92,7 @@ export default function StockRemisesPage() {
     // thème clair/sombre du navigateur.
     <main className="min-h-screen bg-[#1f2125]">
     <div className="mx-auto max-w-6xl px-4 py-8 text-zinc-100">
+        <RetourDashboard />
       <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Retours à remettre en stock (manuel)</h1>
@@ -100,9 +102,6 @@ export default function StockRemisesPage() {
             <Link href="/dashboard/stock-movements" className="text-sky-300 hover:underline">→ Sorties de stock automatiques</Link>
           </p>
         </div>
-        <Link href="/dashboard" className="rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-200 transition hover:bg-[#40454b]">
-          ← Dashboard
-        </Link>
       </div>
 
       {/* KPIs */}

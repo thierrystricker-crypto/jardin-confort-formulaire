@@ -14,6 +14,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useFiltresMemorises } from "@/lib/liste-navigation";
+import RetourDashboard from "@/components/RetourDashboard";
 
 type Ligne = {
   id: string; numero_commande: string; boutique: string
@@ -324,6 +325,7 @@ export default function DelaisPage() {
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       <div className="mx-auto max-w-[1700px] space-y-6">
+        <RetourDashboard />
 
         {/* En-tête */}
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -336,7 +338,6 @@ export default function DelaisPage() {
             </div>
           </div>
           <div className="flex gap-3 flex-wrap">
-            <Link href="/dashboard" className="inline-flex items-center rounded-2xl border border-white/10 bg-[#2a2d31] px-4 py-3 text-sm text-zinc-300 transition hover:bg-[#34383d]">← Dashboard</Link>
             <button onClick={charger} className="inline-flex items-center rounded-2xl border border-white/10 bg-[#2a2d31] px-4 py-3 text-sm text-zinc-300 transition hover:bg-[#34383d]">🔄 Actualiser</button>
           </div>
         </div>

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TransformerModal from "@/components/TransformerModal";
 import AnnexesBlock from "@/components/AnnexesBlock";
+import RetourDashboard from "@/components/RetourDashboard";
 
 type TypeDocument = "Offre" | "Commande";
 
@@ -228,7 +229,7 @@ export default function DashboardDraftDetailPage({
               href="/dashboard"
               className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]"
             >
-              ← Retour au dashboard
+              ← Dashboard
             </Link>
             <Link
               href="/drafts/nouveau"
@@ -273,6 +274,7 @@ export default function DashboardDraftDetailPage({
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       <div className="mx-auto max-w-[1800px] space-y-6">
+        <RetourDashboard />
 
         {/* ═══ BANDEAU BROUILLON ═══ */}
         <div className="rounded-2xl border border-amber-500/40 bg-amber-500/15 px-6 py-4">
@@ -332,19 +334,6 @@ export default function DashboardDraftDetailPage({
           <div className="grid gap-6 lg:grid-cols-2">
 
             <div className="space-y-4">
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  Navigation
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link
-                    href="/dashboard"
-                    className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 transition hover:bg-[#40454b]"
-                  >
-                    ← Retour au dashboard
-                  </Link>
-                </div>
-              </div>
 
               <div className="pt-2 flex flex-wrap items-start justify-between gap-4">
                 <div className="flex items-start gap-4">
@@ -663,7 +652,7 @@ export default function DashboardDraftDetailPage({
               href="/dashboard"
               className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]"
             >
-              ← Retour au dashboard
+              ← Dashboard
             </Link>
             <Link
               href="/drafts/nouveau"

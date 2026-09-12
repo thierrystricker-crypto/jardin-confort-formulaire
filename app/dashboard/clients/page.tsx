@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PrintAddressButton from "@/components/PrintAddressButton";
 import { clicLigne, clicMilieuLigne, useFiltresMemorises } from "@/lib/liste-navigation";
+import RetourDashboard from "@/components/RetourDashboard";
 
 type Client = {
   id: number
@@ -619,11 +620,11 @@ export default function ClientsPage() {
   return (
     <main className="min-h-screen bg-[#1f2125] px-6 py-8 text-zinc-100">
       <div className="mx-auto max-w-[1600px] space-y-6">
+        <RetourDashboard />
 
         {/* HEADER */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="inline-flex items-center rounded-xl border border-white/10 bg-[#34383d] px-4 py-2 text-sm text-zinc-100 hover:bg-[#40454b]">← Dashboard</Link>
             <div>
               <h1 className="text-2xl font-semibold">Fichier clients</h1>
               <p className="text-sm text-zinc-400">
