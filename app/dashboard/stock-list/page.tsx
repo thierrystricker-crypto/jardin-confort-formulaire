@@ -508,7 +508,7 @@ export default function StockListPage() {
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={l.shopify.imageUrl} alt="" className="h-full w-full object-contain" loading="lazy" />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-white/5 text-zinc-600">🪑</div>
+                            <div className="flex h-full w-full items-center justify-center bg-white/5 text-lg text-zinc-600" title="Pas d'image (article absent de Shopify ou sans photo)">×</div>
                           )}
                         </div>
                       </td>

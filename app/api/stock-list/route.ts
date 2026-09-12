@@ -1,5 +1,5 @@
 // app/api/stock-list/route.ts
-// GET /api/stock-list?q=sunwing[&fournisseur=Glatz]
+// GET /api/stock-list?q=sunwing[&fournisseur=Glatz][&stockJC=1&stockFourn=1&masquerNonLivrables=1&actives=1&horsShopify=1]
 //
 // Page « Stock list » : recherche du délai de livraison d'un article au
 // catalogue, y compris les fiches DRAFT et les SKU des relevés fournisseurs
@@ -78,9 +78,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ rows: [], count: 0, tronque: false });
     }
 
+    // Filtres rapides, appliqués AVANT la limite de 300 (sinon on filtrerait
+    // seulement les 300 premiers SKU par ordre alphabétique).
+    const sp = request.nextUrl.searchParams;
     let requete = supabaseWebshop.from("v_recherche_delai").select("*");
     if (motif) requete = requete.or(`sku.ilike.%${motif}%,titre.ilike.%${motif}%`);
     if (fournisseur) requete = requete.eq("fournisseur", fournisseur);
+    if (sp.get("stockJC") === "1") requete = requete.gt("stock_jc", 0);
+    if (sp.get("stockFourn") === "1") requete = requete.eq("dispo_fournisseur", "EN_STOCK");
+    if (sp.get("masquerNonLivrables") === "1") requete = requete.or("dispo_fournisseur.neq.NON_LIVRABLE,dispo_fournisseur.is.null");
+    if (sp.get("actives") === "1") requete = requete.eq("statut_fiche", "ACTIVE");
+    if (sp.get("horsShopify") === "1") requete = requete.is("statut_fiche", null);
 
     const { data, error } = await requete
       .order("fournisseur", { ascending: true })
