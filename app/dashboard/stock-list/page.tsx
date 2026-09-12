@@ -51,9 +51,18 @@ const DISPO: Record<DispoFournisseur, { libelle: string; cls: string; ordre: num
   INCONNU:      { libelle: "Inconnu",      cls: "text-zinc-500",    ordre: 4 },
 };
 
+// Statuts « fermés à la commande » qui, avec une quantité relevée, veulent
+// dire : livrable jusqu'à épuisement du stock fournisseur (Les Jardins
+// NON_COMMANDABLE = allow_out_of_stock_order false, fin de série…).
+const STATUTS_JUSQU_EPUISEMENT = new Set(["NON_COMMANDABLE", "SOLD_OUT", "SORTIE", "EPUISE", "PHASEOUT", "PHASE_OUT", "OUT_OF_STOCK"]);
+
 function libelleDispo(l: Ligne): string {
   if (!l.dispo_fournisseur) return "";
-  return `${DISPO[l.dispo_fournisseur].libelle} chez ${l.fournisseur}`;
+  const base = `${DISPO[l.dispo_fournisseur].libelle} chez ${l.fournisseur}`;
+  if (l.dispo_fournisseur === "EN_STOCK" && STATUTS_JUSQU_EPUISEMENT.has((l.statut_fournisseur || "").toUpperCase())) {
+    return `${base} · jusqu'à épuisement`;
+  }
+  return base;
 }
 
 function fmtDate(iso: string | null) {
