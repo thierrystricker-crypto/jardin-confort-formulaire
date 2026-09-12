@@ -14,36 +14,15 @@
 // Renvoie : { editUrl, dashboardUrl, numeroAffiche, slug, nbProduits, nbCustom }
 
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase";
-import { shopifyAdminGraphQL } from "@/lib/shopify-stock";
 import { normaliserMembre } from "@/lib/jardi-equipe";
 import type { ListeAchat, LigneListe } from "@/lib/listes-achat";
-import type { QuoteLine } from "@/lib/jc-print-types";
+import { construireLignesBrouillon } from "@/lib/listes-achat-lignes";
 import { POST as creerDraft } from "@/app/api/drafts/route";
 
 export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-type NodeVariant = {
-  id: string;
-  sku: string | null;
-  title: string | null;
-  price: string;
-  inventoryQuantity: number | null;
-  inventoryPolicy: "DENY" | "CONTINUE";
-  image: { url: string } | null;
-  product: {
-    title: string;
-    status: string;
-    featuredMedia: { preview: { image: { url: string } | null } | null } | null;
-  } | null;
-} | null;
-
-function gid(id: string): string {
-  return id.startsWith("gid://") ? id : `gid://shopify/ProductVariant/${id}`;
-}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -59,62 +38,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Liste vide" }, { status: 400 });
     }
 
-    // ── Prix et état Shopify à l'instant T ──
-    const ids = l.lignes.filter((x) => x.variant_id).map((x) => gid(String(x.variant_id)));
-    const infos = new Map<string, NonNullable<NodeVariant>>();
-    for (let i = 0; i < ids.length; i += 250) {
-      const data = await shopifyAdminGraphQL<{ nodes: NodeVariant[] }>(
-        `query listeAchatBrouillon($ids: [ID!]!) {
-          nodes(ids: $ids) {
-            ... on ProductVariant {
-              id sku title price inventoryQuantity inventoryPolicy
-              image { url(transform: { maxWidth: 400, maxHeight: 400 }) }
-              product { title status featuredMedia { preview { image { url(transform: { maxWidth: 400, maxHeight: 400 }) } } } }
-            }
-          }
-        }`,
-        { ids: ids.slice(i, i + 250) }
-      );
-      for (const n of data.nodes || []) if (n) infos.set(n.id, n);
-    }
-
-    // ── Lignes du brouillon (format QuoteLine du formulaire) ──
-    const lines: QuoteLine[] = [];
-    let nbProduits = 0, nbCustom = 0;
-    for (const x of l.lignes as LigneListe[]) {
-      const qty = Math.max(1, Number(x.qty) || 1);
-      const info = x.variant_id ? infos.get(gid(String(x.variant_id))) : undefined;
-      if (info) {
-        const vt = (info.title || "").trim();
-        const titre = info.product ? (vt && vt !== "Default Title" ? `${info.product.title} / ${vt}` : info.product.title) : (x.titre || x.sku);
-        lines.push({
-          id: randomUUID(),
-          type: "product",
-          image: info.image?.url || info.product?.featuredMedia?.preview?.image?.url || x.image_url || "",
-          sku: info.sku || x.sku,
-          title: titre,
-          unitPrice: Number(info.price) || 0,
-          qty,
-          stock: info.inventoryQuantity ?? null,
-          inventoryPolicy: info.inventoryPolicy,
-          shopifyLocked: true,
-          shopifyVariantId: info.id,
-        });
-        nbProduits++;
-      } else {
-        // Hors Shopify (ou variante disparue) : article à la volée, prix à compléter
-        lines.push({
-          id: randomUUID(),
-          type: "custom",
-          image: x.image_url || "",
-          sku: x.sku,
-          title: x.titre ? [x.titre, x.variante_titre].filter(Boolean).join(" / ") : `${x.fournisseur} — ${x.sku} (article à créer)`,
-          unitPrice: 0,
-          qty,
-        });
-        nbCustom++;
-      }
-    }
+    // ── Lignes du brouillon, prix Shopify relus à l'instant ──
+    const { lines, nbProduits, nbCustom } = await construireLignesBrouillon(l.lignes as LigneListe[]);
 
     const commercial = normaliserMembre(body.cree_par) ?? normaliserMembre(l.cree_par) ?? "";
     const aujourdhui = new Date().toISOString().slice(0, 10);

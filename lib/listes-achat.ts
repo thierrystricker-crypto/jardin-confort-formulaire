@@ -20,7 +20,28 @@ export type LigneListe = {
   statut_fiche: "ACTIVE" | "DRAFT" | "ARCHIVED" | null;
   qty: number;
   image_url: string | null;
+  prix?: number | null;            // article à la volée seulement (variant_id null) : prix TTC saisi ;
+                                   // les variantes Shopify n'ont jamais de prix stocké
 };
+
+// Fournisseur des articles à la volée saisis dans une liste (pas de relevé)
+export const FOURNISSEUR_LIBRE = "Libre";
+
+export function nouvelleLigneLibre(titre: string, sku: string, qty: number, prix: number | null): LigneListe {
+  const ref = sku.trim() || `LIBRE-${Date.now().toString(36).toUpperCase()}`;
+  return {
+    fournisseur: FOURNISSEUR_LIBRE,
+    sku: ref,
+    titre: titre.trim(),
+    variante_titre: null,
+    variant_id: null,
+    product_id: null,
+    statut_fiche: null,
+    qty: Math.max(1, qty),
+    image_url: null,
+    prix,
+  };
+}
 
 export type StatutListe = "ouverte" | "transformee" | "archivee";
 
@@ -86,6 +107,7 @@ export function normaliserLignes(brut: unknown): LigneListe[] {
       statut_fiche: statut === "ACTIVE" || statut === "DRAFT" || statut === "ARCHIVED" ? statut : null,
       qty,
       image_url: typeof o.image_url === "string" && o.image_url ? o.image_url : null,
+      prix: o.prix === null || o.prix === undefined || o.prix === "" ? null : Math.max(0, Number(o.prix) || 0),
     });
   }
   return out.slice(0, 200);

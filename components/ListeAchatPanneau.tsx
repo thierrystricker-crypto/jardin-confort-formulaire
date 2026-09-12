@@ -12,6 +12,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { EQUIPE_JARDI, CLE_UTILISATEUR, normaliserMembre } from "@/lib/jardi-equipe";
 import { cleLigne, nbArticles, PANIER_VIDE, type ListeAchat, type PanierLocal } from "@/lib/listes-achat";
+import ListeAchatLignes from "@/components/ListeAchatLignes";
 
 type Props = {
   panier: PanierLocal;
@@ -57,19 +58,6 @@ export default function ListeAchatPanneau({ panier, setPanier, prix }: Props) {
   function signaler(type: "ok" | "erreur", texte: string) {
     setMessage({ type, texte });
     setTimeout(() => setMessage((m) => (m?.texte === texte ? null : m)), 4000);
-  }
-
-  function changerQty(cle: string, delta: number) {
-    setPanier((p) => ({
-      ...p,
-      lignes: p.lignes
-        .map((l) => (cleLigne(l) === cle ? { ...l, qty: Math.max(0, l.qty + delta) } : l))
-        .filter((l) => l.qty > 0),
-    }));
-  }
-  function saisirQty(cle: string, valeur: string) {
-    const n = Math.max(0, Math.min(999, Math.round(Number(valeur) || 0)));
-    setPanier((p) => ({ ...p, lignes: p.lignes.map((l) => (cleLigne(l) === cle ? { ...l, qty: n } : l)).filter((l) => l.qty > 0) }));
   }
 
   // Sauvegarde : POST si nouvelle, PATCH si copie de travail d'une liste existante.
@@ -152,11 +140,12 @@ export default function ListeAchatPanneau({ panier, setPanier, prix }: Props) {
     signaler("ok", liste.est_modele ? `Modèle « ${liste.nom} » chargé (copie).` : `Liste « ${liste.nom} » chargée.`);
   }
 
+  const prixLigne = (l: PanierLocal["lignes"][number]) => (l.variant_id ? prix[cleLigne(l)] : l.prix);
   const totalConnu = panier.lignes.reduce((s, l) => {
-    const p = prix[cleLigne(l)];
+    const p = prixLigne(l);
     return typeof p === "number" ? s + p * l.qty : s;
   }, 0);
-  const nbSansPrix = panier.lignes.filter((l) => typeof prix[cleLigne(l)] !== "number").length;
+  const nbSansPrix = panier.lignes.filter((l) => typeof prixLigne(l) !== "number").length;
 
   return (
     <div className={`fixed inset-x-0 bottom-0 z-40 ${ouvert ? "p-3 lg:p-4" : ""}`}>
@@ -217,48 +206,12 @@ export default function ListeAchatPanneau({ panier, setPanier, prix }: Props) {
               <button type="button" onClick={() => { if (confirm("Vider la liste en cours ?")) setPanier(PANIER_VIDE); }} className="text-xs text-zinc-500 hover:text-rose-300">Vider</button>
             </div>
 
-            {panier.lignes.length === 0 ? (
-              <div className="flex h-[46vh] items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-zinc-500">Ajoute des articles avec le bouton « + » de chaque ligne.</div>
-            ) : (
-              <div className="h-[46vh] overflow-y-auto rounded-xl border border-white/10 bg-[#25282c]">
-                <table className="w-full text-sm">
-                  <tbody>
-                    {panier.lignes.map((l) => {
-                      const cle = cleLigne(l);
-                      const p = prix[cle];
-                      return (
-                        <tr key={cle} className="border-b border-white/5">
-                          <td className="w-12 px-2 py-1.5">
-                            <div className="h-9 w-9 overflow-hidden rounded-md bg-white">
-                              {l.image_url
-                                // eslint-disable-next-line @next/next/no-img-element
-                                ? <img src={l.image_url} alt="" className="h-full w-full object-contain" />
-                                : <div className="flex h-full w-full items-center justify-center bg-white/5 text-zinc-600">×</div>}
-                            </div>
-                          </td>
-                          <td className="w-40 px-2 py-1.5 font-mono text-xs text-zinc-300">{l.sku}</td>
-                          <td className="px-2 py-1.5">
-                            <div className="text-zinc-100">{l.titre || <span className="italic text-zinc-500">Hors Shopify — {l.fournisseur} {l.sku}</span>}{l.variante_titre && <span className="ml-2 text-sky-200/80">{l.variante_titre}</span>}</div>
-                            <div className="text-[11px] text-zinc-500">{l.fournisseur}{!l.variant_id ? " · sera une ligne libre du brouillon" : l.statut_fiche === "DRAFT" ? " · fiche brouillon" : ""}</div>
-                          </td>
-                          <td className="w-28 px-2 py-1.5 text-right tabular-nums text-zinc-300">{typeof p === "number" ? fmtCHF(p) : <span className="text-zinc-600">—</span>}</td>
-                          <td className="w-32 px-2 py-1.5">
-                            <div className="flex items-center justify-end gap-1">
-                              <button type="button" onClick={() => changerQty(cle, -1)} className="h-6 w-6 rounded border border-white/10 text-zinc-300 hover:bg-white/10">−</button>
-                              <input value={l.qty} onChange={(e) => saisirQty(cle, e.target.value)} className="w-10 rounded border border-white/10 bg-[#1f2125] px-1 py-0.5 text-center text-xs text-zinc-100" />
-                              <button type="button" onClick={() => changerQty(cle, 1)} className="h-6 w-6 rounded border border-white/10 text-zinc-300 hover:bg-white/10">+</button>
-                            </div>
-                          </td>
-                          <td className="w-8 px-1 py-1.5 text-right">
-                            <button type="button" onClick={() => saisirQty(cle, "0")} className="text-zinc-500 hover:text-rose-300" title="Retirer">✕</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <ListeAchatLignes
+              lignes={panier.lignes}
+              onChange={(lignes) => setPanier((p) => ({ ...p, lignes }))}
+              prix={prix}
+              hauteur="h-[40vh]"
+            />
             {panier.lignes.length > 0 && (
               <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
                 <span>{panier.lignes.length} référence{panier.lignes.length > 1 ? "s" : ""} · {total} pièce{total > 1 ? "s" : ""}</span>

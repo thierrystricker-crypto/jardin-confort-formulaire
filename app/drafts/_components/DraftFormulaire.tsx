@@ -3,6 +3,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import MediaLinePicker from "../../offres/nouveau/MediaLinePicker";
+import ListeAchatImport from "@/components/ListeAchatImport";
 import TransformerModal from "@/components/TransformerModal";
 import { isStockCritical } from "@/lib/jc-print-types";
 import { manqueNumero, adresseLivraisonEffective } from "@/lib/adresse-utils";
@@ -362,7 +363,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   const [draggedAmbianceId, setDraggedAmbianceId] = useState<string | null>(null);
   const [openDiscountLines, setOpenDiscountLines] = useState<Set<string>>(new Set());
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [activeTab, setActiveTab]           = useState<"shopify" | "custom">("shopify");
+  const [activeTab, setActiveTab]           = useState<"shopify" | "custom" | "liste">("shopify");
   const [darkMode, setDarkMode]             = useState(true);
   const [wideMode, setWideMode]             = useState(true);
   const [filterInStock, setFilterInStock]   = useState(false);
@@ -2193,6 +2194,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
           <div className="jc-tabs screenOnly">
             <button className={`jc-tab ${activeTab === "shopify" ? "jc-tab-active" : ""}`} onClick={() => setActiveTab("shopify")}>Catalogue Shopify</button>
             <button className={`jc-tab ${activeTab === "custom" ? "jc-tab-active" : ""}`} onClick={() => setActiveTab("custom")}>Article à la volée</button>
+            <button className={`jc-tab ${activeTab === "liste" ? "jc-tab-active" : ""}`} onClick={() => setActiveTab("liste")}>🛒 Liste d'achat</button>
           </div>
 
           {activeTab === "shopify" && (
@@ -2328,6 +2330,10 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                 );
               })()}
             </>
+          )}
+
+          {activeTab === "liste" && (
+            <ListeAchatImport onAjouter={(nouvelles) => { captureUndo(); setLines((c) => [...c, ...nouvelles]); }} />
           )}
 
           {activeTab === "custom" && (
@@ -2991,6 +2997,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
               <div className="jc-tabs screenOnly">
                 <button className={`jc-tab ${activeTab === "shopify" ? "jc-tab-active" : ""}`} onClick={() => setActiveTab("shopify")}>Catalogue Shopify</button>
                 <button className={`jc-tab ${activeTab === "custom" ? "jc-tab-active" : ""}`} onClick={() => setActiveTab("custom")}>Article à la volée</button>
+                <button className={`jc-tab ${activeTab === "liste" ? "jc-tab-active" : ""}`} onClick={() => setActiveTab("liste")}>🛒 Liste d'achat</button>
               </div>
 
               {activeTab === "shopify" && (
@@ -3054,6 +3061,10 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                     );
                   })()}
                 </>
+              )}
+
+              {activeTab === "liste" && (
+                <ListeAchatImport onAjouter={(nouvelles) => { captureUndo(); setLines((c) => [...c, ...nouvelles]); }} />
               )}
 
               {activeTab === "custom" && (

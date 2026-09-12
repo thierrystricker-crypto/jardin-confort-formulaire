@@ -10,7 +10,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { EQUIPE_JARDI, CLE_UTILISATEUR, normaliserMembre } from "@/lib/jardi-equipe";
-import type { ListeAchat } from "@/lib/listes-achat";
+import type { ListeAchat, LigneListe } from "@/lib/listes-achat";
+import ListeAchatLignes from "@/components/ListeAchatLignes";
 
 type Onglet = "ouverte" | "modeles" | "transformee" | "archivee";
 
@@ -26,6 +27,7 @@ export default function ListesAchatPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [utilisateur, setUtilisateur] = useState("");
   const [ouverte, setOuverte] = useState<string | null>(null); // détail déplié
+  const [edition, setEdition] = useState<{ id: string; lignes: LigneListe[] } | null>(null); // lignes modifiées, pas encore enregistrées
 
   useEffect(() => {
     try { const u = normaliserMembre(window.localStorage.getItem(CLE_UTILISATEUR)); if (u) setUtilisateur(u); } catch { /* ignore */ }
@@ -150,27 +152,23 @@ export default function ListesAchatPage() {
                     </div>
                   </div>
                   {deplie && (
-                    <div className="border-t border-white/5 px-4 py-2">
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {l.lignes.map((x) => (
-                            <tr key={`${x.fournisseur}|${x.sku}`} className="border-b border-white/5 last:border-0">
-                              <td className="w-12 py-1.5">
-                                <div className="h-8 w-8 overflow-hidden rounded bg-white">
-                                  {x.image_url
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    ? <img src={x.image_url} alt="" className="h-full w-full object-contain" />
-                                    : <div className="flex h-full w-full items-center justify-center bg-white/5 text-zinc-600">×</div>}
-                                </div>
-                              </td>
-                              <td className="w-40 py-1.5 font-mono text-xs text-zinc-300">{x.sku}</td>
-                              <td className="py-1.5 text-zinc-200">{x.titre || <span className="italic text-zinc-500">Hors Shopify — {x.fournisseur}</span>}{x.variante_titre && <span className="ml-2 text-sky-200/80">{x.variante_titre}</span>}</td>
-                              <td className="w-16 py-1.5 text-right tabular-nums text-zinc-300">× {x.qty}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {l.notes && <p className="mt-2 text-xs text-zinc-400">{l.notes}</p>}
+                    <div className="border-t border-white/5 px-4 py-3">
+                      <ListeAchatLignes
+                        lignes={edition?.id === l.id ? edition.lignes : l.lignes}
+                        onChange={(lignes) => setEdition({ id: l.id, lignes })}
+                        hauteur="max-h-[50vh]"
+                      />
+                      <div className="mt-2 flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">{l.notes || "Réordonne (flèches ou glisser), ajuste les quantités, ajoute un article à la volée — puis enregistre."}</span>
+                        {edition?.id === l.id && (
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => setEdition(null)} className="text-zinc-400 hover:text-zinc-200">Annuler</button>
+                            <button type="button" disabled={busyId === l.id} onClick={async () => { await patch(l.id, { lignes: edition.lignes }); setEdition(null); }} className="rounded-lg border border-sky-500/40 bg-sky-500/20 px-3 py-1.5 font-medium text-sky-200 hover:bg-sky-500/30 disabled:opacity-50">
+                              {busyId === l.id ? "…" : "Enregistrer les modifications"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
