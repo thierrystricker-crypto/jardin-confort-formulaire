@@ -61,14 +61,13 @@ export default function ListeAchatImport({ onAjouter }: Props) {
       // L'API rend les lignes dans l'ordre de la liste : on aligne par index,
       // puis on applique les cases et quantités choisies dans l'aperçu.
       const toutes = (json.lines || []) as QuoteLine[];
-      const lines: QuoteLine[] = retenues
-        .map(({ c, i }) => {
-          const l = toutes[i];
-          if (!l) return null;
-          const parUnite = l.lineDiscountPerUnit ?? 0;
-          return { ...l, qty: c.qty, lineDiscount: Math.round(parUnite * c.qty * 100) / 100 };
-        })
-        .filter((l): l is QuoteLine => l !== null);
+      const lines: QuoteLine[] = [];
+      for (const { c, i } of retenues) {
+        const l = toutes[i];
+        if (!l) continue;
+        const parUnite = l.lineDiscountPerUnit ?? 0;
+        lines.push({ ...l, qty: c.qty, lineDiscount: Math.round(parUnite * c.qty * 100) / 100 });
+      }
       onAjouter(lines);
       const nbCustom = lines.filter((l) => l.type === "custom").length;
       setMessage(`${lines.length} ligne(s) de « ${apercu.nom} » ajoutée(s) à l'offre${nbCustom > 0 ? ` — ${nbCustom} article(s) libre(s) à vérifier (prix)` : ""}.`);
