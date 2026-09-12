@@ -2,7 +2,8 @@
 // GET /api/stock-list?q=sunwing[&fournisseur=Glatz][&stockJC=1&stockFourn=1&masquerNonLivrables=1&actives=1&horsShopify=1]
 //
 // Page « Stock list » : recherche du délai de livraison d'un article au
-// catalogue, y compris les fiches DRAFT et les SKU des relevés fournisseurs
+// catalogue (texte sur SKU/titre dans la vue + variantes trouvées par la
+// recherche Shopify Admin, pour les titres de variantes : couleur, taille…), y compris les fiches DRAFT et les SKU des relevés fournisseurs
 // pas encore créés dans Shopify. Source : vue v_recherche_delai du Supabase
 // WEBSHOP (lib/supabase-webshop.ts), qui calcule déjà le délai client.
 //
@@ -14,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseWebshop, webshopConfigure, type RechercheDelaiRow } from "@/lib/supabase-webshop";
 import { supabaseAdmin } from "@/lib/supabase";
+import { shopifyAdminGraphQL } from "@/lib/shopify-stock";
 
 // Logo de marque (table brand_logos du Supabase de l'app) apparié au nom du
 // fournisseur par slug : "Cane-line" → cane-line, "Les Jardins" → les-jardins.
@@ -81,26 +83,65 @@ export async function GET(request: NextRequest) {
     // Filtres rapides, appliqués AVANT la limite de 300 (sinon on filtrerait
     // seulement les 300 premiers SKU par ordre alphabétique).
     const sp = request.nextUrl.searchParams;
-    let requete = supabaseWebshop.from("v_recherche_delai").select("*");
-    if (motif) requete = requete.or(`sku.ilike.%${motif}%,titre.ilike.%${motif}%`);
-    if (fournisseur) requete = requete.eq("fournisseur", fournisseur);
-    if (sp.get("stockJC") === "1") requete = requete.gt("stock_jc", 0);
-    if (sp.get("stockFourn") === "1") requete = requete.eq("dispo_fournisseur", "EN_STOCK");
-    if (sp.get("masquerNonLivrables") === "1") requete = requete.or("dispo_fournisseur.neq.NON_LIVRABLE,dispo_fournisseur.is.null");
-    if (sp.get("actives") === "1") requete = requete.eq("statut_fiche", "ACTIVE");
-    if (sp.get("horsShopify") === "1") requete = requete.is("statut_fiche", null);
-
-    const { data, error } = await requete
-      .order("fournisseur", { ascending: true })
-      .order("sku", { ascending: true })
-      .limit(LIMITE + 1);
-
-    if (error) {
-      console.error("Stock list error:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    function base() {
+      let r = supabaseWebshop.from("v_recherche_delai").select("*");
+      if (fournisseur) r = r.eq("fournisseur", fournisseur);
+      if (sp.get("stockJC") === "1") r = r.gt("stock_jc", 0);
+      if (sp.get("stockFourn") === "1") r = r.eq("dispo_fournisseur", "EN_STOCK");
+      if (sp.get("masquerNonLivrables") === "1") r = r.or("dispo_fournisseur.neq.NON_LIVRABLE,dispo_fournisseur.is.null");
+      if (sp.get("actives") === "1") r = r.eq("statut_fiche", "ACTIVE");
+      if (sp.get("horsShopify") === "1") r = r.is("statut_fiche", null);
+      return r;
     }
 
-    const toutes = (data || []) as RechercheDelaiRow[];
+    // ── 1. Recherche texte dans la vue (SKU, titre produit) ──
+    const requetes: Promise<{ data: unknown; error: { message: string } | null }>[] = [];
+    if (motif) {
+      requetes.push(Promise.resolve(base().or(`sku.ilike.%${motif}%,titre.ilike.%${motif}%`).order("fournisseur").order("sku").limit(LIMITE + 1)));
+    } else {
+      requetes.push(Promise.resolve(base().order("fournisseur").order("sku").limit(LIMITE + 1)));
+    }
+
+    // ── 2. Recherche Shopify Admin sur les VARIANTES (titre produit + titre de
+    // variante : « sfera 527 » trouve « Sfera … 527 Urban Chrome »), fiches DRAFT
+    // comprises — la vue ne connaît pas le titre de variante. Les gid trouvés
+    // sont ramenés dans la vue par variant_id, par paquets de 100 (longueur d'URL).
+    if (q.length >= 2) {
+      try {
+        const rech = q.replace(/["\\]/g, " ").trim();
+        const data = await shopifyAdminGraphQL<{ productVariants: { nodes: { id: string }[] } }>(
+          `query stockListVariantes($q: String!) { productVariants(first: 250, query: $q) { nodes { id } } }`,
+          { q: rech }
+        );
+        const gids = (data.productVariants?.nodes || []).map((n) => n.id);
+        for (let i = 0; i < gids.length; i += 100) {
+          requetes.push(Promise.resolve(base().in("variant_id", gids.slice(i, i + 100)).limit(LIMITE)));
+        }
+      } catch (e) {
+        console.warn("Stock list : recherche Shopify indisponible, texte seul —", e);
+      }
+    }
+
+    const resultats = await Promise.all(requetes);
+    const erreur = resultats.find((r) => r.error);
+    if (erreur?.error) {
+      console.error("Stock list error:", erreur.error);
+      return NextResponse.json({ error: erreur.error.message }, { status: 500 });
+    }
+    const vues = new Set<string>();
+    const fusion: RechercheDelaiRow[] = [];
+    for (const r of resultats) {
+      for (const row of (r.data || []) as RechercheDelaiRow[]) {
+        const cle = `${row.fournisseur}|${row.sku}`;
+        if (vues.has(cle)) continue;
+        vues.add(cle);
+        fusion.push(row);
+      }
+    }
+    fusion.sort((a, b) => a.fournisseur.localeCompare(b.fournisseur) || a.sku.localeCompare(b.sku));
+    const data = fusion;
+
+    const toutes = data;
     const rows = toutes.slice(0, LIMITE);
 
     return NextResponse.json({ rows, count: rows.length, tronque: toutes.length > LIMITE });
