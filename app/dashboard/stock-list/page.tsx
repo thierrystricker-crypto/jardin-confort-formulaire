@@ -20,6 +20,8 @@ import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useFiltresMemorises } from "@/lib/liste-navigation";
 import type { RechercheDelaiRow, StockListShopifyInfo, DispoFournisseur } from "@/lib/supabase-webshop";
+import ListeAchatPanneau from "@/components/ListeAchatPanneau";
+import { CLE_PANIER, PANIER_VIDE, cleLigne, type LigneListe, type PanierLocal } from "@/lib/listes-achat";
 
 type Ligne = RechercheDelaiRow & { shopify?: StockListShopifyInfo };
 
@@ -104,7 +106,7 @@ function DelaiClient({ plage }: { plage: string | null }) {
 }
 
 // ─── Tri et filtres rapides (côté client, sur les lignes chargées) ───
-type CleTri = "sku" | "titre" | "fiche" | "stock_jc" | "stock_fournisseur" | "statut_fournisseur" | "dispo" | "transport" | "delai";
+type CleTri = "sku" | "titre" | "prix" | "fiche" | "stock_jc" | "stock_fournisseur" | "statut_fournisseur" | "dispo" | "transport" | "delai";
 
 // "2-3" → 2 (borne basse) ; "25-26" → 25 ; vide → Infinity (tout en bas)
 function delaiMin(plage: string | null): number {
@@ -145,6 +147,7 @@ function valeurTri(l: Ligne, cle: CleTri): string | number {
   switch (cle) {
     case "sku": return l.sku || "";
     case "titre": return (l.titre || "\uffff").toLowerCase();
+    case "prix": return typeof l.shopify?.prixTTC === "number" ? l.shopify.prixTTC : Infinity;
     case "fiche": return l.statut_fiche === "ACTIVE" ? 0 : l.statut_fiche === "DRAFT" ? 1 : l.statut_fiche === "ARCHIVED" ? 2 : 3;
     case "stock_jc": return l.stock_jc ?? -1;
     case "stock_fournisseur": return l.stock_fournisseur ?? -1;
@@ -168,6 +171,16 @@ const ICONE_OUVRIR = (
     <path d="M11 9.5V12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2.5" />
   </svg>
 );
+
+const ICONE_PLUS = (
+  <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M8 3v10M3 8h10" />
+  </svg>
+);
+
+function fmtCHF(n: number) {
+  return n.toLocaleString("fr-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 function BoutonAction({ titre, onClick, actif, enfant, href }: {
   titre: string; onClick?: () => void; actif?: boolean; enfant: React.ReactNode; href?: string;
@@ -211,6 +224,9 @@ export default function StockListPage() {
   const [fournisseurs, setFournisseurs] = useState<FournisseurSync[]>([]);
   const [copie, setCopie] = useState<string>(""); // clé du dernier élément copié (feedback 1,5 s)
   const [filtres, setFiltres] = useState<FiltresRapides>(FILTRES_DEFAUT);
+  const [panier, setPanier] = useState<PanierLocal>(PANIER_VIDE);
+  const [panierPret, setPanierPret] = useState(false);
+  const [prixConnus, setPrixConnus] = useState<Record<string, number | null>>({});
   const [tri, setTri] = useState<{ cle: CleTri; desc: boolean } | null>(null);
   const requeteEnCours = useRef(0);
 
@@ -239,6 +255,59 @@ export default function StockListPage() {
       })
     : lignesFiltrees;
   const nbFiltresActifs = Object.values(filtres).filter(Boolean).length;
+
+  // Panier : restauré depuis le navigateur, ou chargé depuis ?liste=<id>
+  // (lien « Ouvrir dans Stock list » de la page Listes d'achat).
+  useEffect(() => {
+    const idListe = new URLSearchParams(window.location.search).get("liste");
+    if (idListe) {
+      fetch(`/api/listes-achat/${idListe}`)
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.liste) {
+            setPanier({ id: j.liste.est_modele ? null : j.liste.id, nom: j.liste.nom, est_modele: false, lignes: j.liste.lignes || [] });
+          }
+        })
+        .catch(() => { /* on garde le panier local */ })
+        .finally(() => setPanierPret(true));
+      return;
+    }
+    try {
+      const brut = window.localStorage.getItem(CLE_PANIER);
+      if (brut) {
+        const lu = JSON.parse(brut) as PanierLocal;
+        if (lu && Array.isArray(lu.lignes)) setPanier({ ...PANIER_VIDE, ...lu });
+      }
+    } catch { /* localStorage indisponible */ }
+    setPanierPret(true);
+  }, []);
+  useEffect(() => {
+    if (!panierPret) return;
+    try { window.localStorage.setItem(CLE_PANIER, JSON.stringify(panier)); } catch { /* ignore */ }
+  }, [panier, panierPret]);
+
+  function ajouterAuPanier(l: Ligne) {
+    const cle = cleLigne(l);
+    setPanier((p) => {
+      const existe = p.lignes.find((x) => cleLigne(x) === cle);
+      if (existe) {
+        return { ...p, lignes: p.lignes.map((x) => (cleLigne(x) === cle ? { ...x, qty: Math.min(999, x.qty + 1) } : x)) };
+      }
+      const ligne: LigneListe = {
+        fournisseur: l.fournisseur,
+        sku: l.sku,
+        titre: l.titre,
+        variante_titre: l.shopify?.varianteTitre ?? null,
+        variant_id: l.variant_id ? String(l.variant_id) : null,
+        product_id: l.product_id ? String(l.product_id) : null,
+        statut_fiche: l.statut_fiche,
+        qty: 1,
+        image_url: l.shopify?.imageUrl ?? null,
+      };
+      return { ...p, lignes: [...p.lignes, ligne] };
+    });
+  }
+  const qtyPanier = (l: Ligne) => panier.lignes.find((x) => cleLigne(x) === cleLigne(l))?.qty ?? 0;
 
   // Bandeau : quels fournisseurs sont couverts par la synchro.
   useEffect(() => {
@@ -288,6 +357,14 @@ export default function StockListPage() {
           const info = infos[cleVariante(l.variant_id)];
           return info ? { ...l, shopify: info } : l;
         }));
+        setPrixConnus((prev) => {
+          const suite = { ...prev };
+          for (const l of lignes) {
+            const info = infos[cleVariante(l.variant_id)];
+            if (info) suite[cleLigne(l)] = info.prixTTC;
+          }
+          return suite;
+        });
       } catch (e) {
         if (id !== requeteEnCours.current) return;
         setError(String(e)); setLoading(false);
@@ -314,7 +391,9 @@ export default function StockListPage() {
 
   return (
     <main className="min-h-screen bg-[#1f2125]">
-      <div className="mx-auto max-w-7xl px-4 py-8 text-zinc-100">
+      {/* Pleine largeur (plafond 1 900 px) : la page est un outil de tableau, elle doit
+          profiter des grands écrans du magasin. */}
+      <div className="mx-auto max-w-[1900px] px-4 pb-28 pt-8 text-zinc-100 lg:px-6">
         <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-semibold">🔎 Stock list</h1>
@@ -398,7 +477,7 @@ export default function StockListPage() {
             className="w-full rounded-2xl border border-white/10 bg-[#2a2d31] px-5 py-3.5 text-base text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-sky-500/50"
           />
           <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-            <span>Boutons de ligne : copier le SKU, copier le titre, ouvrir la variante dans un nouvel onglet (boutique, ou admin Shopify si brouillon).</span>
+            <span>Boutons de ligne : + ajouter à la liste d&apos;achat, copier le SKU, copier le titre, ouvrir la variante (boutique, ou admin Shopify si brouillon).</span>
             {cherche && !loading && (
               <span>
                 {lignesAffichees.length !== rows.length ? `${lignesAffichees.length} sur ` : ""}{rows.length} résultat{rows.length > 1 ? "s" : ""}
@@ -468,11 +547,12 @@ export default function StockListPage() {
             {/* table-fixed + colgroup : largeurs stables, la colonne Article prend tout
                 le reste ; sans ça les titres se cassaient sur 5 lignes et la vignette
                 se faisait écraser à quelques pixels. */}
-            <table className="w-full min-w-[1080px] table-fixed text-sm">
+            <table className="w-full min-w-[1170px] table-fixed text-sm">
               <colgroup>
                 <col className="w-[60px]" />
                 <col className="w-[160px]" />
                 <col />
+                <col className="w-[92px]" />
                 <col className="w-[86px]" />
                 <col className="w-[66px]" />
                 <col className="w-[88px]" />
@@ -486,6 +566,7 @@ export default function StockListPage() {
                   <th className="px-3 py-3"></th>
                   <EnTete cle="sku" tri={tri} onClick={trierPar}>SKU</EnTete>
                   <EnTete cle="titre" tri={tri} onClick={trierPar}>Article</EnTete>
+                  <EnTete cle="prix" tri={tri} onClick={trierPar} droite aide="Prix de vente Shopify TTC, lu à l'instant">Prix<br />TTC</EnTete>
                   <EnTete cle="fiche" tri={tri} onClick={trierPar}>Fiche</EnTete>
                   <EnTete cle="stock_jc" tri={tri} onClick={trierPar} droite aide="Stock Jardin Confort (miroir Shopify)">Stock<br />JC</EnTete>
                   <EnTete cle="stock_fournisseur" tri={tri} onClick={trierPar} droite aide="Stock chez le fournisseur (dernier relevé)">Stock<br />fourn.</EnTete>
@@ -533,6 +614,12 @@ export default function StockListPage() {
                             <div className="text-xs text-zinc-500">{l.fournisseur}</div>
                           </div>
                           <div className="ml-auto flex shrink-0 items-center gap-1 opacity-40 transition group-hover:opacity-100">
+                            <BoutonAction
+                              titre={qtyPanier(l) > 0 ? `Dans la liste (${qtyPanier(l)}) — cliquer pour +1` : "Ajouter à la liste d'achat"}
+                              actif={qtyPanier(l) > 0}
+                              onClick={() => ajouterAuPanier(l)}
+                              enfant={qtyPanier(l) > 0 ? <span className="text-[11px] font-bold">{qtyPanier(l)}</span> : ICONE_PLUS}
+                            />
                             {titreComplet && (
                               <BoutonAction
                                 titre={copie === `titre:${cle}` ? "Copié !" : "Copier le titre"}
@@ -550,6 +637,9 @@ export default function StockListPage() {
                             )}
                           </div>
                         </div>
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums text-zinc-200">
+                        {typeof l.shopify?.prixTTC === "number" ? fmtCHF(l.shopify.prixTTC) : <span className="text-zinc-600">—</span>}
                       </td>
                       <td className="px-3 py-2"><BadgeFiche statut={l.statut_fiche} /></td>
                       <td className="px-2 py-2 text-right tabular-nums"><Stock n={l.stock_jc} /></td>
@@ -580,6 +670,7 @@ export default function StockListPage() {
           « à confirmer » = aucun élément fiable (pas de stock fournisseur, pas de date, pas de règle de délai).
         </p>
       </div>
+      <ListeAchatPanneau panier={panier} setPanier={setPanier} prix={prixConnus} />
     </main>
   );
 }

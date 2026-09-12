@@ -49,6 +49,7 @@ export type RechercheDelaiRow = {
 // POST /api/stock-list/shopify.
 export type StockListShopifyInfo = {
   varianteTitre: string | null;   // ex. "260x260cm / 605 Clay" (null si "Default Title")
+  prixTTC: number | null;         // prix de vente Shopify à l'instant, jamais stocké
   imageUrl: string | null;
   onlineStoreUrl: string | null;
   adminUrl: string | null;
