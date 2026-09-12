@@ -617,8 +617,14 @@ export default function StockListPage() {
                           <div className="min-w-0">
                             <div className="font-medium leading-snug text-zinc-100">
                               {l.titre || <span className="italic text-zinc-500">Titre inconnu (relevé fournisseur)</span>}
-                              {l.shopify?.varianteTitre && <span className="ml-2 font-normal text-sky-200/80">{l.shopify.varianteTitre}</span>}
                             </div>
+                            {l.shopify?.varianteTitre && (
+                              <div className="leading-snug text-sky-200/85">
+                                {(l.shopify.options.length > 0 ? l.shopify.options : l.shopify.varianteTitre.split(" / ")).map((o, i) => (
+                                  <div key={i}>{o}</div>
+                                ))}
+                              </div>
+                            )}
                             <div className="text-xs text-zinc-500">{l.fournisseur}</div>
                           </div>
                           <div className="ml-auto flex shrink-0 items-center gap-1.5">
