@@ -132,13 +132,12 @@ type FiltresRapides = {
 };
 const FILTRES_DEFAUT: FiltresRapides = { stockJC: false, stockFourn: false, delaiCourt: false, masquerNonLivrables: false, actives: false, horsShopify: false };
 
+// Côté client il ne reste que « délai court » (plage texte) et le volet
+// « rien nulle part » des non livrables ; le reste est filtré par l'API,
+// avant la limite de 300 lignes.
 function passeFiltres(l: Ligne, f: FiltresRapides): boolean {
-  if (f.stockJC && (l.stock_jc ?? 0) <= 0) return false;
-  if (f.stockFourn && l.dispo_fournisseur !== "EN_STOCK") return false;
   if (f.delaiCourt && delaiMax(l.delai_client_semaines) > 4) return false;
   if (f.masquerNonLivrables && estNonLivrable(l)) return false;
-  if (f.actives && l.statut_fiche !== "ACTIVE") return false;
-  if (f.horsShopify && l.statut_fiche !== null) return false;
   return true;
 }
 
@@ -264,6 +263,9 @@ export default function StockListPage() {
         const params = new URLSearchParams();
         if (terme.length >= 2) params.set("q", terme);
         if (marque) params.set("fournisseur", marque);
+        for (const cle of ["stockJC", "stockFourn", "masquerNonLivrables", "actives", "horsShopify"] as const) {
+          if (filtres[cle]) params.set(cle, "1");
+        }
         const res = await fetch(`/api/stock-list?${params.toString()}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
@@ -292,7 +294,8 @@ export default function StockListPage() {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [q, marque]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, marque, filtres.stockJC, filtres.stockFourn, filtres.masquerNonLivrables, filtres.actives, filtres.horsShopify]);
 
   async function copier(cle: string, texte: string) {
     try {
@@ -405,7 +408,7 @@ export default function StockListPage() {
           </div>
         </div>
 
-        {/* Filtres rapides — appliqués aux lignes chargées (300 max) */}
+        {/* Filtres rapides — appliqués par l'API avant la limite de 300 (sauf délai court) */}
         {rechercheActive && (
           <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
             <span className="text-zinc-500">Filtres :</span>
@@ -418,7 +421,6 @@ export default function StockListPage() {
               ["horsShopify", "Hors Shopify", "relevé fournisseur sans fiche dans la boutique — à créer"],
             ] as [keyof FiltresRapides, string, string][]).map(([cle, libelle, aide]) => {
               const actif = filtres[cle];
-              const nb = rows.filter((l) => passeFiltres(l, { ...filtres, [cle]: true })).length;
               return (
                 <button
                   key={cle}
@@ -431,7 +433,7 @@ export default function StockListPage() {
                       : "border-white/10 bg-white/5 text-zinc-400 hover:border-white/25 hover:text-zinc-200"
                   }`}
                 >
-                  {libelle} <span className={actif ? "text-sky-300/70" : "text-zinc-600"}>{nb}</span>
+                  {libelle}
                 </button>
               );
             })}
