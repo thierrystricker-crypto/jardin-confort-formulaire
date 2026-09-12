@@ -24,6 +24,8 @@ export const supabaseWebshop = createClient(
   { auth: { persistSession: false, autoRefreshToken: false } }
 );
 
+export type DispoFournisseur = "EN_STOCK" | "SUR_COMMANDE" | "REASSORT" | "NON_LIVRABLE" | "INCONNU";
+
 // Une ligne de la vue v_recherche_delai (full outer join feed × shopify_variante)
 export type RechercheDelaiRow = {
   fournisseur: string;
@@ -34,7 +36,8 @@ export type RechercheDelaiRow = {
   statut_fiche: "ACTIVE" | "DRAFT" | "ARCHIVED" | null;
   stock_jc: number | null;
   stock_fournisseur: number | null;
-  statut_fournisseur: string | null;
+  statut_fournisseur: string | null;       // vocabulaire brut du fournisseur (YES, DELAI_4, PROD_4_6…)
+  dispo_fournisseur: DispoFournisseur | null; // catégorie uniformisée calculée par la vue
   date_dispo_fournisseur: string | null;   // YYYY-MM-DD
   transport_semaines: number | null;
   delai_client_semaines: string | null;    // ex. "2-3", déjà calculé par la vue

@@ -88,11 +88,14 @@ export async function POST(request: NextRequest) {
       if (!node) continue;
       const produit = node.product;
       const titre = (node.title || "").trim();
-      infos[legacyId(node.id)] = {
+      const vid = legacyId(node.id);
+      // Liens vers LA variante, pas vers la première du produit :
+      // frontstore ?variant=<id>, admin /products/<pid>/variants/<vid>.
+      infos[vid] = {
         varianteTitre: titre && titre !== "Default Title" ? titre : null,
         imageUrl: node.image?.url || produit?.featuredMedia?.preview?.image?.url || null,
-        onlineStoreUrl: produit?.onlineStoreUrl || null,
-        adminUrl: base && produit ? `${base}/products/${produit.legacyResourceId}` : null,
+        onlineStoreUrl: produit?.onlineStoreUrl ? `${produit.onlineStoreUrl}?variant=${vid}` : null,
+        adminUrl: base && produit ? `${base}/products/${produit.legacyResourceId}/variants/${vid}` : null,
       };
     }
 
