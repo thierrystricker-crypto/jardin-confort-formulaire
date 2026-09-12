@@ -190,7 +190,7 @@ function EnTete({ cle, tri, onClick, droite, surligne, aide, children }: {
   const actif = tri?.cle === cle;
   return (
     <th
-      className={`px-3 py-3 select-none cursor-pointer whitespace-nowrap ${droite ? "text-right" : ""} ${surligne ? "bg-sky-500/10 text-sky-300" : ""} ${actif && !surligne ? "text-zinc-200" : ""} hover:text-zinc-200`}
+      className={`px-2 py-3 align-bottom select-none cursor-pointer leading-tight ${droite ? "text-right" : ""} ${surligne ? "bg-sky-500/10 text-sky-300" : ""} ${actif && !surligne ? "text-zinc-200" : ""} hover:text-zinc-200`}
       title={aide ? `${aide} — cliquer pour trier` : "Cliquer pour trier"}
       onClick={() => onClick(cle)}
     >
@@ -468,18 +468,18 @@ export default function StockListPage() {
             {/* table-fixed + colgroup : largeurs stables, la colonne Article prend tout
                 le reste ; sans ça les titres se cassaient sur 5 lignes et la vignette
                 se faisait écraser à quelques pixels. */}
-            <table className="w-full min-w-[1180px] table-fixed text-sm">
+            <table className="w-full min-w-[1080px] table-fixed text-sm">
               <colgroup>
                 <col className="w-[60px]" />
-                <col className="w-[170px]" />
+                <col className="w-[160px]" />
                 <col />
-                <col className="w-[92px]" />
-                <col className="w-[84px]" />
+                <col className="w-[86px]" />
+                <col className="w-[66px]" />
+                <col className="w-[88px]" />
+                <col className="w-[168px]" />
+                <col className="w-[86px]" />
+                <col className="w-[74px]" />
                 <col className="w-[104px]" />
-                <col className="w-[210px]" />
-                <col className="w-[100px]" />
-                <col className="w-[92px]" />
-                <col className="w-[118px]" />
               </colgroup>
               <thead>
                 <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-zinc-500">
@@ -487,12 +487,12 @@ export default function StockListPage() {
                   <EnTete cle="sku" tri={tri} onClick={trierPar}>SKU</EnTete>
                   <EnTete cle="titre" tri={tri} onClick={trierPar}>Article</EnTete>
                   <EnTete cle="fiche" tri={tri} onClick={trierPar}>Fiche</EnTete>
-                  <EnTete cle="stock_jc" tri={tri} onClick={trierPar} droite aide="Stock Jardin Confort (miroir Shopify)">Stock JC</EnTete>
-                  <EnTete cle="stock_fournisseur" tri={tri} onClick={trierPar} droite aide="Stock chez le fournisseur (dernier relevé)">Stock fourn.</EnTete>
-                  <EnTete cle="statut_fournisseur" tri={tri} onClick={trierPar}>Chez le fournisseur</EnTete>
-                  <EnTete cle="dispo" tri={tri} onClick={trierPar}>Dispo dès</EnTete>
-                  <EnTete cle="transport" tri={tri} onClick={trierPar} droite aide="Acheminement fournisseur → Lutry, en semaines">Transport</EnTete>
-                  <EnTete cle="delai" tri={tri} onClick={trierPar} droite surligne aide="Délai à annoncer au client, en semaines (transport compris)">Délai client</EnTete>
+                  <EnTete cle="stock_jc" tri={tri} onClick={trierPar} droite aide="Stock Jardin Confort (miroir Shopify)">Stock<br />JC</EnTete>
+                  <EnTete cle="stock_fournisseur" tri={tri} onClick={trierPar} droite aide="Stock chez le fournisseur (dernier relevé)">Stock<br />fourn.</EnTete>
+                  <EnTete cle="statut_fournisseur" tri={tri} onClick={trierPar}>Chez le<br />fournisseur</EnTete>
+                  <EnTete cle="dispo" tri={tri} onClick={trierPar}>Dispo<br />dès</EnTete>
+                  <EnTete cle="transport" tri={tri} onClick={trierPar} droite aide="Acheminement fournisseur → Lutry, en semaines">Trans-<br />port</EnTete>
+                  <EnTete cle="delai" tri={tri} onClick={trierPar} droite surligne aide="Délai à annoncer au client, en semaines (transport compris)">Délai<br />client</EnTete>
                 </tr>
               </thead>
               <tbody>
@@ -552,11 +552,11 @@ export default function StockListPage() {
                         </div>
                       </td>
                       <td className="px-3 py-2"><BadgeFiche statut={l.statut_fiche} /></td>
-                      <td className="px-3 py-2 text-right tabular-nums"><Stock n={l.stock_jc} /></td>
-                      <td className="px-3 py-2 text-right tabular-nums">
+                      <td className="px-2 py-2 text-right tabular-nums"><Stock n={l.stock_jc} /></td>
+                      <td className="px-2 py-2 text-right tabular-nums">
                         <Stock n={l.stock_fournisseur} />
                         {l.releve_fournisseur_le && (
-                          <div className="text-[10px] text-zinc-600" title="Date du dernier relevé fournisseur">relevé {fmtDateHeure(l.releve_fournisseur_le)}</div>
+                          <div className="text-[10px] leading-tight text-zinc-600" title="Date et heure du dernier relevé fournisseur">{fmtDateHeure(l.releve_fournisseur_le)}</div>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -564,8 +564,8 @@ export default function StockListPage() {
                           ? <span className={DISPO[l.dispo_fournisseur].cls} title={l.statut_fournisseur ? `Statut ${l.fournisseur} : ${l.statut_fournisseur}` : "Déduit de la quantité relevée"}>{libelleDispo(l)}</span>
                           : <span className="text-zinc-600">—</span>}
                       </td>
-                      <td className="px-3 py-2 tabular-nums text-zinc-300">{fmtDate(l.date_dispo_fournisseur) || <span className="text-zinc-600">—</span>}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-zinc-300">{l.transport_semaines !== null ? `${l.transport_semaines} sem.` : <span className="text-zinc-600">—</span>}</td>
+                      <td className="px-2 py-2 tabular-nums text-zinc-300">{fmtDate(l.date_dispo_fournisseur) || <span className="text-zinc-600">—</span>}</td>
+                      <td className="px-2 py-2 text-right tabular-nums text-zinc-300">{l.transport_semaines !== null ? `${l.transport_semaines} sem.` : <span className="text-zinc-600">—</span>}</td>
                       <td className="px-3 py-2 text-right bg-sky-500/10"><DelaiClient plage={l.delai_client_semaines} /></td>
                     </tr>
                   );
