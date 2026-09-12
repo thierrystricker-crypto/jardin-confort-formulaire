@@ -159,10 +159,14 @@ export default function ListeAchatPanneau({ panier, setPanier, prix }: Props) {
   const nbSansPrix = panier.lignes.filter((l) => typeof prix[cleLigne(l)] !== "number").length;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#25282c]/95 backdrop-blur">
-      <div className="mx-auto max-w-[1900px] px-4 lg:px-6">
+    <div className={`fixed inset-x-0 bottom-0 z-40 ${ouvert ? "p-3 lg:p-4" : ""}`}>
+      <div className={`mx-auto max-w-[1900px] ${
+        ouvert
+          ? "rounded-2xl border-2 border-sky-400 bg-[#1b1d21] px-4 shadow-2xl shadow-black/60 ring-4 ring-sky-500/20 lg:px-6"
+          : "border-t border-white/10 bg-[#25282c]/95 px-4 backdrop-blur lg:px-6"
+      }`}>
         {/* Barre repliée */}
-        <div className="flex items-center gap-3 py-2">
+        <div className="flex items-center gap-3 py-2.5">
           <button type="button" onClick={() => setOuvert((o) => !o)} className="flex items-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/15 px-3 py-1.5 text-sm text-sky-200 transition hover:bg-sky-500/25">
             🛒 Liste d&apos;achat
             <span className="rounded-full bg-sky-500 px-2 text-xs font-bold text-black">{total}</span>
@@ -214,9 +218,9 @@ export default function ListeAchatPanneau({ panier, setPanier, prix }: Props) {
             </div>
 
             {panier.lignes.length === 0 ? (
-              <div className="py-4 text-center text-sm text-zinc-500">Ajoute des articles avec le bouton « + » de chaque ligne.</div>
+              <div className="flex h-[46vh] items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-zinc-500">Ajoute des articles avec le bouton « + » de chaque ligne.</div>
             ) : (
-              <div className="max-h-[42vh] overflow-y-auto rounded-xl border border-white/10">
+              <div className="h-[46vh] overflow-y-auto rounded-xl border border-white/10 bg-[#25282c]">
                 <table className="w-full text-sm">
                   <tbody>
                     {panier.lignes.map((l) => {

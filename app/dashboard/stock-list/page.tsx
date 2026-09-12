@@ -178,17 +178,25 @@ const ICONE_PLUS = (
   </svg>
 );
 
+const ICONE_PLUS_GRAND = (
+  <svg viewBox="0 0 16 16" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M8 3v10M3 8h10" />
+  </svg>
+);
+
 function fmtCHF(n: number) {
   return n.toLocaleString("fr-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function BoutonAction({ titre, onClick, actif, enfant, href }: {
-  titre: string; onClick?: () => void; actif?: boolean; enfant: React.ReactNode; href?: string;
+function BoutonAction({ titre, onClick, actif, enfant, href, grand }: {
+  titre: string; onClick?: () => void; actif?: boolean; enfant: React.ReactNode; href?: string; grand?: boolean;
 }) {
-  const cls = `inline-flex h-6 w-6 items-center justify-center rounded-md border transition ${
+  const cls = `inline-flex ${grand ? "h-9 w-9 rounded-lg" : "h-6 w-6 rounded-md"} items-center justify-center border transition ${
     actif
-      ? "border-emerald-500/40 bg-emerald-500/20 text-emerald-300"
-      : "border-white/10 bg-white/5 text-zinc-400 hover:border-sky-500/40 hover:bg-sky-500/15 hover:text-sky-300"
+      ? "border-emerald-500/50 bg-emerald-500/25 text-emerald-200"
+      : grand
+        ? "border-sky-500/40 bg-sky-500/15 text-sky-200 hover:bg-sky-500/30"
+        : "border-white/10 bg-white/5 text-zinc-400 hover:border-sky-500/40 hover:bg-sky-500/15 hover:text-sky-300"
   }`;
   if (href) {
     return <a href={href} target="_blank" rel="noopener noreferrer" title={titre} className={cls}>{enfant}</a>;
@@ -595,7 +603,7 @@ export default function StockListPage() {
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-zinc-200 select-all">{l.sku}</span>
+                          <span className="select-all text-[15px] tracking-wide text-zinc-100">{l.sku}</span>
                           <BoutonAction
                             titre={copie === `sku:${cle}` ? "Copié !" : "Copier le SKU"}
                             actif={copie === `sku:${cle}`}
@@ -613,12 +621,13 @@ export default function StockListPage() {
                             </div>
                             <div className="text-xs text-zinc-500">{l.fournisseur}</div>
                           </div>
-                          <div className="ml-auto flex shrink-0 items-center gap-1 opacity-40 transition group-hover:opacity-100">
+                          <div className="ml-auto flex shrink-0 items-center gap-1.5">
                             <BoutonAction
+                              grand
                               titre={qtyPanier(l) > 0 ? `Dans la liste (${qtyPanier(l)}) — cliquer pour +1` : "Ajouter à la liste d'achat"}
                               actif={qtyPanier(l) > 0}
                               onClick={() => ajouterAuPanier(l)}
-                              enfant={qtyPanier(l) > 0 ? <span className="text-[11px] font-bold">{qtyPanier(l)}</span> : ICONE_PLUS}
+                              enfant={qtyPanier(l) > 0 ? <span className="text-sm font-bold">{qtyPanier(l)}</span> : ICONE_PLUS_GRAND}
                             />
                             {titreComplet && (
                               <BoutonAction
