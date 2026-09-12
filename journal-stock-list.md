@@ -64,3 +64,50 @@ après la mise en prod.
 envoyé une version en retard du fichier (page.tsx, route.ts, supabase-webshop.ts).
 Toujours vérifier la taille du fichier sur disque après écriture, et que
 `git diff --stat` liste bien chaque fichier attendu avant de pousser.
+
+## 12.09.2026 (soir) — Listes d'achat (branche `feature/listes-achat`)
+
+**Pourquoi** : après un jour d'usage, la Stock list devient le point de départ
+des offres. Les vendeurs veulent choisir plusieurs articles, garder le panier,
+et surtout ré-utiliser les combos qu'on revend sans arrêt (socle + poids +
+tube + parasol).
+
+**Base** : table `listes_achat` (Supabase de l'app `llkyzspixrbtoprtmvoh`,
+`docs/sql/017-listes-achat.sql`, RLS sans policy) — nom, cree_par, statut
+(ouverte / transformee / archivee), lignes jsonb, est_modele, draft_slug.
+Aucun prix stocké : relus chez Shopify (Admin `nodes`, price + compareAtPrice)
+au moment de créer ou compléter un brouillon.
+
+**Fichiers**
+- `lib/listes-achat.ts` (types, panier local, article à la volée « Libre »)
+- `lib/listes-achat-lignes.ts` (serveur : lignes de liste → QuoteLine, promo en
+  lineDiscount comme le picker)
+- `app/api/listes-achat/route.ts` (GET/POST), `[id]/route.ts` (GET/PATCH/DELETE
+  = archive), `[id]/brouillon/route.ts` (POST → DRA via le handler /api/drafts
+  importé), `[id]/lignes/route.ts` (GET → lignes pour ajout à une offre)
+- `components/ListeAchatPanneau.tsx` (barre 🛒 de la Stock list),
+  `ListeAchatLignes.tsx` (tableau éditable partagé : ± qty, ▲▼ et
+  glisser-déposer, article à la volée), `ListeAchatImport.tsx` (onglet
+  « 🛒 Liste d'achat » du formulaire : cartes + aperçu en fenêtre avec cases et
+  quantités, ajout À LA SUITE sans toucher au client)
+- `app/dashboard/listes-achat/page.tsx` (onglets Ouvertes / ⭐ Modèles /
+  Transformées / Archivées, détail éditable + Enregistrer)
+- `DraftFormulaire.tsx` : 3ᵉ onglet dans « Ajouter des articles » (mode normal
+  et mode large)
+- Stock list : colonne Prix TTC, bouton + (36 px, toujours visible), recherche
+  hybride (vue + `productVariants(query)` Admin → « sfera 527 » trouve la
+  variante), pleine largeur 1 900 px, SKU en police normale, titre puis une
+  option de variante par ligne (`selectedOptions`).
+
+**Règles**
+- Un modèle n'est jamais transformé : on charge une copie ; la liste
+  « ouverte » de l'API inclut tous les modèles non archivés ; cocher Modèle
+  rouvre une liste transformée.
+- Le panier non enregistré vit dans le navigateur du poste ; tout le reste est
+  partagé entre vendeurs.
+- « Qui es-tu ? » = `jardi-utilisateur` (même clé que Jardi) → cree_par et
+  commercial du brouillon.
+
+**Reporté** : logo Diphano et Lafuma dans brand_logos ; `date_source` par
+moteur ; `feed.libelle`. Le nom de variante cherchable est RÉGLÉ par la
+recherche Admin, plus besoin de toucher aux scénarios Make pour ça.

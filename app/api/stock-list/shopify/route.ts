@@ -25,6 +25,8 @@ const PAR_APPEL = 250; // plafond Shopify pour nodes(ids)
 type NodeVariant = {
   id: string;
   title: string | null;
+  price: string | null;
+  selectedOptions: { name: string; value: string }[] | null;
   image: { url: string } | null;
   product: {
     legacyResourceId: string;
@@ -65,6 +67,8 @@ export async function POST(request: NextRequest) {
           ... on ProductVariant {
             id
             title
+            price
+            selectedOptions { name value }
             image { url(transform: { maxWidth: 160, maxHeight: 160 }) }
             product {
               legacyResourceId
@@ -93,6 +97,10 @@ export async function POST(request: NextRequest) {
       // frontstore ?variant=<id>, admin /products/<pid>/variants/<vid>.
       infos[vid] = {
         varianteTitre: titre && titre !== "Default Title" ? titre : null,
+        options: titre && titre !== "Default Title"
+          ? (node.selectedOptions || []).map((o) => (o.value || "").trim()).filter((v) => v && v !== "Default Title")
+          : [],
+        prixTTC: node.price !== null && node.price !== undefined && node.price !== "" ? Number(node.price) : null,
         imageUrl: node.image?.url || produit?.featuredMedia?.preview?.image?.url || null,
         onlineStoreUrl: produit?.onlineStoreUrl ? `${produit.onlineStoreUrl}?variant=${vid}` : null,
         adminUrl: base && produit ? `${base}/products/${produit.legacyResourceId}/variants/${vid}` : null,
