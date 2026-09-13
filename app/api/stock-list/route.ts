@@ -91,6 +91,9 @@ export async function GET(request: NextRequest) {
       if (sp.get("masquerNonLivrables") === "1") r = r.or("dispo_fournisseur.neq.NON_LIVRABLE,dispo_fournisseur.is.null");
       if (sp.get("actives") === "1") r = r.eq("statut_fiche", "ACTIVE");
       if (sp.get("horsShopify") === "1") r = r.is("statut_fiche", null);
+      // Fiches ARCHIVED sans stock JC : masquées par défaut (plus vendables, ni
+      // réassortables) — sauf ?archivees=1. Une archivée avec stock reste visible.
+      if (sp.get("archivees") !== "1") r = r.or("statut_fiche.is.null,statut_fiche.neq.ARCHIVED,stock_jc.gt.0");
       return r;
     }
 
