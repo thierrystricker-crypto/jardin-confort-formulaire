@@ -132,8 +132,9 @@ type FiltresRapides = {
   masquerNonLivrables: boolean;
   actives: boolean;          // fiche ACTIVE seulement
   horsShopify: boolean;      // SKU relevé mais absent de la boutique
+  archivees: boolean;        // inclure les fiches ARCHIVED sans stock (masquées par défaut)
 };
-const FILTRES_DEFAUT: FiltresRapides = { stockJC: false, stockFourn: false, delaiCourt: false, masquerNonLivrables: false, actives: false, horsShopify: false };
+const FILTRES_DEFAUT: FiltresRapides = { stockJC: false, stockFourn: false, delaiCourt: false, masquerNonLivrables: false, actives: false, horsShopify: false, archivees: false };
 
 // Côté client il ne reste que « délai court » (plage texte) et le volet
 // « rien nulle part » des non livrables ; le reste est filtré par l'API,
@@ -341,7 +342,7 @@ export default function StockListPage() {
         const params = new URLSearchParams();
         if (terme.length >= 2) params.set("q", terme);
         if (marque) params.set("fournisseur", marque);
-        for (const cle of ["stockJC", "stockFourn", "masquerNonLivrables", "actives", "horsShopify"] as const) {
+        for (const cle of ["stockJC", "stockFourn", "masquerNonLivrables", "actives", "horsShopify", "archivees"] as const) {
           if (filtres[cle]) params.set(cle, "1");
         }
         const res = await fetch(`/api/stock-list?${params.toString()}`);
@@ -381,7 +382,7 @@ export default function StockListPage() {
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, marque, filtres.stockJC, filtres.stockFourn, filtres.masquerNonLivrables, filtres.actives, filtres.horsShopify]);
+  }, [q, marque, filtres.stockJC, filtres.stockFourn, filtres.masquerNonLivrables, filtres.actives, filtres.horsShopify, filtres.archivees]);
 
   async function copier(cle: string, texte: string) {
     try {
@@ -505,6 +506,7 @@ export default function StockListPage() {
               ["masquerNonLivrables", "Masquer les non livrables", "sold out / sortie / rupture / non commandable, ou rien nulle part et aucun délai"],
               ["actives", "Fiches actives", "statut de fiche ACTIVE seulement"],
               ["horsShopify", "Hors Shopify", "relevé fournisseur sans fiche dans la boutique — à créer"],
+              ["archivees", "Voir les archivées vides", "les fiches archivées sans stock sont masquées par défaut ; une archivée qui a encore du stock reste toujours visible"],
             ] as [keyof FiltresRapides, string, string][]).map(([cle, libelle, aide]) => {
               const actif = filtres[cle];
               return (
