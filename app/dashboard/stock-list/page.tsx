@@ -148,7 +148,7 @@ function passeFiltres(l: Ligne, f: FiltresRapides): boolean {
 function valeurTri(l: Ligne, cle: CleTri): string | number {
   switch (cle) {
     case "sku": return l.sku || "";
-    case "titre": return (l.titre || "\uffff").toLowerCase();
+    case "titre": return (l.titre || l.libelle_fournisseur || "\uffff").toLowerCase();
     case "prix": return typeof l.shopify?.prixTTC === "number" ? l.shopify.prixTTC : Infinity;
     case "fiche": return l.statut_fiche === "ACTIVE" ? 0 : l.statut_fiche === "DRAFT" ? 1 : l.statut_fiche === "ARCHIVED" ? 2 : 3;
     case "stock_jc": return l.stock_jc ?? -1;
@@ -306,7 +306,7 @@ export default function StockListPage() {
       const ligne: LigneListe = {
         fournisseur: l.fournisseur,
         sku: l.sku,
-        titre: l.titre,
+        titre: l.titre ?? l.libelle_fournisseur ?? null,
         variante_titre: l.shopify?.varianteTitre ?? null,
         variant_id: l.variant_id ? String(l.variant_id) : null,
         product_id: l.product_id ? String(l.product_id) : null,
@@ -589,7 +589,7 @@ export default function StockListPage() {
                 {lignesAffichees.map((l) => {
                   const url = urlLigne(l);
                   const cle = `${l.fournisseur}|${l.sku}`;
-                  const titreComplet = [l.titre, l.shopify?.varianteTitre].filter(Boolean).join(" — ");
+                  const titreComplet = [l.titre || l.libelle_fournisseur, l.shopify?.varianteTitre].filter(Boolean).join(" — ");
                   return (
                     <tr key={cle} className="group border-b border-white/5 hover:bg-white/[0.03]">
                       <td className="px-2 py-2">
@@ -617,7 +617,9 @@ export default function StockListPage() {
                         <div className="flex items-start gap-1.5">
                           <div className="min-w-0">
                             <div className="font-medium leading-snug text-zinc-100">
-                              {l.titre || <span className="italic text-zinc-500">Titre inconnu (relevé fournisseur)</span>}
+                              {l.titre
+                                || (l.libelle_fournisseur && <span className="text-zinc-200" title="Libellé du relevé fournisseur (pas de fiche Shopify)">{l.libelle_fournisseur}</span>)
+                                || <span className="italic text-zinc-500">Titre inconnu (relevé fournisseur)</span>}
                             </div>
                             {l.shopify?.varianteTitre && (
                               <div className="leading-snug text-sky-200/85">

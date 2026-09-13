@@ -43,6 +43,7 @@ export type RechercheDelaiRow = {
   delai_client_semaines: string | null;    // ex. "2-3", déjà calculé par la vue
   releve_fournisseur_le: string | null;
   miroir_maj_le: string | null;
+  libelle_fournisseur: string | null;      // titre fabricant (feed_libelle), ex. "Fermob Luxembourg · Chaise X2 · Romarin"
 };
 
 // Complément Shopify d'une ligne (image, lien boutique, lien admin) — rendu par

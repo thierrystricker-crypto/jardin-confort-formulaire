@@ -97,10 +97,10 @@ export async function GET(request: NextRequest) {
       return r;
     }
 
-    // ── 1. Recherche texte dans la vue (SKU, titre produit) ──
+    // ── 1. Recherche texte dans la vue (SKU, titre produit, libellé fabricant) ──
     const requetes: Promise<{ data: unknown; error: { message: string } | null }>[] = [];
     if (motif) {
-      requetes.push(Promise.resolve(base().or(`sku.ilike.%${motif}%,titre.ilike.%${motif}%`).order("fournisseur").order("sku").limit(LIMITE + 1)));
+      requetes.push(Promise.resolve(base().or(`sku.ilike.%${motif}%,titre.ilike.%${motif}%,libelle_fournisseur.ilike.%${motif}%`).order("fournisseur").order("sku").limit(LIMITE + 1)));
     } else {
       requetes.push(Promise.resolve(base().order("fournisseur").order("sku").limit(LIMITE + 1)));
     }
