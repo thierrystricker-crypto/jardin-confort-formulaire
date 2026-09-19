@@ -216,3 +216,27 @@ Fichiers : `docs/sql/020-modeles-3d-skus.sql`, `lib/modeles-3d-sync.ts`,
 que le 3D est au niveau fiche, l'utilisateur ajuste la variante dans la liste
 d'achat. Quand le 3D sera par variante (doc `3d-par-variante`), le planner
 portera la vraie variante.
+
+## 20.09.2026 — 3D par variante dans l'index et le planner
+
+Nouvelle convention (doc projet `3d-par-variante-2026-09-19`) : le métachamp
+`custom.model_3d_url` existe aussi **au niveau variante**, rempli seulement
+quand la variante change la géométrie. Cascade thème = cascade planner :
+variante → `model_3d_glb` (Model3d) fiche → `model_3d_url` fiche.
+
+- Bulk : les variantes remontent `selectedOptions` et leur métachamp.
+- SQL 021 : `variantes_3d jsonb` (`[{variant_id, sku, titre, options, url}]`)
+  et `variantes_3d_n`. `model_level` passe à `variante` dès qu'une variante a
+  son fichier → `size_mismatch_possible` (colonne générée) s'éteint pour la
+  fiche. Si la fiche n'a aucun défaut, on prend le premier fichier de
+  variante comme défaut, avec l'anomalie « modèles par variante sans défaut
+  fiche ».
+- Planner : `choixModeles()` (lib/planner-types) dédoublonne par URL (les
+  couleurs partagent le fichier de leur taille) et ajoute le défaut fiche
+  s'il diffère. Vignette : badge « N tailles » ; un clic ouvre « Quelle
+  taille ? » si plusieurs fichiers, sinon pose directement. L'article posé
+  porte le vrai `variant_id` / SKU de la taille → la liste d'achat est juste
+  pour ces fiches, et pas d'avertissement taille.
+- Stats de sync : `par_variante`.
+
+Premiers cas : Marina Extremis (5 fiches), Biohort à suivre.

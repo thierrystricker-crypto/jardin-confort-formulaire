@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
-import { MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CatalogueItem, type Scene, type SceneItem } from "@/lib/planner-types";
+import { MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CatalogueItem, type ChoixModele, type Scene, type SceneItem } from "@/lib/planner-types";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
 const PlannerCanvas = dynamic(() => import("@/components/planner/PlannerCanvas"), {
@@ -134,25 +134,28 @@ export default function PlannerPage() {
     return { x: 0, z: z0 };
   }
 
-  function ajouter(c: CatalogueItem) {
-    if (!c.url_glb || !c.source) return;
+  // Cascade (19.09) : fichier de la variante choisie → défaut de la fiche.
+  // `choix` vient du sélecteur de taille du catalogue ; absent = défaut fiche.
+  function ajouter(c: CatalogueItem, choix?: ChoixModele) {
+    const url = choix?.url || c.url_glb;
+    if (!url) return;
     const pos = caseLibre();
     const nouveau: SceneItem = {
       uid: uid(),
       product_id: c.product_id,
-      titre: c.titre,
+      titre: choix?.label && choix.variant_id ? `${c.titre} — ${choix.label}` : c.titre,
       marque: c.marque,
-      url: c.url_glb,
-      source: c.source,
+      url,
+      source: choix?.variant_id ? "url" : (c.source || "url"),
       x: pos.x,
       z: pos.z,
       rot: 0,
-      size_warn: c.size_mismatch_possible,
+      size_warn: choix ? choix.size_warn : c.size_mismatch_possible,
       color_warn: c.color_mismatch_possible,
       image_url: c.image_url,
       prix: c.prix_min,
-      sku: c.sku_1,
-      variant_id: c.variant_id_1,
+      sku: choix ? choix.sku : c.sku_1,
+      variant_id: choix ? choix.variant_id : c.variant_id_1,
     };
     patch({ items: [...scene.items, nouveau] });
     setSelected(nouveau.uid);

@@ -7,6 +7,15 @@
 // d'offre : le jour du lien offres ↔ planner (étape 3), une ligne d'offre avec
 // modèle = un item, et réciproquement.
 
+// Modèle 3D propre à une variante (même forme que Variante3d du sync)
+export type Variante3d = {
+  variant_id: string;
+  sku: string | null;
+  titre: string | null;
+  options: Record<string, string>;
+  url: string;
+};
+
 export type CatalogueItem = {
   product_id: number;
   handle: string;
@@ -27,7 +36,34 @@ export type CatalogueItem = {
   bbox_z: number | null;
   sku_1: string | null;
   variant_id_1: string | null;
+  has_size_option: boolean;
+  model_level: "fiche" | "variante";
+  variantes_3d: Variante3d[];
 };
+
+// Options qui ne changent pas la géométrie : ignorées pour libeller une taille
+const OPTIONS_SANS_GEOMETRIE = /couleur|colou?r|farbe|coloris|tissu|finition|toile|structure|matière|material/i;
+
+// Choix proposés pour un article : une entrée par fichier distinct (les
+// variantes de couleur partagent le fichier de leur taille). Le défaut de la
+// fiche est ajouté s'il diffère de tous les fichiers de variante.
+export type ChoixModele = { label: string; url: string; variant_id: string | null; sku: string | null; size_warn: boolean };
+export function choixModeles(c: CatalogueItem): ChoixModele[] {
+  const vus = new Set<string>();
+  const out: ChoixModele[] = [];
+  for (const v of c.variantes_3d || []) {
+    if (vus.has(v.url)) continue;
+    vus.add(v.url);
+    const parts = Object.entries(v.options || {})
+      .filter(([n]) => !OPTIONS_SANS_GEOMETRIE.test(n))
+      .map(([, val]) => val);
+    out.push({ label: parts.join(" / ") || v.titre || "Variante", url: v.url, variant_id: v.variant_id, sku: v.sku, size_warn: false });
+  }
+  if (c.url_glb && !vus.has(c.url_glb)) {
+    out.push({ label: out.length ? "Modèle par défaut de la fiche" : "", url: c.url_glb, variant_id: c.variant_id_1, sku: c.sku_1, size_warn: c.has_size_option });
+  }
+  return out;
+}
 
 export type SceneItem = {
   uid: string;              // identifiant local de l'instance (un produit peut être posé plusieurs fois)

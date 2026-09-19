@@ -8,12 +8,14 @@
 // manque. Source : table modeles_3d via /api/planner/catalogue.
 
 import React, { useEffect, useRef, useState } from "react";
-import type { CatalogueItem } from "@/lib/planner-types";
+import { choixModeles, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
 
 type Marque = { marque: string; avec_3d: number };
 type Collection = { collection: string; avec_3d: number; total: number };
 
-export default function PlannerCatalogue({ onAjouter }: { onAjouter: (item: CatalogueItem) => void }) {
+export default function PlannerCatalogue({ onAjouter }: { onAjouter: (item: CatalogueItem, choix?: ChoixModele) => void }) {
+  // Fiche dont on est en train de choisir la taille (3D par variante)
+  const [choixPour, setChoixPour] = useState<number | null>(null);
   const [marques, setMarques] = useState<Marque[]>([]);
   const [marque, setMarque] = useState("");
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -79,6 +81,14 @@ export default function PlannerCatalogue({ onAjouter }: { onAjouter: (item: Cata
 
   const avec3d = rows.filter((r) => r.has_3d).length;
 
+  // Clic sur une vignette : une seule option → on pose ; plusieurs fichiers
+  // (3D par variante) → petit menu de tailles.
+  function cliquer(r: CatalogueItem) {
+    const choix = choixModeles(r);
+    if (choix.length <= 1) { onAjouter(r, choix[0]); return; }
+    setChoixPour(choixPour === r.product_id ? null : r.product_id);
+  }
+
   return (
     <aside className="flex h-full w-[340px] shrink-0 flex-col border-r border-white/10 bg-[#25282c]">
       <div className="space-y-2 border-b border-white/10 p-3">
@@ -135,7 +145,7 @@ export default function PlannerCatalogue({ onAjouter }: { onAjouter: (item: Cata
               <button
                 type="button"
                 disabled={!r.has_3d}
-                onClick={() => onAjouter(r)}
+                onClick={() => cliquer(r)}
                 title={r.has_3d ? "Poser dans la scène" : "Pas de modèle 3D pour cet article"}
                 className="block w-full text-left disabled:cursor-not-allowed"
               >
@@ -145,10 +155,26 @@ export default function PlannerCatalogue({ onAjouter }: { onAjouter: (item: Cata
                 <div className="mt-1 line-clamp-2 text-[11px] leading-tight text-zinc-200">{r.titre}</div>
                 <div className="mt-0.5 flex flex-wrap gap-1">
                   {r.has_3d && <span className="rounded bg-emerald-500/20 px-1 text-[9px] text-emerald-300">3D</span>}
+                  {r.model_level === "variante" && <span className="rounded bg-sky-500/20 px-1 text-[9px] text-sky-300" title="Un fichier 3D par taille">{new Set(r.variantes_3d.map((v) => v.url)).size} taille{new Set(r.variantes_3d.map((v) => v.url)).size > 1 ? "s" : ""}</span>}
                   {r.size_mismatch_possible && <span className="rounded bg-amber-500/20 px-1 text-[9px] text-amber-300" title="Option de taille sur la fiche : rendu indicatif">taille ?</span>}
                   {r.color_mismatch_possible && <span className="rounded bg-amber-500/20 px-1 text-[9px] text-amber-300" title="Option de couleur sur la fiche : rendu indicatif">couleur ?</span>}
                 </div>
               </button>
+              {choixPour === r.product_id && (
+                <div className="absolute inset-x-1 bottom-1 z-10 rounded-lg border border-white/15 bg-[#15171a] p-1 shadow-xl">
+                  <div className="px-1 pb-1 text-[10px] text-zinc-400">Quelle taille ?</div>
+                  {choixModeles(r).map((c) => (
+                    <button
+                      key={c.url}
+                      type="button"
+                      onClick={() => { setChoixPour(null); onAjouter(r, c); }}
+                      className="block w-full truncate rounded px-1.5 py-1 text-left text-[11px] text-zinc-100 hover:bg-sky-500/20"
+                    >
+                      {c.label}{c.size_warn ? " (indicatif)" : ""}
+                    </button>
+                  ))}
+                </div>
+              )}
               {q.trim().length >= 2 && r.collection && (
                 <button
                   type="button"
