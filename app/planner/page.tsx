@@ -11,7 +11,7 @@
 // entre marques, glisser / tourner, vue Plan (ortho) ⇄ 3D, mode maquette,
 // capture PNG avec la mention légale, sauvegarde des scènes.
 //
-// Raccourcis : R / Maj+R tourner ±15°, flèches déplacer de 5 cm, Suppr
+// Raccourcis : R / Maj+R tourner ±15°, F recadrer, flèches déplacer de 5 cm, Suppr
 // supprimer, Ctrl+D dupliquer, Échap désélectionner.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -55,6 +55,8 @@ export default function PlannerPage() {
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
+  const recadrerRef = useRef<(() => void) | null>(null);
+  const [rotationFine, setRotationFine] = useState(false);   // déverrouillage manuel, jamais par défaut
 
   // Historique (annuler / rétablir) : une pile d'états de scène. Les
   // déplacements à la souris sont regroupés : on empile au début du glisser
@@ -157,6 +159,8 @@ export default function PlannerPage() {
       sku: choix ? choix.sku : c.sku_1,
       variant_id: choix ? choix.variant_id : c.variant_id_1,
     };
+    const fix = lireRotFix()[String(c.product_id)];
+    if (fix) nouveau.rot_fix = fix;
     patch({ items: [...scene.items, nouveau] });
     setSelected(nouveau.uid);
   }
@@ -174,6 +178,26 @@ export default function PlannerPage() {
     setSelected(copie.uid);
   }
 
+  // Correction fine : mémorisée par fiche dans le navigateur, pour que le
+  // même modèle de travers arrive corrigé la prochaine fois. La vraie
+  // correction se fera dans le pipeline (fichier retourné), ceci est le
+  // pansement en attendant.
+  const CLE_ROT_FIX = "planner-rot-fix";
+  function lireRotFix(): Record<string, number> {
+    try { return JSON.parse(localStorage.getItem(CLE_ROT_FIX) || "{}"); } catch { return {}; }
+  }
+  function corrigerRotation(u: string, deg: number) {
+    const it = scene.items.find((i) => i.uid === u);
+    if (!it) return;
+    const v = Math.max(-180, Math.min(180, deg));
+    patchItem(u, { rot_fix: v || undefined });
+    try {
+      const m = lireRotFix();
+      if (v) m[String(it.product_id)] = v; else delete m[String(it.product_id)];
+      localStorage.setItem(CLE_ROT_FIX, JSON.stringify(m));
+    } catch { /* stockage indisponible : pas grave */ }
+  }
+
   function tourner(u: string, delta: number) {
     const it = scene.items.find((i) => i.uid === u);
     if (it) patchItem(u, { rot: ((it.rot + delta) % 360 + 360) % 360 });
@@ -186,6 +210,7 @@ export default function PlannerPage() {
       if (cible && (cible.tagName === "INPUT" || cible.tagName === "SELECT" || cible.tagName === "TEXTAREA")) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) retablir(); else annuler(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); retablir(); return; }
+      if ((e.key === "f" || e.key === "F") && !e.ctrlKey && !e.metaKey) { e.preventDefault(); recadrer(); return; }
       if (!selected) return;
       const it = scene.items.find((i) => i.uid === selected);
       if (!it) return;
@@ -205,8 +230,32 @@ export default function PlannerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, scene.items]);
 
+  // Avant un export : le plan doit avoir un vrai nom (il sert de nom de liste
+  // d'achat, de fichier PNG et de titre de fiche).
+  function exigerNom(): boolean {
+    const nom = (scene.nom || "").trim();
+    if (nom && nom !== "Sans titre") return true;
+    const saisi = window.prompt("Nom du plan ? (client, projet, terrasse…)", "");
+    if (saisi === null) return false;
+    const propre = saisi.trim();
+    if (!propre) { setMessage("Il faut un nom pour exporter"); return false; }
+    patch({ nom: propre.slice(0, 120) });
+    return true;
+  }
+
+  // « Recadrer » : repasse en plan et cadre toute la terrasse
+  function recadrer() {
+    if (scene.vue !== "plan") {
+      patch({ vue: "plan" }, false);
+      setTimeout(() => recadrerRef.current?.(), 60);   // la caméra ortho doit être montée
+    } else {
+      recadrerRef.current?.();
+    }
+  }
+
   // Capture PNG avec la mention légale
   function capturer() {
+    if (!exigerNom()) return;
     const data = captureRef.current?.();
     if (!data) { setMessage("Capture impossible (moteur non prêt)"); return; }
     const img = new Image();
@@ -266,6 +315,7 @@ export default function PlannerPage() {
   // est celui de la première variante (le 3D est au niveau fiche).
   async function exporterListeAchat() {
     if (scene.items.length === 0) { setMessage("Aucun article à exporter"); return; }
+    if (!exigerNom()) return;
     const parProduit = new Map<number, { it: SceneItem; qty: number }>();
     for (const it of scene.items) {
       const e = parProduit.get(it.product_id);
@@ -301,6 +351,8 @@ export default function PlannerPage() {
 
   // Fiche imprimable : capture de la vue + tableau des articles avec images.
   function imprimerListe() {
+    if (scene.items.length === 0) { setMessage("Aucun article à imprimer"); return; }
+    if (!exigerNom()) return;
     const data = captureRef.current?.();
     const parProduit = new Map<number, { it: SceneItem; qty: number }>();
     for (const it of scene.items) {
@@ -384,6 +436,7 @@ export default function PlannerPage() {
         <div className="ml-2 flex items-center gap-1">
           <button type="button" onClick={() => patch({ vue: "plan" })} className={scene.vue === "plan" ? BTN_ON : BTN_OFF} title="Vue de dessus (composition)">▦ Plan</button>
           <button type="button" onClick={() => patch({ vue: "3d" })} className={scene.vue === "3d" ? BTN_ON : BTN_OFF} title="Perspective (présentation)">◈ 3D</button>
+          <button type="button" onClick={recadrer} className={BTN_OFF} title="Recadrer : vue de dessus, toute la terrasse visible (touche F)">⛶ Recadrer</button>
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => patch({ mode: "couleurs" })} className={scene.mode === "couleurs" ? BTN_ON : BTN_OFF}>Couleurs</button>
@@ -441,6 +494,7 @@ export default function PlannerPage() {
             onDims={(u, d) => setDims((m) => (m[u] && Math.abs(m[u].l - d.l) < 1e-6 ? m : { ...m, [u]: d }))}
             onError={(u, m) => setErreurs((e) => ({ ...e, [u]: m }))}
             captureRef={captureRef}
+            recadrerRef={recadrerRef}
           />
           {/* Outils de l'article sélectionné */}
           {item && (
@@ -449,6 +503,26 @@ export default function PlannerPage() {
               <button type="button" onClick={() => tourner(item.uid, -15)} className={BTN_OFF} title="Tourner −15° (Maj+R)">⟲</button>
               <button type="button" onClick={() => tourner(item.uid, 15)} className={BTN_OFF} title="Tourner +15° (R)">⟳</button>
               <button type="button" onClick={() => tourner(item.uid, 90)} className={BTN_OFF} title="Tourner de 90°">90°</button>
+              <button type="button" onClick={() => setRotationFine((v) => !v)} className={rotationFine ? BTN_ON : BTN_OFF} title="Déverrouiller la rotation fine (fichier livré de travers)">{rotationFine ? "🔓" : "🔒"}</button>
+              {rotationFine && (
+                <div className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200" title="Correction en degrés, en plus des pas de 15°. Se garde avec la scène et est proposée aux prochains exemplaires de cet article.">
+                  <span>corr.</span>
+                  <input
+                    type="range" min="-45" max="45" step="1"
+                    value={item.rot_fix || 0}
+                    onChange={(e) => corrigerRotation(item.uid, Number(e.target.value))}
+                    className="w-28"
+                  />
+                  <input
+                    type="number" min="-180" max="180" step="0.5"
+                    value={item.rot_fix || 0}
+                    onChange={(e) => corrigerRotation(item.uid, Number(e.target.value) || 0)}
+                    className="w-14 rounded bg-[#2a2d31] px-1 text-right text-zinc-100"
+                  />
+                  <span>°</span>
+                  <button type="button" onClick={() => corrigerRotation(item.uid, 0)} className="text-zinc-400 hover:text-white" title="Remettre à 0">↺</button>
+                </div>
+              )}
               <button type="button" onClick={() => dupliquer(item.uid)} className={BTN_OFF} title="Dupliquer (Ctrl+D)">⧉</button>
               <button type="button" onClick={() => supprimer(item.uid)} className={`${BTN} border-rose-500/40 bg-rose-500/15 text-rose-200`} title="Supprimer (Suppr)">🗑</button>
             </div>

@@ -74,7 +74,8 @@ export type SceneItem = {
   source: "model3d" | "url";
   x: number;                // m, centre de la terrasse = 0
   z: number;                // m
-  rot: number;              // degrés, autour de Y
+  rot: number;              // degrés, autour de Y (pas de 15°)
+  rot_fix?: number;         // correction fine en degrés (fichier livré de travers) — verrouillée par défaut
   size_warn: boolean;       // taille non garantie (option de taille sur la fiche)
   color_warn: boolean;      // couleur non garantie (option de couleur sur la fiche)
   image_url?: string | null;

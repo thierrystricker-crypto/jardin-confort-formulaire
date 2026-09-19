@@ -240,3 +240,22 @@ variante → `model_3d_glb` (Model3d) fiche → `model_3d_url` fiche.
 - Stats de sync : `par_variante`.
 
 Premiers cas : Marina Extremis (5 fiches), Biohort à suivre.
+
+## 20.09.2026 — Planner : retours v2
+
+- **Nom obligatoire avant export** : Capture, Fiche et Liste d'achat
+  demandent un nom (`window.prompt`) si la scène s'appelle encore « Sans
+  titre » ; annuler = pas d'export.
+- **⛶ Recadrer (touche F)** : repasse en vue Plan et cadre toute la terrasse
+  (zoom calculé sur la taille réelle du canvas, marge 1,6 m pour les cotes
+  et la bande de dépôt), cible d'OrbitControls recentrée. En 3D : point de
+  vue de départ.
+- **Rotation fine verrouillée** : certains Dedon sont livrés tournés de ~15°
+  (pas de face). Bouton 🔒/🔓 dans les outils de l'article : déverrouillé,
+  un curseur ±45° (ou saisie ±180°, pas de 0,5°) pose `rot_fix` sur
+  l'article, en plus des pas de 15° de `rot`. Verrouillé par défaut, jamais
+  proposé sans clic (SketchUp syndrome). La correction est mémorisée par
+  fiche dans le navigateur (`planner-rot-fix`) et réappliquée aux prochains
+  exemplaires. **Vraie correction à faire dans le pipeline** (retourner le
+  fichier) ; la liste des `rot_fix` posés donne la liste des fichiers à
+  corriger.

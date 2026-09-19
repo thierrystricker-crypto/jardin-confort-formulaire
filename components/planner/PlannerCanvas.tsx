@@ -42,7 +42,12 @@ type Props = {
   onDims: (uid: string, dims: Dims) => void;
   onError: (uid: string, message: string) => void;
   captureRef: React.MutableRefObject<(() => string | null) | null>;
+  recadrerRef: React.MutableRefObject<(() => void) | null>;   // « Recadrer » : toute la terrasse dans la vue
 };
+
+function rotationY(item: SceneItem): number {
+  return ((item.rot + (item.rot_fix || 0)) * Math.PI) / 180;
+}
 
 const CLAY = new THREE.MeshStandardMaterial({ color: 0xd6d3cd, roughness: 0.95, metalness: 0 });
 
@@ -97,7 +102,7 @@ function Modele({
   }, [objet, mode]);
 
   return (
-    <group position={[item.x, 0, item.z]} rotation={[0, (item.rot * Math.PI) / 180, 0]} onPointerDown={onPointerDown}>
+    <group position={[item.x, 0, item.z]} rotation={[0, rotationY(item), 0]} onPointerDown={onPointerDown}>
       <primitive object={objet} position={offset} />
       {selected && (
         <>
@@ -120,7 +125,7 @@ function Modele({
 // Boîte rouge à la place d'un modèle qui ne charge pas (CORS, fichier absent…)
 function ModeleEnErreur({ item, onPointerDown }: { item: SceneItem; onPointerDown: (e: ThreeEvent<PointerEvent>) => void }) {
   return (
-    <group position={[item.x, 0, item.z]} rotation={[0, (item.rot * Math.PI) / 180, 0]} onPointerDown={onPointerDown}>
+    <group position={[item.x, 0, item.z]} rotation={[0, rotationY(item), 0]} onPointerDown={onPointerDown}>
       <mesh position={[0, 0.3, 0]}>
         <boxGeometry args={[0.6, 0.6, 0.6]} />
         <meshStandardMaterial color={0xef4444} transparent opacity={0.6} />
@@ -153,10 +158,37 @@ function Capture({ captureRef }: { captureRef: Props["captureRef"] }) {
   return null;
 }
 
+// ─── Recadrage ────────────────────────────────────────────────────────────────
+// Remet la caméra sur toute la terrasse (bouton « Recadrer » : on se perd vite
+// à la molette). En plan : zoom calculé sur la taille réelle du canvas ; en
+// 3D : point de vue de départ. Cible d'OrbitControls remise au centre.
+
+function Recadrage({ recadrerRef, terrasse, vue }: { recadrerRef: Props["recadrerRef"]; terrasse: Terrasse; vue: Props["vue"] }) {
+  const { camera, size, controls } = useThree();
+  useEffect(() => {
+    recadrerRef.current = () => {
+      const ctrl = controls as unknown as { target: THREE.Vector3; update: () => void } | null;
+      if (vue === "plan" && (camera as THREE.OrthographicCamera).isOrthographicCamera) {
+        const cam = camera as THREE.OrthographicCamera;
+        const marge = 1.6; // m de chaque côté (cotes + bande de dépôt)
+        cam.zoom = Math.max(5, Math.min(size.width / (terrasse.largeur + 2 * marge), size.height / (terrasse.profondeur + 2 * marge)));
+        cam.position.set(0, 40, 0);
+        cam.updateProjectionMatrix();
+      } else {
+        camera.position.set(terrasse.largeur / 2 + 3, 4, terrasse.profondeur / 2 + 5);
+      }
+      if (ctrl) { ctrl.target.set(0, 0, 0); ctrl.update(); }
+      camera.lookAt(0, 0, 0);
+    };
+    return () => { recadrerRef.current = null; };
+  }, [camera, size, controls, terrasse, vue, recadrerRef]);
+  return null;
+}
+
 // ─── Scène ────────────────────────────────────────────────────────────────────
 
 export default function PlannerCanvas(props: Props) {
-  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef } = props;
+  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, recadrerRef } = props;
   const [drag, setDrag] = useState<{ uid: string; dx: number; dz: number } | null>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
@@ -272,6 +304,7 @@ export default function PlannerCanvas(props: Props) {
       })}
 
       <Capture captureRef={captureRef} />
+      <Recadrage recadrerRef={recadrerRef} terrasse={terrasse} vue={vue} />
     </Canvas>
   );
 }
