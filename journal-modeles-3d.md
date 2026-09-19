@@ -169,3 +169,50 @@ d'offres), catalogue manuel, une scène avec deux vues. Rien côté offres.
 
 **Pas encore** : silhouettes 2D pré-calculées (passe géométrie, étape 1b),
 recoloration Fermob, lien offres (étape 3), page publique.
+
+## 20.09.2026 — Planner : retours v1 (branche `feature/planner-3d`)
+
+Premier essai concluant : CORS OK sur .bin et Model3d, échelle OK. Retours de
+Thierry et réponses :
+
+- **Chevauchement et débordement de la terrasse** : conservés volontairement
+  (utile pour mimer une pile, un débord de parasol, une extension).
+- **Ombres pixelisées** → `PCFSoftShadowMap`, carte 4096², caméra d'ombre
+  serrée sur la terrasse (± L/2+2, ± P/2+2 m) au lieu de ± 12 m fixes, `bias`
+  et `normalBias` réglés (moins d'acné d'ombre sous les tressages).
+- **Fond blanc agressif** → fond `#26292e`, cohérent avec le dashboard sombre.
+- **Couleur du sol** → colonne `sol` sur `planner_scenes` (SQL 020) et
+  presets `SOLS` dans `lib/planner-types.ts` (bois, pierre, béton, gravier,
+  gazon, blanc) ; sélecteur dans la barre ; enregistré avec la scène.
+- **Clic hors du plan doit désélectionner** → `onPointerDown` sur le plan de
+  sol invisible (hors glisser) → `onSelect(null)`.
+- **Nouvel article au milieu du plan** → `caseLibre()` : bande de dépôt sous la
+  terrasse (z = P/2 + 0,9 m), cases de 1 m de gauche à droite, première case
+  sans article à moins de 0,7 m. On glisse ensuite sur la terrasse.
+- **Recherche par SKU** → l'index ne stockait pas les SKU. SQL 020 ajoute
+  `sku_1`, `variant_id_1`, `skus text[]`, `skus_txt` ; le sync les remplit
+  (première variante = référence) ; `/api/modeles-3d/stats?q=` et
+  `/api/planner/catalogue?q=` cherchent aussi dans `skus_txt`. Nécessite un
+  « Rafraîchir l'index 3D » après le SQL.
+- **Annuler** → historique en mémoire (`passe` / `futur`, 50 états) : Ctrl+Z,
+  Ctrl+Y ou Ctrl+Maj+Z, boutons ↶ ↷. Un glisser = un seul état (empilé au
+  début du drag, pas à chaque mouvement).
+- **Exports** :
+  - « 🛒 Liste d'achat » → regroupe les articles par fiche (qty) et crée une
+    liste via `POST /api/listes-achat` (`Planner — <nom de scène>`), avec
+    `sku` / `variant_id` de la première variante, image et prix ; ouvre
+    `/dashboard/listes-achat`.
+  - « 🖨 Fiche » → fenêtre d'impression : capture de la vue courante + tableau
+    (image, titre, marque, SKU, cotes mesurées, qty, prix indicatif) + mention
+    légale. Pas de PDF côté serveur pour l'instant : Ctrl+P → PDF.
+
+Fichiers : `docs/sql/020-modeles-3d-skus.sql`, `lib/modeles-3d-sync.ts`,
+`app/api/modeles-3d/stats/route.ts`, `app/api/planner/catalogue/route.ts`,
+`app/api/planner/scenes/route.ts`, `app/api/planner/scenes/[id]/route.ts`,
+`lib/planner-types.ts`, `components/planner/PlannerCanvas.tsx`,
+`components/planner/PlannerCatalogue.tsx`, `app/planner/page.tsx`.
+
+**Limite connue** : le SKU exporté est celui de la première variante ; tant
+que le 3D est au niveau fiche, l'utilisateur ajuste la variante dans la liste
+d'achat. Quand le 3D sera par variante (doc `3d-par-variante`), le planner
+portera la vraie variante.

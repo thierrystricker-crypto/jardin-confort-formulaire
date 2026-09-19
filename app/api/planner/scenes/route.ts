@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
         items: s.items,
         mode: s.mode,
         vue: s.vue,
+        sol: s.sol || "bois",
       })
       .select("id")
       .single();

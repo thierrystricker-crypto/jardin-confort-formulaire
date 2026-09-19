@@ -86,7 +86,7 @@ export default function PlannerCatalogue({ onAjouter }: { onAjouter: (item: Cata
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Chercher un article, une collection…"
+          placeholder="Chercher un article, un SKU, une collection…"
           className="w-full rounded-xl border border-white/10 bg-[#1f2125] px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-sky-500/50"
         />
         <select
@@ -120,7 +120,7 @@ export default function PlannerCatalogue({ onAjouter }: { onAjouter: (item: Cata
         {erreur && <div className="mb-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-200">{erreur}</div>}
         {rows.length === 0 && !chargement && (
           <p className="px-1 text-xs text-zinc-500">
-            Choisis une marque puis une collection, ou tape un mot. Un clic sur une vignette pose l&apos;article au centre de la terrasse.
+            Choisis une marque puis une collection, ou tape un mot. Un clic sur une vignette dépose l&apos;article dans la bande de dépôt sous la terrasse ; glisse-le ensuite où tu veux.
           </p>
         )}
         {rows.length > 0 && (

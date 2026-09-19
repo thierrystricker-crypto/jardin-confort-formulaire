@@ -236,6 +236,10 @@ export type RowModele3d = {
   tag_no3dfile: boolean;
   image_url: string | null;
   prix_min: number | null;
+  sku_1: string | null;
+  variant_id_1: string | null;
+  skus: string[];
+  skus_txt: string;
   variant_count: number;
   variant_mode: "sans_variante" | "avec_options";
   option_names: string[];
@@ -316,6 +320,10 @@ function construireRow(p: LigneProduit, variantes: LigneVariante[], maintenant: 
     tag_no3dfile: tags.some((t) => t.toLowerCase() === "no3dfile"),
     image_url: p.featuredMedia?.preview?.image?.url ?? null,
     prix_min: prix.length ? Math.min(...prix) : null,
+    sku_1: variantes[0]?.sku?.trim() || null,
+    variant_id_1: variantes[0]?.id || null,
+    skus: variantes.map((v) => (v.sku || "").trim()).filter(Boolean),
+    skus_txt: variantes.map((v) => (v.sku || "").trim()).filter(Boolean).join(" "),
     variant_count: variantes.length,
     variant_mode: variantMode,
     option_names: optionNames,

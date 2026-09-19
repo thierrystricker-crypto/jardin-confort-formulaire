@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 
 const COLONNES =
   "product_id, handle, titre, marque, collection, categories, image_url, prix_min, source, url_glb, has_3d, " +
-  "size_mismatch_possible, color_mismatch_possible, option_names, bbox_x, bbox_y, bbox_z";
+  "size_mismatch_possible, color_mismatch_possible, option_names, bbox_x, bbox_y, bbox_z, sku_1, variant_id_1";
 
 export async function GET(request: NextRequest) {
   const sp = new URL(request.url).searchParams;
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
         .from("modeles_3d")
         .select(COLONNES)
         .eq("statut", "ACTIVE")
-        .or(`titre.ilike.${motif},handle.ilike.${motif},collection.ilike.${motif}`)
+        .or(`titre.ilike.${motif},handle.ilike.${motif},collection.ilike.${motif},skus_txt.ilike.${motif}`)
         .order("has_3d", { ascending: false })
         .order("titre")
         .limit(120);

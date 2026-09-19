@@ -1,6 +1,6 @@
 // app/api/planner/scenes/[id]/route.ts
 //   GET    → la scène complète
-//   PUT    → remplace nom / terrasse / items / mode / vue
+//   PUT    → remplace nom / terrasse / items / mode / vue / sol
 //   DELETE → supprime
 
 import { NextRequest, NextResponse } from "next/server";
@@ -23,6 +23,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     items: data.items,
     mode: data.mode,
     vue: data.vue,
+    sol: data.sol || "bois",
     offre_slug: data.offre_slug,
   };
   return NextResponse.json({ scene, cree_par: data.cree_par, updated_at: data.updated_at });
@@ -42,6 +43,7 @@ export async function PUT(request: NextRequest, ctx: Ctx) {
         items: s.items,
         mode: s.mode,
         vue: s.vue,
+        sol: s.sol || "bois",
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);

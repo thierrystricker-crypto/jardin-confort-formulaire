@@ -25,6 +25,8 @@ export type CatalogueItem = {
   bbox_x: number | null;
   bbox_y: number | null;
   bbox_z: number | null;
+  sku_1: string | null;
+  variant_id_1: string | null;
 };
 
 export type SceneItem = {
@@ -41,14 +43,28 @@ export type SceneItem = {
   color_warn: boolean;      // couleur non garantie (option de couleur sur la fiche)
   image_url?: string | null;
   prix?: number | null;
+  sku?: string | null;
+  variant_id?: string | null;
 };
 
 export type Terrasse = { largeur: number; profondeur: number };
+
+export type SolId = "bois" | "pierre" | "beton" | "gravier" | "gazon" | "blanc";
+
+export const SOLS: { id: SolId; nom: string; couleur: string }[] = [
+  { id: "bois", nom: "Bois", couleur: "#c9a678" },
+  { id: "pierre", nom: "Pierre claire", couleur: "#d8d2c6" },
+  { id: "beton", nom: "Béton", couleur: "#a9a9a4" },
+  { id: "gravier", nom: "Gravier", couleur: "#b8b3aa" },
+  { id: "gazon", nom: "Gazon", couleur: "#7fa25e" },
+  { id: "blanc", nom: "Blanc", couleur: "#f2f2f0" },
+];
 
 export type Scene = {
   id: string | null;
   nom: string;
   terrasse: Terrasse;
+  sol?: SolId;
   items: SceneItem[];
   mode: "couleurs" | "maquette";
   vue: "plan" | "3d";
@@ -59,6 +75,7 @@ export const SCENE_VIDE: Scene = {
   id: null,
   nom: "Sans titre",
   terrasse: { largeur: 6, profondeur: 4 },
+  sol: "bois",
   items: [],
   mode: "couleurs",
   vue: "plan",

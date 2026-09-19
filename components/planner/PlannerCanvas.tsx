@@ -24,7 +24,7 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Grid, Html, OrbitControls, OrthographicCamera, PerspectiveCamera, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import type { SceneItem, Terrasse } from "@/lib/planner-types";
+import { SOLS, type SceneItem, type SolId, type Terrasse } from "@/lib/planner-types";
 
 export type Dims = { l: number; p: number; h: number };
 
@@ -33,9 +33,11 @@ type Props = {
   terrasse: Terrasse;
   vue: "plan" | "3d";
   mode: "couleurs" | "maquette";
+  sol: SolId;
   snap: number;                 // pas d'aimantation en m (0 = libre)
   selectedUid: string | null;
   onSelect: (uid: string | null) => void;
+  onDragStart: () => void;
   onMove: (uid: string, x: number, z: number) => void;
   onDims: (uid: string, dims: Dims) => void;
   onError: (uid: string, message: string) => void;
@@ -154,7 +156,7 @@ function Capture({ captureRef }: { captureRef: Props["captureRef"] }) {
 // ─── Scène ────────────────────────────────────────────────────────────────────
 
 export default function PlannerCanvas(props: Props) {
-  const { items, terrasse, vue, mode, snap, selectedUid, onSelect, onMove, onDims, onError, captureRef } = props;
+  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef } = props;
   const [drag, setDrag] = useState<{ uid: string; dx: number; dz: number } | null>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
@@ -174,8 +176,9 @@ export default function PlannerCanvas(props: Props) {
       shadows
       gl={{ preserveDrawingBuffer: true, antialias: true }}
       dpr={[1, 2]}
+      onCreated={({ gl }) => { gl.shadowMap.type = THREE.PCFSoftShadowMap; }}
       onPointerMissed={() => onSelect(null)}
-      style={{ background: mode === "maquette" ? "#f3f2ef" : "#e9eef2" }}
+      style={{ background: "#26292e" }}
     >
       {vue === "plan" ? (
         <OrthographicCamera makeDefault position={[0, 40, 0]} up={[0, 0, -1]} zoom={zoomPlan} near={0.1} far={200} />
@@ -193,21 +196,29 @@ export default function PlannerCanvas(props: Props) {
       />
 
       <hemisphereLight args={[0xffffff, 0x999999, 0.9]} />
+      {/* Ombres : la caméra d'ombre est serrée sur la terrasse (+ 2 m de marge
+          pour les articles posés à côté) et la carte fait 4096² → ~5 mm par
+          texel sur une terrasse de 8 m au lieu de ~12 mm sur ±12 m fixes. */}
       <directionalLight
-        position={[6, 10, 4]}
-        intensity={1.6}
+        position={[demiL + 4, 9, demiP + 3]}
+        intensity={1.5}
         castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-12}
-        shadow-camera-right={12}
-        shadow-camera-top={12}
-        shadow-camera-bottom={-12}
+        shadow-mapSize={[4096, 4096]}
+        shadow-camera-left={-(demiL + 2)}
+        shadow-camera-right={demiL + 2}
+        shadow-camera-top={demiP + 2}
+        shadow-camera-bottom={-(demiP + 2)}
+        shadow-camera-near={1}
+        shadow-camera-far={30}
+        shadow-bias={-0.0002}
+        shadow-normalBias={0.01}
+        shadow-radius={4}
       />
 
       {/* Terrasse + quadrillage 50 cm / 1 m */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.002, 0]} receiveShadow>
         <planeGeometry args={[terrasse.largeur, terrasse.profondeur]} />
-        <meshStandardMaterial color={mode === "maquette" ? 0xe8e6e1 : 0xd9c7a8} roughness={1} />
+        <meshStandardMaterial color={mode === "maquette" ? "#e8e6e1" : (SOLS.find((x) => x.id === sol)?.couleur || "#c9a678")} roughness={1} />
       </mesh>
       <Grid
         position={[0, 0.001, 0]}
@@ -233,6 +244,7 @@ export default function PlannerCanvas(props: Props) {
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, -0.01, 0]}
+        onPointerDown={() => { if (!dragRef.current) onSelect(null); }}
         onPointerMove={(e) => {
           const d = dragRef.current;
           if (!d) return;
@@ -247,6 +259,7 @@ export default function PlannerCanvas(props: Props) {
         const debut = (e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation();
           onSelect(item.uid);
+          onDragStart();
           setDrag({ uid: item.uid, dx: e.point.x - item.x, dz: e.point.z - item.z });
         };
         return (

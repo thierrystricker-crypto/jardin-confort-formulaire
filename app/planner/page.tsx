@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
-import { MENTION_LEGALE, SCENE_VIDE, uid, type CatalogueItem, type Scene, type SceneItem } from "@/lib/planner-types";
+import { MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CatalogueItem, type Scene, type SceneItem } from "@/lib/planner-types";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
 const PlannerCanvas = dynamic(() => import("@/components/planner/PlannerCanvas"), {
@@ -56,14 +56,47 @@ export default function PlannerPage() {
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
 
-  const patch = useCallback((p: Partial<Scene>) => {
+  // Historique (annuler / rétablir) : une pile d'états de scène. Les
+  // déplacements à la souris sont regroupés : on empile au début du glisser
+  // (pointerdown), pas à chaque mouvement.
+  const passe = useRef<Scene[]>([]);
+  const futur = useRef<Scene[]>([]);
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
+  const [histoN, setHistoN] = useState(0);
+  const empiler = useCallback(() => {
+    passe.current.push(sceneRef.current);
+    if (passe.current.length > 60) passe.current.shift();
+    futur.current = [];
+    setHistoN((n) => n + 1);
+  }, []);
+  const annuler = useCallback(() => {
+    const prev = passe.current.pop();
+    if (!prev) return;
+    futur.current.push(sceneRef.current);
+    setScene(prev);
+    setModifie(true);
+    setHistoN((n) => n + 1);
+  }, []);
+  const retablir = useCallback(() => {
+    const next = futur.current.pop();
+    if (!next) return;
+    passe.current.push(sceneRef.current);
+    setScene(next);
+    setModifie(true);
+    setHistoN((n) => n + 1);
+  }, []);
+
+  const patch = useCallback((p: Partial<Scene>, historiser = true) => {
+    if (historiser) empiler();
     setScene((s) => ({ ...s, ...p }));
     setModifie(true);
-  }, []);
-  const patchItem = useCallback((u: string, p: Partial<SceneItem>) => {
+  }, [empiler]);
+  const patchItem = useCallback((u: string, p: Partial<SceneItem>, historiser = true) => {
+    if (historiser) empiler();
     setScene((s) => ({ ...s, items: s.items.map((it) => (it.uid === u ? { ...it, ...p } : it)) }));
     setModifie(true);
-  }, []);
+  }, [empiler]);
 
   // Charger ?scene=<id>
   useEffect(() => {
@@ -84,9 +117,26 @@ export default function PlannerPage() {
 
   const item = useMemo(() => scene.items.find((i) => i.uid === selected) || null, [scene.items, selected]);
 
+  // Un nouvel article est posé HORS de la terrasse, sur une bande de dépôt
+  // devant (z > profondeur/2), dans la première case libre : jamais sur un
+  // meuble déjà placé. Le vendeur le glisse ensuite à sa place.
+  function caseLibre(): { x: number; z: number } {
+    const pas = 1.0;
+    const z0 = scene.terrasse.profondeur / 2 + 0.9;
+    const x0 = -scene.terrasse.largeur / 2 + 0.5;
+    const nCol = Math.max(1, Math.floor(scene.terrasse.largeur / pas));
+    for (let i = 0; i < 200; i++) {
+      const x = x0 + (i % nCol) * pas;
+      const z = z0 + Math.floor(i / nCol) * pas;
+      const occupe = scene.items.some((it) => Math.abs(it.x - x) < 0.7 && Math.abs(it.z - z) < 0.7);
+      if (!occupe) return { x: +x.toFixed(2), z: +z.toFixed(2) };
+    }
+    return { x: 0, z: z0 };
+  }
+
   function ajouter(c: CatalogueItem) {
     if (!c.url_glb || !c.source) return;
-    const n = scene.items.length;
+    const pos = caseLibre();
     const nouveau: SceneItem = {
       uid: uid(),
       product_id: c.product_id,
@@ -94,13 +144,15 @@ export default function PlannerPage() {
       marque: c.marque,
       url: c.url_glb,
       source: c.source,
-      x: Math.round(((n % 5) * 0.4 - 0.8) * 100) / 100,
-      z: Math.round((Math.floor(n / 5) * 0.4 - 0.4) * 100) / 100,
+      x: pos.x,
+      z: pos.z,
       rot: 0,
       size_warn: c.size_mismatch_possible,
       color_warn: c.color_mismatch_possible,
       image_url: c.image_url,
       prix: c.prix_min,
+      sku: c.sku_1,
+      variant_id: c.variant_id_1,
     };
     patch({ items: [...scene.items, nouveau] });
     setSelected(nouveau.uid);
@@ -129,6 +181,8 @@ export default function PlannerPage() {
     const h = (e: KeyboardEvent) => {
       const cible = e.target as HTMLElement;
       if (cible && (cible.tagName === "INPUT" || cible.tagName === "SELECT" || cible.tagName === "TEXTAREA")) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) retablir(); else annuler(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); retablir(); return; }
       if (!selected) return;
       const it = scene.items.find((i) => i.uid === selected);
       if (!it) return;
@@ -203,6 +257,90 @@ export default function PlannerPage() {
     }
   }
 
+  // ── Exports ──
+  // Liste d'achat : réutilise le circuit existant (table listes_achat →
+  // brouillon DRA). Un article posé n fois = une ligne qty n. Le variant_id
+  // est celui de la première variante (le 3D est au niveau fiche).
+  async function exporterListeAchat() {
+    if (scene.items.length === 0) { setMessage("Aucun article à exporter"); return; }
+    const parProduit = new Map<number, { it: SceneItem; qty: number }>();
+    for (const it of scene.items) {
+      const e = parProduit.get(it.product_id);
+      if (e) e.qty++; else parProduit.set(it.product_id, { it, qty: 1 });
+    }
+    const lignes = [...parProduit.values()].map(({ it, qty }) => ({
+      fournisseur: it.marque || "",
+      sku: it.sku || "",
+      titre: it.titre,
+      variante_titre: null,
+      variant_id: it.variant_id || null,
+      product_id: String(it.product_id),
+      statut_fiche: "ACTIVE",
+      qty,
+      image_url: it.image_url || null,
+    }));
+    let creePar: string | null = null;
+    try { creePar = window.localStorage.getItem("jardi-utilisateur"); } catch { /* ignore */ }
+    try {
+      const r = await fetch("/api/listes-achat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nom: `Planner — ${scene.nom}`, cree_par: creePar, lignes, notes: `Créée depuis le planner 3D${scene.id ? ` (scène ${scene.id})` : ""}. ${MENTION_LEGALE}.` }),
+      });
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      setMessage(`Liste d'achat créée (${lignes.length} article${lignes.length > 1 ? "s" : ""}) — ouvrir : /dashboard/listes-achat`);
+      window.open("/dashboard/listes-achat", "_blank");
+    } catch (e) {
+      setMessage(`Liste d'achat : ${(e as Error).message}`);
+    }
+  }
+
+  // Fiche imprimable : capture de la vue + tableau des articles avec images.
+  function imprimerListe() {
+    const data = captureRef.current?.();
+    const parProduit = new Map<number, { it: SceneItem; qty: number }>();
+    for (const it of scene.items) {
+      const e = parProduit.get(it.product_id);
+      if (e) e.qty++; else parProduit.set(it.product_id, { it, qty: 1 });
+    }
+    const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const lignes = [...parProduit.values()].map(({ it, qty }) => {
+      const d = dims[it.uid];
+      return `<tr>
+        <td>${it.image_url ? `<img src="${it.image_url}" alt="">` : ""}</td>
+        <td><strong>${esc(it.titre)}</strong><br><span class="m">${esc(it.marque || "")}${it.sku ? ` · ${esc(it.sku)}` : ""}</span>
+          ${it.size_warn ? '<br><span class="w">Taille : rendu indicatif</span>' : ""}${it.color_warn && scene.mode === "couleurs" ? '<br><span class="w">Couleur : rendu indicatif</span>' : ""}</td>
+        <td class="r">${d ? `${Math.round(d.l * 100)} × ${Math.round(d.p * 100)} × H ${Math.round(d.h * 100)} cm` : ""}</td>
+        <td class="r">${qty}</td>
+        <td class="r">${it.prix != null ? chf(it.prix * qty) : ""}</td>
+      </tr>`;
+    }).join("");
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(scene.nom)} — Planner 3D</title>
+      <style>
+        body{font-family:Arial,sans-serif;color:#1f2125;margin:24px}
+        h1{font-size:20px;margin:0 0 4px} .sub{color:#666;font-size:12px;margin-bottom:14px}
+        img.cap{max-width:100%;border:1px solid #ddd;border-radius:6px;margin-bottom:16px}
+        table{width:100%;border-collapse:collapse;font-size:12px} th,td{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:middle}
+        td img{width:56px;height:56px;object-fit:contain;background:#fff;border:1px solid #eee;border-radius:4px}
+        .r{text-align:right;white-space:nowrap} .m{color:#666} .w{color:#b45309;font-size:11px}
+        .foot{margin-top:14px;font-size:11px;color:#666}
+        @media print{body{margin:10mm}}
+      </style></head><body>
+      <h1>${esc(scene.nom)}</h1>
+      <div class="sub">Terrasse ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m · ${scene.items.length} article${scene.items.length > 1 ? "s" : ""} · ${dateCH(new Date().toISOString())}${scene.mode === "maquette" ? " · rendu maquette" : ""}</div>
+      ${data ? `<img class="cap" src="${data}" alt="">` : ""}
+      <table><thead><tr><th></th><th>Article</th><th class="r">Cotes mesurées</th><th class="r">Qté</th><th class="r">Prix indicatif</th></tr></thead><tbody>${lignes}</tbody>
+      ${total > 0 ? `<tfoot><tr><td colspan="4" class="r"><strong>Total indicatif</strong></td><td class="r"><strong>${chf(total)}</strong></td></tr></tfoot>` : ""}</table>
+      <div class="foot">${MENTION_LEGALE}. Prix TTC indicatifs (prix le plus bas de la fiche), sous réserve de l'offre. Jardin-Confort SA, Route de Lavaux 425, 1095 Lutry.</div>
+      <script>window.onload=function(){setTimeout(function(){window.print()},300)}</script>
+      </body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
+    w.document.write(html);
+    w.document.close();
+  }
+
   async function ouvrirListe() {
     setListeOuverte(true);
     const r = await fetch("/api/planner/scenes");
@@ -213,11 +351,15 @@ export default function PlannerPage() {
   function nouvelleScene() {
     if (modifie && !window.confirm("Abandonner les modifications non enregistrées ?")) return;
     setScene({ ...SCENE_VIDE, items: [] });
+    passe.current = [];
+    futur.current = [];
+    setHistoN((n) => n + 1);
     setSelected(null);
     setModifie(false);
     window.history.replaceState(null, "", "/planner");
   }
 
+  void histoN; // force le rendu des boutons annuler/rétablir
   const total = scene.items.reduce((n, i) => n + (i.prix || 0), 0);
   const nbAvert = scene.items.filter((i) => i.size_warn || i.color_warn).length;
 
@@ -251,7 +393,19 @@ export default function PlannerPage() {
           <input type="number" step="0.1" min="1" max="40" value={scene.terrasse.profondeur} onChange={(e) => patch({ terrasse: { ...scene.terrasse, profondeur: Math.max(1, Number(e.target.value) || 1) } })} className="w-16 rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-right text-zinc-100" />
           <span>m</span>
         </div>
+        <select
+          value={scene.sol || "bois"}
+          onChange={(e) => patch({ sol: e.target.value as Scene["sol"] })}
+          className="rounded-xl border border-white/10 bg-[#2a2d31] px-2 py-1.5 text-xs text-zinc-300 outline-none focus:border-sky-500/50"
+          title="Revêtement de la terrasse"
+        >
+          {SOLS.map((x) => <option key={x.id} value={x.id}>Sol : {x.nom}</option>)}
+        </select>
         <button type="button" onClick={() => setSnap(snap ? 0 : 0.05)} className={snap ? BTN_ON : BTN_OFF} title="Aimanter les déplacements sur 5 cm">🧲 5 cm</button>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={annuler} disabled={passe.current.length === 0} className={BTN_OFF} title="Annuler (Ctrl+Z)">↶</button>
+          <button type="button" onClick={retablir} disabled={futur.current.length === 0} className={BTN_OFF} title="Rétablir (Ctrl+Y)">↷</button>
+        </div>
         <div className="ml-auto flex items-center gap-1">
           <button type="button" onClick={nouvelleScene} className={BTN_OFF}>＋ Nouvelle</button>
           <button type="button" onClick={ouvrirListe} className={BTN_OFF}>📂 Ouvrir</button>
@@ -259,6 +413,8 @@ export default function PlannerPage() {
             {enregistrement ? "…" : modifie ? "💾 Enregistrer *" : "💾 Enregistrer"}
           </button>
           <button type="button" onClick={capturer} className={BTN_OFF} title="Télécharger une image PNG de la vue actuelle, avec la mention légale">📷 Capture</button>
+          <button type="button" onClick={imprimerListe} className={BTN_OFF} title="Fiche imprimable : image de la vue + liste des articles avec photos, cotes et prix indicatifs">🖨 Fiche</button>
+          <button type="button" onClick={exporterListeAchat} className={`${BTN} border-cyan-500/40 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25`} title="Créer une liste d'achat avec les articles posés (puis brouillon d'offre depuis la page Listes d'achat)">🛒 Liste d'achat</button>
         </div>
       </div>
 
@@ -273,10 +429,12 @@ export default function PlannerPage() {
             terrasse={scene.terrasse}
             vue={scene.vue}
             mode={scene.mode}
+            sol={scene.sol || "bois"}
             snap={snap}
             selectedUid={selected}
             onSelect={setSelected}
-            onMove={(u, x, z) => patchItem(u, { x: +x.toFixed(3), z: +z.toFixed(3) })}
+            onDragStart={empiler}
+            onMove={(u, x, z) => patchItem(u, { x: +x.toFixed(3), z: +z.toFixed(3) }, false)}
             onDims={(u, d) => setDims((m) => (m[u] && Math.abs(m[u].l - d.l) < 1e-6 ? m : { ...m, [u]: d }))}
             onError={(u, m) => setErreurs((e) => ({ ...e, [u]: m }))}
             captureRef={captureRef}
