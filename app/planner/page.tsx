@@ -1,0 +1,368 @@
+"use client";
+// app/planner/page.tsx
+// Planner 3D multi-marques — étape 2 du chantier (voir journal-modeles-3d.md
+// et, côté projet Claude, claude/planner-3d-et-index-2026-09-19.md).
+//
+// Page INTERNE (derrière le verrou d'accès), isolée : aucun état partagé avec
+// le formulaire d'offres. Le lien offres ↔ planner viendra en étape 3 (URL
+// `?ids=` puis card de faisabilité), sans toucher à cette page.
+//
+// Ce qu'on valide ici : chargement des GLB/.bin du CDN Shopify (CORS), échelle
+// entre marques, glisser / tourner, vue Plan (ortho) ⇄ 3D, mode maquette,
+// capture PNG avec la mention légale, sauvegarde des scènes.
+//
+// Raccourcis : R / Maj+R tourner ±15°, flèches déplacer de 5 cm, Suppr
+// supprimer, Ctrl+D dupliquer, Échap désélectionner.
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
+import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
+import type { Dims } from "@/components/planner/PlannerCanvas";
+import { MENTION_LEGALE, SCENE_VIDE, uid, type CatalogueItem, type Scene, type SceneItem } from "@/lib/planner-types";
+
+// three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
+const PlannerCanvas = dynamic(() => import("@/components/planner/PlannerCanvas"), {
+  ssr: false,
+  loading: () => <div className="flex h-full items-center justify-center text-sm text-zinc-500">Chargement du moteur 3D…</div>,
+});
+
+type ResumeScene = { id: string; nom: string; cree_par: string | null; nb_items: number; mode: string; updated_at: string };
+
+function dateCH(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function chf(n: number): string {
+  return `CHF ${n.toLocaleString("fr-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\s/g, "'")}`;
+}
+
+const BTN = "rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40";
+const BTN_OFF = `${BTN} border-white/10 bg-[#2a2d31] text-zinc-300 hover:bg-[#34383d]`;
+const BTN_ON = `${BTN} border-sky-500/40 bg-sky-500/20 text-sky-200`;
+
+export default function PlannerPage() {
+  const [scene, setScene] = useState<Scene>(SCENE_VIDE);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [dims, setDims] = useState<Record<string, Dims>>({});
+  const [erreurs, setErreurs] = useState<Record<string, string>>({});
+  const [snap, setSnap] = useState(0.05);
+  const [message, setMessage] = useState("");
+  const [enregistrement, setEnregistrement] = useState(false);
+  const [listeOuverte, setListeOuverte] = useState(false);
+  const [scenes, setScenes] = useState<ResumeScene[]>([]);
+  const [modifie, setModifie] = useState(false);
+  const captureRef = useRef<(() => string | null) | null>(null);
+
+  const patch = useCallback((p: Partial<Scene>) => {
+    setScene((s) => ({ ...s, ...p }));
+    setModifie(true);
+  }, []);
+  const patchItem = useCallback((u: string, p: Partial<SceneItem>) => {
+    setScene((s) => ({ ...s, items: s.items.map((it) => (it.uid === u ? { ...it, ...p } : it)) }));
+    setModifie(true);
+  }, []);
+
+  // Charger ?scene=<id>
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("scene");
+    if (!id) return;
+    fetch(`/api/planner/scenes/${id}`)
+      .then((r) => r.json())
+      .then((j) => { if (j.scene) { setScene(j.scene); setModifie(false); } else setMessage(j.error || "Scène introuvable"); })
+      .catch((e) => setMessage((e as Error).message));
+  }, []);
+
+  // Avertir avant de quitter avec des modifications non enregistrées
+  useEffect(() => {
+    const h = (e: BeforeUnloadEvent) => { if (modifie) { e.preventDefault(); } };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [modifie]);
+
+  const item = useMemo(() => scene.items.find((i) => i.uid === selected) || null, [scene.items, selected]);
+
+  function ajouter(c: CatalogueItem) {
+    if (!c.url_glb || !c.source) return;
+    const n = scene.items.length;
+    const nouveau: SceneItem = {
+      uid: uid(),
+      product_id: c.product_id,
+      titre: c.titre,
+      marque: c.marque,
+      url: c.url_glb,
+      source: c.source,
+      x: Math.round(((n % 5) * 0.4 - 0.8) * 100) / 100,
+      z: Math.round((Math.floor(n / 5) * 0.4 - 0.4) * 100) / 100,
+      rot: 0,
+      size_warn: c.size_mismatch_possible,
+      color_warn: c.color_mismatch_possible,
+      image_url: c.image_url,
+      prix: c.prix_min,
+    };
+    patch({ items: [...scene.items, nouveau] });
+    setSelected(nouveau.uid);
+  }
+
+  function supprimer(u: string) {
+    patch({ items: scene.items.filter((i) => i.uid !== u) });
+    if (selected === u) setSelected(null);
+  }
+
+  function dupliquer(u: string) {
+    const src = scene.items.find((i) => i.uid === u);
+    if (!src) return;
+    const copie: SceneItem = { ...src, uid: uid(), x: src.x + 0.5, z: src.z + 0.5 };
+    patch({ items: [...scene.items, copie] });
+    setSelected(copie.uid);
+  }
+
+  function tourner(u: string, delta: number) {
+    const it = scene.items.find((i) => i.uid === u);
+    if (it) patchItem(u, { rot: ((it.rot + delta) % 360 + 360) % 360 });
+  }
+
+  // Raccourcis clavier
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const cible = e.target as HTMLElement;
+      if (cible && (cible.tagName === "INPUT" || cible.tagName === "SELECT" || cible.tagName === "TEXTAREA")) return;
+      if (!selected) return;
+      const it = scene.items.find((i) => i.uid === selected);
+      if (!it) return;
+      const pas = e.shiftKey ? 0.25 : 0.05;
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); supprimer(selected); }
+      else if (e.key === "r") { e.preventDefault(); tourner(selected, 15); }
+      else if (e.key === "R") { e.preventDefault(); tourner(selected, -15); }
+      else if (e.key === "Escape") setSelected(null);
+      else if (e.key === "ArrowLeft") { e.preventDefault(); patchItem(selected, { x: +(it.x - pas).toFixed(3) }); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); patchItem(selected, { x: +(it.x + pas).toFixed(3) }); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); patchItem(selected, { z: +(it.z - pas).toFixed(3) }); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); patchItem(selected, { z: +(it.z + pas).toFixed(3) }); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") { e.preventDefault(); dupliquer(selected); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, scene.items]);
+
+  // Capture PNG avec la mention légale
+  function capturer() {
+    const data = captureRef.current?.();
+    if (!data) { setMessage("Capture impossible (moteur non prêt)"); return; }
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = img.width;
+      c.height = img.height + 44;
+      const ctx = c.getContext("2d");
+      if (!ctx) return;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0);
+      ctx.fillStyle = "#1f2125";
+      ctx.font = "bold 15px Arial";
+      ctx.fillText(`${scene.nom} — ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m — ${scene.items.length} article${scene.items.length > 1 ? "s" : ""}`, 14, img.height + 20);
+      ctx.fillStyle = "#666";
+      ctx.font = "12px Arial";
+      ctx.fillText(`${MENTION_LEGALE} · Jardin-Confort SA · ${dateCH(new Date().toISOString())}${scene.mode === "maquette" ? " · rendu maquette" : ""}`, 14, img.height + 37);
+      const a = document.createElement("a");
+      a.href = c.toDataURL("image/png");
+      a.download = `planner-${scene.nom.replace(/[^\w\-]+/g, "_")}-${scene.vue}.png`;
+      a.click();
+    };
+    img.src = data;
+  }
+
+  async function enregistrer() {
+    setEnregistrement(true);
+    setMessage("");
+    try {
+      let creePar: string | null = null;
+      try { creePar = window.localStorage.getItem("jardi-utilisateur"); } catch { /* ignore */ }
+      if (scene.id) {
+        const r = await fetch(`/api/planner/scenes/${scene.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scene }) });
+        const j = await r.json();
+        if (j.error) throw new Error(j.error);
+      } else {
+        const r = await fetch("/api/planner/scenes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scene, cree_par: creePar }) });
+        const j = await r.json();
+        if (j.error) throw new Error(j.error);
+        setScene((s) => ({ ...s, id: j.id }));
+        window.history.replaceState(null, "", `/planner?scene=${j.id}`);
+      }
+      setModifie(false);
+      setMessage("Scène enregistrée");
+      setTimeout(() => setMessage(""), 2500);
+    } catch (e) {
+      setMessage((e as Error).message);
+    } finally {
+      setEnregistrement(false);
+    }
+  }
+
+  async function ouvrirListe() {
+    setListeOuverte(true);
+    const r = await fetch("/api/planner/scenes");
+    const j = await r.json();
+    setScenes(j.scenes || []);
+  }
+
+  function nouvelleScene() {
+    if (modifie && !window.confirm("Abandonner les modifications non enregistrées ?")) return;
+    setScene({ ...SCENE_VIDE, items: [] });
+    setSelected(null);
+    setModifie(false);
+    window.history.replaceState(null, "", "/planner");
+  }
+
+  const total = scene.items.reduce((n, i) => n + (i.prix || 0), 0);
+  const nbAvert = scene.items.filter((i) => i.size_warn || i.color_warn).length;
+
+  return (
+    <main className="flex h-screen flex-col bg-[#1f2125] text-zinc-100">
+      {/* Barre du haut */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
+        <div className="-mb-4">
+          <RetourDashboard>
+            <a href="/dashboard/modeles-3d" className={CLASSE_BOUTON_NAV}>🧊 Index 3D</a>
+          </RetourDashboard>
+        </div>
+        <input
+          value={scene.nom}
+          onChange={(e) => patch({ nom: e.target.value })}
+          className="w-56 rounded-xl border border-white/10 bg-[#2a2d31] px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-sky-500/50"
+          placeholder="Nom de la scène"
+        />
+        <div className="ml-2 flex items-center gap-1">
+          <button type="button" onClick={() => patch({ vue: "plan" })} className={scene.vue === "plan" ? BTN_ON : BTN_OFF} title="Vue de dessus (composition)">▦ Plan</button>
+          <button type="button" onClick={() => patch({ vue: "3d" })} className={scene.vue === "3d" ? BTN_ON : BTN_OFF} title="Perspective (présentation)">◈ 3D</button>
+        </div>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => patch({ mode: "couleurs" })} className={scene.mode === "couleurs" ? BTN_ON : BTN_OFF}>Couleurs</button>
+          <button type="button" onClick={() => patch({ mode: "maquette" })} className={scene.mode === "maquette" ? BTN_ON : BTN_OFF} title="Tout en gris : supprime les écarts de coloris entre marques">Maquette</button>
+        </div>
+        <div className="flex items-center gap-1 text-xs text-zinc-400">
+          <span>Terrasse</span>
+          <input type="number" step="0.1" min="1" max="40" value={scene.terrasse.largeur} onChange={(e) => patch({ terrasse: { ...scene.terrasse, largeur: Math.max(1, Number(e.target.value) || 1) } })} className="w-16 rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-right text-zinc-100" />
+          <span>×</span>
+          <input type="number" step="0.1" min="1" max="40" value={scene.terrasse.profondeur} onChange={(e) => patch({ terrasse: { ...scene.terrasse, profondeur: Math.max(1, Number(e.target.value) || 1) } })} className="w-16 rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-right text-zinc-100" />
+          <span>m</span>
+        </div>
+        <button type="button" onClick={() => setSnap(snap ? 0 : 0.05)} className={snap ? BTN_ON : BTN_OFF} title="Aimanter les déplacements sur 5 cm">🧲 5 cm</button>
+        <div className="ml-auto flex items-center gap-1">
+          <button type="button" onClick={nouvelleScene} className={BTN_OFF}>＋ Nouvelle</button>
+          <button type="button" onClick={ouvrirListe} className={BTN_OFF}>📂 Ouvrir</button>
+          <button type="button" onClick={enregistrer} disabled={enregistrement} className={`${BTN} border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25`}>
+            {enregistrement ? "…" : modifie ? "💾 Enregistrer *" : "💾 Enregistrer"}
+          </button>
+          <button type="button" onClick={capturer} className={BTN_OFF} title="Télécharger une image PNG de la vue actuelle, avec la mention légale">📷 Capture</button>
+        </div>
+      </div>
+
+      {message && <div className="border-b border-white/10 bg-sky-500/10 px-4 py-1.5 text-xs text-sky-200">{message}</div>}
+
+      <div className="flex min-h-0 flex-1">
+        <PlannerCatalogue onAjouter={ajouter} />
+
+        <div className="relative min-w-0 flex-1">
+          <PlannerCanvas
+            items={scene.items}
+            terrasse={scene.terrasse}
+            vue={scene.vue}
+            mode={scene.mode}
+            snap={snap}
+            selectedUid={selected}
+            onSelect={setSelected}
+            onMove={(u, x, z) => patchItem(u, { x: +x.toFixed(3), z: +z.toFixed(3) })}
+            onDims={(u, d) => setDims((m) => (m[u] && Math.abs(m[u].l - d.l) < 1e-6 ? m : { ...m, [u]: d }))}
+            onError={(u, m) => setErreurs((e) => ({ ...e, [u]: m }))}
+            captureRef={captureRef}
+          />
+          {/* Outils de l'article sélectionné */}
+          {item && (
+            <div className="absolute left-3 top-3 flex items-center gap-1 rounded-xl border border-white/10 bg-[#1f2125]/90 p-1.5 shadow-lg backdrop-blur">
+              <span className="max-w-[260px] truncate px-2 text-xs text-zinc-200" title={item.titre}>{item.titre}</span>
+              <button type="button" onClick={() => tourner(item.uid, -15)} className={BTN_OFF} title="Tourner −15° (Maj+R)">⟲</button>
+              <button type="button" onClick={() => tourner(item.uid, 15)} className={BTN_OFF} title="Tourner +15° (R)">⟳</button>
+              <button type="button" onClick={() => tourner(item.uid, 90)} className={BTN_OFF} title="Tourner de 90°">90°</button>
+              <button type="button" onClick={() => dupliquer(item.uid)} className={BTN_OFF} title="Dupliquer (Ctrl+D)">⧉</button>
+              <button type="button" onClick={() => supprimer(item.uid)} className={`${BTN} border-rose-500/40 bg-rose-500/15 text-rose-200`} title="Supprimer (Suppr)">🗑</button>
+            </div>
+          )}
+          <div className="pointer-events-none absolute bottom-2 left-3 rounded bg-black/50 px-2 py-1 text-[11px] text-zinc-300">
+            {MENTION_LEGALE} · {scene.vue === "plan" ? "glisser = déplacer · molette = zoom · clic droit = déplacer la vue" : "glisser = tourner la vue · molette = zoom · clic droit = déplacer"}
+          </div>
+        </div>
+
+        {/* Liste des articles posés */}
+        <aside className="flex w-[300px] shrink-0 flex-col border-l border-white/10 bg-[#25282c]">
+          <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-xs">
+            <span className="uppercase tracking-wide text-zinc-500">Articles posés · {scene.items.length}</span>
+            {total > 0 && <span className="text-zinc-300">{chf(total)}</span>}
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {scene.items.map((i, idx) => {
+              const d = dims[i.uid];
+              const err = erreurs[i.uid];
+              return (
+                <button
+                  key={i.uid}
+                  type="button"
+                  onClick={() => setSelected(i.uid)}
+                  className={`flex w-full items-start gap-2 border-b border-white/5 px-3 py-2 text-left text-xs transition hover:bg-white/5 ${selected === i.uid ? "bg-sky-500/15" : ""}`}
+                >
+                  <span className="mt-0.5 w-4 shrink-0 text-zinc-500">{idx + 1}</span>
+                  {i.image_url ? <img src={i.image_url} alt="" className="h-9 w-9 shrink-0 rounded bg-white object-contain" /> : <div className="h-9 w-9 shrink-0 rounded bg-white/5" />}
+                  <span className="min-w-0 flex-1">
+                    <span className="line-clamp-2 text-zinc-200">{i.titre}</span>
+                    <span className="block text-[10px] text-zinc-500">
+                      {i.marque}{d ? ` · ${Math.round(d.l * 100)}×${Math.round(d.p * 100)}×H${Math.round(d.h * 100)} cm` : ""}{i.rot ? ` · ${i.rot}°` : ""}
+                    </span>
+                    {(i.size_warn || i.color_warn || err) && (
+                      <span className="mt-0.5 flex flex-wrap gap-1">
+                        {i.size_warn && <span className="rounded bg-amber-500/20 px-1 text-[9px] text-amber-300">taille non garantie</span>}
+                        {i.color_warn && scene.mode === "couleurs" && <span className="rounded bg-amber-500/20 px-1 text-[9px] text-amber-300">couleur non garantie</span>}
+                        {err && <span className="rounded bg-rose-500/20 px-1 text-[9px] text-rose-300" title={err}>non chargé</span>}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+            {scene.items.length === 0 && <p className="px-3 py-4 text-xs text-zinc-500">Aucun article. Clique une vignette à gauche.</p>}
+          </div>
+          {nbAvert > 0 && (
+            <div className="border-t border-white/10 px-3 py-2 text-[11px] text-amber-200/90">
+              Rendu indicatif pour {nbAvert} article{nbAvert > 1 ? "s" : ""} : un seul modèle par fiche, la taille ou le coloris affiché ne correspond pas forcément à la variante retenue.
+            </div>
+          )}
+        </aside>
+      </div>
+
+      {/* Ouvrir une scène */}
+      {listeOuverte && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setListeOuverte(false)}>
+          <div className="max-h-[80vh] w-[620px] overflow-y-auto rounded-2xl border border-white/10 bg-[#25282c] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold">Scènes enregistrées</h2>
+              <button type="button" onClick={() => setListeOuverte(false)} className={BTN_OFF}>Fermer</button>
+            </div>
+            {scenes.length === 0 && <p className="text-xs text-zinc-500">Aucune scène enregistrée.</p>}
+            {scenes.map((s) => (
+              <a key={s.id} href={`/planner?scene=${s.id}`} className="flex items-center justify-between border-b border-white/5 px-2 py-2 text-xs hover:bg-white/5">
+                <span>
+                  <span className="text-zinc-100">{s.nom}</span>
+                  <span className="ml-2 text-zinc-500">{s.nb_items} article{s.nb_items > 1 ? "s" : ""}{s.cree_par ? ` · ${s.cree_par}` : ""}</span>
+                </span>
+                <span className="text-zinc-500">{dateCH(s.updated_at)}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}

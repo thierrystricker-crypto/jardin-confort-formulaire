@@ -90,3 +90,82 @@ d'abord, offres en dernier).
 script Node qui charge chaque GLB nouveau ou modifié) ; étape 2 planner
 `/planner` (React Three Fiber, vues Plan/3D, picker par collection) ; étape 3
 badge 3D + card de faisabilité + lien offres → planner.
+
+## 20.09.2026 — première synchro en preview + règle `no3dfile`
+
+- Première passe en **31 s** (Shopify plus rapide que l'export de la veille) :
+  13 984 produits, **1 539 avec modèle** (850 Model3d + 689 .bin, dont les 69
+  Extremis importés le 19.09). Scope `read_files` OK.
+- « 1 359 avec anomalies » : presque tout venait de « tag no3dfile obsolète »
+  (Barlow Tyrie 488/488, Les Jardins 379/379, Dedon 546/548). Cause trouvée :
+  la règle de tagage automatique (condition Twig dans l'app de workflows) ne
+  regardait que `custom.model_3d_glb` — elle datait d'avant le passage aux
+  .bin par URL (17.09). **Corrigée** : `no3dfile` = les DEUX métachamps vides
+  (`model_3d_glb is empty and model_3d_url is empty`). À relancer sur tout le
+  catalogue, puis « Rafraîchir l'index 3D » : l'anomalie doit tomber à zéro.
+- Le tag `no3dfile` n'est **pas** utilisé par le thème (cascade sur les
+  métachamps uniquement) ; c'est un repère interne « où il manque des modèles ».
+  L'anomalie reste en place comme garde-fou : elle signalera si la règle
+  recasse.
+- « Taille ? » vide sur Fermob / Emu / Schaffner = normal : chez ces marques
+  chaque dimension est une fiche, pas une option de variante.
+- « Nouveaux modèles = 1 539 » à la première passe : normal, ne compte que les
+  nouveaux à partir de la 2ᵉ synchro.
+
+## 20.09.2026 — Étape 2 : le planner (`/planner`, branche `feature/planner-3d`)
+
+**Périmètre** : page interne isolée (aucun état partagé avec le formulaire
+d'offres), catalogue manuel, une scène avec deux vues. Rien côté offres.
+
+**Dépendances** : `three`, `@react-three/fiber` (v9, React 19),
+`@react-three/drei` (v10), `@types/three`. Le canvas est importé en
+`dynamic(…, { ssr: false })`.
+
+**Fichiers**
+- `docs/sql/019-planner-scenes.sql` — table `planner_scenes` (nom, cree_par,
+  offre_slug pour l'étape 3, terrasse jsonb, items jsonb, mode, vue). RLS sans
+  policy.
+- `lib/planner-types.ts` — `CatalogueItem`, `SceneItem` (uid, product_id, url,
+  x, z, rot, size_warn, color_warn), `Scene`, `MENTION_LEGALE`.
+- `app/api/planner/catalogue/route.ts` — marques → collections (compteurs
+  avec 3D / total) → articles d'une collection (3D en premier, sans 3D grisés) ;
+  recherche `?q=`. Fiches ACTIVE seulement.
+- `app/api/planner/scenes/route.ts` + `[id]/route.ts` — liste / création /
+  lecture / mise à jour / suppression.
+- `components/planner/PlannerCanvas.tsx` — le moteur : terrasse + `Grid`
+  50 cm / 1 m, modèles `useGLTF(url, draco, meshopt)`, **recentrage au
+  chargement** (pieds à y = 0, centre de l'empreinte à l'origine) et remontée
+  des cotes mesurées ; glisser sur le sol (aimant 5 cm), sélection avec halo
+  + étiquette de cotes ; vue Plan = `OrthographicCamera` vue de dessus
+  (`up = [0,0,-1]`, rotation désactivée, clic gauche = déplacer la vue), vue
+  3D = `PerspectiveCamera` + OrbitControls ; mode maquette = un
+  `MeshStandardMaterial` gris substitué à tous les matériaux (originaux gardés
+  dans `userData`) ; capture via `preserveDrawingBuffer` ; un modèle qui ne
+  charge pas devient un cube rouge « Modèle non chargé » (garde d'erreur par
+  article, la scène continue).
+- `components/planner/PlannerCatalogue.tsx` — recherche, marque, collections,
+  vignettes (image Shopify), badges 3D / taille ? / couleur ? ; règle du picker :
+  un résultat de recherche a un bouton « collection › » qui ouvre toute sa
+  collection.
+- `app/planner/page.tsx` — barre (nom, Plan/3D, Couleurs/Maquette, terrasse
+  L × P, aimant, Nouvelle / Ouvrir / Enregistrer / Capture), outils de
+  l'article sélectionné (⟲ ⟳ 90° dupliquer supprimer), liste des articles posés
+  avec cotes mesurées, total indicatif et avertissements, mention légale
+  affichée en permanence et écrite dans la capture PNG. Raccourcis : R / Maj+R,
+  flèches (5 cm, Maj = 25 cm), Suppr, Ctrl+D, Échap. `?scene=<id>` recharge
+  une scène ; garde `beforeunload` si modifications non enregistrées.
+- `app/dashboard/page.tsx` — bouton « 🪑 Planner 3D ».
+
+**À valider au premier essai (c'est le but du prototype)**
+1. CORS : un .bin (Barlow Tyrie / Dedon / Les Jardins) ET un Model3d
+   (Schaffner / Fermob / Emu) se chargent depuis offres.jardin-confort.ch.
+   Sinon cube rouge → lire la console (`Access-Control-Allow-Origin`).
+2. Échelle : une chaise Schaffner ≈ 55 × 60 × H 85 cm, une table Dedon ≈ ses
+   cotes catalogue ; un Les Jardins ou un Barlow Tyrie aberrant (× 100 ou
+   ÷ 100) se voit tout de suite dans l'étiquette de cotes.
+3. Poids : dix articles Dedon (meshopt) dans une scène restent fluides ?
+4. Orientation : les chaises pCon « de dos » (yaw) — à corriger dans le
+   pipeline, pas dans le planner.
+
+**Pas encore** : silhouettes 2D pré-calculées (passe géométrie, étape 1b),
+recoloration Fermob, lien offres (étape 3), page publique.
