@@ -395,9 +395,11 @@ export default function PlannerPage() {
   // Capture propre : on désélectionne (le halo bleu sous le meuble est un
   // objet de la scène 3D, il partirait dans l'image) et on attend deux
   // rendus avant de lire le canvas.
+  // (setTimeout et pas requestAnimationFrame : rAF ne tourne plus dès que
+  // l'onglet perd le focus, par ex. quand la fenêtre d'impression s'ouvre.)
   async function capturerSansSelection(): Promise<string | null> {
     setSelected(null);
-    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    await new Promise<void>((r) => setTimeout(r, 80));
     return captureRef.current?.() || null;
   }
   function chargerImage(src: string): Promise<HTMLImageElement | null> {
@@ -454,14 +456,14 @@ export default function PlannerPage() {
   async function imprimerListe() {
     const nom = exigerNom();
     if (!nom) return;
-    // Ouvrir la fenêtre tout de suite (dans le clic, sinon bloquée par le
-    // navigateur), puis la remplir une fois le lien de partage obtenu.
+    // 1) capture d'abord, onglet encore au premier plan ; 2) fenêtre ouverte
+    // dans la foulée du clic (sinon bloquée) ; 3) lien de partage ; 4) contenu.
+    const data = await capturerSansSelection();
     const w = window.open("", "_blank");
     if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
     w.document.write("<p style='font-family:sans-serif;padding:24px;color:#666'>Préparation de la fiche…</p>");
     const version = await lienPartagePourExport("fiche");
     const lien = version?.url || null;
-    const data = await capturerSansSelection();
     const parProduit = regrouper(scene.items);
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const fmt = (v: number) => `CHF ${new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)}`;
