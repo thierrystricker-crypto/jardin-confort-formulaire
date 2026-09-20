@@ -334,3 +334,27 @@ ouvre sur son téléphone ou son PC pour tourner autour de son plan.
   lien vivant, « Plan mis à jour le … Ce lien montre toujours la dernière
   version du projet : elle peut différer d'un document imprimé ». La fiche
   mentionne V n dans l'en-tête et dans le bloc 3D ; la capture aussi.
+- **Retours du 20.09 soir** : export = enregistrement automatique (plus de
+  confirm — Chrome l'avalait quand la fenêtre d'impression avait le focus,
+  d'où « pas de QR ») ; capture prise AVANT d'ouvrir la fenêtre (rAF ne tourne
+  plus en arrière-plan → blocage sur « Préparation… ») ; halo de sélection
+  retiré avant capture ; version réutilisée si plan inchangé ; espace après
+  le tiret du nom.
+- **Deux gabarits de fiche** : « 🖨 Fiche » (prix, TVA, total) et « 🖨 Sans
+  prix » (articles, quantités, cotes — ni colonnes prix, ni récapitulatif, ni
+  note « dès »). Plus d'impression automatique : la fiche s'affiche, bouton
+  « Imprimer / PDF » en haut à droite (→ Enregistrer en PDF dans Chrome).
+- **Logo sur la capture PNG** : bandeau blanc de 120 px avec logo à gauche
+  (`GET /api/planner/logo`, same-origin pour le canvas), nom du plan, ligne
+  terrasse / articles / date, mention légale + adresse, QR à droite.
+
+**À préparer — export PDF** : reprendre le circuit des offres. (1) Déplacer
+le HTML de la fiche dans une vraie route `app/print/planner/[token]/page.tsx`
+(jeton de version → `GET /api/planner/partage/[token]` + `?prix=0|1`), ce qui
+règle aussi le `about:blank` ; (2) route interne
+`POST /api/planner/scenes/[id]/pdf` qui fige la version, appelle pdf.co sur
+`/print/planner/<token>?jc_token=…` comme `fiche-travail-pdf/route.ts`, et
+renvoie le PDF (ou l'enregistre dans Supabase Storage `planner-pdf/` avec
+l'URL sur la version) ; (3) bouton « ⬇ PDF » dans le planner ; (4) plus tard,
+joindre ce PDF à l'offre (étape 3). Proxy : `/print/planner/` accepte le
+`jc_token` comme les autres prints (déjà couvert par `pathname.startsWith("/print/")`).

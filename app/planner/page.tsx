@@ -295,12 +295,13 @@ export default function PlannerPage() {
     const lien = version?.url || null;
     const data2 = await capturerSansSelection();
     if (!data2) { setMessage("Capture impossible"); return; }
-    const [img, qr] = await Promise.all([
+    const [img, qr, logo] = await Promise.all([
       chargerImage(data2),
       lien ? chargerImage(`/api/planner/qr?size=220&data=${encodeURIComponent(lien)}`) : Promise.resolve(null),
+      chargerImage("/api/planner/logo"),
     ]);
     if (!img) { setMessage("Capture impossible"); return; }
-    const bandeau = qr ? 120 : 44;
+    const bandeau = 120;   // bandeau blanc : logo à gauche, textes, QR à droite
     const c = document.createElement("canvas");
     c.width = img.width;
     c.height = img.height + bandeau;
@@ -309,12 +310,22 @@ export default function PlannerPage() {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, c.width, c.height);
     ctx.drawImage(img, 0, 0);
+    // Logo (hauteur 60 px, proportions conservées) puis textes à sa droite
+    let xTexte = 14;
+    if (logo) {
+      const h = 60, wl = Math.round((logo.width / logo.height) * h);
+      ctx.drawImage(logo, 14, img.height + 14, wl, h);
+      xTexte = 14 + wl + 22;
+    }
     ctx.fillStyle = "#1f2125";
-    ctx.font = "bold 15px Arial";
-    ctx.fillText(`${nom} — ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m — ${scene.items.length} article${scene.items.length > 1 ? "s" : ""}`, 14, img.height + 20);
-    ctx.fillStyle = "#666";
+    ctx.font = "bold 16px Arial";
+    ctx.fillText(nom, xTexte, img.height + 34);
+    ctx.fillStyle = "#444";
     ctx.font = "12px Arial";
-    ctx.fillText(`${MENTION_LEGALE} · Jardin-Confort SA · ${dateCH(new Date().toISOString())}${scene.mode === "maquette" ? " · rendu maquette" : ""}`, 14, img.height + 37);
+    ctx.fillText(`Terrasse ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m · ${scene.items.length} article${scene.items.length > 1 ? "s" : ""} · ${dateCH(new Date().toISOString())}${scene.mode === "maquette" ? " · rendu maquette" : ""}`, xTexte, img.height + 56);
+    ctx.fillStyle = "#666";
+    ctx.font = "11px Arial";
+    ctx.fillText(`${MENTION_LEGALE} · Jardin-Confort SA · Route de Lavaux 425 · 1095 Lutry · www.jardin-confort.ch`, xTexte, img.height + 76);
     if (qr && lien) {
       const taille = 100;
       const x = c.width - taille - 12, y = img.height + 10;
@@ -454,7 +465,7 @@ export default function PlannerPage() {
   // en-tête logo + tableau méta, filets bleus, totaux à droite, pied de
   // page). On reprend les classes et les réglages de ce document pour que
   // le plan 3D ressorte comme une page de plus du même dossier.
-  async function imprimerListe() {
+  async function imprimerListe(avecPrix = true) {
     const nom = exigerNom();
     if (!nom) return;
     // 1) capture d'abord, onglet encore au premier plan ; 2) fenêtre ouverte
@@ -485,11 +496,11 @@ export default function PlannerPage() {
           ${it.size_warn ? '<div class="item-warn">Taille : rendu 3D indicatif</div>' : ""}${it.color_warn && scene.mode === "couleurs" ? '<div class="item-warn">Couleur : rendu 3D indicatif</div>' : ""}
         </td>
         <td class="td-center">× ${qty}</td>
-        <td class="td-right">${it.prix != null ? des(it) + fmt(it.prix) : "—"}</td>
-        <td class="td-total">${it.prix != null ? des(it) + fmt(it.prix * qty) : "—"}</td>
+        ${avecPrix ? `<td class="td-right">${it.prix != null ? des(it) + fmt(it.prix) : "—"}</td>
+        <td class="td-total">${it.prix != null ? des(it) + fmt(it.prix * qty) : "—"}</td>` : ""}
       </tr>`;
     }).join("");
-    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(nom)} — Plan 3D</title>
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(nom)} — Plan 3D${avecPrix ? "" : " (sans prix)"}</title>
       <link rel="preconnect" href="https://fonts.googleapis.com">
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
       <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;700;900&display=swap" rel="stylesheet">
@@ -556,7 +567,7 @@ export default function PlannerPage() {
         .doc-footer strong { color: ${BLACK}; }
         .doc-footer-url { font-weight: 700; color: ${THEME}; }
       </style></head><body>
-      <button class="print-btn" onclick="window.print()">🖨 Imprimer</button>
+      <button class="print-btn" onclick="window.print()">🖨 Imprimer / PDF</button>
       <div class="doc-wrap">
         <div class="doc-header">
           <div class="doc-header-left">
@@ -583,19 +594,19 @@ export default function PlannerPage() {
             <th style="width:56px"></th>
             <th class="th-left">Description de l'article</th>
             <th class="th-center" style="width:62px">Qté</th>
-            <th class="th-right" style="width:90px">Prix/pce</th>
-            <th class="th-right" style="width:100px">Total</th>
+            ${avecPrix ? `<th class="th-right" style="width:90px">Prix/pce</th>
+            <th class="th-right" style="width:100px">Total</th>` : ""}
           </tr></thead>
           <tbody>${lignes || `<tr><td colspan="5" style="text-align:center;padding:20px;color:#aaa;font-style:italic">Aucun article</td></tr>`}</tbody>
         </table>
-        <div class="doc-bottom-wrap">
+        ${avecPrix ? `<div class="doc-bottom-wrap">
           <div class="doc-notes-col">${totalApprox ? "« dès » : prix le plus bas de la fiche, la variante exacte (taille, coloris) n'étant pas encore choisie." : ""}</div>
           <div class="doc-totals-col"><table class="doc-pricing"><tbody>
             <tr><td class="pt-label">Sous-total articles</td><td class="pt-value">${totalApprox ? "dès " : ""}${fmt(total)}</td></tr>
             <tr class="pt-tva"><td class="pt-label">TVA 8.1% (incluse)</td><td class="pt-value">${fmt(tva)}</td></tr>
             <tr class="pt-total"><td class="pt-total-label">TOTAL TTC${totalApprox ? " (dès)" : ""}</td><td class="pt-total-value">${fmt(total)}</td></tr>
           </tbody></table></div>
-        </div>
+        </div>` : ""}
         ${lien ? `<div class="doc-3d">
           <div style="flex:1">
             <div class="doc-3d-title">🧊 Votre plan en 3D</div>
@@ -609,7 +620,7 @@ export default function PlannerPage() {
           </div>
         </div>` : ""}
         <p class="doc-thanks">Nous nous réjouissons de vous accompagner dans votre projet. Merci pour votre confiance !</p>
-        <p class="doc-terms">${MENTION_LEGALE}. Prix TTC indicatifs au jour de l'impression, sous réserve d'une offre.<br>Les articles, quantités et prix mentionnés peuvent différer de l'offre finale. Seule l'offre signée ou la confirmation de commande fait foi.</p>
+        <p class="doc-terms">${MENTION_LEGALE}.${avecPrix ? " Prix TTC indicatifs au jour de l'impression, sous réserve d'une offre.<br>Les articles, quantités et prix mentionnés peuvent différer de l'offre finale." : "<br>Les articles et quantités mentionnés peuvent différer de l'offre finale."} Seule l'offre signée ou la confirmation de commande fait foi.</p>
         <div class="doc-footer">
           <div><strong>Jardin-Confort SA</strong></div>
           <div>Route de Lavaux 425 · 1095 Lutry · Suisse</div>
@@ -618,13 +629,6 @@ export default function PlannerPage() {
           <div class="doc-footer-url">www.jardin-confort.ch</div>
         </div>
       </div>
-      <script>
-        (function(){
-          var imgs=[].slice.call(document.images).map(function(i){return i.complete?Promise.resolve():new Promise(function(r){i.onload=i.onerror=r;});});
-          var fonts=document.fonts?document.fonts.ready:Promise.resolve();
-          Promise.all(imgs.concat([fonts])).then(function(){setTimeout(function(){window.print()},150);});
-        })();
-      </script>
       </body></html>`;
     w.document.open();
     w.document.write(html);
@@ -736,7 +740,8 @@ export default function PlannerPage() {
           </button>
           <button type="button" onClick={partager} className={BTN_OFF} title="Lien client en lecture seule : il tourne la vue, zoome, bascule Plan/3D — sans rien modifier">🔗 Partager</button>
           <button type="button" onClick={capturer} className={BTN_OFF} title="Télécharger une image PNG de la vue actuelle, avec la mention légale">📷 Capture</button>
-          <button type="button" onClick={imprimerListe} className={BTN_OFF} title="Fiche imprimable : image de la vue + liste des articles avec photos, cotes et prix indicatifs">🖨 Fiche</button>
+          <button type="button" onClick={() => imprimerListe(true)} className={BTN_OFF} title="Fiche imprimable : image de la vue + liste des articles avec photos, cotes et prix indicatifs">🖨 Fiche</button>
+          <button type="button" onClick={() => imprimerListe(false)} className={BTN_OFF} title="Même fiche sans aucun prix : articles, quantités, cotes">🖨 Sans prix</button>
           <button type="button" onClick={exporterListeAchat} className={`${BTN} border-cyan-500/40 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25`} title="Créer une liste d'achat avec les articles posés (puis brouillon d'offre depuis la page Listes d'achat)">🛒 Liste d'achat</button>
         </div>
       </div>
