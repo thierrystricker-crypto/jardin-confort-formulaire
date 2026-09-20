@@ -53,6 +53,7 @@ export default function PlannerPage() {
   const [enregistrement, setEnregistrement] = useState(false);
   const [listeOuverte, setListeOuverte] = useState(false);
   const [partage, setPartage] = useState<{ url: string; copie: boolean } | null>(null);   // lien client affiché
+  const [pdfEnCours, setPdfEnCours] = useState(false);
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
@@ -291,10 +292,10 @@ export default function PlannerPage() {
     const nom = exigerNom();
     if (!nom) return;
     if (!captureRef.current) { setMessage("Capture impossible (moteur non prêt)"); return; }
-    const version = await lienPartagePourExport("capture");
-    const lien = version?.url || null;
     const data2 = await capturerSansSelection();
     if (!data2) { setMessage("Capture impossible"); return; }
+    const version = await lienPartagePourExport("capture", data2);
+    const lien = version?.url || null;
     const [img, qr, logo] = await Promise.all([
       chargerImage(data2),
       lien ? chargerImage(`/api/planner/qr?size=220&data=${encodeURIComponent(lien)}`) : Promise.resolve(null),
@@ -386,19 +387,22 @@ export default function PlannerPage() {
   // document montrait, même si le plan évolue ensuite (le bouton « Partager »
   // donne, lui, le lien vivant). Null seulement en cas d'erreur : l'export se
   // fait alors sans lien 3D.
-  async function lienPartagePourExport(motif: "fiche" | "capture"): Promise<{ url: string; numero: number } | null> {
+  async function lienPartagePourExport(motif: "fiche" | "capture", captureDejaPrise?: string | null): Promise<{ url: string; numero: number; token: string } | null> {
+    // La capture et les cotes mesurées partent avec la version : la fiche
+    // (page serveur) et le PDF n'ont pas de WebGL pour les recalculer.
+    const capture = captureDejaPrise ?? (await capturerSansSelection());
     let id = scene.id;
     if (!id || modifie) {
       id = await enregistrer();
       if (!id) return null;
     }
     try {
-      const r = await fetch(`/api/planner/scenes/${id}/versions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ motif }) });
+      const r = await fetch(`/api/planner/scenes/${id}/versions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ motif, capture, dims }) });
       const j = await r.json();
       if (j.error) throw new Error(j.error);
       setMessage(j.reutilisee ? `Plan inchangé : version V${j.numero} réutilisée` : `Version V${j.numero} figée pour ce document`);
       setTimeout(() => setMessage(""), 3000);
-      return { url: j.url as string, numero: j.numero as number };
+      return { url: j.url as string, numero: j.numero as number, token: j.token as string };
     } catch (e) {
       setMessage(`Lien 3D non joint : ${(e as Error).message}`);
       return null;
@@ -465,174 +469,46 @@ export default function PlannerPage() {
   // en-tête logo + tableau méta, filets bleus, totaux à droite, pied de
   // page). On reprend les classes et les réglages de ce document pour que
   // le plan 3D ressorte comme une page de plus du même dossier.
+  // Fiche imprimable = vraie page /print/planner/<token> (composant serveur,
+  // même gabarit que /print/offre) sur une VERSION figée avec sa capture et
+  // ses cotes. Un humain l'ouvre avec son cookie ; pdf.co la rend avec jc_token.
   async function imprimerListe(avecPrix = true) {
     const nom = exigerNom();
     if (!nom) return;
-    // 1) capture d'abord, onglet encore au premier plan ; 2) fenêtre ouverte
-    // dans la foulée du clic (sinon bloquée) ; 3) lien de partage ; 4) contenu.
-    const data = await capturerSansSelection();
-    const w = window.open("", "_blank");
+    if (scene.items.length === 0) { setMessage("Aucun article à imprimer"); return; }
+    const w = window.open("", "_blank");           // dans le clic, sinon bloqué
     if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
     w.document.write("<p style='font-family:sans-serif;padding:24px;color:#666'>Préparation de la fiche…</p>");
     const version = await lienPartagePourExport("fiche");
-    const lien = version?.url || null;
-    const parProduit = regrouper(scene.items);
-    const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    const fmt = (v: number) => `CHF ${new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)}`;
-    const des = (it: SceneItem) => (it.prix_exact ? "" : "dès ");
-    const TVA = 0.081;
-    const tva = total - total / (1 + TVA);
-    const conseiller = (() => { try { return window.localStorage.getItem("jardi-utilisateur") || ""; } catch { return ""; } })();
-    const dateDoc = new Date().toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
-    const THEME = "#2b8ad1", BLACK = "#000", GREY = "#333", LIGHT = "#f9f9f9";
-    const lignes = [...parProduit.values()].map(({ it, qty }) => {
-      const d = dims[it.uid];
-      return `<tr>
-        <td class="td-img">${it.image_url ? `<img src="${it.image_url}" alt="">` : ""}</td>
-        <td class="td-desc">
-          <div class="item-title">${esc(it.titre)}</div>
-          ${it.sku ? `<div class="item-sku">Réf. ${esc(it.sku)}</div>` : ""}
-          ${d ? `<div class="item-sku">Cotes 3D ${Math.round(d.l * 100)} × ${Math.round(d.p * 100)} × H ${Math.round(d.h * 100)} cm</div>` : ""}
-          ${it.size_warn ? '<div class="item-warn">Taille : rendu 3D indicatif</div>' : ""}${it.color_warn && scene.mode === "couleurs" ? '<div class="item-warn">Couleur : rendu 3D indicatif</div>' : ""}
-        </td>
-        <td class="td-center">× ${qty}</td>
-        ${avecPrix ? `<td class="td-right">${it.prix != null ? des(it) + fmt(it.prix) : "—"}</td>
-        <td class="td-total">${it.prix != null ? des(it) + fmt(it.prix * qty) : "—"}</td>` : ""}
-      </tr>`;
-    }).join("");
-    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(nom)} — Plan 3D${avecPrix ? "" : " (sans prix)"}</title>
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;700;900&display=swap" rel="stylesheet">
-      <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Raleway', 'Helvetica Neue', Arial, sans-serif; font-size: 13px; line-height: 1.5; color: ${GREY}; background: white; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-        @page { size: A4 portrait; margin: 14mm 16mm 14mm 14mm; }
-        @media screen {
-          .doc-wrap { max-width: 794px; margin: 0 auto; padding: 20px 28px; box-shadow: 0 0 20px rgba(0,0,0,0.08); }
-          .print-btn { position: fixed; top: 16px; right: 16px; z-index: 100; background: ${THEME}; color: white; border: 0; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
-        }
-        @media print { .print-btn { display: none !important; } }
-        .doc-header { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 6mm; width: 100%; }
-        .doc-header-left { flex: 0 0 46%; }
-        .doc-header-right { flex: 0 0 50%; }
-        .doc-logo { max-width: 175px; max-height: 65px; object-fit: contain; display: block; margin-bottom: 10px; }
-        .doc-type { font-size: 26px; font-weight: 400; color: ${THEME}; margin-bottom: 8px; line-height: 1.1; }
-        .doc-meta-table { border-collapse: collapse; width: 100%; }
-        .doc-meta-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 12px; line-height: 1.35; }
-        .doc-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 44%; }
-        .doc-plan-name { font-size: 19px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin: 6px 0 4px; }
-        .doc-plan-sub { font-size: 12px; color: #666; }
-        .doc-hr { border: 0; border-top: 2px solid ${THEME}; margin: 4mm 0; width: 100%; }
-        .doc-capture { width: 100%; margin-bottom: 6mm; page-break-inside: avoid; break-inside: avoid; }
-        .doc-capture img { display: block; width: 100%; border: 1px solid #e5e7eb; border-radius: 4px; }
-        .doc-capture-caption { font-size: 10px; color: #777; font-style: italic; margin-top: 5px; text-align: center; }
-        .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; }
-        .doc-table thead th { padding: 7px 4px; border-top: 2px solid ${THEME}; border-bottom: 2px solid ${THEME}; font-weight: 700; font-size: 12px; color: ${BLACK}; }
-        .th-left { text-align: left; } .th-center { text-align: center; } .th-right { text-align: right; }
-        .doc-table tbody tr td { padding: 8px 4px; border-bottom: 1px solid #efefef; vertical-align: top; font-size: 12px; }
-        .doc-table tbody tr:nth-child(odd) td { background: ${LIGHT}; }
-        .td-img { width: 56px; vertical-align: middle; text-align: center; }
-        .td-img img { max-width: 52px; max-height: 52px; object-fit: contain; }
-        .td-desc { padding-left: 8px !important; }
-        .td-center { text-align: center; vertical-align: middle; white-space: nowrap; }
-        .td-right { text-align: right; vertical-align: middle; white-space: nowrap; }
-        .td-total { text-align: right; vertical-align: middle; white-space: nowrap; font-weight: 700; color: ${BLACK}; }
-        .item-title { font-weight: 700; color: ${BLACK}; line-height: 1.35; }
-        .item-sku { font-size: 11px; color: #777; margin-top: 2px; font-weight: 400; }
-        .item-warn { font-size: 11px; font-weight: 600; color: #E67E22; margin-top: 3px; }
-        .doc-bottom-wrap { display: flex; gap: 20px; margin-bottom: 8mm; align-items: flex-end; page-break-inside: avoid; break-inside: avoid; }
-        .doc-notes-col { flex: 1; font-size: 11px; color: #666; line-height: 1.55; }
-        .doc-totals-col { flex: 0 0 44%; }
-        .doc-pricing { width: 100%; border-collapse: collapse; }
-        .doc-pricing td { padding: 5px 4px; font-size: 12px; }
-        .doc-pricing tr:nth-child(even) td { background: ${LIGHT}; }
-        .doc-pricing .pt-label { font-weight: 600; color: ${BLACK}; }
-        .doc-pricing .pt-value { text-align: right; white-space: nowrap; color: ${BLACK}; }
-        .doc-pricing .pt-tva td { color: #666; font-size: 11px; }
-        .doc-pricing .pt-total td { border-top: 2px solid ${THEME} !important; border-bottom: 2px solid ${THEME} !important; padding: 8px 4px !important; }
-        .pt-total-label { font-weight: 900 !important; font-size: 15px !important; color: ${BLACK} !important; }
-        .pt-total-value { font-weight: 900 !important; font-size: 15px !important; color: ${BLACK} !important; text-align: right; white-space: nowrap; }
-        .doc-3d { margin: 0 0 6mm 0; background: linear-gradient(135deg, #EEF6FF 0%, #E8F4FF 100%); border: 1.5px solid ${THEME}; border-radius: 12px; padding: 14px 20px; display: flex; align-items: center; gap: 20px; page-break-inside: avoid; break-inside: avoid; }
-        .doc-3d-title { font-size: 13px; font-weight: 700; color: #0a1551; margin-bottom: 4px; }
-        .doc-3d-text { font-size: 11px; color: #5e678f; line-height: 1.6; margin-bottom: 10px; }
-        .doc-3d-btn { display: inline-block; background: ${THEME}; color: white; border-radius: 20px; padding: 8px 18px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-decoration: none; }
-        .doc-3d-url { margin-top: 6px; font-size: 10px; color: #5e678f; word-break: break-all; }
-        .doc-3d-qr { flex-shrink: 0; text-align: center; }
-        .doc-3d-qr img { width: 110px; height: 110px; border-radius: 8px; border: 1px solid #c7dff5; }
-        .doc-3d-qr div { font-size: 9px; color: #5e678f; margin-top: 4px; }
-        .doc-thanks { text-align: center; font-weight: 700; color: ${THEME}; margin: 6mm 0 3px; font-size: 13px; }
-        .doc-terms { text-align: center; font-size: 10px; color: #888; line-height: 1.5; margin-bottom: 6mm; }
-        .doc-footer { border-top: 1px solid #ddd; padding-top: 6px; text-align: center; font-size: 11px; color: #666; line-height: 1.7; }
-        .doc-footer strong { color: ${BLACK}; }
-        .doc-footer-url { font-weight: 700; color: ${THEME}; }
-      </style></head><body>
-      <button class="print-btn" onclick="window.print()">🖨 Imprimer / PDF</button>
-      <div class="doc-wrap">
-        <div class="doc-header">
-          <div class="doc-header-left">
-            <img class="doc-logo" src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698" alt="Jardin-Confort">
-            <div class="doc-type">Plan 3D</div>
-            <table class="doc-meta-table"><tbody>
-              <tr><td class="doc-meta-label">Date</td><td>${dateDoc}</td></tr>
-              ${conseiller ? `<tr><td class="doc-meta-label">Conseiller</td><td>${esc(conseiller)}</td></tr>` : ""}
-              <tr><td class="doc-meta-label">Terrasse</td><td>${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m</td></tr>
-              <tr><td class="doc-meta-label">Articles</td><td>${scene.items.length}</td></tr>
-              ${scene.id ? `<tr><td class="doc-meta-label">N° de plan</td><td>${esc(scene.id.slice(0, 8))}${version ? ` · V${version.numero}` : ""}</td></tr>` : ""}
-              ${scene.mode === "maquette" ? `<tr><td class="doc-meta-label">Rendu</td><td>maquette (sans couleurs)</td></tr>` : ""}
-            </tbody></table>
-          </div>
-          <div class="doc-header-right">
-            <div class="doc-plan-name">${esc(nom)}</div>
-            <div class="doc-plan-sub">Composition à l'échelle réalisée avec le planner 3D Jardin-Confort.</div>
-          </div>
-        </div>
-        <hr class="doc-hr">
-        ${data ? `<div class="doc-capture"><img src="${data}" alt=""><div class="doc-capture-caption">Vue ${scene.vue === "plan" ? "de dessus" : "en perspective"} — ${MENTION_LEGALE}</div></div>` : ""}
-        <table class="doc-table">
-          <thead><tr>
-            <th style="width:56px"></th>
-            <th class="th-left">Description de l'article</th>
-            <th class="th-center" style="width:62px">Qté</th>
-            ${avecPrix ? `<th class="th-right" style="width:90px">Prix/pce</th>
-            <th class="th-right" style="width:100px">Total</th>` : ""}
-          </tr></thead>
-          <tbody>${lignes || `<tr><td colspan="5" style="text-align:center;padding:20px;color:#aaa;font-style:italic">Aucun article</td></tr>`}</tbody>
-        </table>
-        ${avecPrix ? `<div class="doc-bottom-wrap">
-          <div class="doc-notes-col">${totalApprox ? "« dès » : prix le plus bas de la fiche, la variante exacte (taille, coloris) n'étant pas encore choisie." : ""}</div>
-          <div class="doc-totals-col"><table class="doc-pricing"><tbody>
-            <tr><td class="pt-label">Sous-total articles</td><td class="pt-value">${totalApprox ? "dès " : ""}${fmt(total)}</td></tr>
-            <tr class="pt-tva"><td class="pt-label">TVA 8.1% (incluse)</td><td class="pt-value">${fmt(tva)}</td></tr>
-            <tr class="pt-total"><td class="pt-total-label">TOTAL TTC${totalApprox ? " (dès)" : ""}</td><td class="pt-total-value">${fmt(total)}</td></tr>
-          </tbody></table></div>
-        </div>` : ""}
-        ${lien ? `<div class="doc-3d">
-          <div style="flex:1">
-            <div class="doc-3d-title">🧊 Votre plan en 3D</div>
-            <div class="doc-3d-text">Tournez autour de votre projet, en vue de dessus ou en perspective, depuis votre smartphone ou votre ordinateur : cliquez sur le bouton ci-dessous, ou scannez le QR code si vous lisez ce document sur papier. Ce lien montre la version V${version?.numero} du plan, telle qu'imprimée ici ; si votre conseiller retravaille le projet, la page vous le signalera et vous proposera la version la plus récente.</div>
-            <a href="${esc(lien)}" target="_blank" rel="noopener noreferrer" class="doc-3d-btn">Ouvrir mon plan en 3D →</a>
-            <div class="doc-3d-url">${esc(lien)}</div>
-          </div>
-          <div class="doc-3d-qr">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(lien)}" alt="QR code plan 3D">
-            <div>Scanner pour ouvrir le plan 3D</div>
-          </div>
-        </div>` : ""}
-        <p class="doc-thanks">Nous nous réjouissons de vous accompagner dans votre projet. Merci pour votre confiance !</p>
-        <p class="doc-terms">${MENTION_LEGALE}.${avecPrix ? " Prix TTC indicatifs au jour de l'impression, sous réserve d'une offre.<br>Les articles, quantités et prix mentionnés peuvent différer de l'offre finale." : "<br>Les articles et quantités mentionnés peuvent différer de l'offre finale."} Seule l'offre signée ou la confirmation de commande fait foi.</p>
-        <div class="doc-footer">
-          <div><strong>Jardin-Confort SA</strong></div>
-          <div>Route de Lavaux 425 · 1095 Lutry · Suisse</div>
-          <div>contact@jardinconfort.ch · +41 21 791 36 71</div>
-          <div>TVA : CHE-100.142.327</div>
-          <div class="doc-footer-url">www.jardin-confort.ch</div>
-        </div>
-      </div>
-      </body></html>`;
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
+    if (!version) { w.close(); return; }
+    w.location.href = `/print/planner/${version.token}?prix=${avecPrix ? 1 : 0}`;
+  }
+
+  // PDF via pdf.co, comme les offres : la route fige la version, fait rendre
+  // /print/planner/<token> par pdf.co, stocke le PDF et renvoie son URL.
+  async function genererPdf(avecPrix = true) {
+    const nom = exigerNom();
+    if (!nom) return;
+    if (scene.items.length === 0) { setMessage("Aucun article à exporter"); return; }
+    setPdfEnCours(true);
+    setMessage("Génération du PDF… (10 à 20 s)");
+    try {
+      const capture = await capturerSansSelection();
+      let id = scene.id;
+      if (!id || modifie) { id = await enregistrer(); if (!id) return; }
+      const r = await fetch(`/api/planner/scenes/${id}/pdf`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prix: avecPrix, capture, dims }),
+      });
+      const j = await r.json();
+      if (j.error) throw new Error(j.details ? `${j.error} — ${j.details}` : j.error);
+      setMessage(`PDF prêt (version V${j.numero})`);
+      window.open(j.pdf_url, "_blank");
+    } catch (e) {
+      setMessage(`PDF : ${(e as Error).message}`);
+    } finally {
+      setPdfEnCours(false);
+    }
   }
 
   // Partage client : lien public en lecture seule (/planner/partage/<token>).
@@ -742,6 +618,8 @@ export default function PlannerPage() {
           <button type="button" onClick={capturer} className={BTN_OFF} title="Télécharger une image PNG de la vue actuelle, avec la mention légale">📷 Capture</button>
           <button type="button" onClick={() => imprimerListe(true)} className={BTN_OFF} title="Fiche imprimable : image de la vue + liste des articles avec photos, cotes et prix indicatifs">🖨 Fiche</button>
           <button type="button" onClick={() => imprimerListe(false)} className={BTN_OFF} title="Même fiche sans aucun prix : articles, quantités, cotes">🖨 Sans prix</button>
+          <button type="button" onClick={() => genererPdf(true)} disabled={pdfEnCours} className={`${BTN} border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25`} title="PDF de la fiche généré par pdf.co, comme les offres">{pdfEnCours ? "…" : "⬇ PDF"}</button>
+          <button type="button" onClick={() => genererPdf(false)} disabled={pdfEnCours} className={`${BTN} border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25`} title="PDF sans prix">{pdfEnCours ? "…" : "⬇ PDF sans prix"}</button>
           <button type="button" onClick={exporterListeAchat} className={`${BTN} border-cyan-500/40 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25`} title="Créer une liste d'achat avec les articles posés (puis brouillon d'offre depuis la page Listes d'achat)">🛒 Liste d'achat</button>
         </div>
       </div>

@@ -1,12 +1,12 @@
 // app/api/planner/scenes/[id]/versions/route.ts  (interne)
-//   POST {motif} → fige la scène ENREGISTRÉE (telle qu'en base) en version
-//                  Vn avec son propre jeton public → { numero, token, url, cree_le }
-//   GET           → liste des versions (numero, motif, cree_le, url)
-// Le lien de version est immuable : c'est celui qu'on imprime.
+//   POST {motif, capture?, dims?} → fige la scène ENREGISTRÉE en version Vn
+//        (ou réutilise la dernière si rien n'a bougé) → { numero, token, url, … }
+//   GET → liste des versions (numero, motif, cree_le, url, pdf)
+// Logique dans lib/planner-versions.ts (partagée avec la route PDF).
 
 import { NextRequest, NextResponse } from "next/server";
-import { randomBytes } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase";
+import { figerVersion } from "@/lib/planner-versions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
   const { data, error } = await supabaseAdmin
     .from("planner_scenes_versions")
-    .select("numero, motif, token, cree_par, cree_le")
+    .select("numero, motif, token, cree_par, cree_le, capture_url, pdf_url, pdf_sans_prix_url")
     .eq("scene_id", id)
     .order("numero", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -30,34 +30,9 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
 export async function POST(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  let motif = "fiche";
-  try { motif = String(((await req.json()) as { motif?: string }).motif || "fiche").slice(0, 20); } catch { /* corps vide */ }
-  const { data: s, error } = await supabaseAdmin
-    .from("planner_scenes")
-    .select("id, nom, terrasse, sol, items, mode, vue, cree_par")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!s) return NextResponse.json({ error: "Scène introuvable" }, { status: 404 });
-
-  const { data: derniere } = await supabaseAdmin
-    .from("planner_scenes_versions")
-    .select("numero")
-    .eq("scene_id", id)
-    .order("numero", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const numero = ((derniere?.numero as number) || 0) + 1;
-  const token = randomBytes(16).toString("hex");
-  const { data: v, error: e2 } = await supabaseAdmin
-    .from("planner_scenes_versions")
-    .insert({
-      scene_id: id, numero, token, motif,
-      nom: s.nom, terrasse: s.terrasse, sol: s.sol || "bois", items: s.items, mode: s.mode, vue: s.vue,
-      cree_par: s.cree_par,
-    })
-    .select("numero, token, cree_le")
-    .single();
-  if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });
-  return NextResponse.json({ numero: v.numero, token: v.token, cree_le: v.cree_le, url: urlPartage(req, v.token) });
+  let body: { motif?: string; capture?: string | null; dims?: Record<string, { l: number; p: number; h: number }> } = {};
+  try { body = await req.json(); } catch { /* corps vide */ }
+  const v = await figerVersion(id, String(body.motif || "fiche"), { capture: body.capture, dims: body.dims });
+  if ("error" in v) return NextResponse.json({ error: v.error }, { status: v.status });
+  return NextResponse.json({ numero: v.numero, token: v.token, cree_le: v.cree_le, url: urlPartage(req, v.token), reutilisee: v.reutilisee, capture_url: v.capture_url });
 }
