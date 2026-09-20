@@ -195,6 +195,18 @@ export default function PlannerPage() {
     setSelected(copie.uid);
   }
 
+  // Regroupement pour les exports : une ligne par fiche ET par variante
+  // (deux Marina de longueurs différentes = deux lignes, pas une qty 2).
+  function regrouper(items: SceneItem[]): Map<string, { it: SceneItem; qty: number }> {
+    const m = new Map<string, { it: SceneItem; qty: number }>();
+    for (const it of items) {
+      const cle = `${it.product_id}|${it.variant_id || ""}`;
+      const e = m.get(cle);
+      if (e) e.qty++; else m.set(cle, { it, qty: 1 });
+    }
+    return m;
+  }
+
   // Correction fine : mémorisée par fiche dans le navigateur, pour que le
   // même modèle de travers arrive corrigé la prochaine fois. La vraie
   // correction se fera dans le pipeline (fichier retourné), ceci est le
@@ -337,11 +349,7 @@ export default function PlannerPage() {
     if (scene.items.length === 0) { setMessage("Aucun article à exporter"); return; }
     const nom = exigerNom();
     if (!nom) return;
-    const parProduit = new Map<number, { it: SceneItem; qty: number }>();
-    for (const it of scene.items) {
-      const e = parProduit.get(it.product_id);
-      if (e) e.qty++; else parProduit.set(it.product_id, { it, qty: 1 });
-    }
+    const parProduit = regrouper(scene.items);
     const lignes = [...parProduit.values()].map(({ it, qty }) => ({
       fournisseur: it.marque || "",
       sku: it.sku || "",
@@ -376,11 +384,7 @@ export default function PlannerPage() {
     const nom = exigerNom();
     if (!nom) return;
     const data = captureRef.current?.();
-    const parProduit = new Map<number, { it: SceneItem; qty: number }>();
-    for (const it of scene.items) {
-      const e = parProduit.get(it.product_id);
-      if (e) e.qty++; else parProduit.set(it.product_id, { it, qty: 1 });
-    }
+    const parProduit = regrouper(scene.items);
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const lignes = [...parProduit.values()].map(({ it, qty }) => {
       const d = dims[it.uid];
