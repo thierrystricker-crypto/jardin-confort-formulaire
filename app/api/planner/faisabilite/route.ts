@@ -21,16 +21,15 @@ export async function GET(req: NextRequest) {
   const slug = (sp.get("slug") || "").trim();
   if (!slug) return NextResponse.json({ error: "slug manquant" }, { status: 400 });
 
+  // select("*") : un select conditionnel fait dérailler l'inférence de types
+  // de supabase-js ; on cast la ligne nous-mêmes.
   const table = type === "brouillon" ? "drafts" : "offres";
-  const { data, error } = await supabaseAdmin
-    .from(table)
-    .select(type === "brouillon" ? "slug, numero_affiche, data, client_nom, client_prenom" : "slug, numero_affiche, type_document, commercial, data, client_nom, client_prenom")
-    .eq("slug", slug)
-    .maybeSingle();
+  const { data: brut, error } = await supabaseAdmin.from(table).select("*").eq("slug", slug).maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data) return NextResponse.json({ error: "Document introuvable" }, { status: 404 });
+  if (!brut) return NextResponse.json({ error: "Document introuvable" }, { status: 404 });
+  const data = brut as unknown as Record<string, unknown>;
 
-  const d = (data.data || {}) as { lines?: LigneBrute[]; nom?: string; prenom?: string };
+  const d = ((data.data as Record<string, unknown>) || {}) as { lines?: LigneBrute[]; nom?: string; prenom?: string };
   const brutes = (d.lines || []).filter((l) => (l.type || "product") === "product" && (l.sku || l.shopifyVariantId));
   const cles = brutes.map((l, i) => ({ id: l.id || `l${i}`, sku: l.sku, shopifyVariantId: l.shopifyVariantId, title: l.title, qty: l.qty }));
   const res = await resoudreLignes3d(cles);
@@ -40,7 +39,7 @@ export async function GET(req: NextRequest) {
     return { ...r, id, title: l.title || r.titre || "", sku_ligne: l.sku || "", qty: Math.max(1, Number(l.qty) || 1), image: l.image || r.image_url || null };
   });
   const avec = lignes.filter((l) => l.has_3d);
-  const rec = data as Record<string, unknown>;
+  const rec = data;
   const client = [rec.client_prenom, rec.client_nom].filter(Boolean).join(" ") || [d.prenom, d.nom].filter(Boolean).join(" ");
   return NextResponse.json({
     type,
