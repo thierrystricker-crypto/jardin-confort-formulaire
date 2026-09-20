@@ -616,7 +616,17 @@ export default function PlannerPage() {
     <main className="flex h-screen flex-col bg-[#1f2125] text-zinc-100">
       {/* Barre du haut */}
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
-        <div className="-mb-4">
+        <div
+          className="-mb-4"
+          onClickCapture={(e) => {
+            // Le lien « Dashboard » est une navigation client Next : beforeunload
+            // ne se déclenche pas. On demande confirmation ici si non enregistré.
+            if (modifie && !window.confirm("Modifications non enregistrées. Quitter le planner sans enregistrer ?")) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
+        >
           <RetourDashboard>
             <a href="/dashboard/modeles-3d" className={CLASSE_BOUTON_NAV}>🧊 Index 3D</a>
           </RetourDashboard>

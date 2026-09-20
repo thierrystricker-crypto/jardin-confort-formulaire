@@ -16,13 +16,24 @@ type Ligne = {
   has_3d: boolean; size_warn: boolean; color_warn: boolean; marque: string | null; par: "variante" | "sku" | null;
 };
 type Reponse = { total: number; avec_3d: number; lignes: Ligne[]; numero: string | null; type_document: string; error?: string };
-type SceneLiee = { id: string; nom: string; updated_at: string; nb_items: number };
+type SceneLiee = {
+  id: string; nom: string; updated_at: string; nb_items: number;
+  derniere_version: { numero: number; token: string; capture_url: string | null; pdf_url: string | null; cree_le: string } | null;
+};
 
 export default function Faisabilite3DCard({ type, slug }: { type: "offre" | "brouillon"; slug: string }) {
   const [rep, setRep] = useState<Reponse | null>(null);
   const [scenes, setScenes] = useState<SceneLiee[]>([]);
   const [ouvert, setOuvert] = useState(false);
   const [erreur, setErreur] = useState("");
+  const [copie, setCopie] = useState<string | null>(null);   // id de scène dont le lien vient d'être copié
+
+  // Lien client (version figée la plus récente) à coller dans un mail
+  async function copierLien(sceneId: string, token: string) {
+    const url = `${window.location.origin}/planner/partage/${token}`;
+    try { await navigator.clipboard.writeText(url); setCopie(sceneId); setTimeout(() => setCopie(null), 2500); }
+    catch { window.prompt("Copie manuelle du lien :", url); }
+  }
 
   useEffect(() => {
     let vivant = true;
@@ -59,7 +70,7 @@ export default function Faisabilite3DCard({ type, slug }: { type: "offre" | "bro
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {rep.avec_3d > 0 && (
-            <a href={hrefPlanner} className="rounded-xl border border-sky-500/40 bg-sky-500/20 px-3 py-1.5 text-sm text-sky-200 hover:bg-sky-500/30">
+            <a href={hrefPlanner} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-sky-500/40 bg-sky-500/20 px-3 py-1.5 text-sm text-sky-200 hover:bg-sky-500/30">
               🪑 Ouvrir le planner avec {rep.avec_3d > 1 ? "ces articles" : "cet article"}
             </a>
           )}
@@ -70,15 +81,39 @@ export default function Faisabilite3DCard({ type, slug }: { type: "offre" | "bro
       </div>
 
       {scenes.length > 0 && (
-        <div className="mt-3 text-sm text-zinc-300">
-          <span className="text-zinc-400">Plan{scenes.length > 1 ? "s" : ""} déjà lié{scenes.length > 1 ? "s" : ""} : </span>
-          {scenes.map((s, i) => (
-            <span key={s.id}>
-              {i > 0 && " · "}
-              <a href={`/planner?scene=${s.id}`} className="text-sky-300 underline">{s.nom}</a>
-              <span className="text-zinc-500"> ({s.nb_items} art.)</span>
-            </span>
-          ))}
+        <div className="mt-4">
+          <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Plan{scenes.length > 1 ? "s" : ""} lié{scenes.length > 1 ? "s" : ""} à ce document</div>
+          <div className="flex flex-wrap gap-3">
+            {scenes.map((s) => {
+              const v = s.derniere_version;
+              return (
+                <div key={s.id} className="w-[260px] overflow-hidden rounded-xl border border-white/10 bg-black/20">
+                  {/* Aperçu léger : la capture PNG de la dernière version, pas de WebGL */}
+                  <a href={`/planner?scene=${s.id}`} target="_blank" rel="noopener noreferrer" title="Ouvrir dans le planner">
+                    {v?.capture_url ? (
+                      <img src={v.capture_url} alt="" loading="lazy" className="block h-[150px] w-full object-cover" />
+                    ) : (
+                      <div className="flex h-[150px] items-center justify-center text-xs text-zinc-500">Aucun aperçu — fais une Fiche ou une Capture</div>
+                    )}
+                  </a>
+                  <div className="p-2 text-xs">
+                    <div className="truncate font-medium text-zinc-100" title={s.nom}>{s.nom}</div>
+                    <div className="text-zinc-500">{s.nb_items} article{s.nb_items > 1 ? "s" : ""}{v ? ` · V${v.numero}` : ""} · {new Date(s.updated_at).toLocaleDateString("fr-CH")}</div>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      <a href={`/planner?scene=${s.id}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-0.5 text-zinc-300 hover:bg-[#34383d]">🪑 Planner</a>
+                      {v && <a href={`/planner/partage/${v.token}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-0.5 text-zinc-300 hover:bg-[#34383d]">🧊 3D client</a>}
+                      {v && (
+                        <button type="button" onClick={() => copierLien(s.id, v.token)} className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-emerald-200 hover:bg-emerald-500/25" title="Copier le lien du plan 3D (version figée) pour l'envoyer au client">
+                          {copie === s.id ? "✓ Lien copié" : "🔗 Copier le lien"}
+                        </button>
+                      )}
+                      {v?.pdf_url && <a href={v.pdf_url} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-violet-500/40 bg-violet-500/15 px-2 py-0.5 text-violet-200">⬇ PDF</a>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

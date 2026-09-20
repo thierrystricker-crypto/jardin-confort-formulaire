@@ -419,3 +419,10 @@ données ni de la sauvegarde des offres / brouillons.
 
 Pas encore : PDF / lien 3D joints automatiquement à l'offre (annexe), badge
 sur les lignes déjà posées dans le formulaire.
+- Retours étape 3 : garde « modifications non enregistrées » sur le lien
+  Dashboard du planner (navigation client Next, `beforeunload` ne joue pas) ;
+  la card ouvre le planner dans un nouvel onglet ; **aperçu léger** des plans
+  liés = capture PNG de la dernière version (`GET /api/planner/scenes?offre_slug=`
+  joint `derniere_version` : numero, token, capture_url, pdf_url), avec
+  boutons Planner / 3D client / PDF / **Copier le lien** (version figée) à
+  coller dans un mail au client.
