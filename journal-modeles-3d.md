@@ -312,3 +312,25 @@ ouvre sur son téléphone ou son PC pour tourner autour de son plan.
   routes publiques. Les GLB sont sur le CDN Shopify, déjà publics.
 
 À suivre sur cette base : QR AR, logo en marge, export PDF, puis lien offres.
+- **Lien et QR du plan 3D client sur les exports** : la fiche imprimable
+  reprend le bloc bleu de l'offre (« 🧊 Votre plan en 3D », bouton, URL, QR
+  qrserver) juste avant le remerciement ; la capture PNG gagne un bandeau
+  plus haut avec le QR en bas à droite (« Votre plan en 3D — Scannez pour
+  tourner autour de votre projet »). `lienPartagePourExport()` enregistre le
+  plan si besoin (confirm ; Annuler = export sans lien) puis crée / relit le
+  jeton. `enregistrer()` renvoie désormais l'id. `GET /api/planner/qr`
+  (interne) proxifie qrserver en same-origin pour pouvoir dessiner le QR dans
+  le canvas sans le tainter. La fenêtre d'impression est ouverte dans le clic
+  (popup blocker) puis remplie après le lien.
+- **Versions figées** (SQL 023, `planner_scenes_versions`) : chaque Fiche /
+  Capture fige la scène enregistrée en Vn avec son propre jeton
+  (`POST /api/planner/scenes/[id]/versions {motif}`) ; le QR / lien imprimé
+  pointe sur cet instantané, immuable. `GET /api/planner/partage/[token]`
+  cherche d'abord une version puis le jeton vivant ; pour une version il
+  renvoie `modifie_depuis` (scène mise à jour après, ou version plus
+  récente) et `url_actuelle` (lien vivant s'il existe). La page client
+  affiche un bandeau : « Version V2 du … telle qu'imprimée » (+ « le projet
+  a été modifié depuis — voir la version actuelle » en ambre) ou, pour le
+  lien vivant, « Plan mis à jour le … Ce lien montre toujours la dernière
+  version du projet : elle peut différer d'un document imprimé ». La fiche
+  mentionne V n dans l'en-tête et dans le bloc 3D ; la capture aussi.

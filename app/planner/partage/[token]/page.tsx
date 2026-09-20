@@ -18,6 +18,11 @@ const BTN = "rounded-xl border px-3 py-1.5 text-xs transition";
 const BTN_OFF = `${BTN} border-white/10 bg-[#2a2d31] text-zinc-300 hover:bg-[#34383d]`;
 const BTN_ON = `${BTN} border-sky-500/40 bg-sky-500/20 text-sky-200`;
 
+function dateCH(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} à ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 function chf(n: number): string {
   return `CHF ${new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)}`;
 }
@@ -29,6 +34,9 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
   const [vue, setVue] = useState<"plan" | "3d">("3d");
   const [mode, setMode] = useState<"couleurs" | "maquette">("couleurs");
   const [erreurs, setErreurs] = useState<Record<string, string>>({});
+  // Version figée (export) ou lien vivant : on le dit au client, car le
+  // projet peut avoir évolué depuis le document qu'il a en main.
+  const [info, setInfo] = useState<{ version: { numero: number; cree_le: string } | null; modifie_depuis?: boolean; url_actuelle?: string | null; updated_at?: string }>({ version: null });
   const captureRef = useRef<(() => string | null) | null>(null);
   const recadrerRef = useRef<(() => void) | null>(null);
 
@@ -38,6 +46,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
       .then((j) => {
         if (j.error) { setErreur(j.error); return; }
         setScene(j.scene);
+        setInfo({ version: j.version || null, modifie_depuis: j.modifie_depuis, url_actuelle: j.url_actuelle, updated_at: j.updated_at });
         setVue(j.scene.vue === "plan" ? "plan" : "3d");
         setMode(j.scene.mode || "couleurs");
       })
@@ -98,6 +107,22 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
           <button type="button" onClick={() => setMode("couleurs")} className={mode === "couleurs" ? BTN_ON : BTN_OFF}>Couleurs</button>
           <button type="button" onClick={() => setMode("maquette")} className={mode === "maquette" ? BTN_ON : BTN_OFF} title="Rendu maquette, sans couleurs">Maquette</button>
         </div>
+      </div>
+
+      {/* Bandeau version / mise à jour */}
+      <div className={`border-b border-white/10 px-3 py-1.5 text-[11px] ${info.version && info.modifie_depuis ? "bg-amber-500/10 text-amber-100" : "bg-white/5 text-zinc-400"}`}>
+        {info.version ? (
+          <>
+            Version V{info.version.numero} du {dateCH(info.version.cree_le)}, telle qu&apos;imprimée sur votre document.
+            {info.modifie_depuis
+              ? <> Le projet a été modifié depuis par votre conseiller{info.url_actuelle ? <> — <a href={info.url_actuelle} className="underline">voir la version actuelle</a></> : "."}</>
+              : " C'est la version la plus récente du projet."}
+          </>
+        ) : (
+          <>
+            Plan mis à jour le {info.updated_at ? dateCH(info.updated_at) : "—"}. Ce lien montre toujours la dernière version du projet : elle peut différer d&apos;un document imprimé ou d&apos;une image reçue précédemment.
+          </>
+        )}
       </div>
 
       <div className="flex min-h-0 flex-1">

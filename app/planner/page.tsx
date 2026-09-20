@@ -285,39 +285,63 @@ export default function PlannerPage() {
     }
   }
 
-  // Capture PNG avec la mention légale
-  function capturer() {
+  // Capture PNG : bandeau blanc en bas avec nom, mention légale, logo et,
+  // si le plan est enregistré, le QR code du plan 3D client (coin bas droit).
+  async function capturer() {
     const nom = exigerNom();
     if (!nom) return;
     const data = captureRef.current?.();
     if (!data) { setMessage("Capture impossible (moteur non prêt)"); return; }
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement("canvas");
-      c.width = img.width;
-      c.height = img.height + 44;
-      const ctx = c.getContext("2d");
-      if (!ctx) return;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, c.width, c.height);
-      ctx.drawImage(img, 0, 0);
-      ctx.fillStyle = "#1f2125";
-      ctx.font = "bold 15px Arial";
-      ctx.fillText(`${nom} — ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m — ${scene.items.length} article${scene.items.length > 1 ? "s" : ""}`, 14, img.height + 20);
+    const version = await lienPartagePourExport("capture");
+    const lien = version?.url || null;
+    // La capture doit être refaite après les confirmations (le canvas WebGL
+    // a pu être redessiné) — on reprend la dernière image.
+    const data2 = captureRef.current?.() || data;
+    const [img, qr] = await Promise.all([
+      chargerImage(data2),
+      lien ? chargerImage(`/api/planner/qr?size=220&data=${encodeURIComponent(lien)}`) : Promise.resolve(null),
+    ]);
+    if (!img) { setMessage("Capture impossible"); return; }
+    const bandeau = qr ? 120 : 44;
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height + bandeau;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0);
+    ctx.fillStyle = "#1f2125";
+    ctx.font = "bold 15px Arial";
+    ctx.fillText(`${nom} — ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m — ${scene.items.length} article${scene.items.length > 1 ? "s" : ""}`, 14, img.height + 20);
+    ctx.fillStyle = "#666";
+    ctx.font = "12px Arial";
+    ctx.fillText(`${MENTION_LEGALE} · Jardin-Confort SA · ${dateCH(new Date().toISOString())}${scene.mode === "maquette" ? " · rendu maquette" : ""}`, 14, img.height + 37);
+    if (qr && lien) {
+      const taille = 100;
+      const x = c.width - taille - 12, y = img.height + 10;
+      ctx.drawImage(qr, x, y, taille, taille);
+      ctx.fillStyle = "#2b8ad1";
+      ctx.font = "bold 12px Arial";
+      ctx.textAlign = "right";
+      ctx.fillText(`Votre plan en 3D (V${version?.numero})`, x - 12, img.height + 62);
       ctx.fillStyle = "#666";
-      ctx.font = "12px Arial";
-      ctx.fillText(`${MENTION_LEGALE} · Jardin-Confort SA · ${dateCH(new Date().toISOString())}${scene.mode === "maquette" ? " · rendu maquette" : ""}`, 14, img.height + 37);
+      ctx.font = "11px Arial";
+      ctx.fillText("Scannez pour tourner autour de votre projet", x - 12, img.height + 78);
+      ctx.textAlign = "left";
+    }
+    {
       const a = document.createElement("a");
       a.href = c.toDataURL("image/png");
       a.download = `planner-${nom.replace(/[^\w\-]+/g, "_")}-${scene.vue}.png`;
       a.click();
-    };
-    img.src = data;
+    }
   }
 
-  async function enregistrer() {
+  async function enregistrer(): Promise<string | null> {
     setEnregistrement(true);
     setMessage("");
+    let idScene: string | null = scene.id;
     try {
       let creePar: string | null = null;
       try { creePar = window.localStorage.getItem("jardi-utilisateur"); } catch { /* ignore */ }
@@ -331,15 +355,52 @@ export default function PlannerPage() {
         if (j.error) throw new Error(j.error);
         setScene((s) => ({ ...s, id: j.id }));
         window.history.replaceState(null, "", `/planner?scene=${j.id}`);
+        idScene = j.id;
       }
       setModifie(false);
       setMessage("Scène enregistrée");
       setTimeout(() => setMessage(""), 2500);
     } catch (e) {
       setMessage((e as Error).message);
+      return null;
     } finally {
       setEnregistrement(false);
     }
+    return idScene;
+  }
+
+  // Lien client pour la fiche et la capture : enregistre le plan si besoin,
+  // puis FIGE une version (V1, V2…) avec son propre jeton — le QR imprimé
+  // montre exactement ce que le document montrait, même si le plan évolue
+  // ensuite (le bouton « Partager » donne, lui, le lien vivant).
+  // Renvoie null si l'utilisateur refuse d'enregistrer ou en cas d'erreur :
+  // l'export se fait alors sans lien 3D.
+  async function lienPartagePourExport(motif: "fiche" | "capture"): Promise<{ url: string; numero: number } | null> {
+    let id = scene.id;
+    if (!id || modifie) {
+      if (!window.confirm("Enregistrer le plan pour y joindre le lien et le QR code du plan 3D client ?\n(Annuler = export sans lien)")) return null;
+      id = await enregistrer();
+      if (!id) return null;
+    }
+    try {
+      const r = await fetch(`/api/planner/scenes/${id}/versions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ motif }) });
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      setMessage(`Version V${j.numero} figée pour ce document`);
+      setTimeout(() => setMessage(""), 3000);
+      return { url: j.url as string, numero: j.numero as number };
+    } catch (e) {
+      setMessage(`Lien 3D non joint : ${(e as Error).message}`);
+      return null;
+    }
+  }
+  function chargerImage(src: string): Promise<HTMLImageElement | null> {
+    return new Promise((res) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => res(null);
+      im.src = src;
+    });
   }
 
   // ── Exports ──
@@ -384,9 +445,16 @@ export default function PlannerPage() {
   // en-tête logo + tableau méta, filets bleus, totaux à droite, pied de
   // page). On reprend les classes et les réglages de ce document pour que
   // le plan 3D ressorte comme une page de plus du même dossier.
-  function imprimerListe() {
+  async function imprimerListe() {
     const nom = exigerNom();
     if (!nom) return;
+    // Ouvrir la fenêtre tout de suite (dans le clic, sinon bloquée par le
+    // navigateur), puis la remplir une fois le lien de partage obtenu.
+    const w = window.open("", "_blank");
+    if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
+    w.document.write("<p style='font-family:sans-serif;padding:24px;color:#666'>Préparation de la fiche…</p>");
+    const version = await lienPartagePourExport("fiche");
+    const lien = version?.url || null;
     const data = captureRef.current?.();
     const parProduit = regrouper(scene.items);
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -465,6 +533,14 @@ export default function PlannerPage() {
         .doc-pricing .pt-total td { border-top: 2px solid ${THEME} !important; border-bottom: 2px solid ${THEME} !important; padding: 8px 4px !important; }
         .pt-total-label { font-weight: 900 !important; font-size: 15px !important; color: ${BLACK} !important; }
         .pt-total-value { font-weight: 900 !important; font-size: 15px !important; color: ${BLACK} !important; text-align: right; white-space: nowrap; }
+        .doc-3d { margin: 0 0 6mm 0; background: linear-gradient(135deg, #EEF6FF 0%, #E8F4FF 100%); border: 1.5px solid ${THEME}; border-radius: 12px; padding: 14px 20px; display: flex; align-items: center; gap: 20px; page-break-inside: avoid; break-inside: avoid; }
+        .doc-3d-title { font-size: 13px; font-weight: 700; color: #0a1551; margin-bottom: 4px; }
+        .doc-3d-text { font-size: 11px; color: #5e678f; line-height: 1.6; margin-bottom: 10px; }
+        .doc-3d-btn { display: inline-block; background: ${THEME}; color: white; border-radius: 20px; padding: 8px 18px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-decoration: none; }
+        .doc-3d-url { margin-top: 6px; font-size: 10px; color: #5e678f; word-break: break-all; }
+        .doc-3d-qr { flex-shrink: 0; text-align: center; }
+        .doc-3d-qr img { width: 110px; height: 110px; border-radius: 8px; border: 1px solid #c7dff5; }
+        .doc-3d-qr div { font-size: 9px; color: #5e678f; margin-top: 4px; }
         .doc-thanks { text-align: center; font-weight: 700; color: ${THEME}; margin: 6mm 0 3px; font-size: 13px; }
         .doc-terms { text-align: center; font-size: 10px; color: #888; line-height: 1.5; margin-bottom: 6mm; }
         .doc-footer { border-top: 1px solid #ddd; padding-top: 6px; text-align: center; font-size: 11px; color: #666; line-height: 1.7; }
@@ -482,7 +558,7 @@ export default function PlannerPage() {
               ${conseiller ? `<tr><td class="doc-meta-label">Conseiller</td><td>${esc(conseiller)}</td></tr>` : ""}
               <tr><td class="doc-meta-label">Terrasse</td><td>${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m</td></tr>
               <tr><td class="doc-meta-label">Articles</td><td>${scene.items.length}</td></tr>
-              ${scene.id ? `<tr><td class="doc-meta-label">N° de plan</td><td>${esc(scene.id.slice(0, 8))}</td></tr>` : ""}
+              ${scene.id ? `<tr><td class="doc-meta-label">N° de plan</td><td>${esc(scene.id.slice(0, 8))}${version ? ` · V${version.numero}` : ""}</td></tr>` : ""}
               ${scene.mode === "maquette" ? `<tr><td class="doc-meta-label">Rendu</td><td>maquette (sans couleurs)</td></tr>` : ""}
             </tbody></table>
           </div>
@@ -511,6 +587,18 @@ export default function PlannerPage() {
             <tr class="pt-total"><td class="pt-total-label">TOTAL TTC${totalApprox ? " (dès)" : ""}</td><td class="pt-total-value">${fmt(total)}</td></tr>
           </tbody></table></div>
         </div>
+        ${lien ? `<div class="doc-3d">
+          <div style="flex:1">
+            <div class="doc-3d-title">🧊 Votre plan en 3D</div>
+            <div class="doc-3d-text">Tournez autour de votre projet, en vue de dessus ou en perspective, depuis votre smartphone ou votre ordinateur : cliquez sur le bouton ci-dessous, ou scannez le QR code si vous lisez ce document sur papier. Ce lien montre la version V${version?.numero} du plan, telle qu'imprimée ici ; si votre conseiller retravaille le projet, la page vous le signalera et vous proposera la version la plus récente.</div>
+            <a href="${esc(lien)}" target="_blank" rel="noopener noreferrer" class="doc-3d-btn">Ouvrir mon plan en 3D →</a>
+            <div class="doc-3d-url">${esc(lien)}</div>
+          </div>
+          <div class="doc-3d-qr">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(lien)}" alt="QR code plan 3D">
+            <div>Scanner pour ouvrir le plan 3D</div>
+          </div>
+        </div>` : ""}
         <p class="doc-thanks">Nous nous réjouissons de vous accompagner dans votre projet. Merci pour votre confiance !</p>
         <p class="doc-terms">${MENTION_LEGALE}. Prix TTC indicatifs au jour de l'impression, sous réserve d'une offre.<br>Les articles, quantités et prix mentionnés peuvent différer de l'offre finale. Seule l'offre signée ou la confirmation de commande fait foi.</p>
         <div class="doc-footer">
@@ -529,8 +617,7 @@ export default function PlannerPage() {
         })();
       </script>
       </body></html>`;
-    const w = window.open("", "_blank");
-    if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
+    w.document.open();
     w.document.write(html);
     w.document.close();
   }
