@@ -275,9 +275,13 @@ Premiers cas : Marina Extremis (5 fiches), Biohort à suivre.
   dès qu'une ligne l'est. `SceneItem.prix_exact` porte la distinction ;
   `CatalogueItem.variant_count` remonte dans le catalogue. Nécessite un
   « Rafraîchir l'index 3D » pour que les prix par variante existent.
-- **Fiche imprimable alignée sur la fiche d'offre/commande** (`app/offre/[slug]`) :
-  DM Sans, couleurs de la charte, colonnes vignette / Article (titre, « Réf. »,
-  cotes 3D, avertissements) / Qté / Prix/pce / Total, lignes alternées,
-  récapitulatif Sous-total → TVA 8.1 % (incluse) → TOTAL TTC en bandeau bleu.
-  Plus de marque en doublon (elle est dans le titre). Regroupement par fiche
-  et variante.
+- **Fiche imprimable calquée sur le document `/print/offre/[slug]`** (pas la
+  page web de l'offre) : Raleway, en-tête logo + « Plan 3D » + tableau méta
+  (date, conseiller, terrasse, articles, n° de plan), nom du plan à droite,
+  filet bleu, capture légendée, tableau « Description de l'article / Qté /
+  Prix/pce / Total » avec « Réf. », cotes 3D et avertissements, totaux à
+  droite (Sous-total → TVA 8.1 % incluse → TOTAL TTC entre filets bleus),
+  remerciement, conditions, pied de page complet (adresse, TVA, site). Plus
+  de marque en doublon (elle est dans le titre). Regroupement par fiche et
+  variante. Impression déclenchée une fois police/logo/vignettes chargés,
+  `print-color-adjust: exact`, bouton « Imprimer » à l'écran.

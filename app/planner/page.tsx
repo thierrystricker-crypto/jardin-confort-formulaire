@@ -379,92 +379,154 @@ export default function PlannerPage() {
   }
 
   // Fiche imprimable : capture de la vue + tableau des articles avec images.
-  // Fiche imprimable, même charte que la fiche d'offre/commande (app/offre/[slug]) :
-  // DM Sans, colonnes vignette / Article / Qté / Prix/pce / Total, « Réf. »
-  // sous le titre, récapitulatif Sous-total → TVA 8.1 % incluse → TOTAL TTC.
+  // Fiche imprimable, calquée sur le document /print/offre/[slug] (Raleway,
+  // en-tête logo + tableau méta, filets bleus, totaux à droite, pied de
+  // page). On reprend les classes et les réglages de ce document pour que
+  // le plan 3D ressorte comme une page de plus du même dossier.
   function imprimerListe() {
     const nom = exigerNom();
     if (!nom) return;
     const data = captureRef.current?.();
     const parProduit = regrouper(scene.items);
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    const fmt = (v: number) => "CHF " + new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+    const fmt = (v: number) => `CHF ${new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)}`;
     const des = (it: SceneItem) => (it.prix_exact ? "" : "dès ");
     const TVA = 0.081;
     const tva = total - total / (1 + TVA);
     const conseiller = (() => { try { return window.localStorage.getItem("jardi-utilisateur") || ""; } catch { return ""; } })();
-    const lignes = [...parProduit.values()].map(({ it, qty }, i) => {
+    const dateDoc = new Date().toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const THEME = "#2b8ad1", BLACK = "#000", GREY = "#333", LIGHT = "#f9f9f9";
+    const lignes = [...parProduit.values()].map(({ it, qty }) => {
       const d = dims[it.uid];
-      return `<tr style="background:${i % 2 === 0 ? "#fff" : "#F8FAFC"}">
-        <td class="img">${it.image_url ? `<img src="${it.image_url}" alt="">` : `<div class="ph"></div>`}</td>
-        <td>
-          <div class="t">${esc(it.titre)}</div>
-          ${it.sku ? `<div class="g">Réf. ${esc(it.sku)}</div>` : ""}
-          ${d ? `<div class="g">Cotes 3D ${Math.round(d.l * 100)} × ${Math.round(d.p * 100)} × H ${Math.round(d.h * 100)} cm</div>` : ""}
-          ${it.size_warn ? '<div class="w">⚠ Taille : rendu 3D indicatif</div>' : ""}${it.color_warn && scene.mode === "couleurs" ? '<div class="w">⚠ Couleur : rendu 3D indicatif</div>' : ""}
+      return `<tr>
+        <td class="td-img">${it.image_url ? `<img src="${it.image_url}" alt="">` : ""}</td>
+        <td class="td-desc">
+          <div class="item-title">${esc(it.titre)}</div>
+          ${it.sku ? `<div class="item-sku">Réf. ${esc(it.sku)}</div>` : ""}
+          ${d ? `<div class="item-sku">Cotes 3D ${Math.round(d.l * 100)} × ${Math.round(d.p * 100)} × H ${Math.round(d.h * 100)} cm</div>` : ""}
+          ${it.size_warn ? '<div class="item-warn">Taille : rendu 3D indicatif</div>' : ""}${it.color_warn && scene.mode === "couleurs" ? '<div class="item-warn">Couleur : rendu 3D indicatif</div>' : ""}
         </td>
-        <td class="c">${qty}</td>
-        <td class="r g">${it.prix != null ? des(it) + fmt(it.prix) : "—"}</td>
-        <td class="r b">${it.prix != null ? des(it) + fmt(it.prix * qty) : "—"}</td>
+        <td class="td-center">× ${qty}</td>
+        <td class="td-right">${it.prix != null ? des(it) + fmt(it.prix) : "—"}</td>
+        <td class="td-total">${it.prix != null ? des(it) + fmt(it.prix * qty) : "—"}</td>
       </tr>`;
     }).join("");
     const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(nom)} — Plan 3D</title>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;700;900&display=swap" rel="stylesheet">
       <style>
-        body{font-family:'DM Sans',system-ui,sans-serif;color:#2A2B2A;margin:28px;font-size:14px}
-        header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;border-bottom:1px solid #E5E7EB;padding-bottom:14px;margin-bottom:18px}
-        header img{height:60px;object-fit:contain}
-        h1{font-size:22px;font-weight:700;margin:0 0 2px;color:#2A2B2A}
-        .sub{color:#6B7280;font-size:13px}
-        .meta{font-size:13px;line-height:1.9;text-align:right;white-space:nowrap} .meta b{font-weight:700}
-        footer{border-top:1px solid #E5E7EB;margin-top:22px;padding-top:12px;display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#6B7280;line-height:1.6}
-        footer .s{font-weight:700;color:#2A2B2A}
-        .card{background:#fff;border:1px solid #E5E7EB;border-radius:18px;overflow:hidden;margin-bottom:16px;page-break-inside:avoid}
-        img.cap{display:block;width:100%;background:#26292e}
-        table{width:100%;border-collapse:collapse}
-        th{font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;padding:10px 8px;text-align:left;border-bottom:1px solid #E5E7EB}
-        td{padding:10px 8px;vertical-align:middle;border-top:1px solid #E5E7EB}
-        td.img{width:72px;text-align:center;padding-left:16px} td img,td .ph{width:64px;height:64px;object-fit:contain;border-radius:8px;background:#F8FAFC}
-        .t{font-weight:600;font-size:14px} .g{color:#6B7280;font-size:12.5px;margin-top:1px} .w{color:#E67E22;font-size:12px;font-weight:600;margin-top:2px}
-        .c{text-align:center;color:#6B7280} .r{text-align:right;white-space:nowrap} .b{font-weight:700;padding-right:20px}
-        th.c{text-align:center} th.r{text-align:right} th.b{padding-right:20px}
-        .recap{width:300px;margin-left:auto;border:1px solid #E5E7EB;border-radius:18px;overflow:hidden;page-break-inside:avoid}
-        .recap .l{display:flex;justify-content:space-between;padding:7px 20px;font-size:14px}
-        .recap .l span:first-child{color:#6B7280}
-        .recap .tva{font-size:12.5px;color:#6B7280;border-top:1px solid #E5E7EB;margin-top:4px}
-        .recap .tot{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:#2B8AD1;color:#fff;font-weight:700}
-        .recap .tot span:last-child{font-size:18px}
-        .foot{margin-top:18px;font-size:11.5px;color:#6B7280;line-height:1.45}
-        @media print{body{margin:10mm} a{color:inherit}}
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Raleway', 'Helvetica Neue', Arial, sans-serif; font-size: 13px; line-height: 1.5; color: ${GREY}; background: white; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+        @page { size: A4 portrait; margin: 14mm 16mm 14mm 14mm; }
+        @media screen {
+          .doc-wrap { max-width: 794px; margin: 0 auto; padding: 20px 28px; box-shadow: 0 0 20px rgba(0,0,0,0.08); }
+          .print-btn { position: fixed; top: 16px; right: 16px; z-index: 100; background: ${THEME}; color: white; border: 0; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
+        }
+        @media print { .print-btn { display: none !important; } }
+        .doc-header { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 6mm; width: 100%; }
+        .doc-header-left { flex: 0 0 46%; }
+        .doc-header-right { flex: 0 0 50%; }
+        .doc-logo { max-width: 175px; max-height: 65px; object-fit: contain; display: block; margin-bottom: 10px; }
+        .doc-type { font-size: 26px; font-weight: 400; color: ${THEME}; margin-bottom: 8px; line-height: 1.1; }
+        .doc-meta-table { border-collapse: collapse; width: 100%; }
+        .doc-meta-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 12px; line-height: 1.35; }
+        .doc-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 44%; }
+        .doc-plan-name { font-size: 19px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin: 6px 0 4px; }
+        .doc-plan-sub { font-size: 12px; color: #666; }
+        .doc-hr { border: 0; border-top: 2px solid ${THEME}; margin: 4mm 0; width: 100%; }
+        .doc-capture { width: 100%; margin-bottom: 6mm; page-break-inside: avoid; break-inside: avoid; }
+        .doc-capture img { display: block; width: 100%; border: 1px solid #e5e7eb; border-radius: 4px; }
+        .doc-capture-caption { font-size: 10px; color: #777; font-style: italic; margin-top: 5px; text-align: center; }
+        .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; }
+        .doc-table thead th { padding: 7px 4px; border-top: 2px solid ${THEME}; border-bottom: 2px solid ${THEME}; font-weight: 700; font-size: 12px; color: ${BLACK}; }
+        .th-left { text-align: left; } .th-center { text-align: center; } .th-right { text-align: right; }
+        .doc-table tbody tr td { padding: 8px 4px; border-bottom: 1px solid #efefef; vertical-align: top; font-size: 12px; }
+        .doc-table tbody tr:nth-child(odd) td { background: ${LIGHT}; }
+        .td-img { width: 56px; vertical-align: middle; text-align: center; }
+        .td-img img { max-width: 52px; max-height: 52px; object-fit: contain; }
+        .td-desc { padding-left: 8px !important; }
+        .td-center { text-align: center; vertical-align: middle; white-space: nowrap; }
+        .td-right { text-align: right; vertical-align: middle; white-space: nowrap; }
+        .td-total { text-align: right; vertical-align: middle; white-space: nowrap; font-weight: 700; color: ${BLACK}; }
+        .item-title { font-weight: 700; color: ${BLACK}; line-height: 1.35; }
+        .item-sku { font-size: 11px; color: #777; margin-top: 2px; font-weight: 400; }
+        .item-warn { font-size: 11px; font-weight: 600; color: #E67E22; margin-top: 3px; }
+        .doc-bottom-wrap { display: flex; gap: 20px; margin-bottom: 8mm; align-items: flex-end; page-break-inside: avoid; break-inside: avoid; }
+        .doc-notes-col { flex: 1; font-size: 11px; color: #666; line-height: 1.55; }
+        .doc-totals-col { flex: 0 0 44%; }
+        .doc-pricing { width: 100%; border-collapse: collapse; }
+        .doc-pricing td { padding: 5px 4px; font-size: 12px; }
+        .doc-pricing tr:nth-child(even) td { background: ${LIGHT}; }
+        .doc-pricing .pt-label { font-weight: 600; color: ${BLACK}; }
+        .doc-pricing .pt-value { text-align: right; white-space: nowrap; color: ${BLACK}; }
+        .doc-pricing .pt-tva td { color: #666; font-size: 11px; }
+        .doc-pricing .pt-total td { border-top: 2px solid ${THEME} !important; border-bottom: 2px solid ${THEME} !important; padding: 8px 4px !important; }
+        .pt-total-label { font-weight: 900 !important; font-size: 15px !important; color: ${BLACK} !important; }
+        .pt-total-value { font-weight: 900 !important; font-size: 15px !important; color: ${BLACK} !important; text-align: right; white-space: nowrap; }
+        .doc-thanks { text-align: center; font-weight: 700; color: ${THEME}; margin: 6mm 0 3px; font-size: 13px; }
+        .doc-terms { text-align: center; font-size: 10px; color: #888; line-height: 1.5; margin-bottom: 6mm; }
+        .doc-footer { border-top: 1px solid #ddd; padding-top: 6px; text-align: center; font-size: 11px; color: #666; line-height: 1.7; }
+        .doc-footer strong { color: ${BLACK}; }
+        .doc-footer-url { font-weight: 700; color: ${THEME}; }
       </style></head><body>
-      <header>
-        <div>
-          <img src="https://www.jardin-confort.ch/cdn/shop/files/logo_JARDIN_CONFORT_shopify_51f35272-8a30-45a2-8718-36fb2af011c8.jpg?v=1736184411&width=480" alt="Jardin-Confort">
-          <h1 style="margin-top:10px">${esc(nom)}</h1>
-          <div class="sub">Plan 3D · terrasse ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m · ${scene.items.length} article${scene.items.length > 1 ? "s" : ""}${scene.mode === "maquette" ? " · rendu maquette" : ""}</div>
+      <button class="print-btn" onclick="window.print()">🖨 Imprimer</button>
+      <div class="doc-wrap">
+        <div class="doc-header">
+          <div class="doc-header-left">
+            <img class="doc-logo" src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698" alt="Jardin-Confort">
+            <div class="doc-type">Plan 3D</div>
+            <table class="doc-meta-table"><tbody>
+              <tr><td class="doc-meta-label">Date</td><td>${dateDoc}</td></tr>
+              ${conseiller ? `<tr><td class="doc-meta-label">Conseiller</td><td>${esc(conseiller)}</td></tr>` : ""}
+              <tr><td class="doc-meta-label">Terrasse</td><td>${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m</td></tr>
+              <tr><td class="doc-meta-label">Articles</td><td>${scene.items.length}</td></tr>
+              ${scene.id ? `<tr><td class="doc-meta-label">N° de plan</td><td>${esc(scene.id.slice(0, 8))}</td></tr>` : ""}
+              ${scene.mode === "maquette" ? `<tr><td class="doc-meta-label">Rendu</td><td>maquette (sans couleurs)</td></tr>` : ""}
+            </tbody></table>
+          </div>
+          <div class="doc-header-right">
+            <div class="doc-plan-name">${esc(nom)}</div>
+            <div class="doc-plan-sub">Composition à l'échelle réalisée avec le planner 3D Jardin-Confort.</div>
+          </div>
         </div>
-        <div class="meta">
-          <div><b>Date : </b>${new Date().toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" })}</div>
-          ${conseiller ? `<div><b>Conseiller : </b>${esc(conseiller)}</div>` : ""}
-          ${scene.id ? `<div><b>Plan n° : </b>${esc(scene.id.slice(0, 8))}</div>` : ""}
+        <hr class="doc-hr">
+        ${data ? `<div class="doc-capture"><img src="${data}" alt=""><div class="doc-capture-caption">Vue ${scene.vue === "plan" ? "de dessus" : "en perspective"} — ${MENTION_LEGALE}</div></div>` : ""}
+        <table class="doc-table">
+          <thead><tr>
+            <th style="width:56px"></th>
+            <th class="th-left">Description de l'article</th>
+            <th class="th-center" style="width:62px">Qté</th>
+            <th class="th-right" style="width:90px">Prix/pce</th>
+            <th class="th-right" style="width:100px">Total</th>
+          </tr></thead>
+          <tbody>${lignes || `<tr><td colspan="5" style="text-align:center;padding:20px;color:#aaa;font-style:italic">Aucun article</td></tr>`}</tbody>
+        </table>
+        <div class="doc-bottom-wrap">
+          <div class="doc-notes-col">${totalApprox ? "« dès » : prix le plus bas de la fiche, la variante exacte (taille, coloris) n'étant pas encore choisie." : ""}</div>
+          <div class="doc-totals-col"><table class="doc-pricing"><tbody>
+            <tr><td class="pt-label">Sous-total articles</td><td class="pt-value">${totalApprox ? "dès " : ""}${fmt(total)}</td></tr>
+            <tr class="pt-tva"><td class="pt-label">TVA 8.1% (incluse)</td><td class="pt-value">${fmt(tva)}</td></tr>
+            <tr class="pt-total"><td class="pt-total-label">TOTAL TTC${totalApprox ? " (dès)" : ""}</td><td class="pt-total-value">${fmt(total)}</td></tr>
+          </tbody></table></div>
         </div>
-      </header>
-      ${data ? `<div class="card"><img class="cap" src="${data}" alt=""></div>` : ""}
-      <div class="card"><table>
-        <thead><tr><th></th><th>Article</th><th class="c" style="width:60px">Qté</th><th class="r" style="width:120px">Prix/pce</th><th class="r b" style="width:130px">Total</th></tr></thead>
-        <tbody>${lignes}</tbody>
-      </table></div>
-      ${total > 0 ? `<div class="recap">
-        <div class="l"><span>Sous-total</span><span>${totalApprox ? "dès " : ""}${fmt(total)}</span></div>
-        <div class="l tva"><span>TVA 8.1% (incluse)</span><span>${fmt(tva)}</span></div>
-        <div class="tot"><span>TOTAL TTC${totalApprox ? " (dès)" : ""}</span><span>${fmt(total)}</span></div>
-      </div>` : ""}
-      <div class="foot">${MENTION_LEGALE}. Prix TTC indicatifs, sous réserve d'une offre${totalApprox ? " ; « dès » = prix le plus bas de la fiche, la variante exacte n'étant pas connue" : ""}.</div>
-      <footer>
-        <div><span class="s">JARDIN-CONFORT SA</span><br>Route de Lavaux 425 · CH-1095 Lutry · T +41 21 791 36 71 · jardin-confort.ch</div>
-        <div style="text-align:right"><span class="s">LE MEILLEUR DU MOBILIER D'EXTÉRIEUR DEPUIS 1960</span><br>© ${new Date().getFullYear()} Jardin-Confort SA</div>
-      </footer>
-      <script>window.onload=function(){setTimeout(function(){window.print()},400)}</script>
+        <p class="doc-thanks">Nous nous réjouissons de vous accompagner dans votre projet. Merci pour votre confiance !</p>
+        <p class="doc-terms">${MENTION_LEGALE}. Prix TTC indicatifs au jour de l'impression, sous réserve d'une offre.<br>Les articles, quantités et prix mentionnés peuvent différer de l'offre finale. Seule l'offre signée ou la confirmation de commande fait foi.</p>
+        <div class="doc-footer">
+          <div><strong>Jardin-Confort SA</strong></div>
+          <div>Route de Lavaux 425 · 1095 Lutry · Suisse</div>
+          <div>contact@jardinconfort.ch · +41 21 791 36 71</div>
+          <div>TVA : CHE-100.142.327</div>
+          <div class="doc-footer-url">www.jardin-confort.ch</div>
+        </div>
+      </div>
+      <script>
+        (function(){
+          var imgs=[].slice.call(document.images).map(function(i){return i.complete?Promise.resolve():new Promise(function(r){i.onload=i.onerror=r;});});
+          var fonts=document.fonts?document.fonts.ready:Promise.resolve();
+          Promise.all(imgs.concat([fonts])).then(function(){setTimeout(function(){window.print()},150);});
+        })();
+      </script>
       </body></html>`;
     const w = window.open("", "_blank");
     if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
