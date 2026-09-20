@@ -367,16 +367,17 @@ export default function PlannerPage() {
     return idScene;
   }
 
-  // Lien client pour la fiche et la capture : enregistre le plan si besoin,
-  // puis FIGE une version (V1, V2…) avec son propre jeton — le QR imprimé
-  // montre exactement ce que le document montrait, même si le plan évolue
-  // ensuite (le bouton « Partager » donne, lui, le lien vivant).
-  // Renvoie null si l'utilisateur refuse d'enregistrer ou en cas d'erreur :
-  // l'export se fait alors sans lien 3D.
+  // Lien client pour la fiche et la capture : ENREGISTRE le plan (sans
+  // demander — un document exporté correspond toujours à un plan enregistré,
+  // et une boîte de dialogue serait de toute façon avalée par Chrome quand la
+  // fenêtre d'impression a pris le focus), puis FIGE une version (V1, V2…)
+  // avec son propre jeton — le QR imprimé montre exactement ce que le
+  // document montrait, même si le plan évolue ensuite (le bouton « Partager »
+  // donne, lui, le lien vivant). Null seulement en cas d'erreur : l'export se
+  // fait alors sans lien 3D.
   async function lienPartagePourExport(motif: "fiche" | "capture"): Promise<{ url: string; numero: number } | null> {
     let id = scene.id;
     if (!id || modifie) {
-      if (!window.confirm("Enregistrer le plan pour y joindre le lien et le QR code du plan 3D client ?\n(Annuler = export sans lien)")) return null;
       id = await enregistrer();
       if (!id) return null;
     }
