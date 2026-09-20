@@ -259,3 +259,19 @@ Premiers cas : Marina Extremis (5 fiches), Biohort à suivre.
   exemplaires. **Vraie correction à faire dans le pipeline** (retourner le
   fichier) ; la liste des `rot_fix` posés donne la liste des fichiers à
   corriger.
+- **Correctif** : le nom saisi dans la boîte « Nom du plan ? » n'arrivait pas
+  dans le fichier PNG / la fiche / la liste (l'état React n'est à jour qu'au
+  rendu suivant) → `exigerNom()` renvoie le nom et les exports l'utilisent
+  directement.
+- **Nom pré-rempli** : un nouveau plan s'appelle « 20.09.2026 Thierry — »
+  (date + conseiller `jardi-utilisateur`) ; tant que rien ne suit le tiret, le
+  premier export demande de compléter (client, projet), avec ce préfixe déjà
+  dans la boîte.
+- **Prix** : la fiche affiche maintenant « Prix unitaire TTC » et « Total
+  ligne » (qty × unitaire). Le prix est **exact** quand la variante est
+  connue (fichier 3D par variante → `variantes_3d[].prix`, nouveau champ
+  rempli par le sync ; ou fiche à variante unique) ; sinon c'est le prix le
+  plus bas de la fiche, affiché « dès CHF … », et le total devient « dès »
+  dès qu'une ligne l'est. `SceneItem.prix_exact` porte la distinction ;
+  `CatalogueItem.variant_count` remonte dans le catalogue. Nécessite un
+  « Rafraîchir l'index 3D » pour que les prix par variante existent.

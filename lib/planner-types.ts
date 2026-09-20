@@ -14,6 +14,7 @@ export type Variante3d = {
   titre: string | null;
   options: Record<string, string>;
   url: string;
+  prix: number | null;
 };
 
 export type CatalogueItem = {
@@ -36,6 +37,7 @@ export type CatalogueItem = {
   bbox_z: number | null;
   sku_1: string | null;
   variant_id_1: string | null;
+  variant_count: number;
   has_size_option: boolean;
   model_level: "fiche" | "variante";
   variantes_3d: Variante3d[];
@@ -47,7 +49,7 @@ const OPTIONS_SANS_GEOMETRIE = /couleur|colou?r|farbe|coloris|tissu|finition|toi
 // Choix proposés pour un article : une entrée par fichier distinct (les
 // variantes de couleur partagent le fichier de leur taille). Le défaut de la
 // fiche est ajouté s'il diffère de tous les fichiers de variante.
-export type ChoixModele = { label: string; url: string; variant_id: string | null; sku: string | null; size_warn: boolean };
+export type ChoixModele = { label: string; url: string; variant_id: string | null; sku: string | null; size_warn: boolean; prix: number | null };
 export function choixModeles(c: CatalogueItem): ChoixModele[] {
   const vus = new Set<string>();
   const out: ChoixModele[] = [];
@@ -57,10 +59,10 @@ export function choixModeles(c: CatalogueItem): ChoixModele[] {
     const parts = Object.entries(v.options || {})
       .filter(([n]) => !OPTIONS_SANS_GEOMETRIE.test(n))
       .map(([, val]) => val);
-    out.push({ label: parts.join(" / ") || v.titre || "Variante", url: v.url, variant_id: v.variant_id, sku: v.sku, size_warn: false });
+    out.push({ label: parts.join(" / ") || v.titre || "Variante", url: v.url, variant_id: v.variant_id, sku: v.sku, size_warn: false, prix: v.prix });
   }
   if (c.url_glb && !vus.has(c.url_glb)) {
-    out.push({ label: out.length ? "Modèle par défaut de la fiche" : "", url: c.url_glb, variant_id: c.variant_id_1, sku: c.sku_1, size_warn: c.has_size_option });
+    out.push({ label: out.length ? "Modèle par défaut de la fiche" : "", url: c.url_glb, variant_id: c.variant_id_1, sku: c.sku_1, size_warn: c.has_size_option, prix: null });
   }
   return out;
 }
@@ -79,7 +81,8 @@ export type SceneItem = {
   size_warn: boolean;       // taille non garantie (option de taille sur la fiche)
   color_warn: boolean;      // couleur non garantie (option de couleur sur la fiche)
   image_url?: string | null;
-  prix?: number | null;
+  prix?: number | null;        // prix unitaire TTC
+  prix_exact?: boolean;        // vrai = prix de la variante posée ; faux = prix le plus bas de la fiche (« dès »)
   sku?: string | null;
   variant_id?: string | null;
 };

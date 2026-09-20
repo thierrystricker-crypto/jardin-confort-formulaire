@@ -100,10 +100,24 @@ export default function PlannerPage() {
     setModifie(true);
   }, [empiler]);
 
-  // Charger ?scene=<id>
+  // Nom proposé pour un nouveau plan : « 20.09.2026 Thierry — » ; le
+  // conseiller complète avec le client / projet au premier export.
+  function nomPropose(): string {
+    let conseiller = "";
+    try { conseiller = window.localStorage.getItem("jardi-utilisateur") || ""; } catch { /* ignore */ }
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}${conseiller ? ` ${conseiller}` : ""} — `;
+  }
+  function nomIncomplet(nom: string): boolean {
+    const n = (nom || "").trim();
+    return !n || n === "Sans titre" || n.endsWith("—");
+  }
+
+  // Charger ?scene=<id>, sinon pré-remplir le nom
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("scene");
-    if (!id) return;
+    if (!id) { setScene((sc) => ({ ...sc, nom: nomPropose() })); setModifie(false); return; }
     fetch(`/api/planner/scenes/${id}`)
       .then((r) => r.json())
       .then((j) => { if (j.scene) { setScene(j.scene); setModifie(false); } else setMessage(j.error || "Scène introuvable"); })
@@ -155,7 +169,10 @@ export default function PlannerPage() {
       size_warn: choix ? choix.size_warn : c.size_mismatch_possible,
       color_warn: c.color_mismatch_possible,
       image_url: c.image_url,
-      prix: c.prix_min,
+      // Prix exact si on connaît la variante (fichier par variante, ou fiche à
+      // variante unique) ; sinon prix le plus bas de la fiche → « dès ».
+      prix: choix?.prix ?? c.prix_min,
+      prix_exact: choix?.prix != null || c.variant_count <= 1,
       sku: choix ? choix.sku : c.sku_1,
       variant_id: choix ? choix.variant_id : c.variant_id_1,
     };
@@ -232,15 +249,17 @@ export default function PlannerPage() {
 
   // Avant un export : le plan doit avoir un vrai nom (il sert de nom de liste
   // d'achat, de fichier PNG et de titre de fiche).
-  function exigerNom(): boolean {
+  // Renvoie le nom à utiliser tout de suite (l'état React n'est mis à jour
+  // qu'au rendu suivant, donc les exports ne doivent pas relire scene.nom).
+  function exigerNom(): string | null {
     const nom = (scene.nom || "").trim();
-    if (nom && nom !== "Sans titre") return true;
-    const saisi = window.prompt("Nom du plan ? (client, projet, terrasse…)", "");
-    if (saisi === null) return false;
-    const propre = saisi.trim();
-    if (!propre) { setMessage("Il faut un nom pour exporter"); return false; }
-    patch({ nom: propre.slice(0, 120) });
-    return true;
+    if (!nomIncomplet(nom)) return nom;
+    const saisi = window.prompt("Nom du plan ? (complète avec le client, le projet, la terrasse…)", nom === "Sans titre" ? nomPropose() : nom || nomPropose());
+    if (saisi === null) return null;
+    const propre = saisi.trim().slice(0, 120);
+    if (nomIncomplet(propre)) { setMessage("Il faut un nom de plan pour exporter"); return null; }
+    patch({ nom: propre });
+    return propre;
   }
 
   // « Recadrer » : repasse en plan et cadre toute la terrasse
@@ -255,7 +274,8 @@ export default function PlannerPage() {
 
   // Capture PNG avec la mention légale
   function capturer() {
-    if (!exigerNom()) return;
+    const nom = exigerNom();
+    if (!nom) return;
     const data = captureRef.current?.();
     if (!data) { setMessage("Capture impossible (moteur non prêt)"); return; }
     const img = new Image();
@@ -270,13 +290,13 @@ export default function PlannerPage() {
       ctx.drawImage(img, 0, 0);
       ctx.fillStyle = "#1f2125";
       ctx.font = "bold 15px Arial";
-      ctx.fillText(`${scene.nom} — ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m — ${scene.items.length} article${scene.items.length > 1 ? "s" : ""}`, 14, img.height + 20);
+      ctx.fillText(`${nom} — ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m — ${scene.items.length} article${scene.items.length > 1 ? "s" : ""}`, 14, img.height + 20);
       ctx.fillStyle = "#666";
       ctx.font = "12px Arial";
       ctx.fillText(`${MENTION_LEGALE} · Jardin-Confort SA · ${dateCH(new Date().toISOString())}${scene.mode === "maquette" ? " · rendu maquette" : ""}`, 14, img.height + 37);
       const a = document.createElement("a");
       a.href = c.toDataURL("image/png");
-      a.download = `planner-${scene.nom.replace(/[^\w\-]+/g, "_")}-${scene.vue}.png`;
+      a.download = `planner-${nom.replace(/[^\w\-]+/g, "_")}-${scene.vue}.png`;
       a.click();
     };
     img.src = data;
@@ -315,7 +335,8 @@ export default function PlannerPage() {
   // est celui de la première variante (le 3D est au niveau fiche).
   async function exporterListeAchat() {
     if (scene.items.length === 0) { setMessage("Aucun article à exporter"); return; }
-    if (!exigerNom()) return;
+    const nom = exigerNom();
+    if (!nom) return;
     const parProduit = new Map<number, { it: SceneItem; qty: number }>();
     for (const it of scene.items) {
       const e = parProduit.get(it.product_id);
@@ -338,7 +359,7 @@ export default function PlannerPage() {
       const r = await fetch("/api/listes-achat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nom: `Planner — ${scene.nom}`, cree_par: creePar, lignes, notes: `Créée depuis le planner 3D${scene.id ? ` (scène ${scene.id})` : ""}. ${MENTION_LEGALE}.` }),
+        body: JSON.stringify({ nom: `Planner — ${nom}`, cree_par: creePar, lignes, notes: `Créée depuis le planner 3D${scene.id ? ` (scène ${scene.id})` : ""}. ${MENTION_LEGALE}.` }),
       });
       const j = await r.json();
       if (j.error) throw new Error(j.error);
@@ -352,7 +373,8 @@ export default function PlannerPage() {
   // Fiche imprimable : capture de la vue + tableau des articles avec images.
   function imprimerListe() {
     if (scene.items.length === 0) { setMessage("Aucun article à imprimer"); return; }
-    if (!exigerNom()) return;
+    const nom = exigerNom();
+    if (!nom) return;
     const data = captureRef.current?.();
     const parProduit = new Map<number, { it: SceneItem; qty: number }>();
     for (const it of scene.items) {
@@ -368,10 +390,11 @@ export default function PlannerPage() {
           ${it.size_warn ? '<br><span class="w">Taille : rendu indicatif</span>' : ""}${it.color_warn && scene.mode === "couleurs" ? '<br><span class="w">Couleur : rendu indicatif</span>' : ""}</td>
         <td class="r">${d ? `${Math.round(d.l * 100)} × ${Math.round(d.p * 100)} × H ${Math.round(d.h * 100)} cm` : ""}</td>
         <td class="r">${qty}</td>
-        <td class="r">${it.prix != null ? chf(it.prix * qty) : ""}</td>
+        <td class="r">${it.prix != null ? `${it.prix_exact ? "" : "dès "}${chf(it.prix)}` : "—"}</td>
+        <td class="r">${it.prix != null ? `${it.prix_exact ? "" : "dès "}${chf(it.prix * qty)}` : "—"}</td>
       </tr>`;
     }).join("");
-    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(scene.nom)} — Planner 3D</title>
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(nom)} — Planner 3D</title>
       <style>
         body{font-family:Arial,sans-serif;color:#1f2125;margin:24px}
         h1{font-size:20px;margin:0 0 4px} .sub{color:#666;font-size:12px;margin-bottom:14px}
@@ -382,12 +405,12 @@ export default function PlannerPage() {
         .foot{margin-top:14px;font-size:11px;color:#666}
         @media print{body{margin:10mm}}
       </style></head><body>
-      <h1>${esc(scene.nom)}</h1>
+      <h1>${esc(nom)}</h1>
       <div class="sub">Terrasse ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m · ${scene.items.length} article${scene.items.length > 1 ? "s" : ""} · ${dateCH(new Date().toISOString())}${scene.mode === "maquette" ? " · rendu maquette" : ""}</div>
       ${data ? `<img class="cap" src="${data}" alt="">` : ""}
-      <table><thead><tr><th></th><th>Article</th><th class="r">Cotes mesurées</th><th class="r">Qté</th><th class="r">Prix indicatif</th></tr></thead><tbody>${lignes}</tbody>
-      ${total > 0 ? `<tfoot><tr><td colspan="4" class="r"><strong>Total indicatif</strong></td><td class="r"><strong>${chf(total)}</strong></td></tr></tfoot>` : ""}</table>
-      <div class="foot">${MENTION_LEGALE}. Prix TTC indicatifs (prix le plus bas de la fiche), sous réserve de l'offre. Jardin-Confort SA, Route de Lavaux 425, 1095 Lutry.</div>
+      <table><thead><tr><th></th><th>Article</th><th class="r">Cotes mesurées</th><th class="r">Qté</th><th class="r">Prix unitaire TTC</th><th class="r">Total ligne</th></tr></thead><tbody>${lignes}</tbody>
+      ${total > 0 ? `<tfoot><tr><td colspan="5" class="r"><strong>Total indicatif${totalApprox ? " (dès)" : ""}</strong></td><td class="r"><strong>${totalApprox ? "dès " : ""}${chf(total)}</strong></td></tr></tfoot>` : ""}</table>
+      <div class="foot">${MENTION_LEGALE}. Prix TTC indicatifs, sous réserve de l'offre${totalApprox ? " ; « dès » = prix le plus bas de la fiche, la variante exacte n'étant pas connue" : ""}. Jardin-Confort SA, Route de Lavaux 425, 1095 Lutry.</div>
       <script>window.onload=function(){setTimeout(function(){window.print()},300)}</script>
       </body></html>`;
     const w = window.open("", "_blank");
@@ -405,7 +428,7 @@ export default function PlannerPage() {
 
   function nouvelleScene() {
     if (modifie && !window.confirm("Abandonner les modifications non enregistrées ?")) return;
-    setScene({ ...SCENE_VIDE, items: [] });
+    setScene({ ...SCENE_VIDE, items: [], nom: nomPropose() });
     passe.current = [];
     futur.current = [];
     setHistoN((n) => n + 1);
@@ -416,6 +439,7 @@ export default function PlannerPage() {
 
   void histoN; // force le rendu des boutons annuler/rétablir
   const total = scene.items.reduce((n, i) => n + (i.prix || 0), 0);
+  const totalApprox = scene.items.some((i) => i.prix != null && !i.prix_exact);
   const nbAvert = scene.items.filter((i) => i.size_warn || i.color_warn).length;
 
   return (
@@ -536,7 +560,7 @@ export default function PlannerPage() {
         <aside className="flex w-[300px] shrink-0 flex-col border-l border-white/10 bg-[#25282c]">
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-xs">
             <span className="uppercase tracking-wide text-zinc-500">Articles posés · {scene.items.length}</span>
-            {total > 0 && <span className="text-zinc-300">{chf(total)}</span>}
+            {total > 0 && <span className="text-zinc-300" title={totalApprox ? "« dès » : au moins un article au prix le plus bas de sa fiche" : "Prix des variantes posées"}>{totalApprox ? "dès " : ""}{chf(total)}</span>}
           </div>
           <div className="flex-1 overflow-y-auto">
             {scene.items.map((i, idx) => {

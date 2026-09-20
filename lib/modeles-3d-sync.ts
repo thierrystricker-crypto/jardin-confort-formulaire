@@ -241,6 +241,7 @@ export type Variante3d = {
   titre: string | null;
   options: Record<string, string>;
   url: string;
+  prix: number | null;
 };
 
 export type RowModele3d = {
@@ -337,6 +338,7 @@ function construireRow(p: LigneProduit, variantes: LigneVariante[], maintenant: 
       titre: v.title || null,
       options: Object.fromEntries((v.selectedOptions || []).map((o) => [o.name, o.value])),
       url: v.m3d!.value,
+      prix: v.price && Number.isFinite(Number(v.price)) ? Number(v.price) : null,
     }));
   const anomaliesInitiales: string[] = [];
   if (!source && variantes3d.length > 0) {
