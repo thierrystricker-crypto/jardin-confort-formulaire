@@ -285,3 +285,30 @@ Premiers cas : Marina Extremis (5 fiches), Biohort à suivre.
   de marque en doublon (elle est dans le titre). Regroupement par fiche et
   variante. Impression déclenchée une fois police/logo/vignettes chargés,
   `print-color-adjust: exact`, bouton « Imprimer » à l'écran.
+
+## 20.09.2026 — Partage client en lecture seule (branche `feature/planner-partage`)
+
+Premier morceau du « lien 3D joint à l'offre » : un lien public que le client
+ouvre sur son téléphone ou son PC pour tourner autour de son plan.
+
+- SQL 022 : `planner_scenes.partage_token` (32 hex, unique, null = pas de
+  partage) + `partage_cree_le`.
+- `POST /api/planner/scenes/[id]/partage` (interne) crée ou renvoie le jeton
+  → `{ token, url }` ; `DELETE` le révoque. L'URL utilise
+  `NEXT_PUBLIC_BASE_URL` si défini, sinon l'origine de la requête.
+- `GET /api/planner/partage/[token]` (PUBLIC, proxy.ts) renvoie la scène
+  épurée : nom, terrasse, sol, mode, vue, items (titre, URL du modèle,
+  position, rotation, image, SKU, prix + drapeau « dès »). Ni `cree_par`, ni
+  id de scène, ni `variant_id`. `Cache-Control: no-store`.
+- `/planner/partage/[token]` (PUBLIC) : même moteur `PlannerCanvas` avec
+  `lectureSeule` (le clic sur un meuble ne sélectionne ni ne déplace, il
+  passe aux OrbitControls) ; logo, nom du plan, Plan/3D, Recadrer,
+  Couleurs/Maquette, liste des articles avec prix et avertissements, mention
+  légale, adresse. Recadrage automatique au chargement. Page d'erreur propre
+  si le jeton est révoqué (« Ce lien n'est plus valable »).
+- Planner : bouton « 🔗 Partager » (scène enregistrée obligatoire) → bandeau
+  vert avec l'URL, Copier, Ouvrir, Révoquer.
+- proxy.ts : `/planner/partage/` et `GET /api/planner/partage/` ajoutés aux
+  routes publiques. Les GLB sont sur le CDN Shopify, déjà publics.
+
+À suivre sur cette base : QR AR, logo en marge, export PDF, puis lien offres.

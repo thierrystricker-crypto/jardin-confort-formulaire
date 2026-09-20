@@ -43,6 +43,7 @@ type Props = {
   onError: (uid: string, message: string) => void;
   captureRef: React.MutableRefObject<(() => string | null) | null>;
   recadrerRef: React.MutableRefObject<(() => void) | null>;   // « Recadrer » : toute la terrasse dans la vue
+  lectureSeule?: boolean;       // page client : on regarde, on tourne, on zoome — on ne touche à rien
 };
 
 function rotationY(item: SceneItem): number {
@@ -188,7 +189,7 @@ function Recadrage({ recadrerRef, terrasse, vue }: { recadrerRef: Props["recadre
 // ─── Scène ────────────────────────────────────────────────────────────────────
 
 export default function PlannerCanvas(props: Props) {
-  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, recadrerRef } = props;
+  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, recadrerRef, lectureSeule = false } = props;
   const [drag, setDrag] = useState<{ uid: string; dx: number; dz: number } | null>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
@@ -289,6 +290,7 @@ export default function PlannerCanvas(props: Props) {
 
       {items.map((item) => {
         const debut = (e: ThreeEvent<PointerEvent>) => {
+          if (lectureSeule) return;   // le clic passe aux OrbitControls
           e.stopPropagation();
           onSelect(item.uid);
           onDragStart();

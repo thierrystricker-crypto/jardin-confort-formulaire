@@ -52,6 +52,7 @@ export default function PlannerPage() {
   const [message, setMessage] = useState("");
   const [enregistrement, setEnregistrement] = useState(false);
   const [listeOuverte, setListeOuverte] = useState(false);
+  const [partage, setPartage] = useState<{ url: string; copie: boolean } | null>(null);   // lien client affiché
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
@@ -534,6 +535,35 @@ export default function PlannerPage() {
     w.document.close();
   }
 
+  // Partage client : lien public en lecture seule (/planner/partage/<token>).
+  // La scène doit être enregistrée (le jeton vit sur la ligne planner_scenes).
+  async function partager() {
+    if (!scene.id || modifie) {
+      setMessage("Enregistre d'abord le plan pour le partager");
+      return;
+    }
+    try {
+      const r = await fetch(`/api/planner/scenes/${scene.id}/partage`, { method: "POST" });
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      setPartage({ url: j.url, copie: false });
+    } catch (e) {
+      setMessage(`Partage impossible : ${(e as Error).message}`);
+    }
+  }
+  async function copierPartage() {
+    if (!partage) return;
+    try { await navigator.clipboard.writeText(partage.url); setPartage({ ...partage, copie: true }); } catch { /* pas de presse-papiers */ }
+  }
+  async function revoquerPartage() {
+    if (!scene.id || !window.confirm("Révoquer le lien ? Le client ne pourra plus ouvrir le plan avec ce lien.")) return;
+    const r = await fetch(`/api/planner/scenes/${scene.id}/partage`, { method: "DELETE" });
+    const j = await r.json();
+    if (j.error) { setMessage(j.error); return; }
+    setPartage(null);
+    setMessage("Lien de partage révoqué");
+  }
+
   async function ouvrirListe() {
     setListeOuverte(true);
     const r = await fetch("/api/planner/scenes");
@@ -607,6 +637,7 @@ export default function PlannerPage() {
           <button type="button" onClick={enregistrer} disabled={enregistrement} className={`${BTN} border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25`}>
             {enregistrement ? "…" : modifie ? "💾 Enregistrer *" : "💾 Enregistrer"}
           </button>
+          <button type="button" onClick={partager} className={BTN_OFF} title="Lien client en lecture seule : il tourne la vue, zoome, bascule Plan/3D — sans rien modifier">🔗 Partager</button>
           <button type="button" onClick={capturer} className={BTN_OFF} title="Télécharger une image PNG de la vue actuelle, avec la mention légale">📷 Capture</button>
           <button type="button" onClick={imprimerListe} className={BTN_OFF} title="Fiche imprimable : image de la vue + liste des articles avec photos, cotes et prix indicatifs">🖨 Fiche</button>
           <button type="button" onClick={exporterListeAchat} className={`${BTN} border-cyan-500/40 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25`} title="Créer une liste d'achat avec les articles posés (puis brouillon d'offre depuis la page Listes d'achat)">🛒 Liste d'achat</button>
@@ -614,6 +645,16 @@ export default function PlannerPage() {
       </div>
 
       {message && <div className="border-b border-white/10 bg-sky-500/10 px-4 py-1.5 text-xs text-sky-200">{message}</div>}
+      {partage && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-emerald-500/10 px-4 py-1.5 text-xs text-emerald-100">
+          <span>Lien client (lecture seule) :</span>
+          <input readOnly value={partage.url} onFocus={(e) => e.currentTarget.select()} className="min-w-[280px] flex-1 rounded-lg border border-white/10 bg-[#1f2125] px-2 py-1 font-mono text-[11px] text-zinc-200" />
+          <button type="button" onClick={copierPartage} className={BTN_OFF}>{partage.copie ? "✓ Copié" : "Copier"}</button>
+          <a href={partage.url} target="_blank" rel="noopener noreferrer" className={BTN_OFF}>Ouvrir ↗</a>
+          <button type="button" onClick={revoquerPartage} className={`${BTN} border-rose-500/40 bg-rose-500/15 text-rose-200`}>Révoquer</button>
+          <button type="button" onClick={() => setPartage(null)} className="ml-auto text-zinc-400 hover:text-white" title="Masquer">✕</button>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1">
         <PlannerCatalogue onAjouter={ajouter} />

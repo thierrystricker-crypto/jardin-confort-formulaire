@@ -33,6 +33,12 @@ function estRoutePublique(pathname: string, method: string): boolean {
   // Impression client — UNIQUEMENT l'offre (les autres prints sont internes)
   if (pathname.startsWith("/print/offre/")) return true;
 
+  // Planner 3D — partage client en lecture seule (20.09.2026) : la page et
+  // sa seule API, GET, identifiée par un jeton aléatoire révocable. Les
+  // modèles GLB sont sur le CDN Shopify, déjà publics.
+  if (pathname.startsWith("/planner/partage/")) return true;
+  if (pathname.startsWith("/api/planner/partage/") && method === "GET") return true;
+
   // API de connexion au verrou
   if (pathname === "/api/acces") return true;
 
@@ -68,6 +74,9 @@ function estRoutePublique(pathname: string, method: string): boolean {
   //   • GET (racine)   → lecture de l'offre par le client         → PUBLIC
   //   • /valider       → validation de l'offre par le client      → PUBLIC
   //   • /qr            → QR de paiement affiché au client          → PUBLIC
+  //   • /wallee-facture → QR-facture rendue par Wallee, servie au client
+  //     depuis sa page de confirmation (05.09.2026). GET seul, lecture
+  //     seule, 404 sans transaction Wallee — même exposition que /qr → PUBLIC
   //   • /signature     → tracé signé, lu par /print/offre/[slug]    → PUBLIC
   //     (GET seul. Public par nécessité : pdf.co rend la page print
   //      depuis ses serveurs, sans cookie — protégée, elle renverrait
@@ -80,6 +89,7 @@ function estRoutePublique(pathname: string, method: string): boolean {
     if (sousChemin === "" && method === "GET") return true;
     if (sousChemin === "/valider") return true;
     if (sousChemin === "/qr") return true;
+    if (sousChemin === "/wallee-facture" && method === "GET") return true;
     if (sousChemin === "/signature" && method === "GET") return true;
     return false;
   }
