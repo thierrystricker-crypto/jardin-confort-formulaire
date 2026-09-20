@@ -57,7 +57,11 @@ const BULK_QUERY = `
         }
         variants {
           edges {
-            node { id sku title price }
+            node {
+              id sku title price
+              selectedOptions { name value }
+              m3d: metafield(namespace: "custom", key: "model_3d_url") { value }
+            }
           }
         }
       }
@@ -82,6 +86,7 @@ export type StatsImport = {
   avec_3d: number;
   model3d: number;
   url: number;
+  par_variante: number;
   anomalies: number;
   supprimes: number;
   options_modifiees: number;
@@ -220,7 +225,24 @@ type LigneProduit = {
   } | null;
 };
 
-type LigneVariante = { id: string; sku: string | null; title: string | null; price: string | null; __parentId: string };
+type LigneVariante = {
+  id: string; sku: string | null; title: string | null; price: string | null;
+  selectedOptions?: { name: string; value: string }[];
+  m3d?: { value: string } | null;
+  __parentId: string;
+};
+
+// Modèle 3D propre à une variante (convention du 19.09 : métachamp
+// custom.model_3d_url au niveau variante, rempli seulement quand la variante
+// change la géométrie — taille, longueur, nombre de places).
+export type Variante3d = {
+  variant_id: string;
+  sku: string | null;
+  titre: string | null;
+  options: Record<string, string>;
+  url: string;
+  prix: number | null;
+};
 
 export type RowModele3d = {
   product_id: number;
@@ -236,6 +258,10 @@ export type RowModele3d = {
   tag_no3dfile: boolean;
   image_url: string | null;
   prix_min: number | null;
+  sku_1: string | null;
+  variant_id_1: string | null;
+  skus: string[];
+  skus_txt: string;
   variant_count: number;
   variant_mode: "sans_variante" | "avec_options";
   option_names: string[];
@@ -244,7 +270,9 @@ export type RowModele3d = {
   has_color_option: boolean;
   options_signature: string;
   options_changed_at: string | null;
-  model_level: "fiche";
+  model_level: "fiche" | "variante";
+  variantes_3d: Variante3d[];
+  variantes_3d_n: number;
   source: "model3d" | "url" | null;
   url_glb: string | null;
   url_usdz: string | null;
@@ -298,6 +326,28 @@ function construireRow(p: LigneProduit, variantes: LigneVariante[], maintenant: 
     nomFichier = nomFichierDepuisUrl(p.m3d.value);
   }
 
+  // Cascade (thème et planner) : variante → Model3d fiche → URL fiche.
+  // La fiche garde son modèle par défaut ; les variantes qui ont leur propre
+  // fichier sont listées à part. Si la fiche n'a aucun défaut mais qu'une
+  // variante a un fichier, on prend celui-ci comme défaut (has_3d vrai).
+  const variantes3d: Variante3d[] = variantes
+    .filter((v) => v.m3d?.value)
+    .map((v) => ({
+      variant_id: v.id,
+      sku: v.sku?.trim() || null,
+      titre: v.title || null,
+      options: Object.fromEntries((v.selectedOptions || []).map((o) => [o.name, o.value])),
+      url: v.m3d!.value,
+      prix: v.price && Number.isFinite(Number(v.price)) ? Number(v.price) : null,
+    }));
+  const anomaliesInitiales: string[] = [];
+  if (!source && variantes3d.length > 0) {
+    source = "url";
+    urlGlb = variantes3d[0].url;
+    nomFichier = nomFichierDepuisUrl(variantes3d[0].url);
+    anomaliesInitiales.push("modèles par variante sans défaut fiche");
+  }
+
   const prix = variantes
     .map((v) => (v.price ? Number(v.price) : NaN))
     .filter((n) => Number.isFinite(n));
@@ -316,6 +366,10 @@ function construireRow(p: LigneProduit, variantes: LigneVariante[], maintenant: 
     tag_no3dfile: tags.some((t) => t.toLowerCase() === "no3dfile"),
     image_url: p.featuredMedia?.preview?.image?.url ?? null,
     prix_min: prix.length ? Math.min(...prix) : null,
+    sku_1: variantes[0]?.sku?.trim() || null,
+    variant_id_1: variantes[0]?.id || null,
+    skus: variantes.map((v) => (v.sku || "").trim()).filter(Boolean),
+    skus_txt: variantes.map((v) => (v.sku || "").trim()).filter(Boolean).join(" "),
     variant_count: variantes.length,
     variant_mode: variantMode,
     option_names: optionNames,
@@ -324,7 +378,9 @@ function construireRow(p: LigneProduit, variantes: LigneVariante[], maintenant: 
     has_color_option: variantMode === "avec_options" && hasColor,
     options_signature: signature,
     options_changed_at: null,     // posé au croisement avec l'existant
-    model_level: "fiche",
+    model_level: variantes3d.length > 0 ? "variante" : "fiche",
+    variantes_3d: variantes3d,
+    variantes_3d_n: variantes3d.length,
     source,
     url_glb: urlGlb,
     url_usdz: urlUsdz,
@@ -333,7 +389,7 @@ function construireRow(p: LigneProduit, variantes: LigneVariante[], maintenant: 
     taille_octets: taille,
     fichier_partage_n: 0,         // posé après comptage
     model_attached_at: null,      // posé au croisement avec l'existant
-    anomalies: [],                // posées à la fin
+    anomalies: anomaliesInitiales, // complétées à la fin
     synced_at: maintenant,
   };
 }
@@ -411,7 +467,7 @@ export async function importerDepuisUrl(url: string): Promise<StatsImport> {
       r.options_changed_at = ex.options_changed_at;
     }
 
-    const a: string[] = [];
+    const a: string[] = [...r.anomalies];   // anomalies déjà posées par construireRow
     if (r.source) {
       if (r.taille_octets && r.taille_octets > 5_000_000) a.push("> 5 Mo");
       else if (r.taille_octets && r.taille_octets > 3_000_000) a.push("> 3 Mo");
@@ -443,6 +499,7 @@ export async function importerDepuisUrl(url: string): Promise<StatsImport> {
     avec_3d: rows.filter((r) => r.source).length,
     model3d: rows.filter((r) => r.source === "model3d").length,
     url: rows.filter((r) => r.source === "url").length,
+    par_variante: rows.filter((r) => r.variantes_3d_n > 0).length,
     anomalies: rows.filter((r) => r.anomalies.length > 0).length,
     supprimes: supprimes || 0,
     options_modifiees: optionsModifiees,

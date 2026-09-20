@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       let req = supabaseAdmin
         .from("modeles_3d")
         .select(COLONNES)
-        .or(`titre.ilike.${motif},handle.ilike.${motif},nom_fichier.ilike.${motif},collection.ilike.${motif}`)
+        .or(`titre.ilike.${motif},handle.ilike.${motif},nom_fichier.ilike.${motif},collection.ilike.${motif},skus_txt.ilike.${motif}`)
         .order("has_3d", { ascending: false })
         .order("titre")
         .limit(100);
