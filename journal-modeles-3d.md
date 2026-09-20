@@ -358,3 +358,30 @@ renvoie le PDF (ou l'enregistre dans Supabase Storage `planner-pdf/` avec
 l'URL sur la version) ; (3) bouton « ⬇ PDF » dans le planner ; (4) plus tard,
 joindre ce PDF à l'offre (étape 3). Proxy : `/print/planner/` accepte le
 `jc_token` comme les autres prints (déjà couvert par `pathname.startsWith("/print/")`).
+
+## 20.09.2026 — Fiche en vraie page print + PDF pdf.co (branche `feature/planner-pdf`)
+
+- SQL 024 : `planner_scenes_versions.capture_url`, `pdf_url`,
+  `pdf_sans_prix_url` ; les cotes 3D mesurées sont figées dans `items[].dims`.
+- `lib/planner-versions.ts` : `figerVersion(sceneId, motif, {capture, dims})`
+  — logique partagée (réutilisation si scène inchangée, dépôt de la capture
+  PNG dans le bucket public `pdfs` sous `planner/<token>.png`).
+- `app/print/planner/[token]/page.tsx` : **composant serveur**, même gabarit
+  que `/print/offre`, lit la version dans Supabase, affiche la capture
+  stockée (pas de WebGL) ; `?prix=0` = sans prix. Un humain l'ouvre avec son
+  cookie, pdf.co avec `jc_token` (déjà couvert par proxy.ts pour `/print/`).
+  Les boutons « Fiche » / « Sans prix » du planner figent la version (avec
+  capture + cotes) puis ouvrent cette page → plus de `about:blank`, plus de
+  HTML généré côté client.
+- `POST /api/planner/scenes/[id]/pdf {prix, capture, dims}` : fige / réutilise
+  la version, pdf.co `convert/from/url` sur la page print (A4, marges 10 mm,
+  `printBackground`), PDF stocké `planner/<token>-avec-prix.pdf` |
+  `-sans-prix.pdf`, URL sur la version ; renvoyé tel quel s'il existe déjà.
+  Boutons « ⬇ PDF » et « ⬇ PDF sans prix » (violet) dans le planner ; ouvre le
+  PDF dans un onglet. `maxDuration = 60`.
+- Variables : `PDFCO_API_KEY`, `DASHBOARD_SESSION_SECRET`, `NEXT_PUBLIC_APP_URL`
+  (déjà en place pour les offres) ; `NEXT_PUBLIC_BASE_URL` optionnel pour les
+  liens de partage.
+- ⚠️ pdf.co doit atteindre la page print : en **preview Vercel** la
+  protection de déploiement peut le bloquer → tester le PDF en prod, ou
+  désactiver la protection sur le preview le temps du test.

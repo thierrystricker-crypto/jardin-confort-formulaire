@@ -85,6 +85,7 @@ export type SceneItem = {
   prix_exact?: boolean;        // vrai = prix de la variante posée ; faux = prix le plus bas de la fiche (« dès »)
   sku?: string | null;
   variant_id?: string | null;
+  dims?: { l: number; p: number; h: number };   // cotes mesurées, posées sur les versions figées (fiche PDF)
 };
 
 export type Terrasse = { largeur: number; profondeur: number };

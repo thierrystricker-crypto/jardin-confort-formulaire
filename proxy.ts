@@ -38,6 +38,9 @@ function estRoutePublique(pathname: string, method: string): boolean {
   // modèles GLB sont sur le CDN Shopify, déjà publics.
   if (pathname.startsWith("/planner/partage/")) return true;
   if (pathname.startsWith("/api/planner/partage/") && method === "GET") return true;
+  // Fiche imprimable d'une version figée (jeton aléatoire, lecture seule) :
+  // publique comme /print/offre/, pour l'envoyer au client ou la rendre par pdf.co.
+  if (pathname.startsWith("/print/planner/")) return true;
 
   // API de connexion au verrou
   if (pathname === "/api/acces") return true;
