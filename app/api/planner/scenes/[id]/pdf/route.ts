@@ -35,7 +35,12 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   const jcToken = encodeURIComponent(process.env.DASHBOARD_SESSION_SECRET || "");
   const printUrl = `${APP_URL}/print/planner/${v.token}?prix=${avecPrix ? 1 : 0}&jc_token=${jcToken}`;
-  const nomFichier = `planner-${v.token}-${avecPrix ? "avec-prix" : "sans-prix"}.pdf`;
+  // Nom de fichier lisible pour le client : « Dupont-terrasse-sud-V2-plan-3D.pdf »
+  const { data: sc } = await supabaseAdmin.from("planner_scenes").select("nom").eq("id", id).maybeSingle();
+  const slug = String(sc?.nom || "plan")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "plan";
+  const nomFichier = `${slug}-V${v.numero}-plan-3D${avecPrix ? "" : "-sans-prix"}.pdf`;
 
   const pdfcoRes = await fetch("https://api.pdf.co/v1/pdf/convert/from/url", {
     method: "POST",
@@ -60,7 +65,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (!pdfRes.ok) return NextResponse.json({ error: "Impossible de télécharger le PDF" }, { status: 500 });
   const buf = await pdfRes.arrayBuffer();
 
-  const chemin = `planner/${v.token}-${avecPrix ? "avec-prix" : "sans-prix"}.pdf`;
+  const chemin = `planner/${v.token.slice(0, 8)}-${nomFichier}`;
   const { error: up } = await supabaseAdmin.storage.from(BUCKET).upload(chemin, buf, { contentType: "application/pdf", upsert: true });
   if (up) return NextResponse.json({ error: `Stockage PDF : ${up.message}` }, { status: 500 });
   const pdfUrl = urlPublique(chemin);

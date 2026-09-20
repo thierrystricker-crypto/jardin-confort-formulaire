@@ -27,6 +27,15 @@ function dateCH(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Zurich" });
 }
 
+// Titre du document (onglet et métadonnée « Title » du PDF pdf.co)
+export async function generateMetadata({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const { token } = await params;
+  const sp = await searchParams;
+  const { data } = await supabaseAdmin.from("planner_scenes_versions").select("nom, numero").eq("token", /^[0-9a-f]{32}$/.test(token) ? token : "").maybeSingle();
+  if (!data) return { title: "Plan 3D — Jardin-Confort" };
+  return { title: `${data.nom} — Plan 3D V${data.numero}${sp.prix === "0" ? " (sans prix)" : ""} — Jardin-Confort` };
+}
+
 export default async function PagePrintPlanner({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { token } = await params;
   const sp = await searchParams;
