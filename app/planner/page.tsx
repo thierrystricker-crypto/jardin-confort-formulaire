@@ -116,9 +116,58 @@ export default function PlannerPage() {
     return !n || n === "Sans titre" || n.endsWith("—");
   }
 
-  // Charger ?scene=<id>, sinon pré-remplir le nom
+  // Depuis une offre / un brouillon / une commande (card « Faisabilité 3D ») :
+  // ?depuis=offre:<slug> ou brouillon:<slug> → nouvelle scène, non enregistrée,
+  // avec les lignes qui ont un modèle 3D (× quantité), liée par offre_slug.
+  // Les pages d'offres ne sont pas touchées : on ne fait que lire.
+  async function chargerDepuisDocument(depuis: string) {
+    const [type, ...reste] = depuis.split(":");
+    const slug = reste.join(":");
+    if (!slug || (type !== "offre" && type !== "brouillon")) return;
+    try {
+      const r = await fetch(`/api/planner/faisabilite?type=${type}&slug=${encodeURIComponent(slug)}`);
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      const items: SceneItem[] = [];
+      const lignes = (j.lignes as Array<{ has_3d: boolean; qty: number; url: string | null; source: "model3d" | "url" | null; title: string; titre: string | null; marque: string | null; image: string | null; prix: number | null; prix_exact: boolean; sku: string | null; variant_id: string | null; size_warn: boolean; color_warn: boolean; product_id: number | null }>).filter((l) => l.has_3d && l.url);
+      // Dépôt en grille sous la terrasse (même logique que caseLibre, sans état)
+      const largeur = SCENE_VIDE.terrasse.largeur, profondeur = SCENE_VIDE.terrasse.profondeur;
+      const nCol = Math.max(1, Math.floor(largeur / 1));
+      let n = 0;
+      for (const l of lignes) {
+        for (let k = 0; k < Math.min(l.qty, 20); k++) {
+          const x = -largeur / 2 + 0.5 + (n % nCol) * 1;
+          const z = profondeur / 2 + 0.9 + Math.floor(n / nCol) * 1;
+          n++;
+          items.push({
+            uid: uid(), product_id: l.product_id || 0, titre: l.titre || l.title, marque: l.marque,
+            url: l.url!, source: l.source || "url", x: +x.toFixed(2), z: +z.toFixed(2), rot: 0,
+            size_warn: l.size_warn, color_warn: l.color_warn, image_url: l.image, prix: l.prix, prix_exact: l.prix_exact,
+            sku: l.sku, variant_id: l.variant_id,
+          });
+        }
+      }
+      const fix = lireRotFix();
+      for (const it of items) { const f = fix[String(it.product_id)]; if (f) it.rot_fix = f; }
+      const libelle = [j.numero, j.client].filter(Boolean).join(" ");
+      setScene({ ...SCENE_VIDE, items, nom: `${nomPropose()}${libelle}`, offre_slug: slug });
+      passe.current = [];
+      futur.current = [];
+      setHistoN((k) => k + 1);
+      setModifie(true);
+      setMessage(`${items.length} article${items.length > 1 ? "s" : ""} posé${items.length > 1 ? "s" : ""} depuis ${j.type_document || "l'offre"} ${j.numero || ""} — ${j.avec_3d}/${j.total} ligne${j.total > 1 ? "s" : ""} avec 3D. Glisse-les sur la terrasse, puis Enregistrer.`);
+    } catch (e) {
+      setMessage(`Pré-remplissage impossible : ${(e as Error).message}`);
+      setScene((sc) => ({ ...sc, nom: nomPropose() }));
+    }
+  }
+
+  // Charger ?scene=<id>, ?depuis=<type>:<slug>, sinon pré-remplir le nom
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("scene");
+    const sp = new URLSearchParams(window.location.search);
+    const depuis = sp.get("depuis");
+    if (depuis) { void chargerDepuisDocument(depuis); return; }
+    const id = sp.get("scene");
     if (!id) { setScene((sc) => ({ ...sc, nom: nomPropose() })); setModifie(false); return; }
     fetch(`/api/planner/scenes/${id}`)
       .then((r) => r.json())

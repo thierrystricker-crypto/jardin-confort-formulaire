@@ -385,3 +385,37 @@ joindre ce PDF à l'offre (étape 3). Proxy : `/print/planner/` accepte le
 - ⚠️ pdf.co doit atteindre la page print : en **preview Vercel** la
   protection de déploiement peut le bloquer → tester le PDF en prod, ou
   désactiver la protection sur le preview le temps du test.
+
+## 21.09.2026 — Étape 3 : lien avec les offres (branche `feature/planner-offres`)
+
+Léger et en lecture seule, comme convenu : aucune modification du modèle de
+données ni de la sauvegarde des offres / brouillons.
+
+- SQL 025 : `modeles_3d.variant_ids text[]` (gid de toutes les variantes de
+  la fiche) + index GIN sur `variant_ids` et `skus`. Le sync les remplit.
+  → « Rafraîchir l'index 3D » après le SQL.
+- `lib/modeles-3d-lookup.ts` : `resoudreLignes3d(lignes)` — retrouve le
+  modèle d'une ligne par **gid de variante** (`shopifyVariantId`, clé fiable),
+  repli par SKU (si unique, ou une seule fiche avec 3D). Cascade variante →
+  fiche ; renvoie url, source, prix (exact si variante connue), avertissements
+  taille / couleur, marque, image.
+- `GET /api/planner/faisabilite?type=offre|brouillon&slug=` : relit
+  `offres.data.lines` / `drafts.data.lines` (lignes `product`), synthèse
+  `avec_3d / total` + détail par ligne. Recalculé à chaque appel → suit V1,
+  V2, V3.
+- `components/Faisabilite3DCard.tsx` : card « 🧊 Faisabilité 3D » — « 5/8
+  articles de cette commande sont disponibles pour un plan-rendu en 3D »,
+  bouton « Ouvrir le planner avec ces articles », détail par ligne (3D / — ,
+  taille ?, couleur ?), marques manquantes, plans déjà liés (scènes avec
+  `offre_slug`). Posée sur `app/dashboard/[slug]` (offres et commandes) et
+  `app/dashboard/draft/[slug]`. Se cache si erreur ou aucune ligne produit.
+- Planner : `?depuis=offre:<slug>` | `brouillon:<slug>` → nouvelle scène
+  (non enregistrée) avec les lignes 3D × quantité posées dans la bande de
+  dépôt, `offre_slug` renseigné, nom « date conseiller — N° client ».
+  `GET /api/planner/scenes?offre_slug=` liste les scènes liées.
+- Badge « 3D » dans le picker du formulaire de brouillon :
+  `/api/shopify-search` renvoie `has3d` (lookup par gid, jamais bloquant),
+  `DraftFormulaire` affiche un petit badge vert à côté du SKU.
+
+Pas encore : PDF / lien 3D joints automatiquement à l'offre (annexe), badge
+sur les lignes déjà posées dans le formulaire.

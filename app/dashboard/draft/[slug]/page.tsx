@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import TransformerModal from "@/components/TransformerModal";
 import AnnexesBlock from "@/components/AnnexesBlock";
 import RetourDashboard from "@/components/RetourDashboard";
+import Faisabilite3DCard from "@/components/Faisabilite3DCard";
 
 type TypeDocument = "Offre" | "Commande";
 
@@ -543,6 +544,9 @@ export default function DashboardDraftDetailPage({
                 </div>
               </section>
             )}
+
+            {/* Faisabilité 3D (planner) — lecture seule (21.09.2026) */}
+            <Faisabilite3DCard type="brouillon" slug={slug} />
 
             <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
               <h2 className="mb-4 text-xl font-semibold">Montants</h2>

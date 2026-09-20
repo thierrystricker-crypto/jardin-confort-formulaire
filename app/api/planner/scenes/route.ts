@@ -11,13 +11,16 @@ import type { Scene } from "@/lib/planner-types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabaseAdmin
+    const offreSlug = (new URL(request.url).searchParams.get("offre_slug") || "").trim();
+    let q = supabaseAdmin
       .from("planner_scenes")
       .select("id, nom, cree_par, offre_slug, items, mode, updated_at")
       .order("updated_at", { ascending: false })
       .limit(50);
+    if (offreSlug) q = q.eq("offre_slug", offreSlug);
+    const { data, error } = await q;
     if (error) throw error;
     const scenes = (data || []).map((s) => ({
       id: s.id as string,
