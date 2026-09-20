@@ -379,43 +379,92 @@ export default function PlannerPage() {
   }
 
   // Fiche imprimable : capture de la vue + tableau des articles avec images.
+  // Fiche imprimable, même charte que la fiche d'offre/commande (app/offre/[slug]) :
+  // DM Sans, colonnes vignette / Article / Qté / Prix/pce / Total, « Réf. »
+  // sous le titre, récapitulatif Sous-total → TVA 8.1 % incluse → TOTAL TTC.
   function imprimerListe() {
-    if (scene.items.length === 0) { setMessage("Aucun article à imprimer"); return; }
     const nom = exigerNom();
     if (!nom) return;
     const data = captureRef.current?.();
     const parProduit = regrouper(scene.items);
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    const lignes = [...parProduit.values()].map(({ it, qty }) => {
+    const fmt = (v: number) => "CHF " + new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+    const des = (it: SceneItem) => (it.prix_exact ? "" : "dès ");
+    const TVA = 0.081;
+    const tva = total - total / (1 + TVA);
+    const conseiller = (() => { try { return window.localStorage.getItem("jardi-utilisateur") || ""; } catch { return ""; } })();
+    const lignes = [...parProduit.values()].map(({ it, qty }, i) => {
       const d = dims[it.uid];
-      return `<tr>
-        <td>${it.image_url ? `<img src="${it.image_url}" alt="">` : ""}</td>
-        <td><strong>${esc(it.titre)}</strong><br><span class="m">${esc(it.marque || "")}${it.sku ? ` · ${esc(it.sku)}` : ""}</span>
-          ${it.size_warn ? '<br><span class="w">Taille : rendu indicatif</span>' : ""}${it.color_warn && scene.mode === "couleurs" ? '<br><span class="w">Couleur : rendu indicatif</span>' : ""}</td>
-        <td class="r">${d ? `${Math.round(d.l * 100)} × ${Math.round(d.p * 100)} × H ${Math.round(d.h * 100)} cm` : ""}</td>
-        <td class="r">${qty}</td>
-        <td class="r">${it.prix != null ? `${it.prix_exact ? "" : "dès "}${chf(it.prix)}` : "—"}</td>
-        <td class="r">${it.prix != null ? `${it.prix_exact ? "" : "dès "}${chf(it.prix * qty)}` : "—"}</td>
+      return `<tr style="background:${i % 2 === 0 ? "#fff" : "#F8FAFC"}">
+        <td class="img">${it.image_url ? `<img src="${it.image_url}" alt="">` : `<div class="ph"></div>`}</td>
+        <td>
+          <div class="t">${esc(it.titre)}</div>
+          ${it.sku ? `<div class="g">Réf. ${esc(it.sku)}</div>` : ""}
+          ${d ? `<div class="g">Cotes 3D ${Math.round(d.l * 100)} × ${Math.round(d.p * 100)} × H ${Math.round(d.h * 100)} cm</div>` : ""}
+          ${it.size_warn ? '<div class="w">⚠ Taille : rendu 3D indicatif</div>' : ""}${it.color_warn && scene.mode === "couleurs" ? '<div class="w">⚠ Couleur : rendu 3D indicatif</div>' : ""}
+        </td>
+        <td class="c">${qty}</td>
+        <td class="r g">${it.prix != null ? des(it) + fmt(it.prix) : "—"}</td>
+        <td class="r b">${it.prix != null ? des(it) + fmt(it.prix * qty) : "—"}</td>
       </tr>`;
     }).join("");
-    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(nom)} — Planner 3D</title>
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(nom)} — Plan 3D</title>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
       <style>
-        body{font-family:Arial,sans-serif;color:#1f2125;margin:24px}
-        h1{font-size:20px;margin:0 0 4px} .sub{color:#666;font-size:12px;margin-bottom:14px}
-        img.cap{max-width:100%;border:1px solid #ddd;border-radius:6px;margin-bottom:16px}
-        table{width:100%;border-collapse:collapse;font-size:12px} th,td{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:middle}
-        td img{width:56px;height:56px;object-fit:contain;background:#fff;border:1px solid #eee;border-radius:4px}
-        .r{text-align:right;white-space:nowrap} .m{color:#666} .w{color:#b45309;font-size:11px}
-        .foot{margin-top:14px;font-size:11px;color:#666}
-        @media print{body{margin:10mm}}
+        body{font-family:'DM Sans',system-ui,sans-serif;color:#2A2B2A;margin:28px;font-size:14px}
+        header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;border-bottom:1px solid #E5E7EB;padding-bottom:14px;margin-bottom:18px}
+        header img{height:60px;object-fit:contain}
+        h1{font-size:22px;font-weight:700;margin:0 0 2px;color:#2A2B2A}
+        .sub{color:#6B7280;font-size:13px}
+        .meta{font-size:13px;line-height:1.9;text-align:right;white-space:nowrap} .meta b{font-weight:700}
+        footer{border-top:1px solid #E5E7EB;margin-top:22px;padding-top:12px;display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#6B7280;line-height:1.6}
+        footer .s{font-weight:700;color:#2A2B2A}
+        .card{background:#fff;border:1px solid #E5E7EB;border-radius:18px;overflow:hidden;margin-bottom:16px;page-break-inside:avoid}
+        img.cap{display:block;width:100%;background:#26292e}
+        table{width:100%;border-collapse:collapse}
+        th{font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;padding:10px 8px;text-align:left;border-bottom:1px solid #E5E7EB}
+        td{padding:10px 8px;vertical-align:middle;border-top:1px solid #E5E7EB}
+        td.img{width:72px;text-align:center;padding-left:16px} td img,td .ph{width:64px;height:64px;object-fit:contain;border-radius:8px;background:#F8FAFC}
+        .t{font-weight:600;font-size:14px} .g{color:#6B7280;font-size:12.5px;margin-top:1px} .w{color:#E67E22;font-size:12px;font-weight:600;margin-top:2px}
+        .c{text-align:center;color:#6B7280} .r{text-align:right;white-space:nowrap} .b{font-weight:700;padding-right:20px}
+        th.c{text-align:center} th.r{text-align:right} th.b{padding-right:20px}
+        .recap{width:300px;margin-left:auto;border:1px solid #E5E7EB;border-radius:18px;overflow:hidden;page-break-inside:avoid}
+        .recap .l{display:flex;justify-content:space-between;padding:7px 20px;font-size:14px}
+        .recap .l span:first-child{color:#6B7280}
+        .recap .tva{font-size:12.5px;color:#6B7280;border-top:1px solid #E5E7EB;margin-top:4px}
+        .recap .tot{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:#2B8AD1;color:#fff;font-weight:700}
+        .recap .tot span:last-child{font-size:18px}
+        .foot{margin-top:18px;font-size:11.5px;color:#6B7280;line-height:1.45}
+        @media print{body{margin:10mm} a{color:inherit}}
       </style></head><body>
-      <h1>${esc(nom)}</h1>
-      <div class="sub">Terrasse ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m · ${scene.items.length} article${scene.items.length > 1 ? "s" : ""} · ${dateCH(new Date().toISOString())}${scene.mode === "maquette" ? " · rendu maquette" : ""}</div>
-      ${data ? `<img class="cap" src="${data}" alt="">` : ""}
-      <table><thead><tr><th></th><th>Article</th><th class="r">Cotes mesurées</th><th class="r">Qté</th><th class="r">Prix unitaire TTC</th><th class="r">Total ligne</th></tr></thead><tbody>${lignes}</tbody>
-      ${total > 0 ? `<tfoot><tr><td colspan="5" class="r"><strong>Total indicatif${totalApprox ? " (dès)" : ""}</strong></td><td class="r"><strong>${totalApprox ? "dès " : ""}${chf(total)}</strong></td></tr></tfoot>` : ""}</table>
-      <div class="foot">${MENTION_LEGALE}. Prix TTC indicatifs, sous réserve de l'offre${totalApprox ? " ; « dès » = prix le plus bas de la fiche, la variante exacte n'étant pas connue" : ""}. Jardin-Confort SA, Route de Lavaux 425, 1095 Lutry.</div>
-      <script>window.onload=function(){setTimeout(function(){window.print()},300)}</script>
+      <header>
+        <div>
+          <img src="https://www.jardin-confort.ch/cdn/shop/files/logo_JARDIN_CONFORT_shopify_51f35272-8a30-45a2-8718-36fb2af011c8.jpg?v=1736184411&width=480" alt="Jardin-Confort">
+          <h1 style="margin-top:10px">${esc(nom)}</h1>
+          <div class="sub">Plan 3D · terrasse ${scene.terrasse.largeur} × ${scene.terrasse.profondeur} m · ${scene.items.length} article${scene.items.length > 1 ? "s" : ""}${scene.mode === "maquette" ? " · rendu maquette" : ""}</div>
+        </div>
+        <div class="meta">
+          <div><b>Date : </b>${new Date().toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" })}</div>
+          ${conseiller ? `<div><b>Conseiller : </b>${esc(conseiller)}</div>` : ""}
+          ${scene.id ? `<div><b>Plan n° : </b>${esc(scene.id.slice(0, 8))}</div>` : ""}
+        </div>
+      </header>
+      ${data ? `<div class="card"><img class="cap" src="${data}" alt=""></div>` : ""}
+      <div class="card"><table>
+        <thead><tr><th></th><th>Article</th><th class="c" style="width:60px">Qté</th><th class="r" style="width:120px">Prix/pce</th><th class="r b" style="width:130px">Total</th></tr></thead>
+        <tbody>${lignes}</tbody>
+      </table></div>
+      ${total > 0 ? `<div class="recap">
+        <div class="l"><span>Sous-total</span><span>${totalApprox ? "dès " : ""}${fmt(total)}</span></div>
+        <div class="l tva"><span>TVA 8.1% (incluse)</span><span>${fmt(tva)}</span></div>
+        <div class="tot"><span>TOTAL TTC${totalApprox ? " (dès)" : ""}</span><span>${fmt(total)}</span></div>
+      </div>` : ""}
+      <div class="foot">${MENTION_LEGALE}. Prix TTC indicatifs, sous réserve d'une offre${totalApprox ? " ; « dès » = prix le plus bas de la fiche, la variante exacte n'étant pas connue" : ""}.</div>
+      <footer>
+        <div><span class="s">JARDIN-CONFORT SA</span><br>Route de Lavaux 425 · CH-1095 Lutry · T +41 21 791 36 71 · jardin-confort.ch</div>
+        <div style="text-align:right"><span class="s">LE MEILLEUR DU MOBILIER D'EXTÉRIEUR DEPUIS 1960</span><br>© ${new Date().getFullYear()} Jardin-Confort SA</div>
+      </footer>
+      <script>window.onload=function(){setTimeout(function(){window.print()},400)}</script>
       </body></html>`;
     const w = window.open("", "_blank");
     if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
