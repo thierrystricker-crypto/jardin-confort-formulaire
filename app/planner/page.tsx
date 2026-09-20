@@ -269,7 +269,7 @@ export default function PlannerPage() {
     if (!nomIncomplet(nom)) return nom;
     const saisi = window.prompt("Nom du plan ? (complète avec le client, le projet, la terrasse…)", nom === "Sans titre" ? nomPropose() : nom || nomPropose());
     if (saisi === null) return null;
-    const propre = saisi.trim().slice(0, 120);
+    const propre = saisi.trim().replace(/—(?=\S)/, "— ").slice(0, 120);   // « —dedon » → « — dedon »
     if (nomIncomplet(propre)) { setMessage("Il faut un nom de plan pour exporter"); return null; }
     patch({ nom: propre });
     return propre;
@@ -290,13 +290,11 @@ export default function PlannerPage() {
   async function capturer() {
     const nom = exigerNom();
     if (!nom) return;
-    const data = captureRef.current?.();
-    if (!data) { setMessage("Capture impossible (moteur non prêt)"); return; }
+    if (!captureRef.current) { setMessage("Capture impossible (moteur non prêt)"); return; }
     const version = await lienPartagePourExport("capture");
     const lien = version?.url || null;
-    // La capture doit être refaite après les confirmations (le canvas WebGL
-    // a pu être redessiné) — on reprend la dernière image.
-    const data2 = captureRef.current?.() || data;
+    const data2 = await capturerSansSelection();
+    if (!data2) { setMessage("Capture impossible"); return; }
     const [img, qr] = await Promise.all([
       chargerImage(data2),
       lien ? chargerImage(`/api/planner/qr?size=220&data=${encodeURIComponent(lien)}`) : Promise.resolve(null),
@@ -386,13 +384,21 @@ export default function PlannerPage() {
       const r = await fetch(`/api/planner/scenes/${id}/versions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ motif }) });
       const j = await r.json();
       if (j.error) throw new Error(j.error);
-      setMessage(`Version V${j.numero} figée pour ce document`);
+      setMessage(j.reutilisee ? `Plan inchangé : version V${j.numero} réutilisée` : `Version V${j.numero} figée pour ce document`);
       setTimeout(() => setMessage(""), 3000);
       return { url: j.url as string, numero: j.numero as number };
     } catch (e) {
       setMessage(`Lien 3D non joint : ${(e as Error).message}`);
       return null;
     }
+  }
+  // Capture propre : on désélectionne (le halo bleu sous le meuble est un
+  // objet de la scène 3D, il partirait dans l'image) et on attend deux
+  // rendus avant de lire le canvas.
+  async function capturerSansSelection(): Promise<string | null> {
+    setSelected(null);
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    return captureRef.current?.() || null;
   }
   function chargerImage(src: string): Promise<HTMLImageElement | null> {
     return new Promise((res) => {
@@ -455,7 +461,7 @@ export default function PlannerPage() {
     w.document.write("<p style='font-family:sans-serif;padding:24px;color:#666'>Préparation de la fiche…</p>");
     const version = await lienPartagePourExport("fiche");
     const lien = version?.url || null;
-    const data = captureRef.current?.();
+    const data = await capturerSansSelection();
     const parProduit = regrouper(scene.items);
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const fmt = (v: number) => `CHF ${new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)}`;
@@ -686,6 +692,7 @@ export default function PlannerPage() {
         <input
           value={scene.nom}
           onChange={(e) => patch({ nom: e.target.value })}
+          onBlur={(e) => { const v = e.target.value.replace(/—(?=\S)/, "— "); if (v !== e.target.value) patch({ nom: v }, false); }}
           className="w-56 rounded-xl border border-white/10 bg-[#2a2d31] px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-sky-500/50"
           placeholder="Nom de la scène"
         />
