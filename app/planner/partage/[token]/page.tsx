@@ -36,7 +36,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
   const [erreurs, setErreurs] = useState<Record<string, string>>({});
   // Version figée (export) ou lien vivant : on le dit au client, car le
   // projet peut avoir évolué depuis le document qu'il a en main.
-  const [info, setInfo] = useState<{ version: { numero: number; cree_le: string } | null; modifie_depuis?: boolean; url_actuelle?: string | null; updated_at?: string }>({ version: null });
+  const [info, setInfo] = useState<{ version: { numero: number; cree_le: string } | null; modifie_depuis?: boolean; url_actuelle?: string | null; updated_at?: string; sans_prix?: boolean }>({ version: null });
   const captureRef = useRef<(() => string | null) | null>(null);
   const recadrerRef = useRef<(() => void) | null>(null);
 
@@ -46,7 +46,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
       .then((j) => {
         if (j.error) { setErreur(j.error); return; }
         setScene(j.scene);
-        setInfo({ version: j.version || null, modifie_depuis: j.modifie_depuis, url_actuelle: j.url_actuelle, updated_at: j.updated_at });
+        setInfo({ version: j.version || null, modifie_depuis: j.modifie_depuis, url_actuelle: j.url_actuelle, updated_at: j.updated_at, sans_prix: Boolean(j.sans_prix) });
         setVue(j.scene.vue === "plan" ? "plan" : "3d");
         setMode(j.scene.mode || "couleurs");
       })
@@ -153,7 +153,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
         <aside className="hidden w-[300px] shrink-0 flex-col border-l border-white/10 bg-[#25282c] md:flex">
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-xs">
             <span className="uppercase tracking-wide text-zinc-500">Articles · {scene.items.length}</span>
-            {total > 0 && <span className="text-zinc-300">{totalApprox ? "dès " : ""}{chf(total)}</span>}
+            {total > 0 && !info.sans_prix && <span className="text-zinc-300">{totalApprox ? "dès " : ""}{chf(total)}</span>}
           </div>
           <div className="flex-1 overflow-y-auto">
             {lignes.map((l, idx) => (
@@ -164,7 +164,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
                 <div className="min-w-0 flex-1">
                   <div className="line-clamp-2 text-[12px] leading-tight text-zinc-100">{l.titre}</div>
                   <div className="mt-0.5 text-[11px] text-zinc-500">
-                    {l.qty > 1 ? `× ${l.qty} · ` : ""}{l.prix != null ? `${l.prix_exact ? "" : "dès "}${chf(l.prix)}` : ""}
+                    {l.qty > 1 ? `× ${l.qty}` : ""}{l.qty > 1 && l.prix != null && !info.sans_prix ? " · " : ""}{l.prix != null && !info.sans_prix ? `${l.prix_exact ? "" : "dès "}${chf(l.prix)}` : ""}
                   </div>
                   {(l.size_warn || (l.color_warn && mode === "couleurs")) && (
                     <div className="mt-0.5 text-[10px] text-amber-300">
@@ -179,7 +179,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
             )}
           </div>
           <div className="border-t border-white/10 px-3 py-2 text-[10px] leading-relaxed text-zinc-500">
-            Prix TTC indicatifs du webshop, sous réserve d&apos;une offre. {MENTION_LEGALE}.<br />
+            {info.sans_prix ? "Les prix figurent sur votre offre ou votre commande. " : "Prix TTC indicatifs du webshop, sous réserve d'une offre. "}{MENTION_LEGALE}.<br />
             Jardin-Confort SA · Route de Lavaux 425 · 1095 Lutry · +41 21 791 36 71
           </div>
         </aside>

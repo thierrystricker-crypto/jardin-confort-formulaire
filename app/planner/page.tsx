@@ -521,9 +521,21 @@ export default function PlannerPage() {
   // Fiche imprimable = vraie page /print/planner/<token> (composant serveur,
   // même gabarit que /print/offre) sur une VERSION figée avec sa capture et
   // ses cotes. Un humain l'ouvre avec son cookie ; pdf.co la rend avec jc_token.
+  // Plan lié à une offre / commande : les prix du planner sont ceux du webshop,
+  // pas ceux du document. On oriente vers la version sans prix.
+  function garderSansPrixSiLie(avecPrix: boolean): boolean {
+    if (!avecPrix || !scene.offre_slug) return avecPrix;
+    const ok = window.confirm(
+      `Ce plan est lié au document ${scene.offre_slug}.\nLes prix du planner sont ceux du webshop, pas ceux de l'offre ou de la commande : le client ne doit pas les voir.\n\nOK = ouvrir la version SANS prix (à partager)\nAnnuler = ne rien faire`,
+    );
+    if (!ok) throw new Error("annulé");
+    return false;
+  }
+
   async function imprimerListe(avecPrix = true) {
     const nom = exigerNom();
     if (!nom) return;
+    try { avecPrix = garderSansPrixSiLie(avecPrix); } catch { return; }
     if (scene.items.length === 0) { setMessage("Aucun article à imprimer"); return; }
     const w = window.open("", "_blank");           // dans le clic, sinon bloqué
     if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
@@ -538,6 +550,7 @@ export default function PlannerPage() {
   async function genererPdf(avecPrix = true) {
     const nom = exigerNom();
     if (!nom) return;
+    try { avecPrix = garderSansPrixSiLie(avecPrix); } catch { return; }
     if (scene.items.length === 0) { setMessage("Aucun article à exporter"); return; }
     setPdfEnCours(true);
     setMessage("Génération du PDF… (10 à 20 s)");
@@ -675,9 +688,9 @@ export default function PlannerPage() {
           </button>
           <button type="button" onClick={partager} className={BTN_OFF} title="Lien client en lecture seule : il tourne la vue, zoome, bascule Plan/3D — sans rien modifier">🔗 Partager</button>
           <button type="button" onClick={capturer} className={BTN_OFF} title="Télécharger une image PNG de la vue actuelle, avec la mention légale">📷 Capture</button>
-          <button type="button" onClick={() => imprimerListe(true)} className={BTN_OFF} title="Fiche imprimable : image de la vue + liste des articles avec photos, cotes et prix indicatifs">🖨 Fiche</button>
+          <button type="button" onClick={() => imprimerListe(true)} className={scene.offre_slug ? `${BTN} border-amber-500/30 bg-amber-500/5 text-zinc-500` : BTN_OFF} title={scene.offre_slug ? "Plan lié à une offre / commande : préférer la version sans prix" : "Fiche imprimable : image de la vue + liste des articles avec photos, cotes et prix indicatifs"}>🖨 Fiche</button>
           <button type="button" onClick={() => imprimerListe(false)} className={BTN_OFF} title="Même fiche sans aucun prix : articles, quantités, cotes">🖨 Sans prix</button>
-          <button type="button" onClick={() => genererPdf(true)} disabled={pdfEnCours} className={`${BTN} border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25`} title="PDF de la fiche généré par pdf.co, comme les offres">{pdfEnCours ? "…" : "⬇ PDF"}</button>
+          <button type="button" onClick={() => genererPdf(true)} disabled={pdfEnCours} className={scene.offre_slug ? `${BTN} border-amber-500/30 bg-amber-500/5 text-zinc-500` : `${BTN} border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25`} title={scene.offre_slug ? "Plan lié à une offre / commande : préférer le PDF sans prix" : "PDF de la fiche généré par pdf.co, comme les offres"}>{pdfEnCours ? "…" : "⬇ PDF"}</button>
           <button type="button" onClick={() => genererPdf(false)} disabled={pdfEnCours} className={`${BTN} border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25`} title="PDF sans prix">{pdfEnCours ? "…" : "⬇ PDF sans prix"}</button>
           <button type="button" onClick={exporterListeAchat} className={`${BTN} border-cyan-500/40 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25`} title="Créer une liste d'achat avec les articles posés (puis brouillon d'offre depuis la page Listes d'achat)">🛒 Liste d'achat</button>
         </div>

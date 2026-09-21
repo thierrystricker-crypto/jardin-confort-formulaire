@@ -426,3 +426,9 @@ sur les lignes déjà posées dans le formulaire.
   joint `derniere_version` : numero, token, capture_url, pdf_url), avec
   boutons Planner / 3D client / PDF / **Copier le lien** (version figée) à
   coller dans un mail au client.
+- **Plan lié à une offre / commande → pas de prix webshop côté client** :
+  la page `/planner/partage/[token]` masque prix et total (API publique :
+  `sans_prix` = `offre_slug` non nul, pour les versions comme pour le lien
+  vivant) et affiche « Les prix figurent sur votre offre ou votre commande » ;
+  dans le planner, « Fiche » et « ⬇ PDF » (avec prix) passent en gris ambre
+  et, au clic, proposent d'ouvrir la version sans prix (OK) ou d'annuler.
