@@ -77,3 +77,56 @@ Tout ceci vit dans le portail Wallee, pas dans le dépôt — consigné ici pour
 4. Page de validation / confirmation / mail Make / mail pré-écrit : servir la QR-facture Wallee à la place du pdf4me — via une route publique en lecture seule.
 5. Lien « solde » : seconde transaction sur la même commande (`total_ttc − acompte`), badge distinguant acompte et solde.
 6. Vérifier la migration ISO 2019 avec Wallee avant le 16.11.2026 (P1-54).
+
+---
+
+# Chantier « Wallee v2 » — TWINT/PostFinance/PayPal, solde, QR-facture sur la page client (05.09.2026)
+
+Branche `feat/wallee-v2-twint-solde-facture`. Suite directe du chantier du 04.09. **État : code écrit, migration 016 à exécuter, smoke test sur CMD-80666 à faire** (voir § Protocole).
+
+## Pivot du cadrage (04.09 soir → 05.09)
+
+- **Les cartes de crédit ne passeront pas par Wallee.** Wallee conditionne l'activation Visa/MasterCard à la reprise de l'acquiring cartes du webshop Shopify, à un taux refusé. Le « lien carte » prévu au cadrage n'aurait de toute façon offert que TWINT / PostFinance / PayPal : il est renommé honnêtement. Les cartes iront chez un autre prestataire : **Saferpay** (Worldline, taux 1,7 %) si la licence *Easy* / *Go Card ePayments* (Payment API + Management API) est accessible à un tarif raisonnable — demande envoyée à Worldline ; sinon **Stripe** (2,9 %, Checkout Session + webhook, un lien « Page de paiement Jardin-Confort SA » existe déjà mais à montant libre). La licence Saferpay actuelle *GoCard SPG* n'a **ni Payment API ni Management API** : liens à la main seulement. Chantier cartes = séparé, plus tard. Stripe mis de côté.
+- **Règle métier nouvelle : les liens QR et TWINT d'une même commande vivent en parallèle.** Cas vécu : le client reçoit le QR, demande un lien carte/TWINT, dépasse sa limite, revient payer par QR — le QR doit rester actif. « Une seule transaction vivante par commande » devient **« une seule vivante par (commande, mode, tranche) »**.
+- **Aucune décomptabilisation**, ni bouton ni automatisme : une QR-facture non payée qui traîne chez le client « est une facture papier dans un tiroir ». (L'idée « décomptabiliser la QR sœur quand un TWINT passe FULFILL » est notée, pas retenue.)
+- **Le solde est une seconde transaction QR**, pas une réutilisation de celle de l'acompte : une transaction Wallee porte un montant fixe et se ferme une fois payée ; un second virement sur le même QR arriverait sur le compte mais tomberait en tâche manuelle chez Wallee, sans webhook. Le solde est **créé à la demande par le vendeur** (le « payable jusqu'au » +30 j part de la création : le créer à la conversion ferait une facture échue avant la livraison).
+- **Correction d'un constat du cadrage** : `/offre/[cmd-slug]` (la `successUrl`) affiche bien les deux boutons PDF + QR — une commande garde `statut = "Acceptée"`, et le bloc l. 723 teste `isAcceptee`. `successUrl` inchangée.
+
+## Ids relevés dans le portail (space 48617, 05.09.2026)
+
+| Configuration | id | Usage |
+|---|---|---|
+| TWINT (connecteur #336339) | 242531 | mode `twint` |
+| PayPal | 243712 | mode `twint` |
+| Carte PostFinance | 243713 | mode `twint` |
+| PostFinance e-finance | 243714 | mode `twint` |
+| PostFinance Pay | 243715 | mode `twint` |
+| Virement bancaire (QR) | 243711 | mode `qr` |
+| Facture (QR-Facture PostFinance) | 255090 | **exclu en dur** |
+| Carte de crédit/débit | 242532 | contrat non actif, exclu |
+
+## Livré (code)
+
+- **`docs/sql/016-transactions-wallee-mode-tranche.sql`** : colonnes `mode` (`qr` | `twint` | `carte` réservé) et `tranche` (`acompte` | `solde`), DEFAULT `qr` / `acompte` (les lignes existantes sont toutes des QR d'acompte), CHECK, index `(commande_slug, mode, tranche, created_at desc)`. **À exécuter au SQL Editor avant de déployer** : la route sélectionne ces colonnes.
+- **`app/api/wallee-transactions/route.ts`** : `POST { slug, mode?, tranche?, force? }` ; `METHODES_TWINT = [242531, 243712, 243713, 243714, 243715]` (env `WALLEE_METHODES_TWINT` en CSV, 255090 retiré quoi qu'il arrive) ; montant du solde = `total_ttc − acompte`, 409 si le document n'est pas en « 50% » ; règle une-vivante par (mode, tranche) ; `lineItem.uniqueId = numero-tranche`, libellé « Solde à la livraison » ; `metaData` gagne `mode`, `tranche`. `GET ?slug=` relit l'état de la dernière ligne de chaque (mode, tranche) non terminale et joint `payment_page_url` à chaque ligne payable ; renvoie `montant_acompte`, `montant_solde`, `solde_applicable`. `GET &document=facture&tranche=` : la QR-facture de la dernière transaction **QR** de la tranche (AUTHORIZED/COMPLETED/FULFILL).
+- **`components/WalleeLienPaiement.tsx`** : boutons de création par (mode, tranche) absents ou en échec — « Créer QR acompte », « Créer TWINT / PostFinance / PayPal acompte », et les deux « solde » si `solde_applicable` ; une ligne d'état par transaction courante (pastille, montant, n°, Ouvrir / Copier si payable, QR-facture si QR validée, « Montant modifié » si le montant de la tranche a changé, compteur d'antérieures). Libellé COMPLETED distinct par mode (« QR-facture émise — en attente du virement » vs « Paiement annoncé »).
+- **`app/api/acomptes-wallee/route.ts`** + **`components/AcompteWalleeBadge.tsx`** : chaque acompte FULFILL est enrichi de `mode`/`tranche` relus dans `transactions_wallee` (jointure par `wallee_transaction_id`) → badge « ✅ Acompte reçu » / « ✅ Solde reçu » / « ✅ Paiement reçu » (transaction inconnue de l'app, ex. webshop). Webhook **non touché**.
+- **`app/api/offres/[slug]/wallee-facture/route.ts`** (nouvelle, **publique, GET seul, lecture seule**) : résout le slug (commande, ou offre convertie → commande liée par `numero_commande`, comme le GET racine), cherche la dernière transaction QR de la tranche avec facture ; `?format=json` → `{ disponible, tranche, wallee_transaction_id, state, montant }` ; sinon le PDF Wallee, `no-store`. 404 sans transaction. Déclarée dans **`proxy.ts`** juste sous `/qr` (`/wallee-facture` && GET).
+- **`app/offre/[slug]/page.tsx`** et **`app/offre/[slug]/confirmation/page.tsx`** : au chargement, un `fetch ?format=json` pour `acompte` et `solde` ; si la QR-facture d'acompte existe, `handleQrDownload` ouvre `/api/offres/[slug]/wallee-facture?tranche=acompte` (libellé « Télécharger la QR-facture [de l'acompte] ») ; sinon **code pdf4me intact**. Un bouton « QR-facture du solde » apparaît quand elle existe. `api/offres/[slug]/qr`, `valider/route.ts`, Make : non touchés.
+
+## Protocole de test (preview Vercel, cobaye CMD-80666 / `cmd-80666-l8i6x` UNIQUEMENT)
+
+0. SQL Editor : exécuter la 016, puis `delete from transactions_wallee where commande_slug = 'cmd-80666-l8i6x';` (la ligne témoin 587401300 disparaît — assumé). Portail : décomptabiliser la facture de 587401300 si elle est encore ouverte.
+1. Fiche commande : « Créer QR acompte » → page Wallee → virement QR + Payer → redirection `/offre/cmd-80666-l8i6x` → le bouton QR doit dire « Télécharger la QR-facture » et ouvrir le PDF Wallee ; **TVA 8,1 %** visible ; « Payable jusqu'au » +30 j.
+2. Fiche commande : « Créer TWINT / PostFinance / PayPal acompte » → page Wallee avec TWINT, PostFinance Pay / e-finance / Carte, PayPal, **sans « Facture » ni carte de crédit** ; ne pas payer. Le QR de l'étape 1 doit rester listé et sa facture téléchargeable (parallélisme).
+3. Si CMD-80666 est en « Acompte de 50 % » : « Créer QR solde » → montant = total − acompte, libellé « Solde à la livraison » → page client : second bouton « QR-facture du solde ». Sinon vérifier que les boutons solde sont absents et que `POST tranche=solde` répond 409.
+4. Rejeu Make d'un FULFILL existant (CMD-80947 si payé) → badge « Acompte reçu » (tranche relue) ; une ligne webshop → « Paiement reçu ».
+5. `/offre/[dev-slug]` de l'offre convertie liée (si elle existe) → même bascule.
+
+## Reste à faire / bilan de passation (à consolider par la conversation de synthèse)
+
+- Chantier **cartes** (Saferpay Easy / Go Card ePayments si tarif OK, sinon Stripe) : table sœur par prestataire, route, webhook signé, `mode = 'carte'` déjà prévu par la 016.
+- **D du cadrage** : une commande dont le TWINT est FULFILL garde le bouton QR pdf4me côté client ; et la page client ne dit pas « acompte payé, solde à régler ». À traiter avec l'affichage solde côté client.
+- Création automatique du lien QR d'acompte à la conversion (`after()` de `valider`, non bloquant) — chantier séparé, `valider/route.ts` non touché ici.
+- `postPaymentTransactionsInvoicesIdReplace` avec `dueOn` pour un solde à échéance choisie — non testé.
+- ISO 2019 avant le 16.11.2026 (P1-54) ; adresse du space dans le portail.

@@ -38,8 +38,8 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  const cle = process.env.OPENAI_API_KEY;
-  if (!cle) return NextResponse.json({ error: "OPENAI_API_KEY non configurée" }, { status: 500 });
+  const cle = process.env.OPENAI_IMAGE_API_KEY || process.env.OPENAI_API_KEY;
+  if (!cle) return NextResponse.json({ error: "OPENAI_IMAGE_API_KEY non configurée" }, { status: 500 });
 
   let body: { prompt?: string; capture?: string | null; dims?: Record<string, { l: number; p: number; h: number }>; regenerer?: boolean } = {};
   try { body = await req.json(); } catch { /* corps vide */ }

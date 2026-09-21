@@ -135,6 +135,28 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
   // États pour QR paiement (poller au clic sur télécharger)
   const [qrDownloading, setQrDownloading] = useState(false);
   const [qrProgress, setQrProgress] = useState(0);
+  // QR-facture Wallee (05.09.2026) : quand une transaction « virement QR » a été
+  // validée pour la commande, les boutons QR servent le PDF rendu par Wallee
+  // (route publique /api/offres/[slug]/wallee-facture) au lieu du pdf4me.
+  // Sans transaction : comportement pdf4me inchangé.
+  const [walleeFacture, setWalleeFacture] = useState<{ acompte: boolean; solde: boolean }>({ acompte: false, solde: false });
+
+  useEffect(() => {
+    if (!slug || !cmd) return;
+    let actif = true;
+    const lire = async (tranche: "acompte" | "solde") => {
+      try {
+        const res = await fetch(`/api/offres/${slug}/wallee-facture?format=json&tranche=${tranche}`);
+        if (!res.ok) return false;
+        const json = await res.json();
+        return json?.disponible === true;
+      } catch { return false; }
+    };
+    Promise.all([lire("acompte"), lire("solde")]).then(([acompte, solde]) => {
+      if (actif) setWalleeFacture({ acompte, solde });
+    });
+    return () => { actif = false; };
+  }, [slug, cmd]);
 
   // ── Chargement initial ──
   useEffect(() => {
@@ -197,6 +219,8 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
   // ── Téléchargement QR (génère à la demande si pas encore prêt) ──
   const handleQrDownload = useCallback(async () => {
     if (qrDownloading) return;
+    // QR-facture Wallee : prioritaire sur le pdf4me dès qu'elle existe.
+    if (walleeFacture.acompte) { window.open(`/api/offres/${slug}/wallee-facture?tranche=acompte`, "_blank"); return; }
     if (qrUrl) { window.open(qrUrl, "_blank"); return; }
     setQrDownloading(true);
     setQrProgress(5);
@@ -225,7 +249,7 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
       setQrDownloading(false); setQrProgress(0);
       alert("Le QR paiement prend plus de temps. Utilisez le bulletin de secours.");
     } catch { setQrDownloading(false); setQrProgress(0); }
-  }, [slug, qrUrl, qrDownloading]);
+  }, [slug, qrUrl, qrDownloading, walleeFacture.acompte]);
 
   if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: FONT }}>Chargement…</div>;
   if (!cmd) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: FONT }}>Commande introuvable</div>;
@@ -336,9 +360,18 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
                   <ProgressBar progress={qrProgress} />
                 </>
               ) : (
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>📥 Télécharger le QR paiement</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>📥 Télécharger {walleeFacture.acompte ? (isAcompte ? "la QR-facture de l'acompte" : "la QR-facture") : "le QR paiement"}</span>
               )}
             </button>
+
+            {/* QR-facture Wallee du SOLDE (05.09.2026) : n'existe que si le vendeur
+                a créé le lien de solde chez Wallee et que le client l'a validé. */}
+            {walleeFacture.solde && (
+              <a href={`/api/offres/${slug}/wallee-facture?tranche=solde`} target="_blank" rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 52, padding: "0 20px", borderRadius: 26, background: "white", color: C.blueBtn, fontWeight: 600, fontSize: 15, border: `1px solid ${C.blueBtn}`, textDecoration: "none" }}>
+                📥 Télécharger la QR-facture du solde
+              </a>
+            )}
 
             <a href="mailto:contact@jardinconfort.ch"
               style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 52, padding: "0 20px", borderRadius: 26, background: "white", color: C.text, fontWeight: 600, fontSize: 15, border: `1px solid ${C.border}` }}>
@@ -450,12 +483,23 @@ export default function ConfirmationPage({ params }: { params: Promise<{ slug: s
                     <ProgressBar progress={qrProgress}/>
                   </div>
                 </>
-              ) : qrUrl ? (
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>📥 Ouvrir le QR-facture</span>
+              ) : (qrUrl || walleeFacture.acompte) ? (
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>📥 Ouvrir le QR-facture{walleeFacture.acompte && isAcompte ? " de l'acompte" : ""}</span>
               ) : (
                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}>📥 Télécharger le QR-facture</span>
               )}
             </button>
+            {walleeFacture.solde && (
+              <a href={`/api/offres/${slug}/wallee-facture?tranche=solde`} target="_blank" rel="noopener noreferrer"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  minHeight: 56, padding: "12px 28px", borderRadius: 26,
+                  background: "white", color: C.blueBtn, fontWeight: 700, fontSize: 15,
+                  border: `1px solid ${C.blueBtn}`, textDecoration: "none", whiteSpace: "nowrap",
+                }}>
+                📥 QR-facture du solde
+              </a>
+            )}
           </div>
 
           {/* Lien de secours */}
