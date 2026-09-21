@@ -13,6 +13,9 @@
 //      pixel pour pixel par-dessus l'image générée. Quoi que fasse l'IA sur
 //      les bords, ce que voit le client est le rendu 3D exact.
 // Sans calque (ancien client), on retombe sur l'édition sans masque.
+// Traitement d'image en JS pur (pngjs) : le recadrage 1536×1024 est fait par le
+// navigateur, le serveur ne fait que le masque et le recollage — pas de binaire
+// natif (sharp ne chargeait pas ses libvips Linux sur Vercel/Turbopack).
 //
 // Route PARALLÈLE et indépendante : n'utilise ni Jardi (chat) ni le serveur
 // MCP jardi-mail — clé dédiée OPENAI_IMAGE_API_KEY (restreinte « Images »),
@@ -22,7 +25,7 @@
 // renvoyée telle quelle (regenerer: true pour forcer).
 
 import { NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
+import { PNG } from "pngjs";
 import { supabaseAdmin } from "@/lib/supabase";
 import { BUCKET, figerVersion, urlPublique } from "@/lib/planner-versions";
 import { MENTION_IA } from "@/lib/planner-types";
@@ -32,7 +35,6 @@ export const maxDuration = 60;
 
 const MODELE = process.env.OPENAI_IMAGE_MODELE || "gpt-image-1";
 const LARG = 1536, HAUT = 1024;          // format paysage 3:2 de gpt-image-1
-const FOND = "#dfe3e6";                  // remplace le fond transparent du canvas
 
 // Consignes fixes : le côté commercial des meubles prime, on ne touche qu'au décor.
 function construirePrompt(description: string, sol: string, nbArticles: number, masque: boolean): string {
@@ -56,31 +58,44 @@ function depuisDataUrl(d?: string | null): Buffer | null {
   try { return Buffer.from(i >= 0 ? d.slice(i + 1) : d, "base64"); } catch { return null; }
 }
 
-// Image de base, masque et calque, tous ramenés au même cadrage 1536×1024
-// (recadrage « cover » centré, identique pour les trois → superposables).
-async function preparer(capture: Buffer, calque: Buffer | null) {
-  const cadrer = (b: Buffer) => sharp(b).resize(LARG, HAUT, { fit: "cover", position: "centre" });
-  const image = await cadrer(capture).flatten({ background: FOND }).png().toBuffer();
-  if (!calque) return { image, masque: null as Buffer | null, meubles: null as Buffer | null };
+// Masque OpenAI : alpha des meubles seuil 160/255 → les ombres (≈115) restent
+// « à générer », les meubles sont opaques (protégés). Noir + alpha.
+function construireMasque(calque: PNG): Buffer {
+  const m = new PNG({ width: calque.width, height: calque.height });
+  for (let i = 0; i < calque.data.length; i += 4) {
+    m.data[i] = 0; m.data[i + 1] = 0; m.data[i + 2] = 0;
+    m.data[i + 3] = calque.data[i + 3] >= 160 ? 255 : 0;
+  }
+  return PNG.sync.write(m);
+}
 
-  // Le calque doit venir du même canvas que la capture (même taille), sinon
-  // il ne se superpose pas : on l'ignore plutôt que de recoller de travers.
-  const [mc, mq] = await Promise.all([sharp(capture).metadata(), sharp(calque).metadata()]);
-  if (mc.width !== mq.width || mc.height !== mq.height) {
-    console.warn("[planner ambiance] calque ignoré : taille différente de la capture", mc.width, mc.height, mq.width, mq.height);
-    return { image, masque: null, meubles: null };
+// Recolle le calque (meubles + ombres, alpha) sur l'image générée.
+function recoller(fond: PNG, calque: PNG): Buffer {
+  for (let i = 0; i < fond.data.length; i += 4) {
+    const a = calque.data[i + 3] / 255;
+    if (a === 0) continue;
+    fond.data[i] = Math.round(calque.data[i] * a + fond.data[i] * (1 - a));
+    fond.data[i + 1] = Math.round(calque.data[i + 1] * a + fond.data[i + 1] * (1 - a));
+    fond.data[i + 2] = Math.round(calque.data[i + 2] * a + fond.data[i + 2] * (1 - a));
+    fond.data[i + 3] = 255;
   }
-  const meubles = await cadrer(calque).ensureAlpha().png().toBuffer();
-  // Masque : alpha des meubles seuil 160/255 → les ombres (≈115) restent
-  // « à générer », les meubles sont opaques (protégés). Pixels traités à la
-  // main (joinChannel sur une image créée sortait un alpha vide).
-  const { data, info } = await sharp(meubles).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  for (let i = 0; i < data.length; i += 4) {
-    const a = data[i + 3] >= 160 ? 255 : 0;
-    data[i] = 0; data[i + 1] = 0; data[i + 2] = 0; data[i + 3] = a;
+  return PNG.sync.write(fond);
+}
+
+// Image, masque et calque : le navigateur envoie capture et calque déjà cadrés
+// en 1536×1024 (même caméra) ; on vérifie, sinon on ignore le calque plutôt
+// que de recoller de travers.
+function preparer(capture: Buffer, calqueBuf: Buffer | null) {
+  let calque: PNG | null = null;
+  if (calqueBuf) {
+    try {
+      const c = PNG.sync.read(calqueBuf);
+      const im = PNG.sync.read(capture);
+      if (c.width === im.width && c.height === im.height && c.width === LARG && c.height === HAUT) calque = c;
+      else console.warn("[planner ambiance] calque ignoré : tailles", im.width, im.height, c.width, c.height);
+    } catch (e) { console.warn("[planner ambiance] calque illisible :", (e as Error).message); }
   }
-  const masque = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
-  return { image, masque, meubles };
+  return { image: capture, masque: calque ? construireMasque(calque) : null, calque };
 }
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -120,9 +135,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   }
   const nbArticles = Array.isArray(vv?.items) ? (vv!.items as unknown[]).length : 0;
 
-  let prep: Awaited<ReturnType<typeof preparer>>;
-  try { prep = await preparer(capture, calque); }
-  catch (e) { return NextResponse.json({ error: "Préparation de l'image impossible", details: (e as Error).message }, { status: 500 }); }
+  const prep = preparer(capture, calque);
 
   const form = new FormData();
   form.append("model", MODELE);
@@ -143,13 +156,11 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   let buf = Buffer.from(j.data[0].b64_json, "base64");
 
   // Recollage des meubles d'origine (avec leurs ombres) sur le décor généré.
-  if (prep.meubles) {
+  if (prep.calque) {
     try {
-      const m = await sharp(buf).metadata();
-      const calqueFinal = (m.width === LARG && m.height === HAUT)
-        ? prep.meubles
-        : await sharp(prep.meubles).resize(m.width, m.height, { fit: "fill" }).png().toBuffer();
-      buf = await sharp(buf).composite([{ input: calqueFinal }]).png().toBuffer();
+      const fond = PNG.sync.read(buf);
+      if (fond.width === prep.calque.width && fond.height === prep.calque.height) buf = recoller(fond, prep.calque);
+      else console.warn("[planner ambiance] recollage impossible : l'IA a rendu", fond.width, fond.height);
     } catch (e) {
       console.warn("[planner ambiance] recollage impossible, image IA brute conservée :", (e as Error).message);
     }

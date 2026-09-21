@@ -471,19 +471,24 @@ export default function PlannerPage() {
     await new Promise<void>((r) => setTimeout(r, 80));
     return captureRef.current?.() || null;
   }
-  // Réduit une capture (data URL) à maxL px de large : les fonctions Vercel
-  // refusent les corps > 4,5 Mo, et deux PNG du canvas en DPR 2 les dépassent.
-  async function reduire(data: string | null, maxL = 1536): Promise<string | null> {
+  // Cadre une capture (data URL) au format 1536×1024 de gpt-image-1 : recadrage
+  // « cover » centré, identique pour la capture et le calque (même caméra),
+  // donc superposables au pixel. `fond` remplit l'arrière-plan transparent du
+  // canvas (capture) ; sans fond, la transparence est conservée (calque).
+  // Au passage, ça tient sous les 4,5 Mo par requête des fonctions Vercel.
+  async function cadrer(data: string | null, fond?: string): Promise<string | null> {
     if (!data) return null;
     const im = await chargerImage(data);
-    if (!im) return data;
-    if (im.width <= maxL) return data;
+    if (!im) return null;
+    const L = 1536, H = 1024;
     const c = document.createElement("canvas");
-    c.width = maxL;
-    c.height = Math.round((im.height * maxL) / im.width);
+    c.width = L; c.height = H;
     const ctx = c.getContext("2d");
-    if (!ctx) return data;
-    ctx.drawImage(im, 0, 0, c.width, c.height);
+    if (!ctx) return null;
+    if (fond) { ctx.fillStyle = fond; ctx.fillRect(0, 0, L, H); }
+    const k = Math.max(L / im.width, H / im.height);
+    const w = im.width * k, h = im.height * k;
+    ctx.drawImage(im, (L - w) / 2, (H - h) / 2, w, h);
     return c.toDataURL("image/png");
   }
   function chargerImage(src: string): Promise<HTMLImageElement | null> {
@@ -581,8 +586,10 @@ export default function PlannerPage() {
     setAmbianceErreur(null);
     setMessage("Génération de l'image d'ambiance… (20 à 40 s)");
     try {
-      const capture = await reduire(await capturerSansSelection());
-      const calque = await reduire(calqueRef.current?.() || null);   // même caméra, même taille : superposable
+      const brute = await capturerSansSelection();
+      const calqueBrut = calqueRef.current?.() || null;   // même caméra, même taille : superposable
+      const capture = await cadrer(brute, "#dfe3e6");
+      const calque = await cadrer(calqueBrut);
       let id = scene.id;
       if (!id || modifie) { id = await enregistrer(); if (!id) return; }
       const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
