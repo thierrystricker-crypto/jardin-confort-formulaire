@@ -56,6 +56,7 @@ export default function PlannerPage() {
   const [pdfEnCours, setPdfEnCours] = useState(false);
   const [ambiance, setAmbiance] = useState<{ url: string; numero: number; token: string } | null>(null);
   const [ambianceEnCours, setAmbianceEnCours] = useState(false);
+  const [ambianceErreur, setAmbianceErreur] = useState<string | null>(null);
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
@@ -561,6 +562,7 @@ export default function PlannerPage() {
     );
     if (description === null || !description.trim()) return;
     setAmbianceEnCours(true);
+    setAmbianceErreur(null);
     setMessage("Génération de l'image d'ambiance… (20 à 40 s)");
     try {
       const capture = await capturerSansSelection();
@@ -575,7 +577,8 @@ export default function PlannerPage() {
       setAmbiance({ url: j.ambiance_url, numero: j.numero, token: j.token });
       setMessage(j.reutilisee ? `Image d'ambiance déjà générée pour la version V${j.numero}` : `Image d'ambiance générée (version V${j.numero})`);
     } catch (e) {
-      setMessage(`Ambiance IA : ${(e as Error).message}`);
+      setAmbianceErreur((e as Error).message);
+      setMessage("");
     } finally {
       setAmbianceEnCours(false);
     }
@@ -734,6 +737,15 @@ export default function PlannerPage() {
       </div>
 
       {message && <div className="border-b border-white/10 bg-sky-500/10 px-4 py-1.5 text-xs text-sky-200">{message}</div>}
+      {ambianceEnCours && (
+        <div className="border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">🎨 Génération de l&apos;image d&apos;ambiance en cours… 20 à 40 secondes, la vignette apparaîtra ici.</div>
+      )}
+      {ambianceErreur && (
+        <div className="flex items-center gap-3 border-b border-white/10 bg-rose-500/10 px-4 py-2 text-xs text-rose-100">
+          <span className="min-w-0 flex-1">🎨 Ambiance IA impossible : {ambianceErreur}</span>
+          <button type="button" onClick={() => setAmbianceErreur(null)} className="text-zinc-400 hover:text-white">✕</button>
+        </div>
+      )}
       {ambiance && (
         <div className="flex flex-wrap items-center gap-3 border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">
           <a href={ambiance.url} target="_blank" rel="noopener noreferrer"><img src={ambiance.url} alt="" className="h-20 rounded-lg border border-white/10" /></a>
