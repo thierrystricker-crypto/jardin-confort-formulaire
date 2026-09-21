@@ -44,7 +44,7 @@ function construirePrompt(description: string, sol: string, nbArticles: number, 
     "This image is a 3D rendering of a real outdoor furniture arrangement sold by Jardin-Confort (Switzerland).",
     `It contains ${nbArticles} piece(s) of furniture. Keep EVERY piece of furniture EXACTLY as shown: same models, shapes, proportions, colours, materials, count, positions, orientations and spacing. Do not add, remove, move, resize, restyle or recolour any furniture. Do not add cushions, tableware, plants on tables, people or animals.`,
     masque
-      ? `The opaque area of the mask is the terrace platform (${sol}) with the furniture standing on it: never paint over it, never move or resize it. Generate ONLY the transparent area, i.e. what lies beyond the edges of the terrace: the surroundings, landscape, vegetation, sky, horizon and lighting, seen from the same camera height and angle so that it connects naturally to the terrace edges.`
+      ? `The photo is taken at standing eye level from the front edge of a ${sol} terrace; the terrace fills the bottom of the frame and its far edge is visible. The opaque area of the mask is this terrace with the furniture on it: never paint over it, never move or resize it. Generate ONLY the transparent area: the landscape beyond the far edge and beside the terrace, the horizon, the sky and the lighting, seen from the same eye height so it connects naturally to the terrace edges. Do NOT draw any other deck, platform, floor, steps, wall or furniture anywhere.`
       : `Replace ONLY the environment: the ground / terrace surface (currently ${sol}), the surroundings, vegetation, sky, horizon and lighting.`,
     "Keep the camera angle, perspective and framing unchanged.",
     `Description of the wanted setting: "${description}".`,
@@ -107,7 +107,11 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const cle = process.env.OPENAI_IMAGE_API_KEY || process.env.OPENAI_API_KEY;
   if (!cle) return NextResponse.json({ error: "OPENAI_IMAGE_API_KEY non configurée" }, { status: 500 });
 
-  let body: { prompt?: string; capture?: string | null; calque?: string | null; dims?: Record<string, { l: number; p: number; h: number }>; regenerer?: boolean } = {};
+  let body: {
+    prompt?: string; capture?: string | null; calque?: string | null;
+    ambiance?: { capture?: string | null; calque?: string | null } | null;   // paire cadrée « photo » (caméra dédiée)
+    dims?: Record<string, { l: number; p: number; h: number }>; regenerer?: boolean;
+  } = {};
   try { body = await req.json(); } catch { /* corps vide */ }
   const description = String(body.prompt || "").trim().slice(0, 400);
   if (!description) return NextResponse.json({ error: "Décris l'ambiance souhaitée" }, { status: 400 });
@@ -124,10 +128,11 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ ambiance_url: vv.ambiance_url, numero: v.numero, token: v.token, reutilisee: true, mention: MENTION_IA });
   }
 
-  // Image de départ : la capture envoyée (même canvas que le calque) ; sinon
-  // la capture figée de la version (sans calque possible).
-  let capture = depuisDataUrl(body.capture);
-  let calque = depuisDataUrl(body.calque);
+  // Image de départ : la paire « photo » si le client l'a envoyée (caméra à
+  // hauteur d'œil, bord avant hors champ), sinon la capture normale + son
+  // calque, sinon la capture figée de la version (sans calque possible).
+  let capture = depuisDataUrl(body.ambiance?.capture || body.capture);
+  let calque = depuisDataUrl(body.ambiance?.calque || body.calque);
   if (!capture) {
     if (!v.capture_url) return NextResponse.json({ error: "Aucune capture 3D pour cette version" }, { status: 400 });
     const src = await fetch(v.capture_url);

@@ -45,6 +45,9 @@ type Props = {
   // Calque « meubles seuls » (fond transparent, sol remplacé par un récepteur
   // d'ombres) pour l'ambiance IA : sert de masque et se recolle sur l'image.
   calqueRef?: React.MutableRefObject<(() => string | null) | null>;
+  // Paire capture + calque prise avec la caméra « photo » d'ambiance (hauteur
+  // d'œil, bord avant de la terrasse hors champ) — vue 3D seulement.
+  ambianceRef?: React.MutableRefObject<(() => { capture: string; calque: string } | null) | null>;
   recadrerRef: React.MutableRefObject<(() => void) | null>;   // « Recadrer » : toute la terrasse dans la vue
   lectureSeule?: boolean;       // page client : on regarde, on tourne, on zoome — on ne touche à rien
 };
@@ -222,11 +225,54 @@ function useTextureSol(sol: SolId, mode: Props["mode"], largeur: number, profond
 
 type RefMesh = React.RefObject<THREE.Object3D | null>;
 
-function Capture({ captureRef, calqueRef, grilleRef, ombreRef }: {
-  captureRef: Props["captureRef"]; calqueRef?: Props["calqueRef"]; grilleRef: RefMesh; ombreRef: RefMesh;
+function Capture({ captureRef, calqueRef, ambianceRef, grilleRef, ombreRef, terrasse }: {
+  captureRef: Props["captureRef"]; calqueRef?: Props["calqueRef"]; ambianceRef?: Props["ambianceRef"]; grilleRef: RefMesh; ombreRef: RefMesh; terrasse: Terrasse;
 }) {
-  const { gl, scene, camera } = useThree();
+  const { gl, scene, camera, controls } = useThree();
   useEffect(() => {
+    // Rendu « meubles + terrasse, sans grille, fond transparent » avec la
+    // caméra passée (voir calqueRef ci-dessous pour le pourquoi).
+    const rendreCalque = (cam: THREE.Camera) => {
+      const g = grilleRef.current, o = ombreRef.current;
+      const vg = g?.visible ?? true;
+      if (g) g.visible = false;
+      if (o) o.visible = true;
+      gl.render(scene, cam);
+      const data = gl.domElement.toDataURL("image/png");
+      if (g) g.visible = vg;
+      if (o) o.visible = false;
+      return data;
+    };
+    if (ambianceRef) {
+      // Caméra photo : hauteur d'œil 2 m, même azimut que la vue courante (le
+      // conseiller tourne la vue pour choisir le côté qui regarde le lac),
+      // placée à 1 m du bord de la terrasse, légèrement piquée (6°) → le bord
+      // avant sort du cadre en bas, l'horizon est vers 40 % du haut. L'IA n'a
+      // alors que le paysage au-delà du bord arrière et des côtés à peindre :
+      // plus de « deuxième terrasse » inventée sous le bord avant.
+      ambianceRef.current = () => {
+        const cam = camera as THREE.PerspectiveCamera;
+        if (!cam.isPerspectiveCamera) return null;                  // vue plan : pas d'ambiance
+        const pos0 = cam.position.clone(), quat0 = cam.quaternion.clone();
+        const ctrl = controls as unknown as { target: THREE.Vector3; update: () => void } | null;
+        const az = Math.atan2(cam.position.x, cam.position.z);
+        const d = 0.5 * Math.min(terrasse.largeur, terrasse.profondeur) + 1.0;
+        cam.position.set(Math.sin(az) * d, 2.0, Math.cos(az) * d);
+        const pique = (6 * Math.PI) / 180;
+        const dir = new THREE.Vector3(-Math.sin(az), -Math.tan(pique), -Math.cos(az)).normalize();
+        cam.lookAt(cam.position.clone().add(dir));
+        cam.updateMatrixWorld();
+        gl.render(scene, cam);
+        const capture = gl.domElement.toDataURL("image/png");
+        const calque = rendreCalque(cam);
+        cam.position.copy(pos0);
+        cam.quaternion.copy(quat0);
+        cam.updateMatrixWorld();
+        if (ctrl) ctrl.update();
+        gl.render(scene, camera);
+        return { capture, calque };
+      };
+    }
     captureRef.current = () => {
       gl.render(scene, camera);
       return gl.domElement.toDataURL("image/png");
@@ -240,20 +286,13 @@ function Capture({ captureRef, calqueRef, grilleRef, ombreRef }: {
       // La terrasse fait partie du calque : l'IA ne génère que le décor autour
       // et la géométrie (sol + meubles) est recollée telle quelle.
       calqueRef.current = () => {
-        const g = grilleRef.current, o = ombreRef.current;
-        const vg = g?.visible ?? true;
-        if (g) g.visible = false;
-        if (o) o.visible = true;
-        gl.render(scene, camera);
-        const data = gl.domElement.toDataURL("image/png");
-        if (g) g.visible = vg;
-        if (o) o.visible = false;
+        const data = rendreCalque(camera);
         gl.render(scene, camera);
         return data;
       };
     }
-    return () => { captureRef.current = null; if (calqueRef) calqueRef.current = null; };
-  }, [gl, scene, camera, captureRef, calqueRef, grilleRef, ombreRef]);
+    return () => { captureRef.current = null; if (calqueRef) calqueRef.current = null; if (ambianceRef) ambianceRef.current = null; };
+  }, [gl, scene, camera, controls, captureRef, calqueRef, ambianceRef, grilleRef, ombreRef, terrasse]);
   return null;
 }
 
@@ -287,7 +326,7 @@ function Recadrage({ recadrerRef, terrasse, vue }: { recadrerRef: Props["recadre
 // ─── Scène ────────────────────────────────────────────────────────────────────
 
 export default function PlannerCanvas(props: Props) {
-  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, calqueRef, recadrerRef, lectureSeule = false } = props;
+  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, calqueRef, ambianceRef, recadrerRef, lectureSeule = false } = props;
   const [drag, setDrag] = useState<{ uid: string; dx: number; dz: number } | null>(null);
   const grilleRef = useRef<THREE.Mesh>(null);
   const ombreRef = useRef<THREE.Mesh>(null);
@@ -417,7 +456,7 @@ export default function PlannerCanvas(props: Props) {
         );
       })}
 
-      <Capture captureRef={captureRef} calqueRef={calqueRef} grilleRef={grilleRef} ombreRef={ombreRef} />
+      <Capture captureRef={captureRef} calqueRef={calqueRef} ambianceRef={ambianceRef} grilleRef={grilleRef} ombreRef={ombreRef} terrasse={terrasse} />
       <Recadrage recadrerRef={recadrerRef} terrasse={terrasse} vue={vue} />
     </Canvas>
   );

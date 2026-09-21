@@ -60,7 +60,8 @@ export default function PlannerPage() {
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
-  const calqueRef = useRef<(() => string | null) | null>(null);   // meubles seuls, pour l'ambiance IA
+  const calqueRef = useRef<(() => string | null) | null>(null);   // terrasse + meubles, fond transparent
+  const ambianceRef = useRef<(() => { capture: string; calque: string } | null) | null>(null);   // paire cadrée « photo »
   const recadrerRef = useRef<(() => void) | null>(null);
   const [rotationFine, setRotationFine] = useState(false);   // déverrouillage manuel, jamais par défaut
 
@@ -586,17 +587,22 @@ export default function PlannerPage() {
     setAmbianceErreur(null);
     setMessage("Génération de l'image d'ambiance… (20 à 40 s)");
     try {
+      // Capture normale (pour la version / la fiche) + paire « photo » cadrée
+      // à hauteur d'œil pour l'IA (même caméra pour capture et calque →
+      // superposables). En vue plan, on retombe sur la vue courante.
       const brute = await capturerSansSelection();
-      const calqueBrut = calqueRef.current?.() || null;   // même caméra, même taille : superposable
+      const paire = ambianceRef.current?.() || null;
       const capture = await cadrer(brute, "#dfe3e6");
-      const calque = await cadrer(calqueBrut);
+      const ambianceCapture = await cadrer(paire?.capture || brute, "#dfe3e6");
+      const ambianceCalque = await cadrer(paire?.calque || calqueRef.current?.() || null);
+      if (!paire) setMessage("Astuce : passe en vue 3D pour un cadrage photo de l'ambiance");
       let id = scene.id;
       if (!id || modifie) { id = await enregistrer(); if (!id) return; }
       const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         // Une image existe déjà (bouton « Régénérer ») → on force une nouvelle
         // génération, sinon la route renvoie l'image stockée pour la version.
-        body: JSON.stringify({ prompt: description.trim(), capture, calque, dims, regenerer: Boolean(ambiance) }),
+        body: JSON.stringify({ prompt: description.trim(), capture, ambiance: { capture: ambianceCapture, calque: ambianceCalque }, dims, regenerer: Boolean(ambiance) }),
       });
       const texte = await r.text();
       let j: { error?: string; details?: string; ambiance_url?: string; numero?: number; token?: string; reutilisee?: boolean; masque?: boolean };
@@ -821,6 +827,7 @@ export default function PlannerPage() {
             onError={(u, m) => setErreurs((e) => ({ ...e, [u]: m }))}
             captureRef={captureRef}
             calqueRef={calqueRef}
+            ambianceRef={ambianceRef}
             recadrerRef={recadrerRef}
           />
           {/* Outils de l'article sélectionné */}
