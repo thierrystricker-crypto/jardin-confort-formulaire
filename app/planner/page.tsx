@@ -471,6 +471,21 @@ export default function PlannerPage() {
     await new Promise<void>((r) => setTimeout(r, 80));
     return captureRef.current?.() || null;
   }
+  // Réduit une capture (data URL) à maxL px de large : les fonctions Vercel
+  // refusent les corps > 4,5 Mo, et deux PNG du canvas en DPR 2 les dépassent.
+  async function reduire(data: string | null, maxL = 1536): Promise<string | null> {
+    if (!data) return null;
+    const im = await chargerImage(data);
+    if (!im) return data;
+    if (im.width <= maxL) return data;
+    const c = document.createElement("canvas");
+    c.width = maxL;
+    c.height = Math.round((im.height * maxL) / im.width);
+    const ctx = c.getContext("2d");
+    if (!ctx) return data;
+    ctx.drawImage(im, 0, 0, c.width, c.height);
+    return c.toDataURL("image/png");
+  }
   function chargerImage(src: string): Promise<HTMLImageElement | null> {
     return new Promise((res) => {
       const im = new Image();
@@ -566,17 +581,20 @@ export default function PlannerPage() {
     setAmbianceErreur(null);
     setMessage("Génération de l'image d'ambiance… (20 à 40 s)");
     try {
-      const capture = await capturerSansSelection();
-      const calque = calqueRef.current?.() || null;   // même caméra, même taille : superposable
+      const capture = await reduire(await capturerSansSelection());
+      const calque = await reduire(calqueRef.current?.() || null);   // même caméra, même taille : superposable
       let id = scene.id;
       if (!id || modifie) { id = await enregistrer(); if (!id) return; }
       const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: description.trim(), capture, calque, dims }),
       });
-      const j = await r.json();
+      const texte = await r.text();
+      let j: { error?: string; details?: string; ambiance_url?: string; numero?: number; token?: string; reutilisee?: boolean };
+      try { j = JSON.parse(texte); }
+      catch { throw new Error(`Réponse ${r.status} du serveur (pas du JSON) — ${r.status === 413 ? "images trop lourdes" : r.status === 504 ? "délai dépassé" : texte.slice(0, 80)}`); }
       if (j.error) throw new Error(j.details ? `${j.error} — ${j.details}` : j.error);
-      setAmbiance({ url: j.ambiance_url, numero: j.numero, token: j.token });
+      setAmbiance({ url: j.ambiance_url as string, numero: j.numero as number, token: j.token as string });
       setMessage(j.reutilisee ? `Image d'ambiance déjà générée pour la version V${j.numero}` : `Image d'ambiance générée (version V${j.numero})`);
     } catch (e) {
       setAmbianceErreur((e as Error).message);
