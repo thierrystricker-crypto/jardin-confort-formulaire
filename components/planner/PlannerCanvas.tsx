@@ -148,12 +148,82 @@ class Garde extends React.Component<{ onError: (m: string) => void; fallback: Re
   render() { return this.state.erreur ? this.props.fallback : this.props.children; }
 }
 
+// ─── Texture du sol ───────────────────────────────────────────────────────────
+// Texture procédurale (1 tuile = 1 m) : lames de bois, dalles, béton, gravier,
+// gazon. Sert à la vue normale et surtout à l'ambiance IA, où la terrasse est
+// recollée telle quelle sur le décor généré (l'IA ne touche pas à la terrasse,
+// elle ne génère que ce qu'il y a au-delà de ses bords).
+
+function useTextureSol(sol: SolId, mode: Props["mode"], largeur: number, profondeur: number): THREE.CanvasTexture | null {
+  return useMemo(() => {
+    if (mode === "maquette" || typeof document === "undefined") return null;
+    const N = 512;
+    const c = document.createElement("canvas");
+    c.width = N; c.height = N;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    const base = SOLS.find((x) => x.id === sol)?.couleur || "#c9a678";
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, N, N);
+    const grain = (n: number, amp: number, taille = 2, clair = false) => {
+      for (let i = 0; i < n; i++) {
+        ctx.fillStyle = `rgba(${clair ? "255,255,255" : "0,0,0"},${Math.random() * amp})`;
+        ctx.fillRect(Math.random() * N, Math.random() * N, taille, taille);
+      }
+    };
+    if (sol === "bois") {
+      const lame = 72;                                   // ≈ 14 cm
+      for (let y = 0; y < N; y += lame) {
+        ctx.fillStyle = `rgba(0,0,0,${0.03 + Math.random() * 0.09})`;
+        ctx.fillRect(0, y, N, lame);
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.fillRect(0, y, N, 3);                        // joint
+      }
+      ctx.strokeStyle = "rgba(0,0,0,0.07)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 90; i++) {                     // veinage
+        const y = Math.random() * N;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.bezierCurveTo(N / 3, y + Math.random() * 6 - 3, (2 * N) / 3, y + Math.random() * 6 - 3, N, y);
+        ctx.stroke();
+      }
+    } else if (sol === "pierre" || sol === "blanc" || sol === "beton") {
+      const t = sol === "beton" ? N : N / 2;             // dalles 50 cm, béton 1 m
+      for (let y = 0; y < N; y += t) for (let x = 0; x < N; x += t) {
+        ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.06})`;
+        ctx.fillRect(x, y, t, t);
+      }
+      ctx.strokeStyle = "rgba(0,0,0,0.28)";
+      ctx.lineWidth = 3;
+      for (let k = 0; k <= N; k += t) {
+        ctx.beginPath(); ctx.moveTo(k, 0); ctx.lineTo(k, N); ctx.moveTo(0, k); ctx.lineTo(N, k); ctx.stroke();
+      }
+      grain(5000, 0.08);
+    } else if (sol === "gravier") {
+      grain(20000, 0.25);
+      grain(9000, 0.3, 2, true);
+    } else if (sol === "gazon") {
+      for (let i = 0; i < 30000; i++) {
+        ctx.fillStyle = `rgba(${Math.random() < 0.5 ? "0,60,0" : "130,190,50"},${Math.random() * 0.35})`;
+        ctx.fillRect(Math.random() * N, Math.random() * N, 1, 3);
+      }
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(largeur, profondeur);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
+  }, [sol, mode, largeur, profondeur]);
+}
+
 // ─── Capture d'écran ──────────────────────────────────────────────────────────
 
 type RefMesh = React.RefObject<THREE.Object3D | null>;
 
-function Capture({ captureRef, calqueRef, terrasseRef, grilleRef, ombreRef }: {
-  captureRef: Props["captureRef"]; calqueRef?: Props["calqueRef"]; terrasseRef: RefMesh; grilleRef: RefMesh; ombreRef: RefMesh;
+function Capture({ captureRef, calqueRef, grilleRef, ombreRef }: {
+  captureRef: Props["captureRef"]; calqueRef?: Props["calqueRef"]; grilleRef: RefMesh; ombreRef: RefMesh;
 }) {
   const { gl, scene, camera } = useThree();
   useEffect(() => {
@@ -163,18 +233,19 @@ function Capture({ captureRef, calqueRef, terrasseRef, grilleRef, ombreRef }: {
     };
     if (calqueRef) {
       // Même caméra, même taille que la capture prise juste avant : on cache
-      // la terrasse et la grille, on montre le plan « ombres seules », on lit
-      // le canvas (fond transparent : le canvas est alpha, le gris vient du CSS)
+      // la grille, on montre le plan « ombres seules » (pour les articles posés
+      // hors terrasse), on lit le canvas — fond transparent (le canvas est
+      // alpha, le gris vient du CSS), terrasse texturée et meubles opaques —
       // puis on remet tout et on redessine la vue normale.
+      // La terrasse fait partie du calque : l'IA ne génère que le décor autour
+      // et la géométrie (sol + meubles) est recollée telle quelle.
       calqueRef.current = () => {
-        const t = terrasseRef.current, g = grilleRef.current, o = ombreRef.current;
-        const vt = t?.visible ?? true, vg = g?.visible ?? true;
-        if (t) t.visible = false;
+        const g = grilleRef.current, o = ombreRef.current;
+        const vg = g?.visible ?? true;
         if (g) g.visible = false;
         if (o) o.visible = true;
         gl.render(scene, camera);
         const data = gl.domElement.toDataURL("image/png");
-        if (t) t.visible = vt;
         if (g) g.visible = vg;
         if (o) o.visible = false;
         gl.render(scene, camera);
@@ -182,7 +253,7 @@ function Capture({ captureRef, calqueRef, terrasseRef, grilleRef, ombreRef }: {
       };
     }
     return () => { captureRef.current = null; if (calqueRef) calqueRef.current = null; };
-  }, [gl, scene, camera, captureRef, calqueRef, terrasseRef, grilleRef, ombreRef]);
+  }, [gl, scene, camera, captureRef, calqueRef, grilleRef, ombreRef]);
   return null;
 }
 
@@ -218,7 +289,6 @@ function Recadrage({ recadrerRef, terrasse, vue }: { recadrerRef: Props["recadre
 export default function PlannerCanvas(props: Props) {
   const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, calqueRef, recadrerRef, lectureSeule = false } = props;
   const [drag, setDrag] = useState<{ uid: string; dx: number; dz: number } | null>(null);
-  const terrasseRef = useRef<THREE.Mesh>(null);
   const grilleRef = useRef<THREE.Mesh>(null);
   const ombreRef = useRef<THREE.Mesh>(null);
   const dragRef = useRef(drag);
@@ -232,6 +302,7 @@ export default function PlannerCanvas(props: Props) {
 
   const demiL = terrasse.largeur / 2;
   const demiP = terrasse.profondeur / 2;
+  const textureSol = useTextureSol(sol, mode, terrasse.largeur, terrasse.profondeur);
   const zoomPlan = useMemo(() => Math.max(20, Math.min(120, 520 / Math.max(terrasse.largeur, terrasse.profondeur))), [terrasse]);
 
   return (
@@ -279,9 +350,14 @@ export default function PlannerCanvas(props: Props) {
       />
 
       {/* Terrasse + quadrillage 50 cm / 1 m */}
-      <mesh ref={terrasseRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.002, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.002, 0]} receiveShadow>
         <planeGeometry args={[terrasse.largeur, terrasse.profondeur]} />
-        <meshStandardMaterial color={mode === "maquette" ? "#e8e6e1" : (SOLS.find((x) => x.id === sol)?.couleur || "#c9a678")} roughness={1} />
+        <meshStandardMaterial
+          key={`${sol}-${mode}`}
+          color={mode === "maquette" ? "#e8e6e1" : textureSol ? "#ffffff" : (SOLS.find((x) => x.id === sol)?.couleur || "#c9a678")}
+          map={textureSol ?? undefined}
+          roughness={1}
+        />
       </mesh>
       <Grid
         ref={grilleRef}
@@ -341,7 +417,7 @@ export default function PlannerCanvas(props: Props) {
         );
       })}
 
-      <Capture captureRef={captureRef} calqueRef={calqueRef} terrasseRef={terrasseRef} grilleRef={grilleRef} ombreRef={ombreRef} />
+      <Capture captureRef={captureRef} calqueRef={calqueRef} grilleRef={grilleRef} ombreRef={ombreRef} />
       <Recadrage recadrerRef={recadrerRef} terrasse={terrasse} vue={vue} />
     </Canvas>
   );

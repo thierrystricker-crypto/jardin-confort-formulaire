@@ -6,12 +6,14 @@
 //
 // Garantie « meubles intacts » en deux temps (l'IA seule réinterprète tout,
 // jusqu'au nombre de chaises — constaté le 21.09.2026) :
-//   1. MASQUE : le calque « meubles seuls » (fond transparent, rendu par le
-//      canvas avec la même caméra) devient le masque d'édition OpenAI — pixels
-//      meubles opaques = interdits, reste transparent = à générer.
-//   2. RECOLLAGE : le calque d'origine (meubles + ombres portées) est composé
-//      pixel pour pixel par-dessus l'image générée. Quoi que fasse l'IA sur
-//      les bords, ce que voit le client est le rendu 3D exact.
+//   1. MASQUE : le calque « terrasse + meubles » (fond transparent, rendu par
+//      le canvas avec la même caméra) devient le masque d'édition OpenAI —
+//      pixels opaques = interdits, reste transparent = à générer. Le masque
+//      seul ne suffit pas : gpt-image-1 le traite comme une indication et
+//      redessine volontiers une terrasse ailleurs (constaté 21.09), d'où :
+//   2. RECOLLAGE : le calque d'origine (terrasse texturée + meubles + ombres)
+//      est composé pixel pour pixel par-dessus l'image générée. Sol et
+//      meubles restent solidaires, la géométrie est celle du rendu 3D.
 // Sans calque (ancien client), on retombe sur l'édition sans masque.
 // Traitement d'image en JS pur (pngjs) : le recadrage 1536×1024 est fait par le
 // navigateur, le serveur ne fait que le masque et le recollage — pas de binaire
@@ -42,10 +44,10 @@ function construirePrompt(description: string, sol: string, nbArticles: number, 
     "This image is a 3D rendering of a real outdoor furniture arrangement sold by Jardin-Confort (Switzerland).",
     `It contains ${nbArticles} piece(s) of furniture. Keep EVERY piece of furniture EXACTLY as shown: same models, shapes, proportions, colours, materials, count, positions, orientations and spacing. Do not add, remove, move, resize, restyle or recolour any furniture. Do not add cushions, tableware, plants on tables, people or animals.`,
     masque
-      ? "The opaque area of the mask is the furniture: never paint over it. Generate only the transparent area. The furniture stands on one flat, continuous ground surface: keep that surface level and coherent under and between all pieces."
-      : "",
+      ? `The opaque area of the mask is the terrace platform (${sol}) with the furniture standing on it: never paint over it, never move or resize it. Generate ONLY the transparent area, i.e. what lies beyond the edges of the terrace: the surroundings, landscape, vegetation, sky, horizon and lighting, seen from the same camera height and angle so that it connects naturally to the terrace edges.`
+      : `Replace ONLY the environment: the ground / terrace surface (currently ${sol}), the surroundings, vegetation, sky, horizon and lighting.`,
     "Keep the camera angle, perspective and framing unchanged.",
-    `Replace ONLY the environment: the ground / terrace surface (currently ${sol}), the surroundings, vegetation, sky, horizon and lighting, according to this description: "${description}".`,
+    `Description of the wanted setting: "${description}".`,
     "Photorealistic, natural daylight, high-end garden-magazine editorial photograph, soft realistic shadows consistent with the lighting, no text, no logo, no watermark.",
   ].filter(Boolean).join(" ");
 }
