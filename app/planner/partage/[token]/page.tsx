@@ -11,7 +11,7 @@
 
 import React, { use, useEffect, useMemo, useRef, useState } from "react";
 import PlannerCanvas from "@/components/planner/PlannerCanvas";
-import { MENTION_LEGALE, type Scene } from "@/lib/planner-types";
+import { MENTION_IA, MENTION_LEGALE, type Scene } from "@/lib/planner-types";
 
 const LOGO = "https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698";
 const BTN = "rounded-xl border px-3 py-1.5 text-xs transition";
@@ -36,7 +36,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
   const [erreurs, setErreurs] = useState<Record<string, string>>({});
   // Version figée (export) ou lien vivant : on le dit au client, car le
   // projet peut avoir évolué depuis le document qu'il a en main.
-  const [info, setInfo] = useState<{ version: { numero: number; cree_le: string } | null; modifie_depuis?: boolean; url_actuelle?: string | null; updated_at?: string; sans_prix?: boolean }>({ version: null });
+  const [info, setInfo] = useState<{ version: { numero: number; cree_le: string } | null; modifie_depuis?: boolean; url_actuelle?: string | null; updated_at?: string; sans_prix?: boolean; ambiance_url?: string | null }>({ version: null });
   const captureRef = useRef<(() => string | null) | null>(null);
   const recadrerRef = useRef<(() => void) | null>(null);
 
@@ -46,7 +46,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
       .then((j) => {
         if (j.error) { setErreur(j.error); return; }
         setScene(j.scene);
-        setInfo({ version: j.version || null, modifie_depuis: j.modifie_depuis, url_actuelle: j.url_actuelle, updated_at: j.updated_at, sans_prix: Boolean(j.sans_prix) });
+        setInfo({ version: j.version || null, modifie_depuis: j.modifie_depuis, url_actuelle: j.url_actuelle, updated_at: j.updated_at, sans_prix: Boolean(j.sans_prix), ambiance_url: j.ambiance_url || null });
         setVue(j.scene.vue === "plan" ? "plan" : "3d");
         setMode(j.scene.mode || "couleurs");
       })
@@ -178,6 +178,14 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
               <div className="px-3 py-2 text-[11px] text-rose-300">Certains modèles n&apos;ont pas pu être chargés.</div>
             )}
           </div>
+          {info.ambiance_url && (
+            <div className="border-t border-white/10 p-3">
+              <a href={info.ambiance_url} target="_blank" rel="noopener noreferrer" title={MENTION_IA}>
+                <img src={info.ambiance_url} alt="" className="w-full rounded-lg border border-white/10" />
+              </a>
+              <div className="mt-1 text-[10px] text-zinc-500">🎨 {MENTION_IA}.</div>
+            </div>
+          )}
           <div className="border-t border-white/10 px-3 py-2 text-[10px] leading-relaxed text-zinc-500">
             {info.sans_prix ? "Les prix figurent sur votre offre ou votre commande. " : "Prix TTC indicatifs du webshop, sous réserve d'une offre. "}{MENTION_LEGALE}.<br />
             Jardin-Confort SA · Route de Lavaux 425 · 1095 Lutry · +41 21 791 36 71

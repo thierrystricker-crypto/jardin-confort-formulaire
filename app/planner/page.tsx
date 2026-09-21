@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
-import { MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CatalogueItem, type ChoixModele, type Scene, type SceneItem } from "@/lib/planner-types";
+import { MENTION_IA, MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CatalogueItem, type ChoixModele, type Scene, type SceneItem } from "@/lib/planner-types";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
 const PlannerCanvas = dynamic(() => import("@/components/planner/PlannerCanvas"), {
@@ -54,6 +54,8 @@ export default function PlannerPage() {
   const [listeOuverte, setListeOuverte] = useState(false);
   const [partage, setPartage] = useState<{ url: string; copie: boolean } | null>(null);   // lien client affiché
   const [pdfEnCours, setPdfEnCours] = useState(false);
+  const [ambiance, setAmbiance] = useState<{ url: string; numero: number; token: string } | null>(null);
+  const [ambianceEnCours, setAmbianceEnCours] = useState(false);
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
@@ -545,6 +547,40 @@ export default function PlannerPage() {
     w.location.href = `/print/planner/${version.token}?prix=${avecPrix ? 1 : 0}`;
   }
 
+  // Image d'ambiance IA : capture 3D figée + description → décor réinventé,
+  // meubles inchangés. Route parallèle /ambiance (clé OpenAI de la voix).
+  // S'AJOUTE aux exports : jamais à la place de la capture ou de la fiche.
+  async function genererAmbiance() {
+    const nom = exigerNom();
+    if (!nom) return;
+    if (scene.items.length === 0) { setMessage("Pose d'abord des articles"); return; }
+    const solNom = SOLS.find((x) => x.id === (scene.sol || "bois"))?.nom || "bois";
+    const description = window.prompt(
+      "Décris l'ambiance souhaitée (le décor uniquement — les meubles restent exactement ceux du plan) :",
+      `Terrasse en ${solNom.toLowerCase()} face au lac Léman, vignes en arrière-plan, fin d'après-midi d'été`,
+    );
+    if (description === null || !description.trim()) return;
+    setAmbianceEnCours(true);
+    setMessage("Génération de l'image d'ambiance… (20 à 40 s)");
+    try {
+      const capture = await capturerSansSelection();
+      let id = scene.id;
+      if (!id || modifie) { id = await enregistrer(); if (!id) return; }
+      const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: description.trim(), capture, dims }),
+      });
+      const j = await r.json();
+      if (j.error) throw new Error(j.details ? `${j.error} — ${j.details}` : j.error);
+      setAmbiance({ url: j.ambiance_url, numero: j.numero, token: j.token });
+      setMessage(j.reutilisee ? `Image d'ambiance déjà générée pour la version V${j.numero}` : `Image d'ambiance générée (version V${j.numero})`);
+    } catch (e) {
+      setMessage(`Ambiance IA : ${(e as Error).message}`);
+    } finally {
+      setAmbianceEnCours(false);
+    }
+  }
+
   // PDF via pdf.co, comme les offres : la route fige la version, fait rendre
   // /print/planner/<token> par pdf.co, stocke le PDF et renvoie son URL.
   async function genererPdf(avecPrix = true) {
@@ -691,12 +727,27 @@ export default function PlannerPage() {
           <button type="button" onClick={() => imprimerListe(true)} className={scene.offre_slug ? `${BTN} border-amber-500/30 bg-amber-500/5 text-zinc-500` : BTN_OFF} title={scene.offre_slug ? "Plan lié à une offre / commande : préférer la version sans prix" : "Fiche imprimable : image de la vue + liste des articles avec photos, cotes et prix indicatifs"}>🖨 Fiche</button>
           <button type="button" onClick={() => imprimerListe(false)} className={BTN_OFF} title="Même fiche sans aucun prix : articles, quantités, cotes">🖨 Sans prix</button>
           <button type="button" onClick={() => genererPdf(true)} disabled={pdfEnCours} className={scene.offre_slug ? `${BTN} border-amber-500/30 bg-amber-500/5 text-zinc-500` : `${BTN} border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25`} title={scene.offre_slug ? "Plan lié à une offre / commande : préférer le PDF sans prix" : "PDF de la fiche généré par pdf.co, comme les offres"}>{pdfEnCours ? "…" : "⬇ PDF"}</button>
+          <button type="button" onClick={genererAmbiance} disabled={ambianceEnCours} className={`${BTN} border-pink-500/40 bg-pink-500/15 text-pink-200 hover:bg-pink-500/25`} title="Image d'ambiance générée par IA à partir de la vue 3D : meubles inchangés, décor réinventé. Mention « inspiration libre, non contractuelle ».">{ambianceEnCours ? "…" : "🎨 Ambiance IA"}</button>
           <button type="button" onClick={() => genererPdf(false)} disabled={pdfEnCours} className={`${BTN} border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25`} title="PDF sans prix">{pdfEnCours ? "…" : "⬇ PDF sans prix"}</button>
           <button type="button" onClick={exporterListeAchat} className={`${BTN} border-cyan-500/40 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25`} title="Créer une liste d'achat avec les articles posés (puis brouillon d'offre depuis la page Listes d'achat)">🛒 Liste d'achat</button>
         </div>
       </div>
 
       {message && <div className="border-b border-white/10 bg-sky-500/10 px-4 py-1.5 text-xs text-sky-200">{message}</div>}
+      {ambiance && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">
+          <a href={ambiance.url} target="_blank" rel="noopener noreferrer"><img src={ambiance.url} alt="" className="h-20 rounded-lg border border-white/10" /></a>
+          <div className="min-w-0 flex-1">
+            <div>Image d&apos;ambiance IA — version V{ambiance.numero}. {MENTION_IA}.</div>
+            <div className="mt-1 flex flex-wrap gap-1">
+              <a href={ambiance.url} target="_blank" rel="noopener noreferrer" className={BTN_OFF}>Ouvrir</a>
+              <a href={`/print/planner/${ambiance.token}?prix=0`} target="_blank" rel="noopener noreferrer" className={BTN_OFF}>Fiche sans prix avec l&apos;image</a>
+              <button type="button" onClick={genererAmbiance} className={BTN_OFF}>Régénérer avec une autre ambiance</button>
+            </div>
+          </div>
+          <button type="button" onClick={() => setAmbiance(null)} className="text-zinc-400 hover:text-white" title="Masquer">✕</button>
+        </div>
+      )}
       {partage && (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-emerald-500/10 px-4 py-1.5 text-xs text-emerald-100">
           <span>Lien client (lecture seule) :</span>

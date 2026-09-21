@@ -432,3 +432,30 @@ sur les lignes déjà posées dans le formulaire.
   vivant) et affiche « Les prix figurent sur votre offre ou votre commande » ;
   dans le planner, « Fiche » et « ⬇ PDF » (avec prix) passent en gris ambre
   et, au clic, proposent d'ouvrir la version sans prix (OK) ou d'annuler.
+
+## 21.09.2026 — Image d'ambiance IA (s'ajoute aux exports, ne remplace rien)
+
+- Route **parallèle** `POST /api/planner/scenes/[id]/ambiance {prompt, capture,
+  dims, regenerer?}` : fige/réutilise la version, prend sa capture 3D comme
+  image de départ, appelle OpenAI `images/edits` (`gpt-image-1`, même
+  `OPENAI_API_KEY` que la voix de Jardi — ni le chat Jardi ni le serveur MCP
+  jardi-mail ne sont touchés), stocke le PNG `planner/<token>-ambiance.png`
+  et `ambiance_url / ambiance_prompt / ambiance_cree_le` sur la version
+  (SQL 026). Même prompt sur la même version → image renvoyée telle quelle.
+- **Prompt verrouillé côté commercial** : garder chaque meuble exactement
+  (modèles, formes, proportions, couleurs, nombre, positions, orientation),
+  ne rien ajouter (coussins, vaisselle, personnes), cadrage inchangé ;
+  réinventer uniquement sol, décor, végétation, ciel, lumière d'après la
+  description du conseiller. Style photo éditoriale, sans texte.
+- Planner : bouton « 🎨 Ambiance IA » (rose) → boîte de description
+  pré-remplie d'après le sol (« Terrasse en bois face au lac Léman… »),
+  20–40 s, bandeau avec vignette, Ouvrir, Fiche sans prix avec l'image,
+  Régénérer.
+- Fiche `/print/planner` : l'image d'ambiance apparaît sous la capture 3D
+  avec la mention « Image d'inspiration libre générée par l'IA, non
+  contractuelle — décor imaginé d'après « … » ; seuls les meubles du plan
+  font référence ». Page client : vignette dans la colonne avec la mention.
+- Variables optionnelles : `OPENAI_IMAGE_MODELE` (défaut gpt-image-1),
+  `OPENAI_IMAGE_QUALITE` (medium). Coût ≈ quelques centimes par image.
+- Pas fait : compteur dans la page Usage de Jardi ; plusieurs variantes par
+  version ; modèle à contrôle structurel si gpt-image déforme trop les meubles.

@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   // 1) Version figée ?
   const { data: v, error: ev } = await supabaseAdmin
     .from("planner_scenes_versions")
-    .select("scene_id, numero, nom, terrasse, sol, items, mode, vue, cree_le")
+    .select("scene_id, numero, nom, terrasse, sol, items, mode, vue, cree_le, ambiance_url")
     .eq("token", token)
     .maybeSingle();
   if (ev) return NextResponse.json({ error: ev.message }, { status: 500 });
@@ -62,6 +62,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       // Plan lié à une offre / commande : le client a déjà ses prix sur le
       // document, on ne montre pas ceux du webshop (21.09.2026).
       sans_prix: Boolean(s?.offre_slug),
+      ambiance_url: (v.ambiance_url as string | null) || null,
     }, { headers: entetes });
   }
 

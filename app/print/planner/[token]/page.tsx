@@ -10,7 +10,7 @@
 
 import React from "react";
 import { supabaseAdmin } from "@/lib/supabase";
-import { MENTION_LEGALE, type SceneItem } from "@/lib/planner-types";
+import { MENTION_IA, MENTION_LEGALE, type SceneItem } from "@/lib/planner-types";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +43,7 @@ export default async function PagePrintPlanner({ params, searchParams }: { param
 
   const { data: v } = await supabaseAdmin
     .from("planner_scenes_versions")
-    .select("scene_id, numero, nom, terrasse, sol, items, mode, vue, cree_par, cree_le, capture_url")
+    .select("scene_id, numero, nom, terrasse, sol, items, mode, vue, cree_par, cree_le, capture_url, ambiance_url, ambiance_prompt")
     .eq("token", /^[0-9a-f]{32}$/.test(token) ? token : "")
     .maybeSingle();
   if (!v) {
@@ -154,7 +154,7 @@ export default async function PagePrintPlanner({ params, searchParams }: { param
           </div>
           <div className="doc-header-right">
             <div className="doc-plan-name">{v.nom as string}</div>
-            <div className="doc-plan-sub">Composition à l&apos;échelle réalisée avec le planner 3D Jardin-Confort.</div>
+            <div className="doc-plan-sub">Composition réalisée avec le planner 3D Jardin-Confort.</div>
           </div>
         </div>
         <hr className="doc-hr" />
@@ -163,6 +163,13 @@ export default async function PagePrintPlanner({ params, searchParams }: { param
           <div className="doc-capture">
             <img src={v.capture_url as string} alt="" />
             <div className="doc-capture-caption">Vue {v.vue === "plan" ? "de dessus" : "en perspective"} — {MENTION_LEGALE}</div>
+          </div>
+        ) : null}
+
+        {v.ambiance_url ? (
+          <div className="doc-capture">
+            <img src={v.ambiance_url as string} alt="" />
+            <div className="doc-capture-caption">{MENTION_IA} — décor imaginé d&apos;après « {String(v.ambiance_prompt || "")} » ; seuls les meubles du plan font référence.</div>
           </div>
         ) : null}
 
