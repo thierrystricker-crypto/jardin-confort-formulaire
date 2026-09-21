@@ -17,9 +17,11 @@
 // MCP jardi-mail — clé dédiée OPENAI_IMAGE_API_KEY (restreinte « Images »),
 // repli OPENAI_API_KEY. Modèle OPENAI_IMAGE_MODELE (défaut gpt-image-1.5,
 // repli automatique gpt-image-1 si indisponible), sortie 1536×1024.
-// Résultat stocké sur la version (ambiance_url) dans le bucket « pdfs ».
-// Une image existe déjà pour cette version et le prompt est identique →
-// renvoyée telle quelle (regenerer: true pour forcer).
+// Résultat stocké dans le bucket « pdfs » (planner/<token>-ambiance-<n>.png)
+// et listé dans planner_ambiances : CHAQUE génération S'AJOUTE, rien n'est
+// écrasé. La nouvelle image devient l'image retenue pour les documents
+// (ambiance_url de la version) ; on peut en retenir une autre, n'en retenir
+// aucune, ou en supprimer — voir ../ambiances/route.ts.
 
 import { NextRequest, NextResponse } from "next/server";
 import { PNG } from "pngjs";
@@ -123,12 +125,9 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   const { data: vv } = await supabaseAdmin
     .from("planner_scenes_versions")
-    .select("ambiance_url, ambiance_prompt, sol, items")
+    .select("sol, items, cree_par")
     .eq("id", v.id)
     .maybeSingle();
-  if (vv?.ambiance_url && vv.ambiance_prompt === description && !body.regenerer) {
-    return NextResponse.json({ ambiance_url: vv.ambiance_url, numero: v.numero, token: v.token, reutilisee: true, mention: MENTION_IA });
-  }
 
   // Image de départ : la paire « photo » si le client l'a envoyée (caméra à
   // hauteur d'œil, bord avant hors champ), sinon la capture normale + son
@@ -188,11 +187,23 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     }
   }
 
-  const chemin = `planner/${v.token}-ambiance.png`;
-  const { error: up } = await supabaseAdmin.storage.from(BUCKET).upload(chemin, buf, { contentType: "image/png", upsert: true });
+  // Nom unique : on n'écrase jamais une image précédente.
+  const chemin = `planner/${v.token}-ambiance-${Date.now().toString(36)}.png`;
+  const { error: up } = await supabaseAdmin.storage.from(BUCKET).upload(chemin, buf, { contentType: "image/png", upsert: false });
   if (up) return NextResponse.json({ error: `Stockage : ${up.message}` }, { status: 500 });
-  const url = `${urlPublique(chemin)}?v=${Date.now()}`;
-  await supabaseAdmin.from("planner_scenes_versions").update({ ambiance_url: url, ambiance_prompt: description, ambiance_cree_le: new Date().toISOString() }).eq("id", v.id);
+  const url = urlPublique(chemin);
+  const { data: ligne, error: e3 } = await supabaseAdmin
+    .from("planner_ambiances")
+    .insert({ version_id: v.id, scene_id: id, url, chemin, prompt: description, modele, cree_par: vv?.cree_par || null })
+    .select("id, url, prompt, modele, cree_le")
+    .single();
+  if (e3) return NextResponse.json({ error: `Enregistrement : ${e3.message} (SQL 027 exécuté ?)` }, { status: 500 });
+  // La nouvelle image est retenue pour les documents ; les PDF déjà générés
+  // sont invalidés pour être refaits avec elle.
+  await supabaseAdmin.from("planner_scenes_versions")
+    .update({ ambiance_url: url, ambiance_prompt: description, ambiance_cree_le: new Date().toISOString(), pdf_url: null, pdf_sans_prix_url: null })
+    .eq("id", v.id);
+  const { data: toutes } = await supabaseAdmin.from("planner_ambiances").select("id, url, prompt, modele, cree_le").eq("version_id", v.id).order("cree_le", { ascending: false });
 
-  return NextResponse.json({ ambiance_url: url, numero: v.numero, token: v.token, reutilisee: false, mention: MENTION_IA, masque: Boolean(prep.masque), modele });
+  return NextResponse.json({ ambiance_url: url, ambiance: ligne, ambiances: toutes || [ligne], retenue: url, numero: v.numero, token: v.token, mention: MENTION_IA, modele });
 }

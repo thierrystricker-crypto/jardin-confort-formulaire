@@ -54,7 +54,10 @@ export default function PlannerPage() {
   const [listeOuverte, setListeOuverte] = useState(false);
   const [partage, setPartage] = useState<{ url: string; copie: boolean } | null>(null);   // lien client affiché
   const [pdfEnCours, setPdfEnCours] = useState(false);
-  const [ambiance, setAmbiance] = useState<{ url: string; numero: number; token: string } | null>(null);
+  // Galerie des images d'ambiance IA de la dernière version : chaque
+  // génération S'AJOUTE (rien n'est écrasé) ; `retenue` = celle des documents.
+  type Ambiance = { id: string; url: string; prompt: string | null; modele: string | null; cree_le: string };
+  const [ambiance, setAmbiance] = useState<{ numero: number; token: string; retenue: string | null; liste: Ambiance[] } | null>(null);
   const [ambianceEnCours, setAmbianceEnCours] = useState(false);
   const [ambianceErreur, setAmbianceErreur] = useState<string | null>(null);
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
@@ -174,7 +177,7 @@ export default function PlannerPage() {
     if (!id) { setScene((sc) => ({ ...sc, nom: nomPropose() })); setModifie(false); return; }
     fetch(`/api/planner/scenes/${id}`)
       .then((r) => r.json())
-      .then((j) => { if (j.scene) { setScene(j.scene); setModifie(false); } else setMessage(j.error || "Scène introuvable"); })
+      .then((j) => { if (j.scene) { setScene(j.scene); setModifie(false); chargerAmbiances(id); } else setMessage(j.error || "Scène introuvable"); })
       .catch((e) => setMessage((e as Error).message));
   }, []);
 
@@ -568,6 +571,32 @@ export default function PlannerPage() {
     w.location.href = `/print/planner/${version.token}?prix=${avecPrix ? 1 : 0}`;
   }
 
+  // Galerie des ambiances de la dernière version d'une scène (vide si aucune).
+  function chargerAmbiances(id: string) {
+    fetch(`/api/planner/scenes/${id}/ambiances`)
+      .then((r) => r.json())
+      .then((j) => setAmbiance(j.token && Array.isArray(j.ambiances) && j.ambiances.length ? { numero: j.numero, token: j.token, retenue: j.retenue, liste: j.ambiances } : null))
+      .catch(() => {});
+  }
+  // Retenir une image pour les documents / n'en retenir aucune / supprimer.
+  async function gererAmbiance(action: "retenir" | "exclure" | "supprimer", a: { id: string; url: string }) {
+    if (!scene.id || !ambiance) return;
+    if (action === "supprimer" && !window.confirm("Supprimer définitivement cette image d'ambiance ?\n(Le fichier est effacé ; si elle était sur les documents, ils n'en auront plus.)")) return;
+    try {
+      const r = await fetch(`/api/planner/scenes/${scene.id}/ambiances`, {
+        method: action === "supprimer" ? "DELETE" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: a.id, action }),
+      });
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      setAmbiance(j.ambiances.length ? { ...ambiance, retenue: j.retenue, liste: j.ambiances } : null);
+      setMessage(action === "retenir" ? "Cette image ira sur la fiche, le PDF et la page client" : action === "exclure" ? "Aucune image d'ambiance sur les documents" : "Image supprimée");
+    } catch (e) {
+      setMessage(`Ambiance : ${(e as Error).message}`);
+    }
+  }
+
   // Image d'ambiance IA : capture 3D figée + description → décor réinventé,
   // meubles inchangés. Route parallèle /ambiance (clé OpenAI de la voix).
   // S'AJOUTE aux exports : jamais à la place de la capture ou de la fiche.
@@ -577,7 +606,7 @@ export default function PlannerPage() {
     if (scene.items.length === 0) { setMessage("Pose d'abord des articles"); return; }
     const solNom = SOLS.find((x) => x.id === (scene.sol || "bois"))?.nom || "bois";
     const description = window.prompt(
-      "Décris l'ambiance souhaitée (le décor uniquement — les meubles restent exactement ceux du plan) :",
+      "Décris l'ambiance souhaitée (le décor uniquement — les meubles restent exactement ceux du plan).\nChaque génération s'ajoute à la galerie, rien n'est écrasé.",
       `Terrasse extérieure haut de gamme en ${solNom.toLowerCase()} face au lac Léman, dans l'esprit des terrasses du Lavaux : vignes en terrasses en arrière-plan, lac au loin et relief des Alpes sur l'autre rive. Fin d'après-midi d'été, lumière chaude de golden hour. Atmosphère élégante, calme, contemporaine ; architecture suisse discrète. Quelques végétaux locaux peuvent encadrer la scène sans jamais masquer les meubles.`,
     );
     if (description === null || !description.trim()) return;
@@ -595,17 +624,15 @@ export default function PlannerPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         // Une image existe déjà (bouton « Régénérer ») → on force une nouvelle
         // génération, sinon la route renvoie l'image stockée pour la version.
-        body: JSON.stringify({ prompt: description.trim(), capture, dims, regenerer: Boolean(ambiance) }),
+        body: JSON.stringify({ prompt: description.trim(), capture, dims }),
       });
       const texte = await r.text();
-      let j: { error?: string; details?: string; ambiance_url?: string; numero?: number; token?: string; reutilisee?: boolean; modele?: string };
+      let j: { error?: string; details?: string; ambiance_url?: string; ambiances?: Ambiance[]; retenue?: string | null; numero?: number; token?: string; modele?: string };
       try { j = JSON.parse(texte); }
       catch { throw new Error(`Réponse ${r.status} du serveur (pas du JSON) — ${r.status === 413 ? "images trop lourdes" : r.status === 504 ? "délai dépassé" : texte.slice(0, 80)}`); }
       if (j.error) throw new Error(j.details ? `${j.error} — ${j.details}` : j.error);
-      setAmbiance({ url: j.ambiance_url as string, numero: j.numero as number, token: j.token as string });
-      setMessage(j.reutilisee
-        ? `Image d'ambiance déjà générée pour la version V${j.numero}`
-        : `Image d'ambiance générée (version V${j.numero}${j.modele ? `, ${j.modele}` : ""})`);
+      setAmbiance({ numero: j.numero as number, token: j.token as string, retenue: j.retenue ?? (j.ambiance_url as string), liste: j.ambiances || [] });
+      setMessage(`Image d'ambiance générée (version V${j.numero}${j.modele ? `, ${j.modele}` : ""}) — elle est retenue pour les documents ; les précédentes restent dans la galerie`);
     } catch (e) {
       setAmbianceErreur((e as Error).message);
       setMessage("");
@@ -777,17 +804,30 @@ export default function PlannerPage() {
         </div>
       )}
       {ambiance && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">
-          <a href={ambiance.url} target="_blank" rel="noopener noreferrer"><img src={ambiance.url} alt="" className="h-20 rounded-lg border border-white/10" /></a>
-          <div className="min-w-0 flex-1">
-            <div>Image d&apos;ambiance IA — version V{ambiance.numero}. {MENTION_IA}.</div>
-            <div className="mt-1 flex flex-wrap gap-1">
-              <a href={ambiance.url} target="_blank" rel="noopener noreferrer" className={BTN_OFF}>Ouvrir</a>
-              <a href={`/print/planner/${ambiance.token}?prix=0`} target="_blank" rel="noopener noreferrer" className={BTN_OFF}>Fiche sans prix avec l&apos;image</a>
-              <button type="button" onClick={genererAmbiance} className={BTN_OFF}>Régénérer avec une autre ambiance</button>
-            </div>
+        <div className="border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1">🎨 Ambiances IA — version V{ambiance.numero} · {ambiance.liste.length} image{ambiance.liste.length > 1 ? "s" : ""}. {MENTION_IA}. Chaque génération s&apos;ajoute, rien n&apos;est écrasé ; l&apos;image <b>retenue</b> est celle de la fiche, du PDF et de la page client.</span>
+            <a href={`/print/planner/${ambiance.token}?prix=0`} target="_blank" rel="noopener noreferrer" className={BTN_OFF}>Fiche sans prix</a>
+            <button type="button" onClick={genererAmbiance} disabled={ambianceEnCours} className={BTN_OFF}>+ Nouvelle image</button>
+            {ambiance.retenue && <button type="button" onClick={() => gererAmbiance("exclure", ambiance.liste[0])} className={BTN_OFF} title="Les documents n'auront aucune image d'ambiance (les images restent dans la galerie)">Aucune sur les documents</button>}
+            <button type="button" onClick={() => setAmbiance(null)} className="text-zinc-400 hover:text-white" title="Masquer (rouvrir en rechargeant le plan)">✕</button>
           </div>
-          <button type="button" onClick={() => setAmbiance(null)} className="text-zinc-400 hover:text-white" title="Masquer">✕</button>
+          <div className="mt-2 flex gap-3 overflow-x-auto pb-1">
+            {ambiance.liste.map((a) => {
+              const retenue = a.url === ambiance.retenue;
+              return (
+                <div key={a.id} className={`shrink-0 rounded-lg border p-1 ${retenue ? "border-emerald-400 bg-emerald-500/10" : "border-white/10"}`}>
+                  <a href={a.url} target="_blank" rel="noopener noreferrer" title={a.prompt || ""}><img src={a.url} alt="" className="h-24 rounded" /></a>
+                  <div className="mt-1 flex items-center gap-1">
+                    {retenue
+                      ? <span className="rounded bg-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-100">✓ sur les documents</span>
+                      : <button type="button" onClick={() => gererAmbiance("retenir", a)} className="rounded border border-white/10 bg-[#2a2d31] px-1.5 py-0.5 text-[10px] text-zinc-300 hover:bg-[#34383d]">Retenir</button>}
+                    <button type="button" onClick={() => gererAmbiance("supprimer", a)} className="rounded border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-500/25" title="Supprimer définitivement">🗑</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
       {partage && (
