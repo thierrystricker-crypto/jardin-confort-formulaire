@@ -60,8 +60,6 @@ export default function PlannerPage() {
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
-  const calqueRef = useRef<(() => string | null) | null>(null);   // terrasse + meubles, fond transparent
-  const ambianceRef = useRef<(() => { capture: string; calque: string } | null) | null>(null);   // paire cadrée « photo »
   const recadrerRef = useRef<(() => void) | null>(null);
   const [rotationFine, setRotationFine] = useState(false);   // déverrouillage manuel, jamais par défaut
 
@@ -472,12 +470,11 @@ export default function PlannerPage() {
     await new Promise<void>((r) => setTimeout(r, 80));
     return captureRef.current?.() || null;
   }
-  // Cadre une capture (data URL) au format 1536×1024 de gpt-image-1 : recadrage
-  // « cover » centré, identique pour la capture et le calque (même caméra),
-  // donc superposables au pixel. `fond` remplit l'arrière-plan transparent du
-  // canvas (capture) ; sans fond, la transparence est conservée (calque).
-  // Au passage, ça tient sous les 4,5 Mo par requête des fonctions Vercel.
-  async function cadrer(data: string | null, fond?: string): Promise<string | null> {
+  // Cadre une capture (data URL) au format 1536×1024 de gpt-image : l'image
+  // est CONTENUE (jamais rognée — un meuble coupé serait réinventé), les
+  // bandes sont remplies de blanc, comme le fond de la fiche. Au passage, ça
+  // tient sous les 4,5 Mo par requête des fonctions Vercel.
+  async function cadrer(data: string | null, fond = "#ffffff"): Promise<string | null> {
     if (!data) return null;
     const im = await chargerImage(data);
     if (!im) return null;
@@ -486,8 +483,9 @@ export default function PlannerPage() {
     c.width = L; c.height = H;
     const ctx = c.getContext("2d");
     if (!ctx) return null;
-    if (fond) { ctx.fillStyle = fond; ctx.fillRect(0, 0, L, H); }
-    const k = Math.max(L / im.width, H / im.height);
+    ctx.fillStyle = fond;
+    ctx.fillRect(0, 0, L, H);
+    const k = Math.min(L / im.width, H / im.height);
     const w = im.width * k, h = im.height * k;
     ctx.drawImage(im, (L - w) / 2, (H - h) / 2, w, h);
     return c.toDataURL("image/png");
@@ -580,39 +578,34 @@ export default function PlannerPage() {
     const solNom = SOLS.find((x) => x.id === (scene.sol || "bois"))?.nom || "bois";
     const description = window.prompt(
       "Décris l'ambiance souhaitée (le décor uniquement — les meubles restent exactement ceux du plan) :",
-      `Terrasse en ${solNom.toLowerCase()} face au lac Léman, vignes en arrière-plan, fin d'après-midi d'été`,
+      `Terrasse extérieure haut de gamme en ${solNom.toLowerCase()} face au lac Léman, dans l'esprit des terrasses du Lavaux : vignes en terrasses en arrière-plan, lac au loin et relief des Alpes sur l'autre rive. Fin d'après-midi d'été, lumière chaude de golden hour. Atmosphère élégante, calme, contemporaine ; architecture suisse discrète. Quelques végétaux locaux peuvent encadrer la scène sans jamais masquer les meubles.`,
     );
     if (description === null || !description.trim()) return;
     setAmbianceEnCours(true);
     setAmbianceErreur(null);
     setMessage("Génération de l'image d'ambiance… (20 à 40 s)");
     try {
-      // Capture normale (pour la version / la fiche) + paire « photo » cadrée
-      // à hauteur d'œil pour l'IA (même caméra pour capture et calque →
-      // superposables). En vue plan, on retombe sur la vue courante.
+      // Capture de la vue courante, fond blanc : c'est l'image source de l'IA
+      // (prompt maître côté serveur, pas de masque — voir la route).
       const brute = await capturerSansSelection();
-      const paire = ambianceRef.current?.() || null;
-      const capture = await cadrer(brute, "#dfe3e6");
-      const ambianceCapture = await cadrer(paire?.capture || brute, "#dfe3e6");
-      const ambianceCalque = await cadrer(paire?.calque || calqueRef.current?.() || null);
-      if (!paire) setMessage("Astuce : passe en vue 3D pour un cadrage photo de l'ambiance");
+      const capture = await cadrer(brute);
       let id = scene.id;
       if (!id || modifie) { id = await enregistrer(); if (!id) return; }
       const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         // Une image existe déjà (bouton « Régénérer ») → on force une nouvelle
         // génération, sinon la route renvoie l'image stockée pour la version.
-        body: JSON.stringify({ prompt: description.trim(), capture, ambiance: { capture: ambianceCapture, calque: ambianceCalque }, dims, regenerer: Boolean(ambiance) }),
+        body: JSON.stringify({ prompt: description.trim(), capture, dims, regenerer: Boolean(ambiance) }),
       });
       const texte = await r.text();
-      let j: { error?: string; details?: string; ambiance_url?: string; numero?: number; token?: string; reutilisee?: boolean; masque?: boolean };
+      let j: { error?: string; details?: string; ambiance_url?: string; numero?: number; token?: string; reutilisee?: boolean; modele?: string };
       try { j = JSON.parse(texte); }
       catch { throw new Error(`Réponse ${r.status} du serveur (pas du JSON) — ${r.status === 413 ? "images trop lourdes" : r.status === 504 ? "délai dépassé" : texte.slice(0, 80)}`); }
       if (j.error) throw new Error(j.details ? `${j.error} — ${j.details}` : j.error);
       setAmbiance({ url: j.ambiance_url as string, numero: j.numero as number, token: j.token as string });
       setMessage(j.reutilisee
         ? `Image d'ambiance déjà générée pour la version V${j.numero}`
-        : `Image d'ambiance générée (version V${j.numero})${j.masque ? " — meubles du plan verrouillés" : " — ATTENTION : sans calque, meubles non garantis"}`);
+        : `Image d'ambiance générée (version V${j.numero}${j.modele ? `, ${j.modele}` : ""})`);
     } catch (e) {
       setAmbianceErreur((e as Error).message);
       setMessage("");
@@ -826,8 +819,6 @@ export default function PlannerPage() {
             onDims={(u, d) => setDims((m) => (m[u] && Math.abs(m[u].l - d.l) < 1e-6 ? m : { ...m, [u]: d }))}
             onError={(u, m) => setErreurs((e) => ({ ...e, [u]: m }))}
             captureRef={captureRef}
-            calqueRef={calqueRef}
-            ambianceRef={ambianceRef}
             recadrerRef={recadrerRef}
           />
           {/* Outils de l'article sélectionné */}
