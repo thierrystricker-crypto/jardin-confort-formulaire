@@ -42,6 +42,9 @@ type Props = {
   onDims: (uid: string, dims: Dims) => void;
   onError: (uid: string, message: string) => void;
   captureRef: React.MutableRefObject<(() => string | null) | null>;
+  // Calque « meubles seuls » (fond transparent, sol remplacé par un récepteur
+  // d'ombres) pour l'ambiance IA : sert de masque et se recolle sur l'image.
+  calqueRef?: React.MutableRefObject<(() => string | null) | null>;
   recadrerRef: React.MutableRefObject<(() => void) | null>;   // « Recadrer » : toute la terrasse dans la vue
   lectureSeule?: boolean;       // page client : on regarde, on tourne, on zoome — on ne touche à rien
 };
@@ -147,15 +150,39 @@ class Garde extends React.Component<{ onError: (m: string) => void; fallback: Re
 
 // ─── Capture d'écran ──────────────────────────────────────────────────────────
 
-function Capture({ captureRef }: { captureRef: Props["captureRef"] }) {
+type RefMesh = React.RefObject<THREE.Object3D | null>;
+
+function Capture({ captureRef, calqueRef, terrasseRef, grilleRef, ombreRef }: {
+  captureRef: Props["captureRef"]; calqueRef?: Props["calqueRef"]; terrasseRef: RefMesh; grilleRef: RefMesh; ombreRef: RefMesh;
+}) {
   const { gl, scene, camera } = useThree();
   useEffect(() => {
     captureRef.current = () => {
       gl.render(scene, camera);
       return gl.domElement.toDataURL("image/png");
     };
-    return () => { captureRef.current = null; };
-  }, [gl, scene, camera, captureRef]);
+    if (calqueRef) {
+      // Même caméra, même taille que la capture prise juste avant : on cache
+      // la terrasse et la grille, on montre le plan « ombres seules », on lit
+      // le canvas (fond transparent : le canvas est alpha, le gris vient du CSS)
+      // puis on remet tout et on redessine la vue normale.
+      calqueRef.current = () => {
+        const t = terrasseRef.current, g = grilleRef.current, o = ombreRef.current;
+        const vt = t?.visible ?? true, vg = g?.visible ?? true;
+        if (t) t.visible = false;
+        if (g) g.visible = false;
+        if (o) o.visible = true;
+        gl.render(scene, camera);
+        const data = gl.domElement.toDataURL("image/png");
+        if (t) t.visible = vt;
+        if (g) g.visible = vg;
+        if (o) o.visible = false;
+        gl.render(scene, camera);
+        return data;
+      };
+    }
+    return () => { captureRef.current = null; if (calqueRef) calqueRef.current = null; };
+  }, [gl, scene, camera, captureRef, calqueRef, terrasseRef, grilleRef, ombreRef]);
   return null;
 }
 
@@ -189,8 +216,11 @@ function Recadrage({ recadrerRef, terrasse, vue }: { recadrerRef: Props["recadre
 // ─── Scène ────────────────────────────────────────────────────────────────────
 
 export default function PlannerCanvas(props: Props) {
-  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, recadrerRef, lectureSeule = false } = props;
+  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, calqueRef, recadrerRef, lectureSeule = false } = props;
   const [drag, setDrag] = useState<{ uid: string; dx: number; dz: number } | null>(null);
+  const terrasseRef = useRef<THREE.Mesh>(null);
+  const grilleRef = useRef<THREE.Mesh>(null);
+  const ombreRef = useRef<THREE.Mesh>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
 
@@ -249,11 +279,12 @@ export default function PlannerCanvas(props: Props) {
       />
 
       {/* Terrasse + quadrillage 50 cm / 1 m */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.002, 0]} receiveShadow>
+      <mesh ref={terrasseRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.002, 0]} receiveShadow>
         <planeGeometry args={[terrasse.largeur, terrasse.profondeur]} />
         <meshStandardMaterial color={mode === "maquette" ? "#e8e6e1" : (SOLS.find((x) => x.id === sol)?.couleur || "#c9a678")} roughness={1} />
       </mesh>
       <Grid
+        ref={grilleRef}
         position={[0, 0.001, 0]}
         args={[terrasse.largeur, terrasse.profondeur]}
         cellSize={0.5}
@@ -265,6 +296,11 @@ export default function PlannerCanvas(props: Props) {
         fadeDistance={80}
         infiniteGrid={false}
       />
+      {/* Récepteur d'ombres, visible seulement pendant le calque « meubles seuls » */}
+      <mesh ref={ombreRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.003, 0]} receiveShadow visible={false}>
+        <planeGeometry args={[400, 400]} />
+        <shadowMaterial transparent opacity={0.45} color="#000000" />
+      </mesh>
       {/* Cotes de la terrasse */}
       <Html position={[0, 0.01, demiP + 0.35]} center style={{ pointerEvents: "none" }}>
         <div className="rounded bg-black/60 px-1.5 py-0.5 text-[11px] text-white">{terrasse.largeur.toFixed(2)} m</div>
@@ -305,7 +341,7 @@ export default function PlannerCanvas(props: Props) {
         );
       })}
 
-      <Capture captureRef={captureRef} />
+      <Capture captureRef={captureRef} calqueRef={calqueRef} terrasseRef={terrasseRef} grilleRef={grilleRef} ombreRef={ombreRef} />
       <Recadrage recadrerRef={recadrerRef} terrasse={terrasse} vue={vue} />
     </Canvas>
   );

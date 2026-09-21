@@ -60,6 +60,7 @@ export default function PlannerPage() {
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
+  const calqueRef = useRef<(() => string | null) | null>(null);   // meubles seuls, pour l'ambiance IA
   const recadrerRef = useRef<(() => void) | null>(null);
   const [rotationFine, setRotationFine] = useState(false);   // déverrouillage manuel, jamais par défaut
 
@@ -566,11 +567,12 @@ export default function PlannerPage() {
     setMessage("Génération de l'image d'ambiance… (20 à 40 s)");
     try {
       const capture = await capturerSansSelection();
+      const calque = calqueRef.current?.() || null;   // même caméra, même taille : superposable
       let id = scene.id;
       if (!id || modifie) { id = await enregistrer(); if (!id) return; }
       const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: description.trim(), capture, dims }),
+        body: JSON.stringify({ prompt: description.trim(), capture, calque, dims }),
       });
       const j = await r.json();
       if (j.error) throw new Error(j.details ? `${j.error} — ${j.details}` : j.error);
@@ -789,6 +791,7 @@ export default function PlannerPage() {
             onDims={(u, d) => setDims((m) => (m[u] && Math.abs(m[u].l - d.l) < 1e-6 ? m : { ...m, [u]: d }))}
             onError={(u, m) => setErreurs((e) => ({ ...e, [u]: m }))}
             captureRef={captureRef}
+            calqueRef={calqueRef}
             recadrerRef={recadrerRef}
           />
           {/* Outils de l'article sélectionné */}
