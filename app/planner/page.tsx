@@ -594,15 +594,19 @@ export default function PlannerPage() {
       if (!id || modifie) { id = await enregistrer(); if (!id) return; }
       const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: description.trim(), capture, calque, dims }),
+        // Une image existe déjà (bouton « Régénérer ») → on force une nouvelle
+        // génération, sinon la route renvoie l'image stockée pour la version.
+        body: JSON.stringify({ prompt: description.trim(), capture, calque, dims, regenerer: Boolean(ambiance) }),
       });
       const texte = await r.text();
-      let j: { error?: string; details?: string; ambiance_url?: string; numero?: number; token?: string; reutilisee?: boolean };
+      let j: { error?: string; details?: string; ambiance_url?: string; numero?: number; token?: string; reutilisee?: boolean; masque?: boolean };
       try { j = JSON.parse(texte); }
       catch { throw new Error(`Réponse ${r.status} du serveur (pas du JSON) — ${r.status === 413 ? "images trop lourdes" : r.status === 504 ? "délai dépassé" : texte.slice(0, 80)}`); }
       if (j.error) throw new Error(j.details ? `${j.error} — ${j.details}` : j.error);
       setAmbiance({ url: j.ambiance_url as string, numero: j.numero as number, token: j.token as string });
-      setMessage(j.reutilisee ? `Image d'ambiance déjà générée pour la version V${j.numero}` : `Image d'ambiance générée (version V${j.numero})`);
+      setMessage(j.reutilisee
+        ? `Image d'ambiance déjà générée pour la version V${j.numero}`
+        : `Image d'ambiance générée (version V${j.numero})${j.masque ? " — meubles du plan verrouillés" : " — ATTENTION : sans calque, meubles non garantis"}`);
     } catch (e) {
       setAmbianceErreur((e as Error).message);
       setMessage("");
