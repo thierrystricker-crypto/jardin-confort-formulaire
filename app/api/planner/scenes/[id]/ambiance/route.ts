@@ -153,7 +153,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     console.error("[planner ambiance] OpenAI:", j);
     return NextResponse.json({ error: "Génération impossible", details: j.error?.message || r.statusText }, { status: 502 });
   }
-  let buf = Buffer.from(j.data[0].b64_json, "base64");
+  let buf: Buffer = Buffer.from(j.data[0].b64_json, "base64");
 
   // Recollage des meubles d'origine (avec leurs ombres) sur le décor généré.
   if (prep.calque) {
