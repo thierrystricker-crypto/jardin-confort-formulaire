@@ -18,7 +18,8 @@ type Ligne = {
 type Reponse = { total: number; avec_3d: number; lignes: Ligne[]; numero: string | null; type_document: string; error?: string };
 type SceneLiee = {
   id: string; nom: string; updated_at: string; nb_items: number;
-  derniere_version: { numero: number; token: string; capture_url: string | null; pdf_url: string | null; cree_le: string } | null;
+  sur_documents?: boolean;
+  derniere_version: { numero: number; token: string; capture_url: string | null; ambiance_url: string | null; pdf_url: string | null; pdf_sans_prix_url: string | null; cree_le: string } | null;
 };
 
 export default function Faisabilite3DCard({ type, slug }: { type: "offre" | "brouillon"; slug: string }) {
@@ -69,11 +70,15 @@ export default function Faisabilite3DCard({ type, slug }: { type: "offre" | "bro
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {rep.avec_3d > 0 && (
+          {rep.avec_3d > 0 && (scenes.length === 0 ? (
             <a href={hrefPlanner} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-sky-500/40 bg-sky-500/20 px-3 py-1.5 text-sm text-sky-200 hover:bg-sky-500/30">
               🪑 Ouvrir le planner avec {rep.avec_3d > 1 ? "ces articles" : "cet article"}
             </a>
-          )}
+          ) : (
+            <a href={hrefPlanner} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-white/10 bg-[#2a2d31] px-3 py-1.5 text-xs text-zinc-400 hover:bg-[#34383d]" title="Repart de zéro : nouveau plan avec les articles du document. Pour reprendre le plan existant, clique sur sa vignette.">
+              ＋ Autre plan
+            </a>
+          ))}
           <button type="button" onClick={() => setOuvert((v) => !v)} className="rounded-xl border border-white/10 bg-[#2a2d31] px-3 py-1.5 text-xs text-zinc-300 hover:bg-[#34383d]">
             {ouvert ? "Masquer le détail" : "Détail"}
           </button>
@@ -87,20 +92,27 @@ export default function Faisabilite3DCard({ type, slug }: { type: "offre" | "bro
             {scenes.map((s) => {
               const v = s.derniere_version;
               return (
-                <div key={s.id} className="w-[260px] overflow-hidden rounded-xl border border-white/10 bg-black/20">
-                  {/* Aperçu léger : la capture PNG de la dernière version, pas de WebGL */}
-                  <a href={`/planner?scene=${s.id}`} target="_blank" rel="noopener noreferrer" title="Ouvrir dans le planner">
+                <div key={s.id} className={`w-[320px] overflow-hidden rounded-xl border bg-black/20 ${s.sur_documents ? "border-emerald-500/40" : "border-white/10"}`}>
+                  {/* Aperçus légers (PNG, pas de WebGL) : le plan, et l'image
+                      d'ambiance IA retenue quand il y en a une. */}
+                  <a href={`/planner?scene=${s.id}`} target="_blank" rel="noopener noreferrer" title="Ouvrir dans le planner" className="flex gap-px bg-white/5">
                     {v?.capture_url ? (
-                      <img src={v.capture_url} alt="" loading="lazy" className="block h-[150px] w-full object-cover" />
+                      <img src={v.capture_url} alt="Plan 3D" loading="lazy" className={`block h-[130px] ${v.ambiance_url ? "w-1/2" : "w-full"} object-cover`} />
                     ) : (
-                      <div className="flex h-[150px] items-center justify-center text-xs text-zinc-500">Aucun aperçu — fais une Fiche ou une Capture</div>
+                      <div className="flex h-[130px] w-full items-center justify-center px-2 text-center text-xs text-zinc-500">Aucun aperçu — fais une Fiche ou une Capture</div>
                     )}
+                    {v?.ambiance_url && <img src={v.ambiance_url} alt="Ambiance IA" loading="lazy" className="block h-[130px] w-1/2 object-cover" />}
                   </a>
                   <div className="p-2 text-xs">
+                    <a href={`/planner?scene=${s.id}`} target="_blank" rel="noopener noreferrer" className="mb-1.5 block rounded-lg border border-sky-500/40 bg-sky-500/20 px-2 py-1 text-center text-sm text-sky-200 hover:bg-sky-500/30">
+                      🪑 Reprendre ce plan
+                    </a>
                     <div className="truncate font-medium text-zinc-100" title={s.nom}>{s.nom}</div>
                     <div className="text-zinc-500">{s.nb_items} article{s.nb_items > 1 ? "s" : ""}{v ? ` · V${v.numero}` : ""} · {new Date(s.updated_at).toLocaleDateString("fr-CH")}</div>
+                    {s.sur_documents
+                      ? <div className="mt-0.5 text-emerald-300" title="Le plan et l'image d'ambiance apparaissent en dernière page de l'offre / commande, sans prix">✓ Sur les documents du client</div>
+                      : <div className="mt-0.5 text-zinc-600" title="À cocher dans le planner pour joindre le plan aux documents">Pas sur les documents</div>}
                     <div className="mt-1.5 flex flex-wrap gap-1">
-                      <a href={`/planner?scene=${s.id}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-0.5 text-zinc-300 hover:bg-[#34383d]">🪑 Planner</a>
                       {v && <a href={`/planner/partage/${v.token}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-0.5 text-zinc-300 hover:bg-[#34383d]">🧊 3D client</a>}
                       {v && (
                         <button type="button" onClick={() => copierLien(s.id, v.token)} className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-emerald-200 hover:bg-emerald-500/25" title="Copier le lien du plan 3D (version figée) pour l'envoyer au client">

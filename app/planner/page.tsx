@@ -637,6 +637,32 @@ export default function PlannerPage() {
   }
   const solTexte = () => (SOLS.find((x) => x.id === (scene.sol || "bois"))?.nom || "bois").toLowerCase();
 
+  // Dossier lié : les brouillons vivent sous /dashboard/draft/<slug>
+  function lienDossier(slug: string): string {
+    return /^dra/i.test(slug) ? `/dashboard/draft/${slug}` : `/dashboard/${slug}`;
+  }
+
+  // « Sur les documents » : enregistré TOUT DE SUITE (PATCH), sans attendre
+  // le bouton Enregistrer — sinon on coche, on quitte, et rien n'apparaît sur
+  // l'offre (constaté 22.09.2026).
+  async function basculerSurDocuments(actif: boolean) {
+    patch({ sur_documents: actif }, false);
+    if (!scene.id) { setMessage(actif ? "Le plan sera joint aux documents dès que tu l'auras enregistré." : ""); return; }
+    try {
+      const r = await fetch(`/api/planner/scenes/${scene.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sur_documents: actif }),
+      });
+      if (!r.ok) throw new Error(`Réponse ${r.status}`);
+      setMessage(actif
+        ? `Plan joint aux documents de ${scene.offre_slug} : il apparaît en dernière page de l'offre / commande (sans prix). Régénère le PDF ou recharge la page print pour le voir.`
+        : `Plan retiré des documents de ${scene.offre_slug}.`);
+    } catch (e) {
+      patch({ sur_documents: !actif }, false);
+      setMessage(`Enregistrement impossible : ${(e as Error).message} (SQL 029 exécuté ?)`);
+    }
+  }
+
   async function lancerAmbiance() {
     const { description } = composerDescription(choixAmb.decor, choixAmb.moment, choixAmb.precisions, solTexte());
     try { window.localStorage.setItem("planner-ambiance-choix", JSON.stringify({ ...choixAmb, coloris: "" })); } catch { /* ignore */ }
@@ -829,10 +855,13 @@ export default function PlannerPage() {
           <button type="button" onClick={enregistrer} disabled={enregistrement} className={`${BTN} border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25`}>
             {enregistrement ? "…" : modifie ? "💾 Enregistrer *" : "💾 Enregistrer"}
           </button>
-          {/* Joindre le plan à la page print de l'offre / commande (SQL 029) */}
+          {/* Dossier lié + « Sur les documents » (SQL 029) */}
           {scene.offre_slug && (
-            <label className={`${BTN} flex cursor-pointer items-center gap-1.5 ${scene.sur_documents ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200" : "border-white/10 bg-[#2a2d31] text-zinc-400"}`} title={`Le plan 3D et l'image d'ambiance retenue apparaissent en dernière page de l'offre / commande ${scene.offre_slug} (lien client et PDF), toujours sans prix. Pense à enregistrer.`}>
-              <input type="checkbox" checked={scene.sur_documents === true} onChange={(e) => patch({ sur_documents: e.target.checked })} className="h-3 w-3 accent-emerald-500" />
+            <a href={lienDossier(scene.offre_slug)} target="_blank" rel="noopener noreferrer" className={BTN_OFF} title={`Ouvrir ${scene.offre_slug} dans un nouvel onglet`}>📄 Dossier</a>
+          )}
+          {scene.offre_slug && (
+            <label className={`${BTN} flex cursor-pointer items-center gap-1.5 ${scene.sur_documents ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200" : "border-white/10 bg-[#2a2d31] text-zinc-400"}`} title={`Le plan 3D et l'image d'ambiance retenue apparaissent en dernière page de l'offre / commande ${scene.offre_slug} (lien client et PDF Make), toujours sans prix.`}>
+              <input type="checkbox" checked={scene.sur_documents === true} onChange={(e) => void basculerSurDocuments(e.target.checked)} className="h-3 w-3 accent-emerald-500" />
               Sur les documents
             </label>
           )}
