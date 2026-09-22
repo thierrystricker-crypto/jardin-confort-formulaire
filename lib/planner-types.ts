@@ -114,6 +114,9 @@ export type Scene = {
   mode: "couleurs" | "maquette";
   vue: "plan" | "3d";
   offre_slug?: string | null;
+  // Joindre le plan (vue 3D + image d'ambiance retenue) à la page print de
+  // l'offre / commande liée — SQL 029. Décoché par défaut.
+  sur_documents?: boolean;
   camera?: CameraScene | null;
 };
 

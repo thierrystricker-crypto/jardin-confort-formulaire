@@ -27,6 +27,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     vue: data.vue,
     sol: data.sol || "bois",
     offre_slug: data.offre_slug,
+    sur_documents: data.sur_documents === true,
     camera: data.camera || null,
   };
   return NextResponse.json({ scene, cree_par: data.cree_par, updated_at: data.updated_at });
@@ -47,6 +48,7 @@ export async function PUT(request: NextRequest, ctx: Ctx) {
         mode: s.mode,
         vue: s.vue,
         sol: s.sol || "bois",
+        sur_documents: s.sur_documents === true,
         ...(s.camera ? { camera: s.camera } : {}),
         updated_at: new Date().toISOString(),
       })

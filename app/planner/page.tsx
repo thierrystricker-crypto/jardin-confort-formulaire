@@ -829,6 +829,13 @@ export default function PlannerPage() {
           <button type="button" onClick={enregistrer} disabled={enregistrement} className={`${BTN} border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25`}>
             {enregistrement ? "…" : modifie ? "💾 Enregistrer *" : "💾 Enregistrer"}
           </button>
+          {/* Joindre le plan à la page print de l'offre / commande (SQL 029) */}
+          {scene.offre_slug && (
+            <label className={`${BTN} flex cursor-pointer items-center gap-1.5 ${scene.sur_documents ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200" : "border-white/10 bg-[#2a2d31] text-zinc-400"}`} title={`Le plan 3D et l'image d'ambiance retenue apparaissent en dernière page de l'offre / commande ${scene.offre_slug} (lien client et PDF), toujours sans prix. Pense à enregistrer.`}>
+              <input type="checkbox" checked={scene.sur_documents === true} onChange={(e) => patch({ sur_documents: e.target.checked })} className="h-3 w-3 accent-emerald-500" />
+              Sur les documents
+            </label>
+          )}
           <button type="button" onClick={partager} className={BTN_OFF} title="Lien client en lecture seule : il tourne la vue, zoome, bascule Plan/3D — sans rien modifier">🔗 Partager</button>
           <button type="button" onClick={capturer} className={BTN_OFF} title="Télécharger une image PNG de la vue actuelle, avec la mention légale">📷 Capture</button>
           <button type="button" onClick={() => imprimerListe(true)} className={scene.offre_slug ? `${BTN} border-amber-500/30 bg-amber-500/5 text-zinc-500` : BTN_OFF} title={scene.offre_slug ? "Plan lié à une offre / commande : préférer la version sans prix" : "Fiche imprimable : image de la vue + liste des articles avec photos, cotes et prix indicatifs"}>🖨 Fiche</button>
