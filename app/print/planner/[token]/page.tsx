@@ -81,23 +81,26 @@ export default async function PagePrintPlanner({ params, searchParams }: { param
           .print-btn { position: fixed; top: 16px; right: 16px; z-index: 100; background: ${THEME}; color: white; border: 0; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
         }
         @media print { .print-btn { display: none !important; } }
-        .doc-header { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 6mm; width: 100%; }
+        .doc-header { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 3mm; width: 100%; }
         .doc-header-left { flex: 0 0 46%; } .doc-header-right { flex: 0 0 50%; }
-        .doc-logo { max-width: 175px; max-height: 65px; object-fit: contain; display: block; margin-bottom: 10px; }
+        .doc-logo { max-width: 150px; max-height: 50px; object-fit: contain; display: block; margin-bottom: 6px; }
         .doc-type { font-size: 26px; font-weight: 400; color: ${THEME}; margin-bottom: 8px; line-height: 1.1; }
         .doc-meta-table { border-collapse: collapse; width: 100%; }
         .doc-meta-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 12px; line-height: 1.35; }
-        .doc-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 44%; }
+        .doc-meta-label { font-weight: 700; color: ${BLACK}; white-space: nowrap; width: 28%; }
         .doc-plan-name { font-size: 19px; font-weight: 700; color: ${BLACK}; line-height: 1.3; margin: 6px 0 4px; }
         .doc-plan-sub { font-size: 12px; color: #666; }
         .doc-hr { border: 0; border-top: 2px solid ${THEME}; margin: 4mm 0; width: 100%; }
         .doc-capture { width: 100%; margin-bottom: 6mm; page-break-inside: avoid; break-inside: avoid; }
         .doc-capture img { display: block; width: 100%; border: 1px solid #e5e7eb; border-radius: 4px; }
-        /* Plan + ambiance IA : côte à côte sur la première page, hauteur bornée
-           pour que le tableau des articles commence sous les images. */
-        .doc-duo { display: flex; gap: 4mm; margin-bottom: 6mm; page-break-inside: avoid; break-inside: avoid; }
-        .doc-duo .doc-capture { flex: 1 1 0; min-width: 0; margin-bottom: 0; }
-        .doc-duo .doc-capture img { width: 100%; height: 62mm; object-fit: contain; background: #fff; }
+        /* Plan + ambiance IA : pleine largeur, l'un sous l'autre, hauteurs
+           bornées pour remplir la première page à eux deux (A4 : ~249 mm
+           utiles, en-tête ~38 mm) ; le tableau des articles suit en page 2. */
+        .doc-duo { margin-bottom: 4mm; }
+        .doc-duo .doc-capture { margin-bottom: 3mm; page-break-inside: avoid; break-inside: avoid; }
+        .doc-duo .doc-capture img { width: 100%; height: 92mm; object-fit: contain; background: #fff; }
+        .doc-duo .doc-capture-ia img { height: 96mm; }
+        .doc-duo + .doc-table { page-break-before: always; break-before: page; }
         .doc-capture-caption { font-size: 10px; color: #777; font-style: italic; margin-top: 5px; text-align: center; }
         .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; }
         .doc-table thead th { padding: 7px 4px; border-top: 2px solid ${THEME}; border-bottom: 2px solid ${THEME}; font-weight: 700; font-size: 12px; color: ${BLACK}; }
@@ -148,13 +151,10 @@ export default async function PagePrintPlanner({ params, searchParams }: { param
           <div className="doc-header-left">
             <img className="doc-logo" src={LOGO} alt="Jardin-Confort" />
             <div className="doc-type">Plan 3D</div>
+            {/* En-tête compact (2 lignes) : la première page est réservée aux images */}
             <table className="doc-meta-table"><tbody>
-              <tr><td className="doc-meta-label">Date</td><td>{dateCH(v.cree_le as string)}</td></tr>
-              {v.cree_par ? <tr><td className="doc-meta-label">Conseiller</td><td>{v.cree_par as string}</td></tr> : null}
-              <tr><td className="doc-meta-label">Terrasse</td><td>{terrasse.largeur} × {terrasse.profondeur} m</td></tr>
-              <tr><td className="doc-meta-label">Articles</td><td>{items.length}</td></tr>
-              <tr><td className="doc-meta-label">N° de plan</td><td>{String(v.scene_id).slice(0, 8)} · V{v.numero as number}</td></tr>
-              {v.mode === "maquette" ? <tr><td className="doc-meta-label">Rendu</td><td>maquette (sans couleurs)</td></tr> : null}
+              <tr><td className="doc-meta-label">N° de plan</td><td>{String(v.scene_id).slice(0, 8)} · V{v.numero as number} du {dateCH(v.cree_le as string)}{v.cree_par ? ` · ${v.cree_par as string}` : ""}</td></tr>
+              <tr><td className="doc-meta-label">Terrasse</td><td>{terrasse.largeur} × {terrasse.profondeur} m · {items.length} article{items.length > 1 ? "s" : ""}{v.mode === "maquette" ? " · rendu maquette (sans couleurs)" : ""}</td></tr>
             </tbody></table>
           </div>
           <div className="doc-header-right">
@@ -172,7 +172,7 @@ export default async function PagePrintPlanner({ params, searchParams }: { param
               <img src={v.capture_url as string} alt="" />
               <div className="doc-capture-caption">Plan 3D, vue {v.vue === "plan" ? "de dessus" : "en perspective"} — {MENTION_LEGALE}</div>
             </div>
-            <div className="doc-capture">
+            <div className="doc-capture doc-capture-ia">
               <img src={v.ambiance_url as string} alt="" />
               <div className="doc-capture-caption">{MENTION_IA} — seuls les meubles du plan font référence</div>
             </div>
