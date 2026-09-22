@@ -50,6 +50,9 @@ type Props = {
   // Paire capture + calque prise avec la caméra « photo » d'ambiance (hauteur
   // d'œil, bord avant de la terrasse hors champ) — vue 3D seulement.
   ambianceRef?: React.MutableRefObject<(() => { capture: string; calque: string } | null) | null>;
+  // Nombre de meubles qui touchent le bord de la dernière capture (l'IA a
+  // tendance à les supprimer ou à recadrer) — mis à jour à chaque capture.
+  bordsRef?: React.MutableRefObject<number>;
   recadrerRef: React.MutableRefObject<(() => void) | null>;   // « Recadrer » : toute la terrasse dans la vue
   lectureSeule?: boolean;       // page client : on regarde, on tourne, on zoome — on ne touche à rien
 };
@@ -111,7 +114,7 @@ function Modele({
   }, [objet, mode]);
 
   return (
-    <group position={[item.x, 0, item.z]} rotation={[0, rotationY(item), 0]} onPointerDown={onPointerDown}>
+    <group position={[item.x, 0, item.z]} rotation={[0, rotationY(item), 0]} onPointerDown={onPointerDown} userData={{ meuble: true }}>
       <primitive object={objet} position={offset} />
       {selected && (
         <>
@@ -227,8 +230,25 @@ function useTextureSol(sol: SolId, mode: Props["mode"], largeur: number, profond
 
 type RefMesh = React.RefObject<THREE.Object3D | null>;
 
-function Capture({ captureRef, calqueRef, ambianceRef, grilleRef, ombreRef, terrasse }: {
-  captureRef: Props["captureRef"]; calqueRef?: Props["calqueRef"]; ambianceRef?: Props["ambianceRef"]; grilleRef: RefMesh; ombreRef: RefMesh; terrasse: Terrasse;
+// Meubles dont la boîte englobante sort (ou frôle) le cadre de la caméra.
+function meublesAuBord(scene: THREE.Object3D, camera: THREE.Camera): number {
+  let n = 0;
+  const box = new THREE.Box3();
+  const p = new THREE.Vector3();
+  scene.traverse((o) => {
+    if (!o.userData?.meuble) return;
+    box.setFromObject(o);
+    if (box.isEmpty()) return;
+    for (let i = 0; i < 8; i++) {
+      p.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).project(camera);
+      if (Math.abs(p.x) > 0.96 || Math.abs(p.y) > 0.96) { n++; break; }
+    }
+  });
+  return n;
+}
+
+function Capture({ captureRef, calqueRef, ambianceRef, bordsRef, grilleRef, ombreRef, terrasse }: {
+  captureRef: Props["captureRef"]; calqueRef?: Props["calqueRef"]; ambianceRef?: Props["ambianceRef"]; bordsRef?: Props["bordsRef"]; grilleRef: RefMesh; ombreRef: RefMesh; terrasse: Terrasse;
 }) {
   const { gl, scene, camera, controls } = useThree();
   useEffect(() => {
@@ -299,6 +319,7 @@ function Capture({ captureRef, calqueRef, ambianceRef, grilleRef, ombreRef, terr
         ortho.right = demiH * (W / H);
       }
       camera.updateProjectionMatrix();
+      if (bordsRef) bordsRef.current = meublesAuBord(scene, camera);
       gl.render(scene, camera);
       const data = gl.domElement.toDataURL("image/png");
       if (persp.isPerspectiveCamera) persp.aspect = (sauve as { aspect: number }).aspect;
@@ -324,7 +345,7 @@ function Capture({ captureRef, calqueRef, ambianceRef, grilleRef, ombreRef, terr
       };
     }
     return () => { captureRef.current = null; if (calqueRef) calqueRef.current = null; if (ambianceRef) ambianceRef.current = null; };
-  }, [gl, scene, camera, controls, captureRef, calqueRef, ambianceRef, grilleRef, ombreRef, terrasse]);
+  }, [gl, scene, camera, controls, captureRef, calqueRef, ambianceRef, bordsRef, grilleRef, ombreRef, terrasse]);
   return null;
 }
 
@@ -391,7 +412,7 @@ function Recadrage({ recadrerRef, terrasse, vue }: { recadrerRef: Props["recadre
 // ─── Scène ────────────────────────────────────────────────────────────────────
 
 export default function PlannerCanvas(props: Props) {
-  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, calqueRef, ambianceRef, cameraRef, recadrerRef, lectureSeule = false } = props;
+  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, calqueRef, ambianceRef, bordsRef, cameraRef, recadrerRef, lectureSeule = false } = props;
   const [drag, setDrag] = useState<{ uid: string; dx: number; dz: number } | null>(null);
   const grilleRef = useRef<THREE.Mesh>(null);
   const ombreRef = useRef<THREE.Mesh>(null);
@@ -521,7 +542,7 @@ export default function PlannerCanvas(props: Props) {
         );
       })}
 
-      <Capture captureRef={captureRef} calqueRef={calqueRef} ambianceRef={ambianceRef} grilleRef={grilleRef} ombreRef={ombreRef} terrasse={terrasse} />
+      <Capture captureRef={captureRef} calqueRef={calqueRef} ambianceRef={ambianceRef} bordsRef={bordsRef} grilleRef={grilleRef} ombreRef={ombreRef} terrasse={terrasse} />
       <Recadrage recadrerRef={recadrerRef} terrasse={terrasse} vue={vue} />
       <PointDeVue cameraRef={cameraRef} />
     </Canvas>

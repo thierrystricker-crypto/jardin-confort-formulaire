@@ -72,6 +72,7 @@ export default function PlannerPage() {
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
   const recadrerRef = useRef<(() => void) | null>(null);
+  const bordsRef = useRef(0);   // meubles au bord de la dernière capture
   // Point de vue : lu à l'enregistrement et aux exports, réappliqué à
   // l'ouverture d'un plan et au changement Plan / 3D (SQL 028).
   const cameraRef = useRef<{ lire: () => VueCamera | null; appliquer: (c: VueCamera) => void } | null>(null);
@@ -650,6 +651,13 @@ export default function PlannerPage() {
       // sert à la version ET à l'IA (le serveur pose le fond blanc). Deux
       // images dépassaient les 4,5 Mo par requête des fonctions Vercel.
       const brute = await capturerSansSelection();
+      // Un meuble coupé ou collé au bord du cadre est souvent supprimé par
+      // l'IA (constaté 22.09.2026 : fauteuil disparu) → on prévient.
+      const auBord = bordsRef.current;
+      if (auBord > 0 && !window.confirm(`${auBord} meuble${auBord > 1 ? "s touchent" : " touche"} le bord de la vue : l'IA risque de le${auBord > 1 ? "s" : ""} supprimer ou de recadrer.\n\nOK = générer quand même · Annuler = recadrer d'abord (dézoomer un peu).`)) {
+        setMessage("Génération annulée — dézoome ou recadre pour que tous les meubles soient entiers avec une marge, puis relance.");
+        return;
+      }
       let id = scene.id;
       if (!id || modifie) { id = await enregistrer(); if (!id) return; }
       const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
@@ -937,6 +945,7 @@ export default function PlannerPage() {
             onDims={(u, d) => setDims((m) => (m[u] && Math.abs(m[u].l - d.l) < 1e-6 ? m : { ...m, [u]: d }))}
             onError={(u, m) => setErreurs((e) => ({ ...e, [u]: m }))}
             captureRef={captureRef}
+            bordsRef={bordsRef}
             recadrerRef={recadrerRef}
             cameraRef={cameraRef}
           />

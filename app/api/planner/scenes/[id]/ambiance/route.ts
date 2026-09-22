@@ -78,6 +78,9 @@ ${description}
 Atmosphère élégante, calme, contemporaine et haut de gamme. Quelques végétaux méditerranéens ou locaux peuvent encadrer la scène, mais ils ne doivent jamais masquer les meubles.
 Décoration très sobre afin que les produits restent le sujet principal. Image photoréaliste de qualité catalogue / publicité de mobilier outdoor premium. Lumière réaliste, fidèle au moment de la journée demandé ci-dessus (heure, couleur du ciel, sources de lumière), profondeur photographique subtile, matériaux crédibles. Ne pas ajouter d'autres meubles pouvant être confondus avec les produits vendus ; les accessoires décoratifs éventuels restent secondaires et clairement distincts. Aucun texte, logo ni filigrane.
 
+Garder le même cadrage et le même point de vue que l'image source : ne pas rapprocher, abaisser ni tourner la caméra.
+Avant de finaliser, compter les meubles : il doit y en avoir exactement ${nbArticles}, ceux de l'image source, y compris ceux situés près des bords du cadre — aucun meuble supprimé, ajouté ou dupliqué (pas de pouf, tabouret, table d'appoint ni assise supplémentaire).
+
 PRIORITÉ N°1 : fidélité absolue aux meubles de l'image source. PRIORITÉ N°2 : réalisme du décor et intégration naturelle des produits. En cas de conflit entre esthétique et fidélité produit, toujours privilégier la fidélité produit.`;
 }
 
