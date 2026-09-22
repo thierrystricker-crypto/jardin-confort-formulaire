@@ -44,6 +44,10 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
   // Signature manuscrite du client (25.08.2026). null = aucun tracé : le bloc
   // signature reste alors exactement celui d'avant ce chantier.
   const [signature, setSignature] = useState<{ image: string; signataire: string; date: string } | null>(null);
+  // Plans 3D du planner cochés « Sur les documents » (SQL 029) : vue 3D et
+  // image d'ambiance retenue, en dernière page. Jamais de prix : ceux du
+  // planner viennent du webshop, pas de l'offre.
+  const [plans3d, setPlans3d] = useState<{ id: string; nom: string; numero: number; token: string; capture: string; ambiance: string | null }[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -121,6 +125,31 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         }
       } catch (e) {
         console.error("Erreur chargement signature:", e);
+      }
+
+      // ─── Plans 3D joints au dossier (22.09.2026) ───
+      // Comme la signature : chargé AVANT setReady, sinon pdf.co capture la
+      // page avant l'arrivée des images. Non bloquant.
+      try {
+        const { slug: sp2 } = await params;
+        const pRes = await fetch(`/api/planner/scenes?offre_slug=${encodeURIComponent(sp2)}`);
+        if (pRes.ok) {
+          const pJson = await pRes.json();
+          type SceneListee = { id: string; nom: string; sur_documents?: boolean; derniere_version?: { numero: number; token: string; capture_url: string | null; ambiance_url: string | null } | null };
+          const plans = ((pJson.scenes || []) as SceneListee[])
+            .filter((sc) => sc.sur_documents && sc.derniere_version?.capture_url)
+            .map((sc) => ({
+              id: sc.id,
+              nom: sc.nom,
+              numero: sc.derniere_version!.numero,
+              token: sc.derniere_version!.token,
+              capture: sc.derniere_version!.capture_url as string,
+              ambiance: sc.derniere_version!.ambiance_url || null,
+            }));
+          setPlans3d(plans);
+        }
+      } catch (e) {
+        console.error("Erreur chargement plans 3D:", e);
       }
 
       setReady(true);
@@ -269,6 +298,9 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         .doc-ambiance-item { flex: 0 0 calc(50% - 7px); page-break-inside: avoid; break-inside: avoid; text-align: center; }
         .doc-ambiance-item img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; }
         .doc-ambiance-caption { font-size: 10px; color: #777; font-style: italic; margin-top: 5px; text-align: center; }
+        .doc-plan3d { page-break-before: always; break-before: page; padding-top: 4mm; }
+        .doc-plan3d-img { width: 100%; max-height: 105mm; object-fit: contain; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; }
+        .doc-plan3d-bloc { page-break-inside: avoid; break-inside: avoid; margin-bottom: 7mm; }
       `}</style>
 
       <button className="print-btn" onClick={() => window.print()}>🖨 Imprimer</button>
@@ -772,7 +804,49 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
           </div>
         )}
 
+        {/* PLAN 3D DU PLANNER — une page par plan coché « Sur les documents » */}
+        {plans3d.map((p) => (
+          <div key={p.id} className="doc-plan3d">
+            <div style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 16,
+              marginBottom: "5mm",
+              borderBottom: `2px solid ${THEME}`,
+              paddingBottom: "4mm",
+            }}>
+              <img style={{maxWidth:130, maxHeight:50, objectFit:"contain"}}
+                src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
+                alt="Jardin-Confort" />
+              <div>
+                <div style={{fontSize:18, fontWeight:700, color:THEME}}>
+                  Plan 3D — {numeroAffiche || data.offerNumber}
+                </div>
+                <div style={{fontSize:11, color:"#aaa", fontStyle:"italic", marginTop:2}}>
+                  {p.nom} · version {p.numero} · {data.nom} {data.prenom}
+                </div>
+              </div>
+            </div>
+            <div className="doc-plan3d-bloc">
+              <img className="doc-plan3d-img" src={p.capture} alt="Plan 3D" />
+              <div className="doc-ambiance-caption">Plan 3D, vue en perspective — Rendu à titre informatif, non contractuel</div>
+            </div>
+            {p.ambiance && (
+              <div className="doc-plan3d-bloc">
+                <img className="doc-plan3d-img" src={p.ambiance} alt="Ambiance" />
+                <div className="doc-ambiance-caption">Image d&apos;inspiration libre générée par l&apos;IA, non contractuelle — seuls les meubles du plan font référence</div>
+              </div>
+            )}
+            <div style={{textAlign:"center", fontSize:11, color:"#666", marginTop:"4mm"}}>
+              Votre plan en 3D, à tourner et à zoomer :{" "}
+              <a style={{color:THEME}} href={`https://offres.jardin-confort.ch/planner/partage/${p.token}`}>
+                offres.jardin-confort.ch/planner/partage/{p.token.slice(0, 8)}…
+              </a>
+            </div>
+          </div>
+        ))}
+
       </div>
     </>
   );
-}
+}
