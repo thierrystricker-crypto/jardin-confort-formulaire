@@ -4,8 +4,11 @@
 // les offres : jc_token en query pour passer le verrou proxy.ts), stocke le
 // PDF dans le bucket « pdfs » (planner/<token>-avec-prix.pdf | -sans-prix.pdf)
 // et l'URL sur la version → { pdf_url, numero, token }.
-// Un PDF déjà généré pour cette version est renvoyé tel quel (le contenu
-// d'une version ne change jamais).
+// Le PDF est REGÉNÉRÉ à chaque clic : la capture ou l'image d'ambiance
+// retenue d'une version peuvent changer, et le conseiller veut toujours le
+// document à jour. L'URL porte un cache-buster ?v=… : le fichier est réécrit
+// au même chemin et le CDN Supabase (≈ 1 h) comme le navigateur serviraient
+// sinon l'ancien PDF (constaté 22.09.2026).
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -30,8 +33,6 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: v.status });
 
   const colonne = avecPrix ? "pdf_url" : "pdf_sans_prix_url";
-  const existant = avecPrix ? v.pdf_url : v.pdf_sans_prix_url;
-  if (existant) return NextResponse.json({ pdf_url: existant, numero: v.numero, token: v.token, reutilise: true });
 
   const jcToken = encodeURIComponent(process.env.DASHBOARD_SESSION_SECRET || "");
   const printUrl = `${APP_URL}/print/planner/${v.token}?prix=${avecPrix ? 1 : 0}&jc_token=${jcToken}`;
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const chemin = `planner/${v.token.slice(0, 8)}-${nomFichier}`;
   const { error: up } = await supabaseAdmin.storage.from(BUCKET).upload(chemin, buf, { contentType: "application/pdf", upsert: true });
   if (up) return NextResponse.json({ error: `Stockage PDF : ${up.message}` }, { status: 500 });
-  const pdfUrl = urlPublique(chemin);
+  const pdfUrl = `${urlPublique(chemin)}?v=${Date.now()}`;
   await supabaseAdmin.from("planner_scenes_versions").update({ [colonne]: pdfUrl }).eq("id", v.id);
 
   return NextResponse.json({ pdf_url: pdfUrl, numero: v.numero, token: v.token, reutilise: false });
