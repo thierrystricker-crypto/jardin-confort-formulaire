@@ -659,12 +659,12 @@ export default function PlannerPage() {
         body: JSON.stringify({ prompt: description, capture: brute, dims }),
       });
       const texte = await r.text();
-      let j: { error?: string; details?: string; ambiance_url?: string; ambiances?: Ambiance[]; retenue?: string | null; numero?: number; token?: string; modele?: string; references?: number; coloris?: string | null; ignores?: string[] };
+      let j: { error?: string; details?: string; ambiance_url?: string; ambiances?: Ambiance[]; retenue?: string | null; numero?: number; token?: string; modele?: string; fidelite?: boolean; references?: number; coloris?: string | null; ignores?: string[] };
       try { j = JSON.parse(texte); }
       catch { throw new Error(`Réponse ${r.status} du serveur (pas du JSON) — ${r.status === 413 ? "images trop lourdes" : r.status === 504 ? "délai dépassé" : texte.slice(0, 80)}`); }
       if (j.error) throw new Error(j.details ? `${j.error} — ${j.details}` : j.error);
       setAmbiance({ numero: j.numero as number, token: j.token as string, retenue: j.retenue ?? (j.ambiance_url as string), liste: j.ambiances || [] });
-      setMessage(`Image d'ambiance générée (version V${j.numero}${j.modele ? `, ${j.modele}` : ""}${j.references ? `, ${j.references} photo${j.references > 1 ? "s" : ""} produit en référence` : ""}${j.coloris ? `, coloris imposé ${j.coloris}` : ""}) — elle est retenue pour les documents ; les précédentes restent dans la galerie${j.ignores?.length ? `. Ignoré (concerne les meubles) : « ${j.ignores.join(" ")} »` : ""}`);
+      setMessage(`Image d'ambiance générée (version V${j.numero}${j.modele ? `, ${j.modele}${j.fidelite === false ? " sans fidélité haute (refusée par ce modèle)" : " fidélité haute"}` : ""}${j.references ? `, ${j.references} photo${j.references > 1 ? "s" : ""} produit en référence` : ""}${j.coloris ? `, coloris imposé ${j.coloris}` : ""}) — elle est retenue pour les documents ; les précédentes restent dans la galerie${j.ignores?.length ? `. Ignoré (concerne les meubles) : « ${j.ignores.join(" ")} »` : ""}`);
     } catch (e) {
       setAmbianceErreur((e as Error).message);
       setMessage("");

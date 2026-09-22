@@ -280,12 +280,16 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     return { ok: r.ok, statut: r.statusText, j };
   };
   let modele = MODELES[0];
+  // Fidélité réellement envoyée : affichée au conseiller (diagnostic des
+  // modèles qui refusent input_fidelity et réinterprètent davantage).
+  let fidelite = true;
   let rep = await appeler(modele, true);
   for (let i = 0; i < MODELES.length && !rep.ok; ) {
     let msg = String(rep.j?.error?.message || "");
     // Paramètre refusé par ce modèle (certains gèrent la fidélité eux-mêmes)
     if (/input_fidelity/i.test(msg)) {
       rep = await appeler(modele, false);
+      fidelite = false;
       if (rep.ok) break;
       msg = String(rep.j?.error?.message || "");
     }
@@ -293,6 +297,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (i + 1 < MODELES.length && /model|not found|does not exist|unsupported|access|verif/i.test(msg)) {
       console.warn(`[planner ambiance] ${modele} indisponible (${msg}) → repli ${MODELES[i + 1]}`);
       modele = MODELES[++i];
+      fidelite = true;
       rep = await appeler(modele, true);
       continue;
     }
@@ -334,5 +339,5 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     .eq("id", v.id);
   const toutes = await listerScene(id);
 
-  return NextResponse.json({ ambiance_url: url, ambiance: ligne, ambiances: toutes || [ligne], retenue: url, numero: v.numero, token: v.token, mention: MENTION_IA, modele, references: refs.length, echantillons: echantillons.length, coloris: null, ignores });
+  return NextResponse.json({ ambiance_url: url, ambiance: ligne, ambiances: toutes || [ligne], retenue: url, numero: v.numero, token: v.token, mention: MENTION_IA, modele, fidelite, references: refs.length, echantillons: echantillons.length, coloris: null, ignores });
 }
