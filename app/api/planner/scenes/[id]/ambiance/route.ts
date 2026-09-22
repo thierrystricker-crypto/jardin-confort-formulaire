@@ -41,12 +41,15 @@ const LARG = 1536, HAUT = 1024;          // format paysage 3:2
 // Prompt maître (le bloc « AMBIANCE À CRÉER » est le seul qui varie). Rédigé
 // avec ChatGPT le 22.09.2026 à partir du résultat validé ; les meubles sont
 // présentés comme une couche produit verrouillée, pas comme une référence.
-function construirePrompt(description: string, sol: string, nbArticles: number): string {
+function construirePrompt(description: string, sol: string, nbArticles: number, references: string[]): string {
+  const refs = references.length
+    ? `\nLes images suivantes (${references.length}) sont les PHOTOS CATALOGUE de ces produits : ${references.map((t, i) => `image ${i + 2} = ${t}`).join(" ; ")}. Elles servent UNIQUEMENT à reproduire fidèlement les détails de chaque meuble (forme exacte des pieds et du piètement, hauteur et diamètre des tables d'appoint, tressage, coussins, coutures, couleurs). Elles ne changent ni la composition, ni les positions, ni l'angle de vue, ni l'échelle, qui sont ceux de l'image 1.`
+    : "";
   return `MODIFICATION DE L'IMAGE FOURNIE — NE PAS RÉINTERPRÉTER LES PRODUITS.
-Utilise l'image jointe comme image source et crée une image d'ambiance photoréaliste autour des meubles 3D présents dans l'image (${nbArticles} article${nbArticles > 1 ? "s" : ""} de mobilier d'extérieur vendus par Jardin-Confort, Suisse).
+Utilise la première image jointe comme image source et crée une image d'ambiance photoréaliste autour des meubles 3D présents dans l'image (${nbArticles} article${nbArticles > 1 ? "s" : ""} de mobilier d'extérieur vendus par Jardin-Confort, Suisse).${refs}
 
 CONTRAINTE ABSOLUE ET PRIORITAIRE : les meubles visibles dans l'image sont les produits réellement vendus et leur rendu est contractuel. Les meubles doivent donc rester strictement identiques au rendu 3D fourni. Ne jamais modifier, redessiner, réinterpréter ou compléter les meubles. Conserver exactement : leur nombre ; leur forme et leurs proportions ; leur position relative et leur espacement ; leur angle de vue et leur perspective ; leurs dimensions relatives ; leurs pieds et structures ; leurs coussins ; leur capitonnage ; leurs coutures ; leur tressage ; leurs matériaux ; leurs couleurs et nuances ; tous les petits détails visibles du modèle 3D.
-Ne jamais inventer une partie non visible du meuble. Ne jamais ajouter, supprimer ou déplacer un pied, coussin, accoudoir, élément de structure ou détail. Ne pas remplacer le mobilier par un meuble similaire. Ne pas « améliorer » le design du produit. Ne pas changer son style. Considère les meubles comme une couche visuelle verrouillée et intangible : le travail créatif porte uniquement sur le décor qui les entoure.
+Ne jamais inventer une partie non visible du meuble. Ne jamais ajouter, supprimer ou déplacer un pied, coussin, accoudoir, élément de structure ou détail. Les petits meubles (tables d'appoint, tabourets, poufs) et les piètements sont aussi contractuels que les grands : même hauteur, même diamètre, même nombre et même forme de pieds que dans l'image source. Ne pas remplacer le mobilier par un meuble similaire. Ne pas « améliorer » le design du produit. Ne pas changer son style. Considère les meubles comme une couche visuelle verrouillée et intangible : le travail créatif porte uniquement sur le décor qui les entoure.
 L'angle de caméra et la taille des meubles peuvent varier d'une image source à l'autre : respecter systématiquement la perspective et l'échelle de l'export fourni, sans essayer de reproduire une composition précédente.
 Le sol provisoire du planner (${sol}), l'arrière-plan blanc et les lignes techniques peuvent être supprimés et remplacés par le décor. Faire en sorte que le nouveau sol passe naturellement sous les meubles en conservant précisément leurs points de contact avec le sol. Créer des ombres réalistes et cohérentes avec le nouvel environnement, sans modifier les meubles eux-mêmes.
 
@@ -164,15 +167,38 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     capture = Buffer.from(await src.arrayBuffer());
     calque = null;
   }
-  const nbArticles = Array.isArray(vv?.items) ? (vv!.items as unknown[]).length : 0;
+  const items = (Array.isArray(vv?.items) ? vv!.items : []) as { titre?: string; image_url?: string | null }[];
+  const nbArticles = items.length;
+  // Photos catalogue des produits (une par fiche, 4 au plus) : entrées
+  // supplémentaires pour l'IA — les détails viennent de là, la composition
+  // de la capture. Une photo illisible est simplement ignorée.
+  const refs: { titre: string; blob: Blob }[] = [];
+  const vues = new Set<string>();
+  for (const it of items) {
+    const u = it.image_url || "";
+    if (!u || vues.has(u) || refs.length >= 4) continue;
+    vues.add(u);
+    try {
+      const r = await fetch(u, { signal: AbortSignal.timeout(6000) });
+      if (!r.ok) continue;
+      const type = r.headers.get("content-type") || "image/jpeg";
+      if (!/^image\/(png|jpe?g|webp)/.test(type)) continue;
+      const b = await r.arrayBuffer();
+      if (b.byteLength > 4_000_000) continue;
+      refs.push({ titre: String(it.titre || "article").slice(0, 80), blob: new Blob([b], { type }) });
+    } catch { /* photo ignorée */ }
+  }
 
   const prep = MODE === "calque" ? preparer(capture, calque) : { image: capture, masque: null as Buffer | null, calque: null as PNG | null };
 
-  const prompt = construirePrompt(description, SOLS[String(vv?.sol || "bois")] || "lames de bois", nbArticles);
+  const prompt = construirePrompt(description, SOLS[String(vv?.sol || "bois")] || "lames de bois", nbArticles, refs.map((r) => r.titre));
   const appeler = async (modele: string) => {
     const form = new FormData();
     form.append("model", modele);
-    form.append("image", new Blob([new Uint8Array(prep.image)], { type: "image/png" }), "capture.png");
+    // Plusieurs images d'entrée : image[] — la première est la source, les
+    // suivantes les photos catalogue (gpt-image-1 / 1.5 : jusqu'à 16).
+    form.append("image[]", new Blob([new Uint8Array(prep.image)], { type: "image/png" }), "capture.png");
+    refs.forEach((r, i) => form.append("image[]", r.blob, `produit-${i + 1}.${r.blob.type.includes("png") ? "png" : "jpg"}`));
     if (prep.masque) form.append("mask", new Blob([new Uint8Array(prep.masque)], { type: "image/png" }), "masque.png");
     form.append("prompt", prompt);
     form.append("size", `${LARG}x${HAUT}`);
@@ -228,5 +254,5 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     .eq("id", v.id);
   const toutes = await listerScene(id);
 
-  return NextResponse.json({ ambiance_url: url, ambiance: ligne, ambiances: toutes || [ligne], retenue: url, numero: v.numero, token: v.token, mention: MENTION_IA, modele });
+  return NextResponse.json({ ambiance_url: url, ambiance: ligne, ambiances: toutes || [ligne], retenue: url, numero: v.numero, token: v.token, mention: MENTION_IA, modele, references: refs.length });
 }
