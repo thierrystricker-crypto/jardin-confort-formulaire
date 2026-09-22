@@ -12,7 +12,7 @@
 export type Preset = { id: string; nom: string; texte: (sol: string) => string };
 
 export const DECORS: Preset[] = [
-  { id: "lavaux", nom: "Lavaux, face au Léman", texte: (sol) => `Terrasse extérieure haut de gamme en ${sol} face au lac Léman, dans l'esprit des terrasses du Lavaux : vignes en terrasses en arrière-plan, lac au loin et relief des Alpes sur l'autre rive. Architecture suisse discrète.` },
+  { id: "lavaux", nom: "Lavaux, face au Léman", texte: (sol) => `Terrasse extérieure haut de gamme en ${sol} face au lac Léman, dans l'esprit des terrasses du Lavaux. Vignes en terrasses en arrière-plan, lac visible au loin et relief des Alpes sur l'autre rive. Architecture suisse discrète et raffinée.` },
   { id: "jardin", nom: "Jardin arboré", texte: (sol) => `Terrasse en ${sol} au bord d'un jardin paysager soigné : pelouse, massifs de graminées et de vivaces, quelques arbres, haie en arrière-plan. Maison contemporaine discrète hors champ.` },
   { id: "mediterranee", nom: "Méditerranée", texte: (sol) => `Terrasse en ${sol} d'une villa méditerranéenne : oliviers, lavande, murets de pierre sèche, mer en contrebas, ciel dégagé.` },
   { id: "alpes", nom: "Chalet alpin", texte: (sol) => `Terrasse en ${sol} d'un chalet contemporain en montagne : mélèzes, prairie, sommets alpins en arrière-plan.` },
@@ -24,8 +24,10 @@ export const MOMENTS: Preset[] = [
   { id: "golden", nom: "Fin d'après-midi (golden hour)", texte: () => "Fin d'après-midi d'été, lumière chaude et naturelle de golden hour." },
   { id: "midi", nom: "Plein jour", texte: () => "Plein jour d'été, lumière naturelle douce, ciel bleu légèrement nuageux." },
   { id: "matin", nom: "Matin", texte: () => "Matin d'été, lumière fraîche et rasante, légère brume sur le paysage." },
-  { id: "coucher", nom: "Coucher de soleil", texte: () => "Coucher de soleil, ciel orangé et rosé, lumière chaude et rasante." },
-  { id: "soir", nom: "Soirée éclairée", texte: () => "Début de soirée, heure bleue, éclairage d'ambiance chaud et discret (lanternes au sol, bougies) sans masquer les meubles." },
+  { id: "coucher", nom: "Coucher de soleil", texte: () => "Coucher de soleil : le soleil touche l'horizon, ciel orangé et rosé, lumière chaude et rasante, longues ombres." },
+  // Formulation appuyée : « heure bleue » seule ne suffisait pas, l'IA rendait
+  // un plein jour (constaté 22.09.2026).
+  { id: "soir", nom: "Soirée éclairée", texte: () => "SCÈNE DE SOIRÉE, APRÈS LE COUCHER DU SOLEIL (ce n'est pas une scène de jour) : heure bleue, ciel bleu profond qui s'assombrit, plus aucun soleil ni ombre portée de soleil, paysage dans la pénombre avec quelques lumières au loin. Éclairage artificiel chaud et discret sur la terrasse (lanternes au sol, guirlande lumineuse, bougies) qui éclaire doucement les meubles sans les masquer." },
 ];
 
 // Mots qui font d'une phrase une consigne sur les MEUBLES (à écarter).

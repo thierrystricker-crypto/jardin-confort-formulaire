@@ -15,7 +15,7 @@
 //
 // Route PARALLÈLE et indépendante : n'utilise ni Jardi (chat) ni le serveur
 // MCP jardi-mail — clé dédiée OPENAI_IMAGE_API_KEY (restreinte « Images »),
-// repli OPENAI_API_KEY. Modèle OPENAI_IMAGE_MODELE (défaut gpt-image-1.5,
+// repli OPENAI_API_KEY. Modèle OPENAI_IMAGE_MODELE (défaut chatgpt-image-latest,
 // repli automatique gpt-image-1 si indisponible), sortie 1536×1024.
 // Résultat stocké dans le bucket « pdfs » (planner/<token>-ambiance-<n>.png)
 // et listé dans planner_ambiances : CHAQUE génération S'AJOUTE, rien n'est
@@ -29,7 +29,6 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { BUCKET, figerVersion, urlPublique } from "@/lib/planner-versions";
 import { MENTION_IA } from "@/lib/planner-types";
 import { listerScene } from "@/lib/planner-ambiances";
-import { COULEURS_FERMOB, decrireArticle, type Couleur } from "@/lib/planner-matieres";
 import { filtrerDecor } from "@/lib/planner-ambiance-cadre";
 import { textureDedon } from "@/lib/textures-dedon";
 import { shopifyAdminGraphQL } from "@/lib/shopify-stock";
@@ -37,10 +36,14 @@ import { readFile } from "fs/promises";
 import path from "path";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Qualité « high » et modèles récents : 40 à 120 s par image (22.09.2026).
+export const maxDuration = 180;
 
-const MODELE = process.env.OPENAI_IMAGE_MODELE || "gpt-image-1.5";
-const MODELE_REPLI = "gpt-image-1";
+// Modèle : celui de ChatGPT par défaut (chatgpt-image-latest), où Thierry
+// obtient le résultat de référence avec le même prompt et la même capture
+// (22.09.2026). Cascade si la clé n'y a pas accès : gpt-image-1.5 puis
+// gpt-image-1. OPENAI_IMAGE_MODELE force un modèle (ex. gpt-image-2.5-flare).
+const MODELES = [...new Set([process.env.OPENAI_IMAGE_MODELE || "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1"])];
 const MODE = process.env.AMBIANCE_MODE === "calque" ? "calque" : "prompt";
 // Photos catalogue en entrées supplémentaires : DÉSACTIVÉ (AMBIANCE_PHOTOS=1
 // pour réactiver). Constaté 22.09 : bonnes textures Dedon, mais sur Fermob
@@ -50,43 +53,31 @@ const MODE = process.env.AMBIANCE_MODE === "calque" ? "calque" : "prompt";
 const PHOTOS = process.env.AMBIANCE_PHOTOS === "1";
 const LARG = 1536, HAUT = 1024;          // format paysage 3:2
 
-// Prompt maître (le bloc « AMBIANCE À CRÉER » est le seul qui varie). Rédigé
-// avec ChatGPT le 22.09.2026 à partir du résultat validé ; les meubles sont
-// présentés comme une couche produit verrouillée, pas comme une référence.
-function construirePrompt(description: string, sol: string, nbArticles: number, references: string[], articles: string[], echantillons: string[] = [], imposee: Couleur | null = null, portee: { concernes: string[]; autres: string[] } = { concernes: [], autres: [] }, teinteAppliquee = false): string {
-  // Coloris imposé par le conseiller dans sa description : seule exception à
-  // la règle « couleurs identiques au rendu 3D », énoncée explicitement pour
-  // que le modèle ne reçoive pas deux ordres contraires.
-  // Coloris déjà repeint dans la 3D par le navigateur (22.09.2026) : plus
-  // aucune exception — l'IA garde les couleurs de l'image, comme sans coloris
-  // imposé (le seul cas où elle ne redessinait pas les modèles).
-  const exception = imposee && teinteAppliquee
-    ? `\nCOLORIS : les structures des meubles Fermob sont déjà rendues dans l'image source dans le coloris ${imposee.nom} ${imposee.code} (${imposee.hex}, finition ${imposee.finition}). Aucun meuble n'est à repeindre : garder exactement les couleurs de l'image.`
-    : imposee
-    ? `\nEXCEPTION DEMANDÉE PAR LE CONSEILLER : la structure des meubles Fermob doit être rendue dans le coloris ${imposee.nom} ${imposee.code} (${imposee.hex}, finition ${imposee.finition}) au lieu de la teinte du rendu 3D. C'est la seule modification autorisée sur les meubles : forme, proportions, lattes, pieds, accoudoirs, nombre et positions restent strictement identiques.${portee.concernes.length ? `\nMeubles À REPEINDRE (${portee.concernes.length}, structure en métal laqué Fermob) : ${portee.concernes.join(" ; ")}.` : ""}${portee.autres.length ? `\nMeubles À NE PAS REPEINDRE (${portee.autres.length}, autres marques et matières) : ${portee.autres.join(" ; ")} — ils gardent STRICTEMENT la teinte et la matière du rendu 3D ; ne leur appliquer aucune partie du coloris ${imposee.nom}.` : ""}`
-    : "";
+// Prompt maître — RETOUR AU TEXTE DE DÉPART (22.09.2026, commit 5762461),
+// celui validé par Thierry dans ChatGPT puis dans le planner. Les ajouts
+// suivants ont été retirés car ils dégradaient la fidélité des modèles :
+// liste nominative des articles (le nom « Luxembourg », « Mbrace »… tire
+// l'IA vers le modèle type vu en photo), coloris imposé / à repeindre,
+// comptage final. Seuls ajouts conservés : les échantillons de fibre Dedon
+// (validés) et une lumière qui suit le moment choisi (la ligne fixe
+// « lumière naturelle » écrasait « soirée éclairée » en plein jour).
+function construirePrompt(description: string, sol: string, nbArticles: number, echantillons: string[] = []): string {
   const ech = echantillons.length
     ? `\nLes images suivantes (${echantillons.length}) sont des ÉCHANTILLONS DE MATIÈRE (gros plan du tressage, sans aucun meuble) : ${echantillons.map((t, i) => `image ${i + 2} = ${t}`).join(" ; ")}. Utilise-les UNIQUEMENT pour reproduire la texture, le motif de tressage et la teinte exacte de ces meubles. Ce ne sont pas des objets à placer dans la scène.`
     : "";
-  const liste = articles.length
-    ? `\nARTICLES DU PLAN (matières et coloris de référence — l'apparence reste celle de l'image, ces lignes précisent seulement la matière et la teinte exacte) :\n${articles.map((t, i) => `${i + 1}. ${t}`).join("\n")}\nIl y a exactement ${articles.length} meuble${articles.length > 1 ? "s" : ""} : aucun autre objet meublant ne doit apparaître — ni repose-pieds, ni table basse, ni pouf, ni coussin ou plaid supplémentaire, ni fauteuil « assorti ».`
-    : "";
-  const refs = references.length
-    ? `\nLes images suivantes (${references.length}) sont les PHOTOS CATALOGUE de ces produits : ${references.map((t, i) => `image ${i + 2 + echantillons.length} = ${t}`).join(" ; ")}. Elles servent UNIQUEMENT à reproduire fidèlement les détails de chaque meuble (forme exacte des pieds et du piètement, hauteur et diamètre des tables d'appoint, tressage, coussins, coutures, couleurs). Elles ne changent ni la composition, ni les positions, ni l'angle de vue, ni l'échelle, qui sont ceux de l'image 1.`
-    : "";
   return `MODIFICATION DE L'IMAGE FOURNIE — NE PAS RÉINTERPRÉTER LES PRODUITS.
-Utilise la première image jointe comme image source et crée une image d'ambiance photoréaliste autour des meubles 3D présents dans l'image (${nbArticles} article${nbArticles > 1 ? "s" : ""} de mobilier d'extérieur vendus par Jardin-Confort, Suisse).${liste}${exception}${ech}${refs}
+Utilise ${echantillons.length ? "la première image jointe" : "l'image jointe"} comme image source et crée une image d'ambiance photoréaliste autour des meubles 3D présents dans l'image (${nbArticles} article${nbArticles > 1 ? "s" : ""} de mobilier d'extérieur vendus par Jardin-Confort, Suisse).${ech}
 
-CONTRAINTE ABSOLUE ET PRIORITAIRE : les meubles visibles dans l'image sont les produits réellement vendus et leur rendu est contractuel. Les meubles doivent donc rester strictement identiques au rendu 3D fourni. Ne jamais modifier, redessiner, réinterpréter ou compléter les meubles. Conserver exactement : leur nombre ; leur forme et leurs proportions ; leur position relative et leur espacement ; leur angle de vue et leur perspective ; leurs dimensions relatives ; leurs pieds et structures ; leurs coussins ; leur capitonnage ; leurs coutures ; leur tressage ; leurs matériaux ; leurs couleurs et nuances${imposee && !teinteAppliquee ? " (sauf l'exception de coloris ci-dessus)" : ""} ; tous les petits détails visibles du modèle 3D.
-Ne jamais inventer une partie non visible du meuble. Ne jamais ajouter, supprimer ou déplacer un pied, coussin, accoudoir, élément de structure ou détail. Les petits meubles (tables d'appoint, tabourets, poufs) et les piètements sont aussi contractuels que les grands : même hauteur, même diamètre, même nombre et même forme de pieds que dans l'image source. Ne pas remplacer le mobilier par un meuble similaire. Ne pas « améliorer » le design du produit. Ne pas changer son style. Considère les meubles comme une couche visuelle verrouillée et intangible : le travail créatif porte uniquement sur le décor qui les entoure.
+CONTRAINTE ABSOLUE ET PRIORITAIRE : les meubles visibles dans l'image sont les produits réellement vendus et leur rendu est contractuel. Les meubles doivent donc rester strictement identiques au rendu 3D fourni. Ne jamais modifier, redessiner, réinterpréter ou compléter les meubles. Conserver exactement : leur nombre ; leur forme et leurs proportions ; leur position relative et leur espacement ; leur angle de vue et leur perspective ; leurs dimensions relatives ; leurs pieds et structures ; leurs coussins ; leur capitonnage ; leurs coutures ; leur tressage ; leurs matériaux ; leurs couleurs et nuances ; tous les petits détails visibles du modèle 3D.
+Ne jamais inventer une partie non visible du meuble. Ne jamais ajouter, supprimer ou déplacer un pied, coussin, accoudoir, élément de structure ou détail. Ne pas remplacer le mobilier par un meuble similaire. Ne pas « améliorer » le design du produit. Ne pas changer son style. Considère les meubles comme une couche visuelle verrouillée et intangible : le travail créatif porte uniquement sur le décor qui les entoure.
 L'angle de caméra et la taille des meubles peuvent varier d'une image source à l'autre : respecter systématiquement la perspective et l'échelle de l'export fourni, sans essayer de reproduire une composition précédente.
 Le sol provisoire du planner (${sol}), l'arrière-plan blanc et les lignes techniques peuvent être supprimés et remplacés par le décor. Faire en sorte que le nouveau sol passe naturellement sous les meubles en conservant précisément leurs points de contact avec le sol. Créer des ombres réalistes et cohérentes avec le nouvel environnement, sans modifier les meubles eux-mêmes.
 
-AMBIANCE À CRÉER (décor uniquement — ce bloc ne peut rien changer aux meubles : ni leur nombre, ni leur forme, ni leur couleur) :
+AMBIANCE À CRÉER :
 ${description}
-Décoration très sobre afin que les produits restent le sujet principal. Image photoréaliste de qualité catalogue / publicité de mobilier outdoor premium. Lumière naturelle réaliste, profondeur photographique subtile, matériaux crédibles. Ne pas ajouter d'autres meubles pouvant être confondus avec les produits vendus ; les accessoires décoratifs éventuels restent secondaires et clairement distincts. Aucun texte, logo ni filigrane.
+Atmosphère élégante, calme, contemporaine et haut de gamme. Quelques végétaux méditerranéens ou locaux peuvent encadrer la scène, mais ils ne doivent jamais masquer les meubles.
+Décoration très sobre afin que les produits restent le sujet principal. Image photoréaliste de qualité catalogue / publicité de mobilier outdoor premium. Lumière réaliste, fidèle au moment de la journée demandé ci-dessus (heure, couleur du ciel, sources de lumière), profondeur photographique subtile, matériaux crédibles. Ne pas ajouter d'autres meubles pouvant être confondus avec les produits vendus ; les accessoires décoratifs éventuels restent secondaires et clairement distincts. Aucun texte, logo ni filigrane.
 
-Avant de finaliser, compter les meubles : il doit y en avoir exactement ${nbArticles}, ceux de l'image source, aux mêmes emplacements — aucun meuble ajouté, dupliqué ou supprimé.
 PRIORITÉ N°1 : fidélité absolue aux meubles de l'image source. PRIORITÉ N°2 : réalisme du décor et intégration naturelle des produits. En cas de conflit entre esthétique et fidélité produit, toujours privilégier la fidélité produit.`;
 }
 
@@ -168,11 +159,11 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     prompt?: string; capture?: string | null; source?: string | null; calque?: string | null;   // capture = version ; source = même vue cadrée pour l'IA
     ambiance?: { capture?: string | null; calque?: string | null } | null;   // paire cadrée « photo » (caméra dédiée)
     dims?: Record<string, { l: number; p: number; h: number }>; regenerer?: boolean;
-    teinte_appliquee?: boolean;   // source = capture où la laque Fermob est déjà repeinte au coloris choisi
   } = {};
   try { body = await req.json(); } catch { /* corps vide */ }
   // Les phrases qui parlent des meubles (couleur, ajout, retrait…) sont
-  // écartées : le décor ne pilote que le décor. Le coloris passe par body.coloris.
+  // écartées : le décor ne pilote que le décor (body.coloris est ignoré depuis
+  // le 22.09 : les meubles gardent les couleurs du rendu 3D).
   const { decor: description, ignores } = filtrerDecor(String(body.prompt || "").slice(0, 1200));
   if (!description) return NextResponse.json({ error: "Décris l'ambiance souhaitée" }, { status: 400 });
 
@@ -193,7 +184,6 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   // calque, sinon la capture figée de la version (sans calque possible).
   let capture = depuisDataUrl(body.source || body.ambiance?.capture || body.capture);
   const sourceJpeg = !!body.source && /^data:image\/jpe?g/.test(body.source);
-  const teinteAppliquee = !!body.source && !!body.teinte_appliquee;
   if (capture && !body.source) capture = aplatirSurBlanc(capture);
   let calque = depuisDataUrl(body.ambiance?.calque || body.calque);
   if (!capture) {
@@ -247,13 +237,6 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     }
     if (buf) echantillons.push({ libelle: `fibre Dedon ${t.nom} ${t.code} de « ${String(it.titre || "").slice(0, 60)} »`, blob: new Blob([new Uint8Array(buf)], { type: "image/jpeg" }) });
   }
-  // Une ligne par article posé (les doublons comptent : « exactement N meubles »)
-  // Coloris cité dans la description (« meubles en romarin ») → imposé aux
-  // structures Fermob, seulement s'il y a du Fermob dans le plan.
-  const imposee = body.coloris && items.some((it) => /fermob/i.test(String(it.marque || "")))
-    ? COULEURS_FERMOB.find((c) => c.code === String(body.coloris).toUpperCase()) || null
-    : null;
-  const articles = items.map((it) => decrireArticle({ titre: String(it.titre || "article"), marque: it.marque, sku: it.sku, options: it.variant_id ? optionsParVariante.get(it.variant_id) || null : null }, imposee, teinteAppliquee));
   // Photos catalogue des produits (une par fiche, 4 au plus) : entrées
   // supplémentaires pour l'IA — les détails viennent de là, la composition
   // de la capture. Une photo illisible est simplement ignorée.
@@ -276,36 +259,44 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   const prep = MODE === "calque" ? preparer(capture, calque) : { image: capture, masque: null as Buffer | null, calque: null as PNG | null };
 
-  const prompt = construirePrompt(description, SOLS[String(vv?.sol || "bois")] || "lames de bois", nbArticles, refs.map((r) => r.titre), articles, echantillons.map((e) => e.libelle), imposee, {
-    concernes: imposee ? items.filter((it) => /fermob/i.test(String(it.marque || ""))).map((it) => String(it.titre || "article").slice(0, 80)) : [],
-    autres: imposee ? items.filter((it) => !/fermob/i.test(String(it.marque || ""))).map((it) => String(it.titre || "article").slice(0, 80)) : [],
-  }, teinteAppliquee);
-  const appeler = async (modele: string) => {
+  const prompt = construirePrompt(description, SOLS[String(vv?.sol || "bois")] || "lames de bois", nbArticles, echantillons.map((e) => e.libelle));
+  const appeler = async (modele: string, fidelite: boolean) => {
     const form = new FormData();
     form.append("model", modele);
     // Plusieurs images d'entrée : image[] — la première est la source, les
-    // suivantes les photos catalogue (gpt-image-1 / 1.5 : jusqu'à 16).
+    // suivantes les échantillons de matière (jusqu'à 16).
     form.append("image[]", new Blob([new Uint8Array(prep.image)], { type: sourceJpeg ? "image/jpeg" : "image/png" }), sourceJpeg ? "capture.jpg" : "capture.png");
     echantillons.forEach((e, i) => form.append("image[]", e.blob, `echantillon-${i + 1}.jpg`));
     refs.forEach((r, i) => form.append("image[]", r.blob, `produit-${i + 1}.${r.blob.type.includes("png") ? "png" : "jpg"}`));
     if (prep.masque) form.append("mask", new Blob([new Uint8Array(prep.masque)], { type: "image/png" }), "masque.png");
     form.append("prompt", prompt);
     form.append("size", `${LARG}x${HAUT}`);
-    form.append("quality", process.env.OPENAI_IMAGE_QUALITE || "medium");
-    form.append("input_fidelity", "high");   // garde les détails de l'image d'entrée
+    // « high » par défaut (était « medium » : détails des meubles moins tenus)
+    form.append("quality", process.env.OPENAI_IMAGE_QUALITE || "high");
+    if (fidelite) form.append("input_fidelity", "high");   // garde les détails de l'image d'entrée
     form.append("n", "1");
     const r = await fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers: { Authorization: `Bearer ${cle}` }, body: form });
-    const j = await r.json();
+    const j = await r.json().catch(() => ({ error: { message: `Réponse illisible (${r.status})` } }));
     return { ok: r.ok, statut: r.statusText, j };
   };
-  let modele = MODELE;
-  let rep = await appeler(modele);
-  // Modèle inconnu / non autorisé pour cette clé → on retombe sur gpt-image-1.
-  const msg = String(rep.j?.error?.message || "");
-  if (!rep.ok && modele !== MODELE_REPLI && /model|not found|does not exist|unsupported|access/i.test(msg)) {
-    console.warn(`[planner ambiance] ${modele} indisponible (${msg}) → repli ${MODELE_REPLI}`);
-    modele = MODELE_REPLI;
-    rep = await appeler(modele);
+  let modele = MODELES[0];
+  let rep = await appeler(modele, true);
+  for (let i = 0; i < MODELES.length && !rep.ok; ) {
+    let msg = String(rep.j?.error?.message || "");
+    // Paramètre refusé par ce modèle (certains gèrent la fidélité eux-mêmes)
+    if (/input_fidelity/i.test(msg)) {
+      rep = await appeler(modele, false);
+      if (rep.ok) break;
+      msg = String(rep.j?.error?.message || "");
+    }
+    // Modèle inconnu / non autorisé pour cette clé → modèle suivant
+    if (i + 1 < MODELES.length && /model|not found|does not exist|unsupported|access|verif/i.test(msg)) {
+      console.warn(`[planner ambiance] ${modele} indisponible (${msg}) → repli ${MODELES[i + 1]}`);
+      modele = MODELES[++i];
+      rep = await appeler(modele, true);
+      continue;
+    }
+    break;
   }
   const j = rep.j;
   if (!rep.ok || !j.data?.[0]?.b64_json) {
@@ -343,5 +334,5 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     .eq("id", v.id);
   const toutes = await listerScene(id);
 
-  return NextResponse.json({ ambiance_url: url, ambiance: ligne, ambiances: toutes || [ligne], retenue: url, numero: v.numero, token: v.token, mention: MENTION_IA, modele, references: refs.length, echantillons: echantillons.length, coloris: imposee ? `${imposee.nom} ${imposee.code}` : null, ignores });
+  return NextResponse.json({ ambiance_url: url, ambiance: ligne, ambiances: toutes || [ligne], retenue: url, numero: v.numero, token: v.token, mention: MENTION_IA, modele, references: refs.length, echantillons: echantillons.length, coloris: null, ignores });
 }

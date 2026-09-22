@@ -18,9 +18,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
-import type { Dims, OptionsCapture } from "@/components/planner/PlannerCanvas";
+import type { Dims } from "@/components/planner/PlannerCanvas";
 import { MENTION_IA, MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CameraScene, type CatalogueItem, type ChoixModele, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
-import { COULEURS_FERMOB } from "@/lib/planner-matieres";
 import { DECORS, MOMENTS, composerDescription, filtrerDecor } from "@/lib/planner-ambiance-cadre";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
@@ -71,7 +70,7 @@ export default function PlannerPage() {
   const [ambianceErreur, setAmbianceErreur] = useState<string | null>(null);
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
-  const captureRef = useRef<((o?: OptionsCapture) => string | null) | null>(null);
+  const captureRef = useRef<(() => string | null) | null>(null);
   const recadrerRef = useRef<(() => void) | null>(null);
   // Point de vue : lu à l'enregistrement et aux exports, réappliqué à
   // l'ouverture d'un plan et au changement Plan / 3D (SQL 028).
@@ -636,7 +635,6 @@ export default function PlannerPage() {
     setPanneauAmbiance(true);
   }
   const solTexte = () => (SOLS.find((x) => x.id === (scene.sol || "bois"))?.nom || "bois").toLowerCase();
-  const planFermob = scene.items.some((it) => /fermob/i.test(String(it.marque || "")));
 
   async function lancerAmbiance() {
     const { description } = composerDescription(choixAmb.decor, choixAmb.moment, choixAmb.precisions, solTexte());
@@ -652,22 +650,13 @@ export default function PlannerPage() {
       // sert à la version ET à l'IA (le serveur pose le fond blanc). Deux
       // images dépassaient les 4,5 Mo par requête des fonctions Vercel.
       const brute = await capturerSansSelection();
-      // Coloris Fermob imposé : on repeint la laque dans la 3D, le temps d'une
-      // seconde capture (même cadre), envoyée à l'IA comme image source. L'IA
-      // n'a plus rien à repeindre, donc plus de raison de redessiner (et de
-      // changer) les modèles. La capture de la version reste celle du plan.
-      const codeColoris = planFermob && choixAmb.coloris ? choixAmb.coloris : null;
-      const coul = codeColoris ? COULEURS_FERMOB.find((c) => c.code === codeColoris) : null;
-      const source = coul
-        ? captureRef.current?.({ jpeg: true, teinte: { hex: coul.hex, uids: scene.items.filter((it) => /fermob/i.test(String(it.marque || ""))).map((it) => it.uid) } }) || null
-        : null;
       let id = scene.id;
       if (!id || modifie) { id = await enregistrer(); if (!id) return; }
       const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         // Une image existe déjà (bouton « Régénérer ») → on force une nouvelle
         // génération, sinon la route renvoie l'image stockée pour la version.
-        body: JSON.stringify({ prompt: description, coloris: codeColoris, capture: brute, source, teinte_appliquee: !!source, dims }),
+        body: JSON.stringify({ prompt: description, capture: brute, dims }),
       });
       const texte = await r.text();
       let j: { error?: string; details?: string; ambiance_url?: string; ambiances?: Ambiance[]; retenue?: string | null; numero?: number; token?: string; modele?: string; references?: number; coloris?: string | null; ignores?: string[] };
@@ -863,20 +852,12 @@ export default function PlannerPage() {
                   {MOMENTS.map((m) => <option key={m.id} value={m.id}>{m.nom}</option>)}
                 </select>
               </label>
-              {planFermob && (
-                <label className="mb-2 block">Coloris des meubles Fermob
-                  <select className={SEL} value={choixAmb.coloris} onChange={(e) => setChoixAmb({ ...choixAmb, coloris: e.target.value })}>
-                    <option value="">Coloris du plan (inchangé)</option>
-                    {COULEURS_FERMOB.filter((c) => c.code !== "73").map((c) => <option key={c.code} value={c.code}>{c.nom} {c.code}</option>)}
-                  </select>
-                </label>
-              )}
               <label className="mb-1 block">Précisions sur le décor (facultatif)
                 <textarea className={`${SEL} h-16`} value={choixAmb.precisions} placeholder="ex. : des oliviers en pots, un muret en pierre, le lac plus présent" onChange={(e) => setChoixAmb({ ...choixAmb, precisions: e.target.value })} />
               </label>
               {ignores.length > 0 && (
                 <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-200">
-                  Ces phrases parlent des meubles et seront ignorées : « {ignores.join(" ")} ». {planFermob ? "Pour changer la couleur, utilise la liste « Coloris ». " : ""}Les meubles restent ceux du plan.
+                  Ces phrases parlent des meubles et seront ignorées : « {ignores.join(" ")} ». Les meubles restent ceux du plan.
                 </div>
               )}
               <details className="mb-3 text-zinc-500"><summary className="cursor-pointer">Texte envoyé pour le décor</summary><p className="mt-1">{apercu.description}</p></details>
