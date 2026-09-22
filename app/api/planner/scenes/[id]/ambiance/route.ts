@@ -53,12 +53,12 @@ const LARG = 1536, HAUT = 1024;          // format paysage 3:2
 // Prompt maître (le bloc « AMBIANCE À CRÉER » est le seul qui varie). Rédigé
 // avec ChatGPT le 22.09.2026 à partir du résultat validé ; les meubles sont
 // présentés comme une couche produit verrouillée, pas comme une référence.
-function construirePrompt(description: string, sol: string, nbArticles: number, references: string[], articles: string[], echantillons: string[] = [], imposee: Couleur | null = null): string {
+function construirePrompt(description: string, sol: string, nbArticles: number, references: string[], articles: string[], echantillons: string[] = [], imposee: Couleur | null = null, portee: { concernes: string[]; autres: string[] } = { concernes: [], autres: [] }): string {
   // Coloris imposé par le conseiller dans sa description : seule exception à
   // la règle « couleurs identiques au rendu 3D », énoncée explicitement pour
   // que le modèle ne reçoive pas deux ordres contraires.
   const exception = imposee
-    ? `\nEXCEPTION DEMANDÉE PAR LE CONSEILLER : la structure des meubles Fermob doit être rendue dans le coloris ${imposee.nom} ${imposee.code} (${imposee.hex}, finition ${imposee.finition}) au lieu de la teinte du rendu 3D. C'est la seule modification autorisée sur les meubles : forme, proportions, lattes, pieds, accoudoirs, nombre et positions restent strictement identiques.`
+    ? `\nEXCEPTION DEMANDÉE PAR LE CONSEILLER : la structure des meubles Fermob doit être rendue dans le coloris ${imposee.nom} ${imposee.code} (${imposee.hex}, finition ${imposee.finition}) au lieu de la teinte du rendu 3D. C'est la seule modification autorisée sur les meubles : forme, proportions, lattes, pieds, accoudoirs, nombre et positions restent strictement identiques.${portee.concernes.length ? `\nMeubles À REPEINDRE (${portee.concernes.length}, structure en métal laqué Fermob) : ${portee.concernes.join(" ; ")}.` : ""}${portee.autres.length ? `\nMeubles À NE PAS REPEINDRE (${portee.autres.length}, autres marques et matières) : ${portee.autres.join(" ; ")} — ils gardent STRICTEMENT la teinte et la matière du rendu 3D ; ne leur appliquer aucune partie du coloris ${imposee.nom}.` : ""}`
     : "";
   const ech = echantillons.length
     ? `\nLes images suivantes (${echantillons.length}) sont des ÉCHANTILLONS DE MATIÈRE (gros plan du tressage, sans aucun meuble) : ${echantillons.map((t, i) => `image ${i + 2} = ${t}`).join(" ; ")}. Utilise-les UNIQUEMENT pour reproduire la texture, le motif de tressage et la teinte exacte de ces meubles. Ce ne sont pas des objets à placer dans la scène.`
@@ -268,7 +268,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   const prep = MODE === "calque" ? preparer(capture, calque) : { image: capture, masque: null as Buffer | null, calque: null as PNG | null };
 
-  const prompt = construirePrompt(description, SOLS[String(vv?.sol || "bois")] || "lames de bois", nbArticles, refs.map((r) => r.titre), articles, echantillons.map((e) => e.libelle), imposee);
+  const prompt = construirePrompt(description, SOLS[String(vv?.sol || "bois")] || "lames de bois", nbArticles, refs.map((r) => r.titre), articles, echantillons.map((e) => e.libelle), imposee, {
+    concernes: imposee ? items.filter((it) => /fermob/i.test(String(it.marque || ""))).map((it) => String(it.titre || "article").slice(0, 80)) : [],
+    autres: imposee ? items.filter((it) => !/fermob/i.test(String(it.marque || ""))).map((it) => String(it.titre || "article").slice(0, 80)) : [],
+  });
   const appeler = async (modele: string) => {
     const form = new FormData();
     form.append("model", modele);
