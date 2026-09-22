@@ -11,14 +11,28 @@ import type { Scene } from "@/lib/planner-types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabaseAdmin
+    const offreSlug = (new URL(request.url).searchParams.get("offre_slug") || "").trim();
+    let q = supabaseAdmin
       .from("planner_scenes")
       .select("id, nom, cree_par, offre_slug, items, mode, updated_at")
       .order("updated_at", { ascending: false })
       .limit(50);
+    if (offreSlug) q = q.eq("offre_slug", offreSlug);
+    const { data, error } = await q;
     if (error) throw error;
+    // Pour la card « Faisabilité 3D » : aperçu léger = capture PNG de la
+    // dernière version figée (+ PDF et lien client s'ils existent).
+    const dernieres = new Map<string, { numero: number; token: string; capture_url: string | null; pdf_url: string | null; cree_le: string }>();
+    if (offreSlug && (data || []).length) {
+      const { data: vs } = await supabaseAdmin
+        .from("planner_scenes_versions")
+        .select("scene_id, numero, token, capture_url, pdf_url, cree_le")
+        .in("scene_id", (data || []).map((s) => s.id as string))
+        .order("numero", { ascending: false });
+      for (const v of vs || []) if (!dernieres.has(v.scene_id as string)) dernieres.set(v.scene_id as string, v as never);
+    }
     const scenes = (data || []).map((s) => ({
       id: s.id as string,
       nom: s.nom as string,
@@ -27,6 +41,7 @@ export async function GET() {
       nb_items: Array.isArray(s.items) ? (s.items as unknown[]).length : 0,
       mode: s.mode as string,
       updated_at: s.updated_at as string,
+      derniere_version: dernieres.get(s.id as string) || null,
     }));
     return NextResponse.json({ scenes });
   } catch (err) {

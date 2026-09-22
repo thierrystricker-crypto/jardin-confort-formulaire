@@ -122,6 +122,7 @@ export const SCENE_VIDE: Scene = {
   vue: "plan",
 };
 
+export const MENTION_IA = "Image d'inspiration libre générée par l'IA, non contractuelle";
 export const MENTION_LEGALE = "Rendu à titre informatif, non contractuel";
 
 export function uid(): string {

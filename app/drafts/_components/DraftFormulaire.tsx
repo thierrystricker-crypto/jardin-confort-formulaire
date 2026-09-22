@@ -33,6 +33,7 @@ type ShopifyItem = {
   image3: string;
   delaiLivraison?: string;
   orderUnit?: number | null;
+  has3d?: boolean;                 // modèle 3D dans l'index (badge « 3D », planner)
 };
 
 // Badge de stock du picker (P1-47).
@@ -2278,7 +2279,12 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                             <div className="jc-shopify-variant">{item.variant}</div>
                             <div className="jc-shopify-row">
                               <span className="jc-shopify-label">SKU</span>
-                              <span className="jc-shopify-val">{item.sku || "—"}</span>
+                              <span className="jc-shopify-val">
+                                {item.sku || "—"}
+                                {item.has3d && (
+                                  <span title="Modèle 3D disponible (planner)" style={{ marginLeft: 6, padding: "0 5px", borderRadius: 4, background: "rgba(16,185,129,.18)", color: "#34d399", fontSize: 10, fontWeight: 700, verticalAlign: "middle" }}>3D</span>
+                                )}
+                              </span>
                             </div>
                             <div className="jc-shopify-row">
                               <span className="jc-shopify-label">Prix</span>

@@ -385,3 +385,77 @@ joindre ce PDF à l'offre (étape 3). Proxy : `/print/planner/` accepte le
 - ⚠️ pdf.co doit atteindre la page print : en **preview Vercel** la
   protection de déploiement peut le bloquer → tester le PDF en prod, ou
   désactiver la protection sur le preview le temps du test.
+
+## 21.09.2026 — Étape 3 : lien avec les offres (branche `feature/planner-offres`)
+
+Léger et en lecture seule, comme convenu : aucune modification du modèle de
+données ni de la sauvegarde des offres / brouillons.
+
+- SQL 025 : `modeles_3d.variant_ids text[]` (gid de toutes les variantes de
+  la fiche) + index GIN sur `variant_ids` et `skus`. Le sync les remplit.
+  → « Rafraîchir l'index 3D » après le SQL.
+- `lib/modeles-3d-lookup.ts` : `resoudreLignes3d(lignes)` — retrouve le
+  modèle d'une ligne par **gid de variante** (`shopifyVariantId`, clé fiable),
+  repli par SKU (si unique, ou une seule fiche avec 3D). Cascade variante →
+  fiche ; renvoie url, source, prix (exact si variante connue), avertissements
+  taille / couleur, marque, image.
+- `GET /api/planner/faisabilite?type=offre|brouillon&slug=` : relit
+  `offres.data.lines` / `drafts.data.lines` (lignes `product`), synthèse
+  `avec_3d / total` + détail par ligne. Recalculé à chaque appel → suit V1,
+  V2, V3.
+- `components/Faisabilite3DCard.tsx` : card « 🧊 Faisabilité 3D » — « 5/8
+  articles de cette commande sont disponibles pour un plan-rendu en 3D »,
+  bouton « Ouvrir le planner avec ces articles », détail par ligne (3D / — ,
+  taille ?, couleur ?), marques manquantes, plans déjà liés (scènes avec
+  `offre_slug`). Posée sur `app/dashboard/[slug]` (offres et commandes) et
+  `app/dashboard/draft/[slug]`. Se cache si erreur ou aucune ligne produit.
+- Planner : `?depuis=offre:<slug>` | `brouillon:<slug>` → nouvelle scène
+  (non enregistrée) avec les lignes 3D × quantité posées dans la bande de
+  dépôt, `offre_slug` renseigné, nom « date conseiller — N° client ».
+  `GET /api/planner/scenes?offre_slug=` liste les scènes liées.
+- Badge « 3D » dans le picker du formulaire de brouillon :
+  `/api/shopify-search` renvoie `has3d` (lookup par gid, jamais bloquant),
+  `DraftFormulaire` affiche un petit badge vert à côté du SKU.
+
+Pas encore : PDF / lien 3D joints automatiquement à l'offre (annexe), badge
+sur les lignes déjà posées dans le formulaire.
+- Retours étape 3 : garde « modifications non enregistrées » sur le lien
+  Dashboard du planner (navigation client Next, `beforeunload` ne joue pas) ;
+  la card ouvre le planner dans un nouvel onglet ; **aperçu léger** des plans
+  liés = capture PNG de la dernière version (`GET /api/planner/scenes?offre_slug=`
+  joint `derniere_version` : numero, token, capture_url, pdf_url), avec
+  boutons Planner / 3D client / PDF / **Copier le lien** (version figée) à
+  coller dans un mail au client.
+- **Plan lié à une offre / commande → pas de prix webshop côté client** :
+  la page `/planner/partage/[token]` masque prix et total (API publique :
+  `sans_prix` = `offre_slug` non nul, pour les versions comme pour le lien
+  vivant) et affiche « Les prix figurent sur votre offre ou votre commande » ;
+  dans le planner, « Fiche » et « ⬇ PDF » (avec prix) passent en gris ambre
+  et, au clic, proposent d'ouvrir la version sans prix (OK) ou d'annuler.
+
+## 21.09.2026 — Image d'ambiance IA (s'ajoute aux exports, ne remplace rien)
+
+- Route **parallèle** `POST /api/planner/scenes/[id]/ambiance {prompt, capture,
+  dims, regenerer?}` : fige/réutilise la version, prend sa capture 3D comme
+  image de départ, appelle OpenAI `images/edits` (`gpt-image-1`, même
+  `OPENAI_API_KEY` que la voix de Jardi — ni le chat Jardi ni le serveur MCP
+  jardi-mail ne sont touchés), stocke le PNG `planner/<token>-ambiance.png`
+  et `ambiance_url / ambiance_prompt / ambiance_cree_le` sur la version
+  (SQL 026). Même prompt sur la même version → image renvoyée telle quelle.
+- **Prompt verrouillé côté commercial** : garder chaque meuble exactement
+  (modèles, formes, proportions, couleurs, nombre, positions, orientation),
+  ne rien ajouter (coussins, vaisselle, personnes), cadrage inchangé ;
+  réinventer uniquement sol, décor, végétation, ciel, lumière d'après la
+  description du conseiller. Style photo éditoriale, sans texte.
+- Planner : bouton « 🎨 Ambiance IA » (rose) → boîte de description
+  pré-remplie d'après le sol (« Terrasse en bois face au lac Léman… »),
+  20–40 s, bandeau avec vignette, Ouvrir, Fiche sans prix avec l'image,
+  Régénérer.
+- Fiche `/print/planner` : l'image d'ambiance apparaît sous la capture 3D
+  avec la mention « Image d'inspiration libre générée par l'IA, non
+  contractuelle — décor imaginé d'après « … » ; seuls les meubles du plan
+  font référence ». Page client : vignette dans la colonne avec la mention.
+- Variables optionnelles : `OPENAI_IMAGE_MODELE` (défaut gpt-image-1),
+  `OPENAI_IMAGE_QUALITE` (medium). Coût ≈ quelques centimes par image.
+- Pas fait : compteur dans la page Usage de Jardi ; plusieurs variantes par
+  version ; modèle à contrôle structurel si gpt-image déforme trop les meubles.

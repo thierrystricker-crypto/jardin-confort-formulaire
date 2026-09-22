@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   // 1) Version figée ?
   const { data: v, error: ev } = await supabaseAdmin
     .from("planner_scenes_versions")
-    .select("scene_id, numero, nom, terrasse, sol, items, mode, vue, cree_le")
+    .select("scene_id, numero, nom, terrasse, sol, items, mode, vue, cree_le, ambiance_url")
     .eq("token", token)
     .maybeSingle();
   if (ev) return NextResponse.json({ error: ev.message }, { status: 500 });
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     // version plus récente) → la page client le dit et propose le lien vivant.
     const { data: s } = await supabaseAdmin
       .from("planner_scenes")
-      .select("updated_at, partage_token")
+      .select("updated_at, partage_token, offre_slug")
       .eq("id", v.scene_id)
       .maybeSingle();
     const { data: plusRecente } = await supabaseAdmin
@@ -59,13 +59,17 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       version: { numero: v.numero, cree_le: v.cree_le },
       modifie_depuis: modifieDepuis,
       url_actuelle: s?.partage_token ? `${origine}/planner/partage/${s.partage_token}` : null,
+      // Plan lié à une offre / commande : le client a déjà ses prix sur le
+      // document, on ne montre pas ceux du webshop (21.09.2026).
+      sans_prix: Boolean(s?.offre_slug),
+      ambiance_url: (v.ambiance_url as string | null) || null,
     }, { headers: entetes });
   }
 
   // 2) Lien vivant
   const { data, error } = await supabaseAdmin
     .from("planner_scenes")
-    .select("nom, terrasse, sol, items, mode, vue, updated_at")
+    .select("nom, terrasse, sol, items, mode, vue, updated_at, offre_slug")
     .eq("partage_token", token)
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -74,5 +78,5 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     id: null, nom: data.nom, terrasse: data.terrasse, sol: data.sol || "bois",
     items: epurer(data.items as SceneItem[]), mode: data.mode, vue: data.vue,
   };
-  return NextResponse.json({ scene, version: null, updated_at: data.updated_at }, { headers: entetes });
+  return NextResponse.json({ scene, version: null, updated_at: data.updated_at, sans_prix: Boolean(data.offre_slug) }, { headers: entetes });
 }

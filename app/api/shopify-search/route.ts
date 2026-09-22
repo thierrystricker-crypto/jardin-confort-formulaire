@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resoudreLignes3d } from "@/lib/modeles-3d-lookup";
 
 const SHOP = process.env.SHOPIFY_STORE_DOMAIN;
 const STOREFRONT_TOKEN = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN;
@@ -381,11 +382,17 @@ export async function GET(request: NextRequest) {
 
     try {
       const variantIds = storefrontItems.map((item) => item.id).filter(Boolean);
-      const adminAvailableMap = await getAdminAvailableByVariantId(variantIds);
+      const [adminAvailableMap, modeles3d] = await Promise.all([
+        getAdminAvailableByVariantId(variantIds),
+        // Badge « 3D » du picker (21.09.2026) : index Supabase modeles_3d, par gid
+        // de variante. Jamais bloquant : sans index, pas de badge.
+        resoudreLignes3d(variantIds.map((id) => ({ id, shopifyVariantId: id }))).catch(() => new Map()),
+      ]);
       const items = storefrontItems.map((item) => {
         const adminData = adminAvailableMap.get(item.id);
         return {
           ...item,
+          has3d: Boolean(modeles3d.get(item.id)?.has_3d),
           stock: adminData ? adminData.qty : null,
           inventoryPolicy: adminData ? adminData.inventoryPolicy : null,
           // Cascade du thème : le métachamp de variante prime, le tag (déjà posé

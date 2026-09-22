@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
-import { MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CatalogueItem, type ChoixModele, type Scene, type SceneItem } from "@/lib/planner-types";
+import { MENTION_IA, MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CatalogueItem, type ChoixModele, type Scene, type SceneItem } from "@/lib/planner-types";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
 const PlannerCanvas = dynamic(() => import("@/components/planner/PlannerCanvas"), {
@@ -54,6 +54,12 @@ export default function PlannerPage() {
   const [listeOuverte, setListeOuverte] = useState(false);
   const [partage, setPartage] = useState<{ url: string; copie: boolean } | null>(null);   // lien client affiché
   const [pdfEnCours, setPdfEnCours] = useState(false);
+  // Galerie des images d'ambiance IA de la dernière version : chaque
+  // génération S'AJOUTE (rien n'est écrasé) ; `retenue` = celle des documents.
+  type Ambiance = { id: string; url: string; prompt: string | null; modele: string | null; cree_le: string; numero?: number | null };
+  const [ambiance, setAmbiance] = useState<{ numero: number; token: string; retenue: string | null; liste: Ambiance[] } | null>(null);
+  const [ambianceEnCours, setAmbianceEnCours] = useState(false);
+  const [ambianceErreur, setAmbianceErreur] = useState<string | null>(null);
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
@@ -116,13 +122,62 @@ export default function PlannerPage() {
     return !n || n === "Sans titre" || n.endsWith("—");
   }
 
-  // Charger ?scene=<id>, sinon pré-remplir le nom
+  // Depuis une offre / un brouillon / une commande (card « Faisabilité 3D ») :
+  // ?depuis=offre:<slug> ou brouillon:<slug> → nouvelle scène, non enregistrée,
+  // avec les lignes qui ont un modèle 3D (× quantité), liée par offre_slug.
+  // Les pages d'offres ne sont pas touchées : on ne fait que lire.
+  async function chargerDepuisDocument(depuis: string) {
+    const [type, ...reste] = depuis.split(":");
+    const slug = reste.join(":");
+    if (!slug || (type !== "offre" && type !== "brouillon")) return;
+    try {
+      const r = await fetch(`/api/planner/faisabilite?type=${type}&slug=${encodeURIComponent(slug)}`);
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      const items: SceneItem[] = [];
+      const lignes = (j.lignes as Array<{ has_3d: boolean; qty: number; url: string | null; source: "model3d" | "url" | null; title: string; titre: string | null; marque: string | null; image: string | null; prix: number | null; prix_exact: boolean; sku: string | null; variant_id: string | null; size_warn: boolean; color_warn: boolean; product_id: number | null }>).filter((l) => l.has_3d && l.url);
+      // Dépôt en grille sous la terrasse (même logique que caseLibre, sans état)
+      const largeur = SCENE_VIDE.terrasse.largeur, profondeur = SCENE_VIDE.terrasse.profondeur;
+      const nCol = Math.max(1, Math.floor(largeur / 1));
+      let n = 0;
+      for (const l of lignes) {
+        for (let k = 0; k < Math.min(l.qty, 20); k++) {
+          const x = -largeur / 2 + 0.5 + (n % nCol) * 1;
+          const z = profondeur / 2 + 0.9 + Math.floor(n / nCol) * 1;
+          n++;
+          items.push({
+            uid: uid(), product_id: l.product_id || 0, titre: l.titre || l.title, marque: l.marque,
+            url: l.url!, source: l.source || "url", x: +x.toFixed(2), z: +z.toFixed(2), rot: 0,
+            size_warn: l.size_warn, color_warn: l.color_warn, image_url: l.image, prix: l.prix, prix_exact: l.prix_exact,
+            sku: l.sku, variant_id: l.variant_id,
+          });
+        }
+      }
+      const fix = lireRotFix();
+      for (const it of items) { const f = fix[String(it.product_id)]; if (f) it.rot_fix = f; }
+      const libelle = [j.numero, j.client].filter(Boolean).join(" ");
+      setScene({ ...SCENE_VIDE, items, nom: `${nomPropose()}${libelle}`, offre_slug: slug });
+      passe.current = [];
+      futur.current = [];
+      setHistoN((k) => k + 1);
+      setModifie(true);
+      setMessage(`${items.length} article${items.length > 1 ? "s" : ""} posé${items.length > 1 ? "s" : ""} depuis ${j.type_document || "l'offre"} ${j.numero || ""} — ${j.avec_3d}/${j.total} ligne${j.total > 1 ? "s" : ""} avec 3D. Glisse-les sur la terrasse, puis Enregistrer.`);
+    } catch (e) {
+      setMessage(`Pré-remplissage impossible : ${(e as Error).message}`);
+      setScene((sc) => ({ ...sc, nom: nomPropose() }));
+    }
+  }
+
+  // Charger ?scene=<id>, ?depuis=<type>:<slug>, sinon pré-remplir le nom
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("scene");
+    const sp = new URLSearchParams(window.location.search);
+    const depuis = sp.get("depuis");
+    if (depuis) { void chargerDepuisDocument(depuis); return; }
+    const id = sp.get("scene");
     if (!id) { setScene((sc) => ({ ...sc, nom: nomPropose() })); setModifie(false); return; }
     fetch(`/api/planner/scenes/${id}`)
       .then((r) => r.json())
-      .then((j) => { if (j.scene) { setScene(j.scene); setModifie(false); } else setMessage(j.error || "Scène introuvable"); })
+      .then((j) => { if (j.scene) { setScene(j.scene); setModifie(false); chargerAmbiances(id); } else setMessage(j.error || "Scène introuvable"); })
       .catch((e) => setMessage((e as Error).message));
   }, []);
 
@@ -418,6 +473,26 @@ export default function PlannerPage() {
     await new Promise<void>((r) => setTimeout(r, 80));
     return captureRef.current?.() || null;
   }
+  // Cadre une capture (data URL) au format 1536×1024 de gpt-image : l'image
+  // est CONTENUE (jamais rognée — un meuble coupé serait réinventé), les
+  // bandes sont remplies de blanc, comme le fond de la fiche. Au passage, ça
+  // tient sous les 4,5 Mo par requête des fonctions Vercel.
+  async function cadrer(data: string | null, fond = "#ffffff"): Promise<string | null> {
+    if (!data) return null;
+    const im = await chargerImage(data);
+    if (!im) return null;
+    const L = 1536, H = 1024;
+    const c = document.createElement("canvas");
+    c.width = L; c.height = H;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = fond;
+    ctx.fillRect(0, 0, L, H);
+    const k = Math.min(L / im.width, H / im.height);
+    const w = im.width * k, h = im.height * k;
+    ctx.drawImage(im, (L - w) / 2, (H - h) / 2, w, h);
+    return c.toDataURL("image/png");
+  }
   function chargerImage(src: string): Promise<HTMLImageElement | null> {
     return new Promise((res) => {
       const im = new Image();
@@ -472,9 +547,21 @@ export default function PlannerPage() {
   // Fiche imprimable = vraie page /print/planner/<token> (composant serveur,
   // même gabarit que /print/offre) sur une VERSION figée avec sa capture et
   // ses cotes. Un humain l'ouvre avec son cookie ; pdf.co la rend avec jc_token.
+  // Plan lié à une offre / commande : les prix du planner sont ceux du webshop,
+  // pas ceux du document. On oriente vers la version sans prix.
+  function garderSansPrixSiLie(avecPrix: boolean): boolean {
+    if (!avecPrix || !scene.offre_slug) return avecPrix;
+    const ok = window.confirm(
+      `Ce plan est lié au document ${scene.offre_slug}.\nLes prix du planner sont ceux du webshop, pas ceux de l'offre ou de la commande : le client ne doit pas les voir.\n\nOK = ouvrir la version SANS prix (à partager)\nAnnuler = ne rien faire`,
+    );
+    if (!ok) throw new Error("annulé");
+    return false;
+  }
+
   async function imprimerListe(avecPrix = true) {
     const nom = exigerNom();
     if (!nom) return;
+    try { avecPrix = garderSansPrixSiLie(avecPrix); } catch { return; }
     if (scene.items.length === 0) { setMessage("Aucun article à imprimer"); return; }
     const w = window.open("", "_blank");           // dans le clic, sinon bloqué
     if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
@@ -484,11 +571,82 @@ export default function PlannerPage() {
     w.location.href = `/print/planner/${version.token}?prix=${avecPrix ? 1 : 0}`;
   }
 
+  // Galerie des ambiances de la dernière version d'une scène (vide si aucune).
+  function chargerAmbiances(id: string) {
+    fetch(`/api/planner/scenes/${id}/ambiances`)
+      .then((r) => r.json())
+      .then((j) => setAmbiance(j.token && Array.isArray(j.ambiances) && j.ambiances.length ? { numero: j.numero, token: j.token, retenue: j.retenue, liste: j.ambiances } : null))
+      .catch(() => {});
+  }
+  // Retenir une image pour les documents / n'en retenir aucune / supprimer.
+  async function gererAmbiance(action: "retenir" | "exclure" | "supprimer", a: { id: string; url: string }) {
+    if (!scene.id || !ambiance) return;
+    if (action === "supprimer" && !window.confirm("Supprimer définitivement cette image d'ambiance ?\n(Le fichier est effacé ; si elle était sur les documents, ils n'en auront plus.)")) return;
+    try {
+      const r = await fetch(`/api/planner/scenes/${scene.id}/ambiances`, {
+        method: action === "supprimer" ? "DELETE" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: a.id, action }),
+      });
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      setAmbiance(j.ambiances.length ? { ...ambiance, retenue: j.retenue, liste: j.ambiances } : null);
+      setMessage(action === "retenir" ? "Cette image ira sur la fiche, le PDF et la page client" : action === "exclure" ? "Aucune image d'ambiance sur les documents" : "Image supprimée");
+    } catch (e) {
+      setMessage(`Ambiance : ${(e as Error).message}`);
+    }
+  }
+
+  // Image d'ambiance IA : capture 3D figée + description → décor réinventé,
+  // meubles inchangés. Route parallèle /ambiance (clé OpenAI de la voix).
+  // S'AJOUTE aux exports : jamais à la place de la capture ou de la fiche.
+  async function genererAmbiance() {
+    const nom = exigerNom();
+    if (!nom) return;
+    if (scene.items.length === 0) { setMessage("Pose d'abord des articles"); return; }
+    const solNom = SOLS.find((x) => x.id === (scene.sol || "bois"))?.nom || "bois";
+    const description = window.prompt(
+      "Décris l'ambiance souhaitée (le décor uniquement — les meubles restent exactement ceux du plan).\nChaque génération s'ajoute à la galerie, rien n'est écrasé.",
+      `Terrasse extérieure haut de gamme en ${solNom.toLowerCase()} face au lac Léman, dans l'esprit des terrasses du Lavaux : vignes en terrasses en arrière-plan, lac au loin et relief des Alpes sur l'autre rive. Fin d'après-midi d'été, lumière chaude de golden hour. Atmosphère élégante, calme, contemporaine ; architecture suisse discrète. Quelques végétaux locaux peuvent encadrer la scène sans jamais masquer les meubles.`,
+    );
+    if (description === null || !description.trim()) return;
+    setAmbianceEnCours(true);
+    setAmbianceErreur(null);
+    setMessage("Génération de l'image d'ambiance… (20 à 40 s)");
+    try {
+      // Capture de la vue courante, fond blanc : c'est l'image source de l'IA
+      // (prompt maître côté serveur, pas de masque — voir la route).
+      const brute = await capturerSansSelection();
+      const capture = await cadrer(brute);
+      let id = scene.id;
+      if (!id || modifie) { id = await enregistrer(); if (!id) return; }
+      const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        // Une image existe déjà (bouton « Régénérer ») → on force une nouvelle
+        // génération, sinon la route renvoie l'image stockée pour la version.
+        body: JSON.stringify({ prompt: description.trim(), capture, dims }),
+      });
+      const texte = await r.text();
+      let j: { error?: string; details?: string; ambiance_url?: string; ambiances?: Ambiance[]; retenue?: string | null; numero?: number; token?: string; modele?: string };
+      try { j = JSON.parse(texte); }
+      catch { throw new Error(`Réponse ${r.status} du serveur (pas du JSON) — ${r.status === 413 ? "images trop lourdes" : r.status === 504 ? "délai dépassé" : texte.slice(0, 80)}`); }
+      if (j.error) throw new Error(j.details ? `${j.error} — ${j.details}` : j.error);
+      setAmbiance({ numero: j.numero as number, token: j.token as string, retenue: j.retenue ?? (j.ambiance_url as string), liste: j.ambiances || [] });
+      setMessage(`Image d'ambiance générée (version V${j.numero}${j.modele ? `, ${j.modele}` : ""}) — elle est retenue pour les documents ; les précédentes restent dans la galerie`);
+    } catch (e) {
+      setAmbianceErreur((e as Error).message);
+      setMessage("");
+    } finally {
+      setAmbianceEnCours(false);
+    }
+  }
+
   // PDF via pdf.co, comme les offres : la route fige la version, fait rendre
   // /print/planner/<token> par pdf.co, stocke le PDF et renvoie son URL.
   async function genererPdf(avecPrix = true) {
     const nom = exigerNom();
     if (!nom) return;
+    try { avecPrix = garderSansPrixSiLie(avecPrix); } catch { return; }
     if (scene.items.length === 0) { setMessage("Aucun article à exporter"); return; }
     setPdfEnCours(true);
     setMessage("Génération du PDF… (10 à 20 s)");
@@ -567,7 +725,17 @@ export default function PlannerPage() {
     <main className="flex h-screen flex-col bg-[#1f2125] text-zinc-100">
       {/* Barre du haut */}
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
-        <div className="-mb-4">
+        <div
+          className="-mb-4"
+          onClickCapture={(e) => {
+            // Le lien « Dashboard » est une navigation client Next : beforeunload
+            // ne se déclenche pas. On demande confirmation ici si non enregistré.
+            if (modifie && !window.confirm("Modifications non enregistrées. Quitter le planner sans enregistrer ?")) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
+        >
           <RetourDashboard>
             <a href="/dashboard/modeles-3d" className={CLASSE_BOUTON_NAV}>🧊 Index 3D</a>
           </RetourDashboard>
@@ -616,15 +784,55 @@ export default function PlannerPage() {
           </button>
           <button type="button" onClick={partager} className={BTN_OFF} title="Lien client en lecture seule : il tourne la vue, zoome, bascule Plan/3D — sans rien modifier">🔗 Partager</button>
           <button type="button" onClick={capturer} className={BTN_OFF} title="Télécharger une image PNG de la vue actuelle, avec la mention légale">📷 Capture</button>
-          <button type="button" onClick={() => imprimerListe(true)} className={BTN_OFF} title="Fiche imprimable : image de la vue + liste des articles avec photos, cotes et prix indicatifs">🖨 Fiche</button>
+          <button type="button" onClick={() => imprimerListe(true)} className={scene.offre_slug ? `${BTN} border-amber-500/30 bg-amber-500/5 text-zinc-500` : BTN_OFF} title={scene.offre_slug ? "Plan lié à une offre / commande : préférer la version sans prix" : "Fiche imprimable : image de la vue + liste des articles avec photos, cotes et prix indicatifs"}>🖨 Fiche</button>
           <button type="button" onClick={() => imprimerListe(false)} className={BTN_OFF} title="Même fiche sans aucun prix : articles, quantités, cotes">🖨 Sans prix</button>
-          <button type="button" onClick={() => genererPdf(true)} disabled={pdfEnCours} className={`${BTN} border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25`} title="PDF de la fiche généré par pdf.co, comme les offres">{pdfEnCours ? "…" : "⬇ PDF"}</button>
+          <button type="button" onClick={() => genererPdf(true)} disabled={pdfEnCours} className={scene.offre_slug ? `${BTN} border-amber-500/30 bg-amber-500/5 text-zinc-500` : `${BTN} border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25`} title={scene.offre_slug ? "Plan lié à une offre / commande : préférer le PDF sans prix" : "PDF de la fiche généré par pdf.co, comme les offres"}>{pdfEnCours ? "…" : "⬇ PDF"}</button>
+          <button type="button" onClick={genererAmbiance} disabled={ambianceEnCours} className={`${BTN} border-pink-500/40 bg-pink-500/15 text-pink-200 hover:bg-pink-500/25`} title="Image d'ambiance générée par IA à partir de la vue 3D : meubles inchangés, décor réinventé. Mention « inspiration libre, non contractuelle ».">{ambianceEnCours ? "…" : "🎨 Ambiance IA"}</button>
           <button type="button" onClick={() => genererPdf(false)} disabled={pdfEnCours} className={`${BTN} border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25`} title="PDF sans prix">{pdfEnCours ? "…" : "⬇ PDF sans prix"}</button>
           <button type="button" onClick={exporterListeAchat} className={`${BTN} border-cyan-500/40 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25`} title="Créer une liste d'achat avec les articles posés (puis brouillon d'offre depuis la page Listes d'achat)">🛒 Liste d'achat</button>
         </div>
       </div>
 
       {message && <div className="border-b border-white/10 bg-sky-500/10 px-4 py-1.5 text-xs text-sky-200">{message}</div>}
+      {ambianceEnCours && (
+        <div className="border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">🎨 Génération de l&apos;image d&apos;ambiance en cours… 20 à 40 secondes, la vignette apparaîtra ici.</div>
+      )}
+      {ambianceErreur && (
+        <div className="flex items-center gap-3 border-b border-white/10 bg-rose-500/10 px-4 py-2 text-xs text-rose-100">
+          <span className="min-w-0 flex-1">🎨 Ambiance IA impossible : {ambianceErreur}</span>
+          <button type="button" onClick={() => setAmbianceErreur(null)} className="text-zinc-400 hover:text-white">✕</button>
+        </div>
+      )}
+      {ambiance && (
+        <div className="border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1">🎨 Ambiances IA — {ambiance.liste.length} image{ambiance.liste.length > 1 ? "s" : ""} pour ce plan (toutes versions). {MENTION_IA}. Chaque génération s&apos;ajoute, rien n&apos;est écrasé ; l&apos;image <b>retenue</b> est celle de la fiche, du PDF et de la page client de la version courante (V{ambiance.numero}).</span>
+            <a href={`/print/planner/${ambiance.token}?prix=0`} target="_blank" rel="noopener noreferrer" className={BTN_OFF}>Fiche sans prix</a>
+            <button type="button" onClick={genererAmbiance} disabled={ambianceEnCours} className={BTN_OFF}>+ Nouvelle image</button>
+            {ambiance.retenue && <button type="button" onClick={() => gererAmbiance("exclure", ambiance.liste[0])} className={BTN_OFF} title="Les documents n'auront aucune image d'ambiance (les images restent dans la galerie)">Aucune sur les documents</button>}
+            <button type="button" onClick={() => setAmbiance(null)} className="text-zinc-400 hover:text-white" title="Masquer (rouvrir en rechargeant le plan)">✕</button>
+          </div>
+          <div className="mt-2 flex gap-3 overflow-x-auto pb-1">
+            {ambiance.liste.map((a) => {
+              const retenue = a.url === ambiance.retenue;
+              return (
+                <div key={a.id} className={`shrink-0 rounded-lg border p-1 ${retenue ? "border-emerald-400 bg-emerald-500/10" : "border-white/10"}`}>
+                  <a href={a.url} target="_blank" rel="noopener noreferrer" title={a.prompt || ""} className="relative block">
+                    <img src={a.url} alt="" className="h-24 rounded" />
+                    {a.numero != null && <span className={`absolute left-1 top-1 rounded px-1 text-[10px] ${a.numero === ambiance.numero ? "bg-black/60 text-white" : "bg-amber-500/80 text-black"}`} title={a.numero === ambiance.numero ? "Générée sur la version courante" : "Générée sur une version antérieure du plan (articles ou positions différents)"}>V{a.numero}</span>}
+                  </a>
+                  <div className="mt-1 flex items-center gap-1">
+                    {retenue
+                      ? <span className="rounded bg-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-100">✓ sur les documents</span>
+                      : <button type="button" onClick={() => gererAmbiance("retenir", a)} className="rounded border border-white/10 bg-[#2a2d31] px-1.5 py-0.5 text-[10px] text-zinc-300 hover:bg-[#34383d]">Retenir</button>}
+                    <button type="button" onClick={() => gererAmbiance("supprimer", a)} className="rounded border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-500/25" title="Supprimer définitivement">🗑</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {partage && (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-emerald-500/10 px-4 py-1.5 text-xs text-emerald-100">
           <span>Lien client (lecture seule) :</span>

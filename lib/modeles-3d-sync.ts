@@ -262,6 +262,7 @@ export type RowModele3d = {
   variant_id_1: string | null;
   skus: string[];
   skus_txt: string;
+  variant_ids: string[];
   variant_count: number;
   variant_mode: "sans_variante" | "avec_options";
   option_names: string[];
@@ -370,6 +371,7 @@ function construireRow(p: LigneProduit, variantes: LigneVariante[], maintenant: 
     variant_id_1: variantes[0]?.id || null,
     skus: variantes.map((v) => (v.sku || "").trim()).filter(Boolean),
     skus_txt: variantes.map((v) => (v.sku || "").trim()).filter(Boolean).join(" "),
+    variant_ids: variantes.map((v) => v.id).filter(Boolean),
     variant_count: variantes.length,
     variant_mode: variantMode,
     option_names: optionNames,

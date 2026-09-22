@@ -243,6 +243,11 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
   const [pdfUrl, setPdfUrl] = useState("");
   const [qrUrl, setQrUrl] = useState("");
   const [qrDownloading, setQrDownloading] = useState(false);
+  // QR-facture Wallee (05.09.2026) : quand une transaction « virement QR » a été
+  // validée pour la commande, le bouton QR sert le PDF rendu par Wallee (route
+  // publique /api/offres/[slug]/wallee-facture) au lieu du pdf4me. Sans
+  // transaction : comportement pdf4me inchangé. `solde` ajoute un second bouton.
+  const [walleeFacture, setWalleeFacture] = useState<{ acompte: boolean; solde: boolean }>({ acompte: false, solde: false });
 
   // Validation state
   const [accepted, setAccepted] = useState(false);
@@ -349,9 +354,29 @@ export default function OffrePage({ params }: { params: Promise<{ slug: string }
     return () => clearInterval(interval);
   }, [submitting]);
 
+  // ─── QR-facture Wallee disponible ? (lecture seule, une fois le document chargé) ───
+  useEffect(() => {
+    if (!offre || !slug || !["Acceptée", "Convertie"].includes(offre.statut)) return;
+    let actif = true;
+    const lire = async (tranche: "acompte" | "solde") => {
+      try {
+        const res = await fetch(`/api/offres/${slug}/wallee-facture?format=json&tranche=${tranche}`);
+        if (!res.ok) return false;
+        const json = await res.json();
+        return json?.disponible === true;
+      } catch { return false; }
+    };
+    Promise.all([lire("acompte"), lire("solde")]).then(([acompte, solde]) => {
+      if (actif) setWalleeFacture({ acompte, solde });
+    });
+    return () => { actif = false; };
+  }, [offre, slug]);
+
   // ─── Téléchargement QR à la demande (génère si pas encore créé) ───
   async function handleQrDownload() {
     if (qrDownloading) return;
+    // QR-facture Wallee : prioritaire sur le pdf4me dès qu'elle existe.
+    if (walleeFacture.acompte) { window.open(`/api/offres/${slug}/wallee-facture?tranche=acompte`, "_blank"); return; }
     if (qrUrl) { window.open(qrUrl, "_blank"); return; }
     setQrDownloading(true);
     try {
@@ -766,12 +791,28 @@ useEffect(() => {
                   }}>
                   {qrDownloading ? (
                     <><span className="spinner"/> Génération du QR…</>
+                  ) : walleeFacture.acompte ? (
+                    <>📥 Télécharger la QR-facture{isAcompte ? " de l'acompte" : ""}</>
                   ) : qrUrl ? (
                     <>📥 Télécharger le QR paiement</>
                   ) : (
                     <>📥 Télécharger le QR paiement</>
                   )}
                 </button>
+
+                {/* QR-facture Wallee du SOLDE (05.09.2026) : n'existe que si le vendeur
+                    a créé le lien de solde chez Wallee et que le client l'a validé. */}
+                {walleeFacture.solde && (
+                  <a href={`/api/offres/${slug}/wallee-facture?tranche=solde`} target="_blank" rel="noopener noreferrer"
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                      background: "white", color: C.green, border: `1px solid ${C.green}`,
+                      padding: "12px 20px", borderRadius: 24, fontSize: 14, fontWeight: 600,
+                      textDecoration: "none", marginTop: 10, width: "100%", fontFamily: FONT,
+                    }}>
+                    📥 Télécharger la QR-facture du solde
+                  </a>
+                )}
 
                 {/* Lien discret vers la page complète */}
                 <div style={{ marginTop: 12, textAlign: "center", fontSize: 12, color: "#2e7d32" }}>
