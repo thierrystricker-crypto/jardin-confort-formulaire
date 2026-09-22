@@ -641,6 +641,11 @@ export default function PlannerPage() {
   function lienDossier(slug: string): string {
     return /^dra/i.test(slug) ? `/dashboard/draft/${slug}` : `/dashboard/${slug}`;
   }
+  // « cmd-80952-6hjuo » → « CMD-80952 » (le suffixe est technique)
+  function numeroDossier(slug: string): string {
+    const m = /^([a-z]{3})-(\d+)/i.exec(slug);
+    return m ? `${m[1].toUpperCase()}-${m[2]}` : slug.toUpperCase();
+  }
 
   // « Sur les documents » : enregistré TOUT DE SUITE (PATCH), sans attendre
   // le bouton Enregistrer — sinon on coche, on quitte, et rien n'apparaît sur
@@ -850,15 +855,15 @@ export default function PlannerPage() {
           <button type="button" onClick={retablir} disabled={futur.current.length === 0} className={BTN_OFF} title="Rétablir (Ctrl+Y)">↷</button>
         </div>
         <div className="ml-auto flex items-center gap-1">
+          {/* Retour au dossier d'où vient le plan (offre / commande / brouillon) */}
+          {scene.offre_slug && (
+            <a href={lienDossier(scene.offre_slug)} target="_blank" rel="noopener noreferrer" className={`${BTN} border-sky-500/40 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25`} title={`Ouvrir ${scene.offre_slug} dans un nouvel onglet`}>📄 {numeroDossier(scene.offre_slug)}</a>
+          )}
           <button type="button" onClick={nouvelleScene} className={BTN_OFF}>＋ Nouvelle</button>
           <button type="button" onClick={ouvrirListe} className={BTN_OFF}>📂 Ouvrir</button>
           <button type="button" onClick={enregistrer} disabled={enregistrement} className={`${BTN} border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25`}>
             {enregistrement ? "…" : modifie ? "💾 Enregistrer *" : "💾 Enregistrer"}
           </button>
-          {/* Dossier lié + « Sur les documents » (SQL 029) */}
-          {scene.offre_slug && (
-            <a href={lienDossier(scene.offre_slug)} target="_blank" rel="noopener noreferrer" className={BTN_OFF} title={`Ouvrir ${scene.offre_slug} dans un nouvel onglet`}>📄 Dossier</a>
-          )}
           {scene.offre_slug && (
             <label className={`${BTN} flex cursor-pointer items-center gap-1.5 ${scene.sur_documents ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200" : "border-white/10 bg-[#2a2d31] text-zinc-400"}`} title={`Le plan 3D et l'image d'ambiance retenue apparaissent en dernière page de l'offre / commande ${scene.offre_slug} (lien client et PDF Make), toujours sans prix.`}>
               <input type="checkbox" checked={scene.sur_documents === true} onChange={(e) => void basculerSurDocuments(e.target.checked)} className="h-3 w-3 accent-emerald-500" />

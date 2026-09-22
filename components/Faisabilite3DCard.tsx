@@ -91,17 +91,20 @@ export default function Faisabilite3DCard({ type, slug }: { type: "offre" | "bro
           <div className="flex flex-wrap gap-3">
             {scenes.map((s) => {
               const v = s.derniere_version;
+              // Un seul plan : la carte occupe la largeur disponible et les
+              // deux images sont grandes (sinon la moitié droite reste vide).
+              const large = scenes.length === 1;
               return (
-                <div key={s.id} className={`w-[320px] overflow-hidden rounded-xl border bg-black/20 ${s.sur_documents ? "border-emerald-500/40" : "border-white/10"}`}>
+                <div key={s.id} className={`${large ? "w-full max-w-[760px]" : "w-[320px]"} overflow-hidden rounded-xl border bg-black/20 ${s.sur_documents ? "border-emerald-500/40" : "border-white/10"}`}>
                   {/* Aperçus légers (PNG, pas de WebGL) : le plan, et l'image
                       d'ambiance IA retenue quand il y en a une. */}
                   <a href={`/planner?scene=${s.id}`} target="_blank" rel="noopener noreferrer" title="Ouvrir dans le planner" className="flex gap-px bg-white/5">
                     {v?.capture_url ? (
-                      <img src={v.capture_url} alt="Plan 3D" loading="lazy" className={`block h-[130px] ${v.ambiance_url ? "w-1/2" : "w-full"} object-cover`} />
+                      <img src={v.capture_url} alt="Plan 3D" loading="lazy" className={`block ${large ? "h-[230px]" : "h-[130px]"} ${v.ambiance_url ? "w-1/2" : "w-full"} object-cover`} />
                     ) : (
-                      <div className="flex h-[130px] w-full items-center justify-center px-2 text-center text-xs text-zinc-500">Aucun aperçu — fais une Fiche ou une Capture</div>
+                      <div className={`flex ${large ? "h-[230px]" : "h-[130px]"} w-full items-center justify-center px-2 text-center text-xs text-zinc-500`}>Aucun aperçu — fais une Fiche ou une Capture</div>
                     )}
-                    {v?.ambiance_url && <img src={v.ambiance_url} alt="Ambiance IA" loading="lazy" className="block h-[130px] w-1/2 object-cover" />}
+                    {v?.ambiance_url && <img src={v.ambiance_url} alt="Ambiance IA" loading="lazy" className={`block ${large ? "h-[230px]" : "h-[130px]"} w-1/2 object-cover`} />}
                   </a>
                   <div className="p-2 text-xs">
                     <a href={`/planner?scene=${s.id}`} target="_blank" rel="noopener noreferrer" className="mb-1.5 block rounded-lg border border-sky-500/40 bg-sky-500/20 px-2 py-1 text-center text-sm text-sky-200 hover:bg-sky-500/30">
