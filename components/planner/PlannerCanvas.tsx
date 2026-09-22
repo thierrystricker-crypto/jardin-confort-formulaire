@@ -273,9 +273,39 @@ function Capture({ captureRef, calqueRef, ambianceRef, grilleRef, ombreRef, terr
         return { capture, calque };
       };
     }
+    // Capture TOUJOURS en 3:2 (1536×1024), quel que soit l'écran : le canvas
+    // est rendu hors écran à cette taille avec la même caméra (angle inchangé,
+    // champ adapté), puis remis à sa taille. Ainsi la capture de la fiche et
+    // le rendu IA (3:2 lui aussi) ont exactement le même cadre.
     captureRef.current = () => {
+      const W = 1536, H = 1024;
+      const taille = new THREE.Vector2();
+      gl.getSize(taille);
+      const dpr = gl.getPixelRatio();
+      const persp = camera as THREE.PerspectiveCamera;
+      const ortho = camera as THREE.OrthographicCamera;
+      const sauve = persp.isPerspectiveCamera
+        ? { aspect: persp.aspect }
+        : { left: ortho.left, right: ortho.right, top: ortho.top, bottom: ortho.bottom };
+      gl.setPixelRatio(1);
+      gl.setSize(W, H, false);
+      if (persp.isPerspectiveCamera) {
+        persp.aspect = W / H;
+      } else {
+        const demiH = (ortho.top - ortho.bottom) / 2;
+        ortho.left = -demiH * (W / H);
+        ortho.right = demiH * (W / H);
+      }
+      camera.updateProjectionMatrix();
       gl.render(scene, camera);
-      return gl.domElement.toDataURL("image/png");
+      const data = gl.domElement.toDataURL("image/png");
+      if (persp.isPerspectiveCamera) persp.aspect = (sauve as { aspect: number }).aspect;
+      else Object.assign(ortho, sauve);
+      camera.updateProjectionMatrix();
+      gl.setPixelRatio(dpr);
+      gl.setSize(taille.x, taille.y, false);
+      gl.render(scene, camera);
+      return data;
     };
     if (calqueRef) {
       // Même caméra, même taille que la capture prise juste avant : on cache
