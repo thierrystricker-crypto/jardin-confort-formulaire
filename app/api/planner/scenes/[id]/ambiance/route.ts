@@ -59,6 +59,24 @@ PRIORITÉ N°1 : fidélité absolue aux meubles de l'image source. PRIORITÉ N°
 
 const SOLS: Record<string, string> = { bois: "lames de bois", pierre: "dalles de pierre claire", beton: "béton lisse", gravier: "gravier fin", gazon: "gazon", blanc: "carrelage blanc" };
 
+// Fond blanc sous la capture (le canvas est transparent hors terrasse) :
+// l'IA doit voir une image opaque, comme la fiche.
+function aplatirSurBlanc(png: Buffer): Buffer {
+  try {
+    const im = PNG.sync.read(png);
+    const d = im.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3] / 255;
+      if (a === 1) continue;
+      d[i] = Math.round(d[i] * a + 255 * (1 - a));
+      d[i + 1] = Math.round(d[i + 1] * a + 255 * (1 - a));
+      d[i + 2] = Math.round(d[i + 2] * a + 255 * (1 - a));
+      d[i + 3] = 255;
+    }
+    return PNG.sync.write(im);
+  } catch { return png; }
+}
+
 function depuisDataUrl(d?: string | null): Buffer | null {
   if (!d) return null;
   const i = d.indexOf(",");
@@ -137,6 +155,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   // hauteur d'œil, bord avant hors champ), sinon la capture normale + son
   // calque, sinon la capture figée de la version (sans calque possible).
   let capture = depuisDataUrl(body.source || body.ambiance?.capture || body.capture);
+  if (capture && !body.source) capture = aplatirSurBlanc(capture);
   let calque = depuisDataUrl(body.ambiance?.calque || body.calque);
   if (!capture) {
     if (!v.capture_url) return NextResponse.json({ error: "Aucune capture 3D pour cette version" }, { status: 400 });

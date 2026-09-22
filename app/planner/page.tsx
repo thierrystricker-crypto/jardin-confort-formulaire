@@ -473,26 +473,6 @@ export default function PlannerPage() {
     await new Promise<void>((r) => setTimeout(r, 80));
     return captureRef.current?.() || null;
   }
-  // Cadre une capture (data URL) au format 1536×1024 de gpt-image : l'image
-  // est CONTENUE (jamais rognée — un meuble coupé serait réinventé), les
-  // bandes sont remplies de blanc, comme le fond de la fiche. Au passage, ça
-  // tient sous les 4,5 Mo par requête des fonctions Vercel.
-  async function cadrer(data: string | null, fond = "#ffffff"): Promise<string | null> {
-    if (!data) return null;
-    const im = await chargerImage(data);
-    if (!im) return null;
-    const L = 1536, H = 1024;
-    const c = document.createElement("canvas");
-    c.width = L; c.height = H;
-    const ctx = c.getContext("2d");
-    if (!ctx) return null;
-    ctx.fillStyle = fond;
-    ctx.fillRect(0, 0, L, H);
-    const k = Math.min(L / im.width, H / im.height);
-    const w = im.width * k, h = im.height * k;
-    ctx.drawImage(im, (L - w) / 2, (H - h) / 2, w, h);
-    return c.toDataURL("image/png");
-  }
   function chargerImage(src: string): Promise<HTMLImageElement | null> {
     return new Promise((res) => {
       const im = new Image();
@@ -616,15 +596,17 @@ export default function PlannerPage() {
     try {
       // Capture de la vue courante, fond blanc : c'est l'image source de l'IA
       // (prompt maître côté serveur, pas de masque — voir la route).
-      const brute = await capturerSansSelection();      // capture de la version (fiche, PDF)
-      const source = await cadrer(brute);                 // même vue, cadrée 1536×1024 sur blanc pour l'IA
+      // Une seule image : la capture (déjà en 1536×1024, fond transparent)
+      // sert à la version ET à l'IA (le serveur pose le fond blanc). Deux
+      // images dépassaient les 4,5 Mo par requête des fonctions Vercel.
+      const brute = await capturerSansSelection();
       let id = scene.id;
       if (!id || modifie) { id = await enregistrer(); if (!id) return; }
       const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         // Une image existe déjà (bouton « Régénérer ») → on force une nouvelle
         // génération, sinon la route renvoie l'image stockée pour la version.
-        body: JSON.stringify({ prompt: description.trim(), capture: brute, source, dims }),
+        body: JSON.stringify({ prompt: description.trim(), capture: brute, dims }),
       });
       const texte = await r.text();
       let j: { error?: string; details?: string; ambiance_url?: string; ambiances?: Ambiance[]; retenue?: string | null; numero?: number; token?: string; modele?: string };
