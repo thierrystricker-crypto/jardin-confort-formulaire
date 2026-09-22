@@ -53,11 +53,16 @@ const LARG = 1536, HAUT = 1024;          // format paysage 3:2
 // Prompt maître (le bloc « AMBIANCE À CRÉER » est le seul qui varie). Rédigé
 // avec ChatGPT le 22.09.2026 à partir du résultat validé ; les meubles sont
 // présentés comme une couche produit verrouillée, pas comme une référence.
-function construirePrompt(description: string, sol: string, nbArticles: number, references: string[], articles: string[], echantillons: string[] = [], imposee: Couleur | null = null, portee: { concernes: string[]; autres: string[] } = { concernes: [], autres: [] }): string {
+function construirePrompt(description: string, sol: string, nbArticles: number, references: string[], articles: string[], echantillons: string[] = [], imposee: Couleur | null = null, portee: { concernes: string[]; autres: string[] } = { concernes: [], autres: [] }, teinteAppliquee = false): string {
   // Coloris imposé par le conseiller dans sa description : seule exception à
   // la règle « couleurs identiques au rendu 3D », énoncée explicitement pour
   // que le modèle ne reçoive pas deux ordres contraires.
-  const exception = imposee
+  // Coloris déjà repeint dans la 3D par le navigateur (22.09.2026) : plus
+  // aucune exception — l'IA garde les couleurs de l'image, comme sans coloris
+  // imposé (le seul cas où elle ne redessinait pas les modèles).
+  const exception = imposee && teinteAppliquee
+    ? `\nCOLORIS : les structures des meubles Fermob sont déjà rendues dans l'image source dans le coloris ${imposee.nom} ${imposee.code} (${imposee.hex}, finition ${imposee.finition}). Aucun meuble n'est à repeindre : garder exactement les couleurs de l'image.`
+    : imposee
     ? `\nEXCEPTION DEMANDÉE PAR LE CONSEILLER : la structure des meubles Fermob doit être rendue dans le coloris ${imposee.nom} ${imposee.code} (${imposee.hex}, finition ${imposee.finition}) au lieu de la teinte du rendu 3D. C'est la seule modification autorisée sur les meubles : forme, proportions, lattes, pieds, accoudoirs, nombre et positions restent strictement identiques.${portee.concernes.length ? `\nMeubles À REPEINDRE (${portee.concernes.length}, structure en métal laqué Fermob) : ${portee.concernes.join(" ; ")}.` : ""}${portee.autres.length ? `\nMeubles À NE PAS REPEINDRE (${portee.autres.length}, autres marques et matières) : ${portee.autres.join(" ; ")} — ils gardent STRICTEMENT la teinte et la matière du rendu 3D ; ne leur appliquer aucune partie du coloris ${imposee.nom}.` : ""}`
     : "";
   const ech = echantillons.length
@@ -72,7 +77,7 @@ function construirePrompt(description: string, sol: string, nbArticles: number, 
   return `MODIFICATION DE L'IMAGE FOURNIE — NE PAS RÉINTERPRÉTER LES PRODUITS.
 Utilise la première image jointe comme image source et crée une image d'ambiance photoréaliste autour des meubles 3D présents dans l'image (${nbArticles} article${nbArticles > 1 ? "s" : ""} de mobilier d'extérieur vendus par Jardin-Confort, Suisse).${liste}${exception}${ech}${refs}
 
-CONTRAINTE ABSOLUE ET PRIORITAIRE : les meubles visibles dans l'image sont les produits réellement vendus et leur rendu est contractuel. Les meubles doivent donc rester strictement identiques au rendu 3D fourni. Ne jamais modifier, redessiner, réinterpréter ou compléter les meubles. Conserver exactement : leur nombre ; leur forme et leurs proportions ; leur position relative et leur espacement ; leur angle de vue et leur perspective ; leurs dimensions relatives ; leurs pieds et structures ; leurs coussins ; leur capitonnage ; leurs coutures ; leur tressage ; leurs matériaux ; leurs couleurs et nuances${imposee ? " (sauf l'exception de coloris ci-dessus)" : ""} ; tous les petits détails visibles du modèle 3D.
+CONTRAINTE ABSOLUE ET PRIORITAIRE : les meubles visibles dans l'image sont les produits réellement vendus et leur rendu est contractuel. Les meubles doivent donc rester strictement identiques au rendu 3D fourni. Ne jamais modifier, redessiner, réinterpréter ou compléter les meubles. Conserver exactement : leur nombre ; leur forme et leurs proportions ; leur position relative et leur espacement ; leur angle de vue et leur perspective ; leurs dimensions relatives ; leurs pieds et structures ; leurs coussins ; leur capitonnage ; leurs coutures ; leur tressage ; leurs matériaux ; leurs couleurs et nuances${imposee && !teinteAppliquee ? " (sauf l'exception de coloris ci-dessus)" : ""} ; tous les petits détails visibles du modèle 3D.
 Ne jamais inventer une partie non visible du meuble. Ne jamais ajouter, supprimer ou déplacer un pied, coussin, accoudoir, élément de structure ou détail. Les petits meubles (tables d'appoint, tabourets, poufs) et les piètements sont aussi contractuels que les grands : même hauteur, même diamètre, même nombre et même forme de pieds que dans l'image source. Ne pas remplacer le mobilier par un meuble similaire. Ne pas « améliorer » le design du produit. Ne pas changer son style. Considère les meubles comme une couche visuelle verrouillée et intangible : le travail créatif porte uniquement sur le décor qui les entoure.
 L'angle de caméra et la taille des meubles peuvent varier d'une image source à l'autre : respecter systématiquement la perspective et l'échelle de l'export fourni, sans essayer de reproduire une composition précédente.
 Le sol provisoire du planner (${sol}), l'arrière-plan blanc et les lignes techniques peuvent être supprimés et remplacés par le décor. Faire en sorte que le nouveau sol passe naturellement sous les meubles en conservant précisément leurs points de contact avec le sol. Créer des ombres réalistes et cohérentes avec le nouvel environnement, sans modifier les meubles eux-mêmes.
@@ -163,6 +168,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     prompt?: string; capture?: string | null; source?: string | null; calque?: string | null;   // capture = version ; source = même vue cadrée pour l'IA
     ambiance?: { capture?: string | null; calque?: string | null } | null;   // paire cadrée « photo » (caméra dédiée)
     dims?: Record<string, { l: number; p: number; h: number }>; regenerer?: boolean;
+    teinte_appliquee?: boolean;   // source = capture où la laque Fermob est déjà repeinte au coloris choisi
   } = {};
   try { body = await req.json(); } catch { /* corps vide */ }
   // Les phrases qui parlent des meubles (couleur, ajout, retrait…) sont
@@ -186,6 +192,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   // hauteur d'œil, bord avant hors champ), sinon la capture normale + son
   // calque, sinon la capture figée de la version (sans calque possible).
   let capture = depuisDataUrl(body.source || body.ambiance?.capture || body.capture);
+  const sourceJpeg = !!body.source && /^data:image\/jpe?g/.test(body.source);
+  const teinteAppliquee = !!body.source && !!body.teinte_appliquee;
   if (capture && !body.source) capture = aplatirSurBlanc(capture);
   let calque = depuisDataUrl(body.ambiance?.calque || body.calque);
   if (!capture) {
@@ -245,7 +253,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const imposee = body.coloris && items.some((it) => /fermob/i.test(String(it.marque || "")))
     ? COULEURS_FERMOB.find((c) => c.code === String(body.coloris).toUpperCase()) || null
     : null;
-  const articles = items.map((it) => decrireArticle({ titre: String(it.titre || "article"), marque: it.marque, sku: it.sku, options: it.variant_id ? optionsParVariante.get(it.variant_id) || null : null }, imposee));
+  const articles = items.map((it) => decrireArticle({ titre: String(it.titre || "article"), marque: it.marque, sku: it.sku, options: it.variant_id ? optionsParVariante.get(it.variant_id) || null : null }, imposee, teinteAppliquee));
   // Photos catalogue des produits (une par fiche, 4 au plus) : entrées
   // supplémentaires pour l'IA — les détails viennent de là, la composition
   // de la capture. Une photo illisible est simplement ignorée.
@@ -271,13 +279,13 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const prompt = construirePrompt(description, SOLS[String(vv?.sol || "bois")] || "lames de bois", nbArticles, refs.map((r) => r.titre), articles, echantillons.map((e) => e.libelle), imposee, {
     concernes: imposee ? items.filter((it) => /fermob/i.test(String(it.marque || ""))).map((it) => String(it.titre || "article").slice(0, 80)) : [],
     autres: imposee ? items.filter((it) => !/fermob/i.test(String(it.marque || ""))).map((it) => String(it.titre || "article").slice(0, 80)) : [],
-  });
+  }, teinteAppliquee);
   const appeler = async (modele: string) => {
     const form = new FormData();
     form.append("model", modele);
     // Plusieurs images d'entrée : image[] — la première est la source, les
     // suivantes les photos catalogue (gpt-image-1 / 1.5 : jusqu'à 16).
-    form.append("image[]", new Blob([new Uint8Array(prep.image)], { type: "image/png" }), "capture.png");
+    form.append("image[]", new Blob([new Uint8Array(prep.image)], { type: sourceJpeg ? "image/jpeg" : "image/png" }), sourceJpeg ? "capture.jpg" : "capture.png");
     echantillons.forEach((e, i) => form.append("image[]", e.blob, `echantillon-${i + 1}.jpg`));
     refs.forEach((r, i) => form.append("image[]", r.blob, `produit-${i + 1}.${r.blob.type.includes("png") ? "png" : "jpg"}`));
     if (prep.masque) form.append("mask", new Blob([new Uint8Array(prep.masque)], { type: "image/png" }), "masque.png");

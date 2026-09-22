@@ -28,6 +28,12 @@ import { SOLS, type SceneItem, type SolId, type Terrasse, type VueCamera } from 
 
 export type Dims = { l: number; p: number; h: number };
 
+// Options de capture pour l'ambiance IA : « teinte » repeint en 3D, le temps
+// d'une image, la laque des meubles listés (coloris Fermob choisi dans le
+// panneau) ; « jpeg » aplatit sur fond blanc et encode en JPEG (léger : la
+// requête porte déjà la capture PNG de la version, plafond Vercel 4,5 Mo).
+export type OptionsCapture = { teinte?: { hex: string; uids: string[] } | null; jpeg?: boolean };
+
 type Props = {
   items: SceneItem[];
   terrasse: Terrasse;
@@ -41,7 +47,7 @@ type Props = {
   onMove: (uid: string, x: number, z: number) => void;
   onDims: (uid: string, dims: Dims) => void;
   onError: (uid: string, message: string) => void;
-  captureRef: React.MutableRefObject<(() => string | null) | null>;
+  captureRef: React.MutableRefObject<((o?: OptionsCapture) => string | null) | null>;
   // Calque « meubles seuls » (fond transparent, sol remplacé par un récepteur
   // d'ombres) pour l'ambiance IA : sert de masque et se recolle sur l'image.
   calqueRef?: React.MutableRefObject<(() => string | null) | null>;
@@ -111,7 +117,7 @@ function Modele({
   }, [objet, mode]);
 
   return (
-    <group position={[item.x, 0, item.z]} rotation={[0, rotationY(item), 0]} onPointerDown={onPointerDown}>
+    <group position={[item.x, 0, item.z]} rotation={[0, rotationY(item), 0]} onPointerDown={onPointerDown} userData={{ uidPlanner: item.uid }}>
       <primitive object={objet} position={offset} />
       {selected && (
         <>
@@ -227,6 +233,60 @@ function useTextureSol(sol: SolId, mode: Props["mode"], largeur: number, profond
 
 type RefMesh = React.RefObject<THREE.Object3D | null>;
 
+// Recoloration temporaire (capture IA avec coloris imposé, 22.09.2026).
+// Demander à l'IA de « repeindre » un meuble lui fait redessiner tout le
+// meuble — et elle glisse alors vers le modèle « type » de la marque (vu en
+// photo dans ce coloris). On repeint donc nous-mêmes dans la 3D : l'IA reçoit
+// des meubles déjà dans la bonne teinte et n'a plus rien à redessiner.
+// Par meuble : la matière dominante (la plus de sommets) est la laque ; toutes
+// les matières de teinte proche (écart sRGB < 0.12) sont repeintes, les autres
+// (embouts noirs, coussins, bois) restent. Renvoie la fonction de restauration.
+function teinterMeubles(scene: THREE.Object3D, uids: Set<string>, hex: string): () => void {
+  const couleur = new THREE.Color(hex);
+  const restaurer: (() => void)[] = [];
+  const srgb = (c: THREE.Color) => c.clone().convertLinearToSRGB();
+  scene.traverse((o) => {
+    const uid = o.userData?.uidPlanner as string | undefined;
+    if (!uid || !uids.has(uid)) return;
+    const meshes: THREE.Mesh[] = [];
+    const poids = new Map<THREE.MeshStandardMaterial, number>();
+    o.traverse((c) => {
+      const m = c as THREE.Mesh;
+      if (!m.isMesh || Array.isArray(m.material)) return;
+      const mat = m.material as THREE.MeshStandardMaterial;
+      if (!mat.color) return;
+      meshes.push(m);
+      const n = m.geometry.index?.count ?? m.geometry.attributes.position?.count ?? 0;
+      poids.set(mat, (poids.get(mat) || 0) + n);
+    });
+    let dominant: THREE.MeshStandardMaterial | null = null;
+    let max = -1;
+    poids.forEach((n, mat) => { if (n > max) { max = n; dominant = mat; } });
+    if (!dominant) return;
+    const ref = srgb((dominant as THREE.MeshStandardMaterial).color);
+    const neufs = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+    for (const m of meshes) {
+      const mat = m.material as THREE.MeshStandardMaterial;
+      const c = srgb(mat.color);
+      const ecart = Math.abs(c.r - ref.r) + Math.abs(c.g - ref.g) + Math.abs(c.b - ref.b);
+      if (mat !== dominant && ecart >= 0.12) continue;
+      let neuf = neufs.get(mat);
+      if (!neuf) {
+        neuf = mat.clone();
+        neuf.color.copy(couleur);
+        neuf.map = null;            // une texture de couleur d'origine teinterait le nouveau coloris
+        neuf.needsUpdate = true;
+        neufs.set(mat, neuf);
+      }
+      const ancien = m.material;
+      m.material = neuf;
+      restaurer.push(() => { m.material = ancien; });
+    }
+    restaurer.push(() => neufs.forEach((n) => n.dispose()));
+  });
+  return () => restaurer.forEach((f) => f());
+}
+
 function Capture({ captureRef, calqueRef, ambianceRef, grilleRef, ombreRef, terrasse }: {
   captureRef: Props["captureRef"]; calqueRef?: Props["calqueRef"]; ambianceRef?: Props["ambianceRef"]; grilleRef: RefMesh; ombreRef: RefMesh; terrasse: Terrasse;
 }) {
@@ -279,7 +339,7 @@ function Capture({ captureRef, calqueRef, ambianceRef, grilleRef, ombreRef, terr
     // est rendu hors écran à cette taille avec la même caméra (angle inchangé,
     // champ adapté), puis remis à sa taille. Ainsi la capture de la fiche et
     // le rendu IA (3:2 lui aussi) ont exactement le même cadre.
-    captureRef.current = () => {
+    captureRef.current = (opts?: OptionsCapture) => {
       const W = 1536, H = 1024;
       const taille = new THREE.Vector2();
       gl.getSize(taille);
@@ -299,8 +359,22 @@ function Capture({ captureRef, calqueRef, ambianceRef, grilleRef, ombreRef, terr
         ortho.right = demiH * (W / H);
       }
       camera.updateProjectionMatrix();
+      const restaurerTeinte = opts?.teinte?.uids.length ? teinterMeubles(scene, new Set(opts.teinte.uids), opts.teinte.hex) : null;
       gl.render(scene, camera);
-      const data = gl.domElement.toDataURL("image/png");
+      let data = gl.domElement.toDataURL("image/png");
+      if (opts?.jpeg) {
+        // Fond blanc (le canvas est transparent hors terrasse) puis JPEG
+        const c2 = document.createElement("canvas");
+        c2.width = W; c2.height = H;
+        const ctx = c2.getContext("2d");
+        if (ctx) {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, W, H);
+          ctx.drawImage(gl.domElement, 0, 0, W, H);
+          data = c2.toDataURL("image/jpeg", 0.92);
+        }
+      }
+      if (restaurerTeinte) restaurerTeinte();
       if (persp.isPerspectiveCamera) persp.aspect = (sauve as { aspect: number }).aspect;
       else Object.assign(ortho, sauve);
       camera.updateProjectionMatrix();

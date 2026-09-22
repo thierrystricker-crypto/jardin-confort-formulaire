@@ -18,7 +18,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
-import type { Dims } from "@/components/planner/PlannerCanvas";
+import type { Dims, OptionsCapture } from "@/components/planner/PlannerCanvas";
 import { MENTION_IA, MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CameraScene, type CatalogueItem, type ChoixModele, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
 import { COULEURS_FERMOB } from "@/lib/planner-matieres";
 import { DECORS, MOMENTS, composerDescription, filtrerDecor } from "@/lib/planner-ambiance-cadre";
@@ -71,7 +71,7 @@ export default function PlannerPage() {
   const [ambianceErreur, setAmbianceErreur] = useState<string | null>(null);
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
-  const captureRef = useRef<(() => string | null) | null>(null);
+  const captureRef = useRef<((o?: OptionsCapture) => string | null) | null>(null);
   const recadrerRef = useRef<(() => void) | null>(null);
   // Point de vue : lu à l'enregistrement et aux exports, réappliqué à
   // l'ouverture d'un plan et au changement Plan / 3D (SQL 028).
@@ -652,13 +652,22 @@ export default function PlannerPage() {
       // sert à la version ET à l'IA (le serveur pose le fond blanc). Deux
       // images dépassaient les 4,5 Mo par requête des fonctions Vercel.
       const brute = await capturerSansSelection();
+      // Coloris Fermob imposé : on repeint la laque dans la 3D, le temps d'une
+      // seconde capture (même cadre), envoyée à l'IA comme image source. L'IA
+      // n'a plus rien à repeindre, donc plus de raison de redessiner (et de
+      // changer) les modèles. La capture de la version reste celle du plan.
+      const codeColoris = planFermob && choixAmb.coloris ? choixAmb.coloris : null;
+      const coul = codeColoris ? COULEURS_FERMOB.find((c) => c.code === codeColoris) : null;
+      const source = coul
+        ? captureRef.current?.({ jpeg: true, teinte: { hex: coul.hex, uids: scene.items.filter((it) => /fermob/i.test(String(it.marque || ""))).map((it) => it.uid) } }) || null
+        : null;
       let id = scene.id;
       if (!id || modifie) { id = await enregistrer(); if (!id) return; }
       const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         // Une image existe déjà (bouton « Régénérer ») → on force une nouvelle
         // génération, sinon la route renvoie l'image stockée pour la version.
-        body: JSON.stringify({ prompt: description, coloris: planFermob && choixAmb.coloris ? choixAmb.coloris : null, capture: brute, dims }),
+        body: JSON.stringify({ prompt: description, coloris: codeColoris, capture: brute, source, teinte_appliquee: !!source, dims }),
       });
       const texte = await r.text();
       let j: { error?: string; details?: string; ambiance_url?: string; ambiances?: Ambiance[]; retenue?: string | null; numero?: number; token?: string; modele?: string; references?: number; coloris?: string | null; ignores?: string[] };

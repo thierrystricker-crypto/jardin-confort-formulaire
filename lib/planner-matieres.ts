@@ -79,13 +79,15 @@ export function couleurDemandee(description: string): Couleur | null {
 
 // Description d'un article pour le prompt : « Fermob Luxembourg banc 2 places
 // — acier laqué…, coloris Cactus 82 (#778565, texturé mat) ».
-export function decrireArticle(a: { titre: string; marque?: string | null; options?: Record<string, string> | null; sku?: string | null }, imposee?: Couleur | null): string {
+export function decrireArticle(a: { titre: string; marque?: string | null; options?: Record<string, string> | null; sku?: string | null }, imposee?: Couleur | null, dejaApplique = false): string {
   const marque = a.marque || "";
   const mat = MATIERES_MARQUE.find((m) => m.test.test(marque))?.matiere;
   const valeurs = Object.values(a.options || {});
   const parts: string[] = [];
   if (mat) parts.push(mat);
-  if (/fermob/i.test(marque) && imposee) {
+  if (/fermob/i.test(marque) && imposee && dejaApplique) {
+    parts.push(`coloris ${imposee.nom} ${imposee.code} (${imposee.hex}, finition ${imposee.finition}), déjà visible dans l'image — à conserver tel quel`);
+  } else if (/fermob/i.test(marque) && imposee) {
     parts.push(`coloris IMPOSÉ par le conseiller : ${imposee.nom} ${imposee.code} (${imposee.hex}, finition ${imposee.finition}) — repeindre toute la structure dans cette teinte, forme et détails inchangés`);
   } else if (/fermob/i.test(marque)) {
     const c = couleurFermob([...valeurs, a.sku || ""]);
