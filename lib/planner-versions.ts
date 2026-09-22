@@ -80,16 +80,24 @@ export async function figerVersion(
   // Réutilisation si le CONTENU n'a pas bougé (terrasse, sol, articles, nom) —
   // pas l'horodatage : basculer Plan/3D ou Couleurs/Maquette ré-enregistre la
   // scène sans rien changer au plan, et ça empilait des versions identiques.
-  // On complète la capture si elle manque.
+  // La capture est REMPLACÉE par la vue du moment (même version, même
+  // fichier) : l'angle de la fiche doit être celui que le conseiller vient de
+  // choisir — et celui envoyé à l'ambiance IA. Les PDF déjà générés sont
+  // invalidés pour être refaits avec cette capture.
   const identique = derniere
     && empreinte(s.nom, s.terrasse, s.sol, s.items) === empreinte(derniere.nom, derniere.terrasse, derniere.sol, derniere.items);
   if (derniere && identique) {
     let captureUrl = derniere.capture_url as string | null;
-    if (!captureUrl && extras.capture) {
-      captureUrl = await deposerCapture(derniere.token as string, extras.capture);
-      if (captureUrl) await supabaseAdmin.from("planner_scenes_versions").update({ capture_url: captureUrl }).eq("id", derniere.id);
+    if (extras.capture) {
+      const nouvelle = await deposerCapture(derniere.token as string, extras.capture);
+      if (nouvelle) {
+        captureUrl = nouvelle;
+        await supabaseAdmin.from("planner_scenes_versions")
+          .update({ capture_url: captureUrl, pdf_url: null, pdf_sans_prix_url: null })
+          .eq("id", derniere.id);
+      }
     }
-    return { ...(derniere as Omit<VersionFigee, "reutilisee">), capture_url: captureUrl, reutilisee: true };
+    return { ...(derniere as Omit<VersionFigee, "reutilisee">), capture_url: captureUrl, pdf_url: captureUrl !== derniere.capture_url ? null : derniere.pdf_url, pdf_sans_prix_url: captureUrl !== derniere.capture_url ? null : derniere.pdf_sans_prix_url, reutilisee: true };
   }
 
   const numero = ((derniere?.numero as number) || 0) + 1;
