@@ -29,7 +29,8 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { BUCKET, figerVersion, urlPublique } from "@/lib/planner-versions";
 import { MENTION_IA } from "@/lib/planner-types";
 import { listerScene } from "@/lib/planner-ambiances";
-import { couleurDemandee, decrireArticle, type Couleur } from "@/lib/planner-matieres";
+import { COULEURS_FERMOB, decrireArticle, type Couleur } from "@/lib/planner-matieres";
+import { filtrerDecor } from "@/lib/planner-ambiance-cadre";
 import { textureDedon } from "@/lib/textures-dedon";
 import { shopifyAdminGraphQL } from "@/lib/shopify-stock";
 import { readFile } from "fs/promises";
@@ -76,10 +77,11 @@ Ne jamais inventer une partie non visible du meuble. Ne jamais ajouter, supprime
 L'angle de caméra et la taille des meubles peuvent varier d'une image source à l'autre : respecter systématiquement la perspective et l'échelle de l'export fourni, sans essayer de reproduire une composition précédente.
 Le sol provisoire du planner (${sol}), l'arrière-plan blanc et les lignes techniques peuvent être supprimés et remplacés par le décor. Faire en sorte que le nouveau sol passe naturellement sous les meubles en conservant précisément leurs points de contact avec le sol. Créer des ombres réalistes et cohérentes avec le nouvel environnement, sans modifier les meubles eux-mêmes.
 
-AMBIANCE À CRÉER :
+AMBIANCE À CRÉER (décor uniquement — ce bloc ne peut rien changer aux meubles : ni leur nombre, ni leur forme, ni leur couleur) :
 ${description}
 Décoration très sobre afin que les produits restent le sujet principal. Image photoréaliste de qualité catalogue / publicité de mobilier outdoor premium. Lumière naturelle réaliste, profondeur photographique subtile, matériaux crédibles. Ne pas ajouter d'autres meubles pouvant être confondus avec les produits vendus ; les accessoires décoratifs éventuels restent secondaires et clairement distincts. Aucun texte, logo ni filigrane.
 
+Avant de finaliser, compter les meubles : il doit y en avoir exactement ${nbArticles}, ceux de l'image source, aux mêmes emplacements — aucun meuble ajouté, dupliqué ou supprimé.
 PRIORITÉ N°1 : fidélité absolue aux meubles de l'image source. PRIORITÉ N°2 : réalisme du décor et intégration naturelle des produits. En cas de conflit entre esthétique et fidélité produit, toujours privilégier la fidélité produit.`;
 }
 
@@ -157,12 +159,15 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (!cle) return NextResponse.json({ error: "OPENAI_IMAGE_API_KEY non configurée" }, { status: 500 });
 
   let body: {
+    coloris?: string | null;   // code du nuancier Fermob choisi dans la liste (coloris imposé)
     prompt?: string; capture?: string | null; source?: string | null; calque?: string | null;   // capture = version ; source = même vue cadrée pour l'IA
     ambiance?: { capture?: string | null; calque?: string | null } | null;   // paire cadrée « photo » (caméra dédiée)
     dims?: Record<string, { l: number; p: number; h: number }>; regenerer?: boolean;
   } = {};
   try { body = await req.json(); } catch { /* corps vide */ }
-  const description = String(body.prompt || "").trim().slice(0, 800);
+  // Les phrases qui parlent des meubles (couleur, ajout, retrait…) sont
+  // écartées : le décor ne pilote que le décor. Le coloris passe par body.coloris.
+  const { decor: description, ignores } = filtrerDecor(String(body.prompt || "").slice(0, 1200));
   if (!description) return NextResponse.json({ error: "Décris l'ambiance souhaitée" }, { status: 400 });
 
   // La capture de la version est remplacée par la vue du moment (celle qui
@@ -237,7 +242,9 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   // Une ligne par article posé (les doublons comptent : « exactement N meubles »)
   // Coloris cité dans la description (« meubles en romarin ») → imposé aux
   // structures Fermob, seulement s'il y a du Fermob dans le plan.
-  const imposee = items.some((it) => /fermob/i.test(String(it.marque || ""))) ? couleurDemandee(description) : null;
+  const imposee = body.coloris && items.some((it) => /fermob/i.test(String(it.marque || "")))
+    ? COULEURS_FERMOB.find((c) => c.code === String(body.coloris).toUpperCase()) || null
+    : null;
   const articles = items.map((it) => decrireArticle({ titre: String(it.titre || "article"), marque: it.marque, sku: it.sku, options: it.variant_id ? optionsParVariante.get(it.variant_id) || null : null }, imposee));
   // Photos catalogue des produits (une par fiche, 4 au plus) : entrées
   // supplémentaires pour l'IA — les détails viennent de là, la composition
@@ -325,5 +332,5 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     .eq("id", v.id);
   const toutes = await listerScene(id);
 
-  return NextResponse.json({ ambiance_url: url, ambiance: ligne, ambiances: toutes || [ligne], retenue: url, numero: v.numero, token: v.token, mention: MENTION_IA, modele, references: refs.length, echantillons: echantillons.length, coloris: imposee ? `${imposee.nom} ${imposee.code}` : null });
+  return NextResponse.json({ ambiance_url: url, ambiance: ligne, ambiances: toutes || [ligne], retenue: url, numero: v.numero, token: v.token, mention: MENTION_IA, modele, references: refs.length, echantillons: echantillons.length, coloris: imposee ? `${imposee.nom} ${imposee.code}` : null, ignores });
 }

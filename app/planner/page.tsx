@@ -20,6 +20,8 @@ import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
 import { MENTION_IA, MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CatalogueItem, type ChoixModele, type Scene, type SceneItem } from "@/lib/planner-types";
+import { COULEURS_FERMOB } from "@/lib/planner-matieres";
+import { DECORS, MOMENTS, composerDescription, filtrerDecor } from "@/lib/planner-ambiance-cadre";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
 const PlannerCanvas = dynamic(() => import("@/components/planner/PlannerCanvas"), {
@@ -59,6 +61,13 @@ export default function PlannerPage() {
   type Ambiance = { id: string; url: string; prompt: string | null; modele: string | null; cree_le: string; numero?: number | null };
   const [ambiance, setAmbiance] = useState<{ numero: number; token: string; retenue: string | null; liste: Ambiance[] } | null>(null);
   const [ambianceEnCours, setAmbianceEnCours] = useState(false);
+  // Panneau de demande d'ambiance (cadré : décor + moment prédéfinis,
+  // coloris en liste, précisions filtrées — voir lib/planner-ambiance-cadre.ts)
+  const [panneauAmbiance, setPanneauAmbiance] = useState(false);
+  const [choixAmb, setChoixAmb] = useState<{ decor: string; moment: string; coloris: string; precisions: string }>(() => {
+    try { const j = JSON.parse(window.localStorage.getItem("planner-ambiance-choix") || "null"); if (j) return { ...j, coloris: "" }; } catch { /* ignore */ }
+    return { decor: "lavaux", moment: "golden", coloris: "", precisions: "" };
+  });
   const [ambianceErreur, setAmbianceErreur] = useState<string | null>(null);
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
@@ -580,16 +589,20 @@ export default function PlannerPage() {
   // Image d'ambiance IA : capture 3D figée + description → décor réinventé,
   // meubles inchangés. Route parallèle /ambiance (clé OpenAI de la voix).
   // S'AJOUTE aux exports : jamais à la place de la capture ou de la fiche.
-  async function genererAmbiance() {
+  // Ouvre le panneau de demande (le bouton 🎨 et « + Nouvelle image »).
+  function genererAmbiance() {
     const nom = exigerNom();
     if (!nom) return;
     if (scene.items.length === 0) { setMessage("Pose d'abord des articles"); return; }
-    const solNom = SOLS.find((x) => x.id === (scene.sol || "bois"))?.nom || "bois";
-    const description = window.prompt(
-      "Décris l'ambiance souhaitée (le décor uniquement — les meubles restent exactement ceux du plan).\nChaque génération s'ajoute à la galerie, rien n'est écrasé.",
-      `Terrasse extérieure haut de gamme en ${solNom.toLowerCase()} face au lac Léman, dans l'esprit des terrasses du Lavaux : vignes en terrasses en arrière-plan, lac au loin et relief des Alpes sur l'autre rive. Fin d'après-midi d'été, lumière chaude de golden hour. Atmosphère élégante, calme, contemporaine ; architecture suisse discrète. Quelques végétaux locaux peuvent encadrer la scène sans jamais masquer les meubles.`,
-    );
-    if (description === null || !description.trim()) return;
+    setPanneauAmbiance(true);
+  }
+  const solTexte = () => (SOLS.find((x) => x.id === (scene.sol || "bois"))?.nom || "bois").toLowerCase();
+  const planFermob = scene.items.some((it) => /fermob/i.test(String(it.marque || "")));
+
+  async function lancerAmbiance() {
+    const { description } = composerDescription(choixAmb.decor, choixAmb.moment, choixAmb.precisions, solTexte());
+    try { window.localStorage.setItem("planner-ambiance-choix", JSON.stringify({ ...choixAmb, coloris: "" })); } catch { /* ignore */ }
+    setPanneauAmbiance(false);
     setAmbianceEnCours(true);
     setAmbianceErreur(null);
     setMessage("Génération de l'image d'ambiance… (20 à 40 s)");
@@ -606,15 +619,15 @@ export default function PlannerPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         // Une image existe déjà (bouton « Régénérer ») → on force une nouvelle
         // génération, sinon la route renvoie l'image stockée pour la version.
-        body: JSON.stringify({ prompt: description.trim(), capture: brute, dims }),
+        body: JSON.stringify({ prompt: description, coloris: planFermob && choixAmb.coloris ? choixAmb.coloris : null, capture: brute, dims }),
       });
       const texte = await r.text();
-      let j: { error?: string; details?: string; ambiance_url?: string; ambiances?: Ambiance[]; retenue?: string | null; numero?: number; token?: string; modele?: string; references?: number; coloris?: string | null };
+      let j: { error?: string; details?: string; ambiance_url?: string; ambiances?: Ambiance[]; retenue?: string | null; numero?: number; token?: string; modele?: string; references?: number; coloris?: string | null; ignores?: string[] };
       try { j = JSON.parse(texte); }
       catch { throw new Error(`Réponse ${r.status} du serveur (pas du JSON) — ${r.status === 413 ? "images trop lourdes" : r.status === 504 ? "délai dépassé" : texte.slice(0, 80)}`); }
       if (j.error) throw new Error(j.details ? `${j.error} — ${j.details}` : j.error);
       setAmbiance({ numero: j.numero as number, token: j.token as string, retenue: j.retenue ?? (j.ambiance_url as string), liste: j.ambiances || [] });
-      setMessage(`Image d'ambiance générée (version V${j.numero}${j.modele ? `, ${j.modele}` : ""}${j.references ? `, ${j.references} photo${j.references > 1 ? "s" : ""} produit en référence` : ""}${j.coloris ? `, coloris imposé ${j.coloris}` : ""}) — elle est retenue pour les documents ; les précédentes restent dans la galerie`);
+      setMessage(`Image d'ambiance générée (version V${j.numero}${j.modele ? `, ${j.modele}` : ""}${j.references ? `, ${j.references} photo${j.references > 1 ? "s" : ""} produit en référence` : ""}${j.coloris ? `, coloris imposé ${j.coloris}` : ""}) — elle est retenue pour les documents ; les précédentes restent dans la galerie${j.ignores?.length ? `. Ignoré (concerne les meubles) : « ${j.ignores.join(" ")} »` : ""}`);
     } catch (e) {
       setAmbianceErreur((e as Error).message);
       setMessage("");
@@ -783,6 +796,50 @@ export default function PlannerPage() {
       </div>
 
       {message && <div className="border-b border-white/10 bg-sky-500/10 px-4 py-1.5 text-xs text-sky-200">{message}</div>}
+      {panneauAmbiance && (() => {
+        const apercu = composerDescription(choixAmb.decor, choixAmb.moment, choixAmb.precisions, solTexte());
+        const ignores = filtrerDecor(choixAmb.precisions).ignores;
+        const SEL = "w-full rounded-lg border border-white/10 bg-[#1f2125] px-2 py-1.5 text-xs text-zinc-100";
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPanneauAmbiance(false)}>
+            <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#25282c] p-4 text-xs text-zinc-200" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-1 text-sm font-semibold">🎨 Nouvelle image d&apos;ambiance</div>
+              <p className="mb-3 text-zinc-400">L&apos;IA ne crée que le <b>décor</b> autour des meubles du plan (vue 3D actuelle). Chaque image s&apos;ajoute à la galerie, rien n&apos;est écrasé.</p>
+              <label className="mb-2 block">Décor
+                <select className={SEL} value={choixAmb.decor} onChange={(e) => setChoixAmb({ ...choixAmb, decor: e.target.value })}>
+                  {DECORS.map((d) => <option key={d.id} value={d.id}>{d.nom}</option>)}
+                </select>
+              </label>
+              <label className="mb-2 block">Moment / lumière
+                <select className={SEL} value={choixAmb.moment} onChange={(e) => setChoixAmb({ ...choixAmb, moment: e.target.value })}>
+                  {MOMENTS.map((m) => <option key={m.id} value={m.id}>{m.nom}</option>)}
+                </select>
+              </label>
+              {planFermob && (
+                <label className="mb-2 block">Coloris des meubles Fermob
+                  <select className={SEL} value={choixAmb.coloris} onChange={(e) => setChoixAmb({ ...choixAmb, coloris: e.target.value })}>
+                    <option value="">Coloris du plan (inchangé)</option>
+                    {COULEURS_FERMOB.filter((c) => c.code !== "73").map((c) => <option key={c.code} value={c.code}>{c.nom} {c.code}</option>)}
+                  </select>
+                </label>
+              )}
+              <label className="mb-1 block">Précisions sur le décor (facultatif)
+                <textarea className={`${SEL} h-16`} value={choixAmb.precisions} placeholder="ex. : des oliviers en pots, un muret en pierre, le lac plus présent" onChange={(e) => setChoixAmb({ ...choixAmb, precisions: e.target.value })} />
+              </label>
+              {ignores.length > 0 && (
+                <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-200">
+                  Ces phrases parlent des meubles et seront ignorées : « {ignores.join(" ")} ». {planFermob ? "Pour changer la couleur, utilise la liste « Coloris ». " : ""}Les meubles restent ceux du plan.
+                </div>
+              )}
+              <details className="mb-3 text-zinc-500"><summary className="cursor-pointer">Texte envoyé pour le décor</summary><p className="mt-1">{apercu.description}</p></details>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setPanneauAmbiance(false)} className={BTN_OFF}>Annuler</button>
+                <button type="button" onClick={lancerAmbiance} className={`${BTN} border-pink-500/40 bg-pink-500/20 text-pink-100 hover:bg-pink-500/30`}>Générer (20 à 40 s)</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {ambianceEnCours && (
         <div className="border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">🎨 Génération de l&apos;image d&apos;ambiance en cours… 20 à 40 secondes, la vignette apparaîtra ici.</div>
       )}
