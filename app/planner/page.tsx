@@ -56,7 +56,7 @@ export default function PlannerPage() {
   const [pdfEnCours, setPdfEnCours] = useState(false);
   // Galerie des images d'ambiance IA de la dernière version : chaque
   // génération S'AJOUTE (rien n'est écrasé) ; `retenue` = celle des documents.
-  type Ambiance = { id: string; url: string; prompt: string | null; modele: string | null; cree_le: string };
+  type Ambiance = { id: string; url: string; prompt: string | null; modele: string | null; cree_le: string; numero?: number | null };
   const [ambiance, setAmbiance] = useState<{ numero: number; token: string; retenue: string | null; liste: Ambiance[] } | null>(null);
   const [ambianceEnCours, setAmbianceEnCours] = useState(false);
   const [ambianceErreur, setAmbianceErreur] = useState<string | null>(null);
@@ -806,7 +806,7 @@ export default function PlannerPage() {
       {ambiance && (
         <div className="border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="min-w-0 flex-1">🎨 Ambiances IA — version V{ambiance.numero} · {ambiance.liste.length} image{ambiance.liste.length > 1 ? "s" : ""}. {MENTION_IA}. Chaque génération s&apos;ajoute, rien n&apos;est écrasé ; l&apos;image <b>retenue</b> est celle de la fiche, du PDF et de la page client.</span>
+            <span className="min-w-0 flex-1">🎨 Ambiances IA — {ambiance.liste.length} image{ambiance.liste.length > 1 ? "s" : ""} pour ce plan (toutes versions). {MENTION_IA}. Chaque génération s&apos;ajoute, rien n&apos;est écrasé ; l&apos;image <b>retenue</b> est celle de la fiche, du PDF et de la page client de la version courante (V{ambiance.numero}).</span>
             <a href={`/print/planner/${ambiance.token}?prix=0`} target="_blank" rel="noopener noreferrer" className={BTN_OFF}>Fiche sans prix</a>
             <button type="button" onClick={genererAmbiance} disabled={ambianceEnCours} className={BTN_OFF}>+ Nouvelle image</button>
             {ambiance.retenue && <button type="button" onClick={() => gererAmbiance("exclure", ambiance.liste[0])} className={BTN_OFF} title="Les documents n'auront aucune image d'ambiance (les images restent dans la galerie)">Aucune sur les documents</button>}
@@ -817,7 +817,10 @@ export default function PlannerPage() {
               const retenue = a.url === ambiance.retenue;
               return (
                 <div key={a.id} className={`shrink-0 rounded-lg border p-1 ${retenue ? "border-emerald-400 bg-emerald-500/10" : "border-white/10"}`}>
-                  <a href={a.url} target="_blank" rel="noopener noreferrer" title={a.prompt || ""}><img src={a.url} alt="" className="h-24 rounded" /></a>
+                  <a href={a.url} target="_blank" rel="noopener noreferrer" title={a.prompt || ""} className="relative block">
+                    <img src={a.url} alt="" className="h-24 rounded" />
+                    {a.numero != null && <span className={`absolute left-1 top-1 rounded px-1 text-[10px] ${a.numero === ambiance.numero ? "bg-black/60 text-white" : "bg-amber-500/80 text-black"}`} title={a.numero === ambiance.numero ? "Générée sur la version courante" : "Générée sur une version antérieure du plan (articles ou positions différents)"}>V{a.numero}</span>}
+                  </a>
                   <div className="mt-1 flex items-center gap-1">
                     {retenue
                       ? <span className="rounded bg-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-100">✓ sur les documents</span>

@@ -28,6 +28,7 @@ import { PNG } from "pngjs";
 import { supabaseAdmin } from "@/lib/supabase";
 import { BUCKET, figerVersion, urlPublique } from "@/lib/planner-versions";
 import { MENTION_IA } from "@/lib/planner-types";
+import { listerScene } from "@/lib/planner-ambiances";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -203,7 +204,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   await supabaseAdmin.from("planner_scenes_versions")
     .update({ ambiance_url: url, ambiance_prompt: description, ambiance_cree_le: new Date().toISOString(), pdf_url: null, pdf_sans_prix_url: null })
     .eq("id", v.id);
-  const { data: toutes } = await supabaseAdmin.from("planner_ambiances").select("id, url, prompt, modele, cree_le").eq("version_id", v.id).order("cree_le", { ascending: false });
+  const toutes = await listerScene(id);
 
   return NextResponse.json({ ambiance_url: url, ambiance: ligne, ambiances: toutes || [ligne], retenue: url, numero: v.numero, token: v.token, mention: MENTION_IA, modele });
 }
