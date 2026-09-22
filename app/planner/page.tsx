@@ -900,7 +900,7 @@ export default function PlannerPage() {
               const retenue = a.url === ambiance.retenue;
               return (
                 <div key={a.id} className={`shrink-0 rounded-lg border p-1 ${retenue ? "border-emerald-400 bg-emerald-500/10" : "border-white/10"}`}>
-                  <a href={a.url} target="_blank" rel="noopener noreferrer" title={a.prompt || ""} className="relative block">
+                  <a href={a.url} target="_blank" rel="noopener noreferrer" title={`${a.modele ? `Modèle : ${a.modele}\n` : ""}${new Date(a.cree_le).toLocaleString("fr-CH")}${a.prompt ? `\n\n${a.prompt}` : ""}`} className="relative block">
                     <img src={a.url} alt="" className="h-24 rounded" />
                     {a.numero != null && <span className={`absolute left-1 top-1 rounded px-1 text-[10px] ${a.numero === ambiance.numero ? "bg-black/60 text-white" : "bg-amber-500/80 text-black"}`} title={a.numero === ambiance.numero ? "Générée sur la version courante" : "Générée sur une version antérieure du plan (articles ou positions différents)"}>V{a.numero}</span>}
                   </a>
@@ -910,6 +910,8 @@ export default function PlannerPage() {
                       : <button type="button" onClick={() => gererAmbiance("retenir", a)} className="rounded border border-white/10 bg-[#2a2d31] px-1.5 py-0.5 text-[10px] text-zinc-300 hover:bg-[#34383d]">Retenir</button>}
                     <button type="button" onClick={() => gererAmbiance("supprimer", a)} className="rounded border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-500/25" title="Supprimer définitivement">🗑</button>
                   </div>
+                  {/* Modèle utilisé : le message de génération disparaît vite, ici il reste (22.09.2026) */}
+                  {a.modele && <div className="mt-0.5 max-w-[160px] truncate text-[9px] text-zinc-500" title={a.modele}>{a.modele}</div>}
                 </div>
               );
             })}
