@@ -98,9 +98,10 @@ export default async function PagePrintPlanner({ params, searchParams }: { param
            utiles, en-tête ~38 mm) ; le tableau des articles suit en page 2. */
         .doc-duo { margin-bottom: 4mm; }
         .doc-duo .doc-capture { margin-bottom: 3mm; page-break-inside: avoid; break-inside: avoid; }
-        .doc-duo .doc-capture img { width: 100%; height: 94mm; object-fit: contain; background: #fff; }
-        /* Les deux images sont en 3:2 (capture 1536×1024 et rendu IA) : même
-           hauteur = mêmes dimensions exactement. */
+        /* Largeur FIXE identique pour les deux, hauteur calculée : quelle que
+           soit la proportion de chaque image, elles s'alignent au pixel près
+           (en 3:2, capture 1536×1024 et rendu IA font 94 mm de haut chacune). */
+        .doc-duo .doc-capture img { width: 141mm; height: auto; max-height: 100mm; object-fit: contain; display: block; margin: 0 auto; background: #fff; }
         .doc-duo + .doc-table { page-break-before: always; break-before: page; }
         .doc-capture-caption { font-size: 10px; color: #777; font-style: italic; margin-top: 5px; text-align: center; }
         .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; }
