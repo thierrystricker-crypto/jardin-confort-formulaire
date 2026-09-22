@@ -616,15 +616,15 @@ export default function PlannerPage() {
     try {
       // Capture de la vue courante, fond blanc : c'est l'image source de l'IA
       // (prompt maître côté serveur, pas de masque — voir la route).
-      const brute = await capturerSansSelection();
-      const capture = await cadrer(brute);
+      const brute = await capturerSansSelection();      // capture de la version (fiche, PDF)
+      const source = await cadrer(brute);                 // même vue, cadrée 1536×1024 sur blanc pour l'IA
       let id = scene.id;
       if (!id || modifie) { id = await enregistrer(); if (!id) return; }
       const r = await fetch(`/api/planner/scenes/${id}/ambiance`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         // Une image existe déjà (bouton « Régénérer ») → on force une nouvelle
         // génération, sinon la route renvoie l'image stockée pour la version.
-        body: JSON.stringify({ prompt: description.trim(), capture, dims }),
+        body: JSON.stringify({ prompt: description.trim(), capture: brute, source, dims }),
       });
       const texte = await r.text();
       let j: { error?: string; details?: string; ambiance_url?: string; ambiances?: Ambiance[]; retenue?: string | null; numero?: number; token?: string; modele?: string };
@@ -648,12 +648,18 @@ export default function PlannerPage() {
     if (!nom) return;
     try { avecPrix = garderSansPrixSiLie(avecPrix); } catch { return; }
     if (scene.items.length === 0) { setMessage("Aucun article à exporter"); return; }
+    // Comme pour les offres : un onglet s'ouvre tout de suite (dans le clic,
+    // sinon bloqué) avec un message d'attente, puis reçoit le PDF. Le
+    // conseiller voit qu'il se passe quelque chose et ne reclique pas.
+    const w = window.open("", "_blank");
+    if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
+    w.document.write(`<!doctype html><title>PDF du plan 3D</title><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Raleway,Arial,sans-serif;color:#555;background:#fafafa"><div style="text-align:center"><div style="font-size:18px;font-weight:600">Génération du PDF du plan 3D…</div><div style="margin-top:8px;font-size:13px;color:#888">10 à 20 secondes — ${avecPrix ? "avec prix" : "sans prix"}</div><div style="margin:18px auto 0;width:220px;height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden"><div style="width:40%;height:100%;background:#2563eb;animation:jc 1.2s infinite linear"></div></div><style>@keyframes jc{0%{margin-left:-40%}100%{margin-left:100%}}</style></div></body>`);
     setPdfEnCours(true);
     setMessage("Génération du PDF… (10 à 20 s)");
     try {
       const capture = await capturerSansSelection();
       let id = scene.id;
-      if (!id || modifie) { id = await enregistrer(); if (!id) return; }
+      if (!id || modifie) { id = await enregistrer(); if (!id) { w.close(); return; } }
       const r = await fetch(`/api/planner/scenes/${id}/pdf`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prix: avecPrix, capture, dims }),
@@ -661,8 +667,9 @@ export default function PlannerPage() {
       const j = await r.json();
       if (j.error) throw new Error(j.details ? `${j.error} — ${j.details}` : j.error);
       setMessage(`PDF prêt (version V${j.numero})`);
-      window.open(j.pdf_url, "_blank");
+      w.location.href = j.pdf_url;
     } catch (e) {
+      w.close();
       setMessage(`PDF : ${(e as Error).message}`);
     } finally {
       setPdfEnCours(false);

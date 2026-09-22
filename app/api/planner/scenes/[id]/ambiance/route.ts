@@ -113,7 +113,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (!cle) return NextResponse.json({ error: "OPENAI_IMAGE_API_KEY non configurée" }, { status: 500 });
 
   let body: {
-    prompt?: string; capture?: string | null; calque?: string | null;
+    prompt?: string; capture?: string | null; source?: string | null; calque?: string | null;   // capture = version ; source = même vue cadrée pour l'IA
     ambiance?: { capture?: string | null; calque?: string | null } | null;   // paire cadrée « photo » (caméra dédiée)
     dims?: Record<string, { l: number; p: number; h: number }>; regenerer?: boolean;
   } = {};
@@ -121,7 +121,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const description = String(body.prompt || "").trim().slice(0, 800);
   if (!description) return NextResponse.json({ error: "Décris l'ambiance souhaitée" }, { status: 400 });
 
-  const v = await figerVersion(id, "ambiance", { capture: body.capture, dims: body.dims });
+  // La capture de la version est remplacée par la vue du moment (celle qui
+  // part à l'IA), même si une ambiance précédente était retenue : plan et
+  // nouveau rendu montreront le même angle.
+  const v = await figerVersion(id, "ambiance", { capture: body.capture, dims: body.dims, forcerCapture: true });
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: v.status });
 
   const { data: vv } = await supabaseAdmin
@@ -133,7 +136,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   // Image de départ : la paire « photo » si le client l'a envoyée (caméra à
   // hauteur d'œil, bord avant hors champ), sinon la capture normale + son
   // calque, sinon la capture figée de la version (sans calque possible).
-  let capture = depuisDataUrl(body.ambiance?.capture || body.capture);
+  let capture = depuisDataUrl(body.source || body.ambiance?.capture || body.capture);
   let calque = depuisDataUrl(body.ambiance?.calque || body.calque);
   if (!capture) {
     if (!v.capture_url) return NextResponse.json({ error: "Aucune capture 3D pour cette version" }, { status: 400 });

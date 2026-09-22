@@ -93,6 +93,11 @@ export default async function PagePrintPlanner({ params, searchParams }: { param
         .doc-hr { border: 0; border-top: 2px solid ${THEME}; margin: 4mm 0; width: 100%; }
         .doc-capture { width: 100%; margin-bottom: 6mm; page-break-inside: avoid; break-inside: avoid; }
         .doc-capture img { display: block; width: 100%; border: 1px solid #e5e7eb; border-radius: 4px; }
+        /* Plan + ambiance IA : côte à côte sur la première page, hauteur bornée
+           pour que le tableau des articles commence sous les images. */
+        .doc-duo { display: flex; gap: 4mm; margin-bottom: 6mm; page-break-inside: avoid; break-inside: avoid; }
+        .doc-duo .doc-capture { flex: 1 1 0; min-width: 0; margin-bottom: 0; }
+        .doc-duo .doc-capture img { width: 100%; height: 62mm; object-fit: contain; background: #fff; }
         .doc-capture-caption { font-size: 10px; color: #777; font-style: italic; margin-top: 5px; text-align: center; }
         .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; }
         .doc-table thead th { padding: 7px 4px; border-top: 2px solid ${THEME}; border-bottom: 2px solid ${THEME}; font-weight: 700; font-size: 12px; color: ${BLACK}; }
@@ -159,17 +164,23 @@ export default async function PagePrintPlanner({ params, searchParams }: { param
         </div>
         <hr className="doc-hr" />
 
-        {v.capture_url ? (
+        {/* Le texte de l'ambiance (prompt) reste interne : il se lit dans le
+            planner (galerie), jamais sur le document. */}
+        {v.capture_url && v.ambiance_url ? (
+          <div className="doc-duo">
+            <div className="doc-capture">
+              <img src={v.capture_url as string} alt="" />
+              <div className="doc-capture-caption">Plan 3D, vue {v.vue === "plan" ? "de dessus" : "en perspective"} — {MENTION_LEGALE}</div>
+            </div>
+            <div className="doc-capture">
+              <img src={v.ambiance_url as string} alt="" />
+              <div className="doc-capture-caption">{MENTION_IA} — seuls les meubles du plan font référence</div>
+            </div>
+          </div>
+        ) : v.capture_url ? (
           <div className="doc-capture">
             <img src={v.capture_url as string} alt="" />
             <div className="doc-capture-caption">Vue {v.vue === "plan" ? "de dessus" : "en perspective"} — {MENTION_LEGALE}</div>
-          </div>
-        ) : null}
-
-        {v.ambiance_url ? (
-          <div className="doc-capture">
-            <img src={v.ambiance_url as string} alt="" />
-            <div className="doc-capture-caption">{MENTION_IA} — décor imaginé d&apos;après « {String(v.ambiance_prompt || "")} » ; seuls les meubles du plan font référence.</div>
           </div>
         ) : null}
 

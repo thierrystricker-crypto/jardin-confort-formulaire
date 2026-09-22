@@ -59,7 +59,7 @@ function empreinte(nom: unknown, terrasse: unknown, sol: unknown, items: unknown
 export async function figerVersion(
   sceneId: string,
   motif: string,
-  extras: { capture?: string | null; dims?: Record<string, { l: number; p: number; h: number }> } = {},
+  extras: { capture?: string | null; dims?: Record<string, { l: number; p: number; h: number }>; forcerCapture?: boolean } = {},
 ): Promise<VersionFigee | { error: string; status: number }> {
   const { data: s, error } = await supabaseAdmin
     .from("planner_scenes")
@@ -71,7 +71,7 @@ export async function figerVersion(
 
   const { data: derniere } = await supabaseAdmin
     .from("planner_scenes_versions")
-    .select("id, scene_id, numero, token, cree_le, capture_url, pdf_url, pdf_sans_prix_url, nom, terrasse, sol, items")
+    .select("id, scene_id, numero, token, cree_le, capture_url, pdf_url, pdf_sans_prix_url, nom, terrasse, sol, items, ambiance_url")
     .eq("scene_id", sceneId)
     .order("numero", { ascending: false })
     .limit(1)
@@ -82,13 +82,17 @@ export async function figerVersion(
   // scène sans rien changer au plan, et ça empilait des versions identiques.
   // La capture est REMPLACÉE par la vue du moment (même version, même
   // fichier) : l'angle de la fiche doit être celui que le conseiller vient de
-  // choisir — et celui envoyé à l'ambiance IA. Les PDF déjà générés sont
-  // invalidés pour être refaits avec cette capture.
+  // choisir. SAUF si une ambiance IA est retenue sur cette version : le rendu
+  // IA a été fait depuis la capture existante, on la garde pour que plan et
+  // rendu montrent le même angle (extras.forcerCapture = true pour passer
+  // outre, utilisé par la génération d'ambiance qui repart de la vue du
+  // moment). Les PDF déjà générés sont invalidés pour être refaits.
   const identique = derniere
     && empreinte(s.nom, s.terrasse, s.sol, s.items) === empreinte(derniere.nom, derniere.terrasse, derniere.sol, derniere.items);
   if (derniere && identique) {
     let captureUrl = derniere.capture_url as string | null;
-    if (extras.capture) {
+    const figee = Boolean(derniere.ambiance_url) && !extras.forcerCapture;
+    if (extras.capture && (!captureUrl || !figee)) {
       const nouvelle = await deposerCapture(derniere.token as string, extras.capture);
       if (nouvelle) {
         captureUrl = nouvelle;
