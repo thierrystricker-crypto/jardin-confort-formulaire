@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
-import { MENTION_IA, MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CatalogueItem, type ChoixModele, type Scene, type SceneItem } from "@/lib/planner-types";
+import { MENTION_IA, MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CameraScene, type CatalogueItem, type ChoixModele, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
 import { COULEURS_FERMOB } from "@/lib/planner-matieres";
 import { DECORS, MOMENTS, composerDescription, filtrerDecor } from "@/lib/planner-ambiance-cadre";
 
@@ -73,6 +73,10 @@ export default function PlannerPage() {
   const [modifie, setModifie] = useState(false);
   const captureRef = useRef<(() => string | null) | null>(null);
   const recadrerRef = useRef<(() => void) | null>(null);
+  // Point de vue : lu à l'enregistrement et aux exports, réappliqué à
+  // l'ouverture d'un plan et au changement Plan / 3D (SQL 028).
+  const cameraRef = useRef<{ lire: () => VueCamera | null; appliquer: (c: VueCamera) => void } | null>(null);
+  const sauterCameraRef = useRef(false);   // « Recadrer » : ne pas réappliquer la vue mémorisée
   const [rotationFine, setRotationFine] = useState(false);   // déverrouillage manuel, jamais par défaut
 
   // Historique (annuler / rétablir) : une pile d'états de scène. Les
@@ -343,7 +347,8 @@ export default function PlannerPage() {
   // « Recadrer » : repasse en plan et cadre toute la terrasse
   function recadrer() {
     if (scene.vue !== "plan") {
-      patch({ vue: "plan" }, false);
+      sauterCameraRef.current = true;
+      patch({ vue: "plan", camera: cameraCourante() }, false);
       setTimeout(() => recadrerRef.current?.(), 60);   // la caméra ortho doit être montée
     } else {
       recadrerRef.current?.();
@@ -412,19 +417,49 @@ export default function PlannerPage() {
     }
   }
 
+  // Caméra courante fusionnée avec celle déjà mémorisée pour l'autre vue.
+  function cameraCourante(): CameraScene | null {
+    const c = cameraRef.current?.lire();
+    if (!c) return scene.camera || null;
+    return { ...(scene.camera || {}), [scene.vue]: c };
+  }
+  // Mémorise le point de vue seul (sans marquer le plan « modifié »).
+  async function memoriserCamera(id: string | null) {
+    const camera = cameraCourante();
+    if (!id || !camera) return;
+    setScene((sc) => ({ ...sc, camera }));
+    try { await fetch(`/api/planner/scenes/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ camera }) }); } catch { /* sans gravité */ }
+  }
+  function changerVue(v: "plan" | "3d") {
+    if (v === scene.vue) return;
+    patch({ vue: v, camera: cameraCourante() });
+  }
+  // À l'ouverture d'un plan et à chaque bascule Plan / 3D : remettre le point
+  // de vue mémorisé pour cette vue (la caméra est remontée par le canvas).
+  useEffect(() => {
+    if (sauterCameraRef.current) { sauterCameraRef.current = false; return; }
+    const c = scene.camera?.[scene.vue];
+    if (!c) return;
+    const t = setTimeout(() => cameraRef.current?.appliquer(c), 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene.id, scene.vue]);
+
   async function enregistrer(): Promise<string | null> {
     setEnregistrement(true);
     setMessage("");
     let idScene: string | null = scene.id;
+    const aEnvoyer: Scene = { ...scene, camera: cameraCourante() };
+    setScene((sc) => ({ ...sc, camera: aEnvoyer.camera }));
     try {
       let creePar: string | null = null;
       try { creePar = window.localStorage.getItem("jardi-utilisateur"); } catch { /* ignore */ }
       if (scene.id) {
-        const r = await fetch(`/api/planner/scenes/${scene.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scene }) });
+        const r = await fetch(`/api/planner/scenes/${scene.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scene: aEnvoyer }) });
         const j = await r.json();
         if (j.error) throw new Error(j.error);
       } else {
-        const r = await fetch("/api/planner/scenes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scene, cree_par: creePar }) });
+        const r = await fetch("/api/planner/scenes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scene: aEnvoyer, cree_par: creePar }) });
         const j = await r.json();
         if (j.error) throw new Error(j.error);
         setScene((s) => ({ ...s, id: j.id }));
@@ -480,7 +515,11 @@ export default function PlannerPage() {
   async function capturerSansSelection(): Promise<string | null> {
     setSelected(null);
     await new Promise<void>((r) => setTimeout(r, 80));
-    return captureRef.current?.() || null;
+    const data = captureRef.current?.() || null;
+    // Le point de vue de la capture est mémorisé avec le plan : la version
+    // figée le reprend et la page client s'ouvre sous le même angle.
+    if (scene.id && !modifie) await memoriserCamera(scene.id);
+    return data;
   }
   function chargerImage(src: string): Promise<HTMLImageElement | null> {
     return new Promise((res) => {
@@ -750,8 +789,8 @@ export default function PlannerPage() {
           placeholder="Nom de la scène"
         />
         <div className="ml-2 flex items-center gap-1">
-          <button type="button" onClick={() => patch({ vue: "plan" })} className={scene.vue === "plan" ? BTN_ON : BTN_OFF} title="Vue de dessus (composition)">▦ Plan</button>
-          <button type="button" onClick={() => patch({ vue: "3d" })} className={scene.vue === "3d" ? BTN_ON : BTN_OFF} title="Perspective (présentation)">◈ 3D</button>
+          <button type="button" onClick={() => changerVue("plan")} className={scene.vue === "plan" ? BTN_ON : BTN_OFF} title="Vue de dessus (composition)">▦ Plan</button>
+          <button type="button" onClick={() => changerVue("3d")} className={scene.vue === "3d" ? BTN_ON : BTN_OFF} title="Perspective (présentation)">◈ 3D</button>
           <button type="button" onClick={recadrer} className={BTN_OFF} title="Recadrer : vue de dessus, toute la terrasse visible (touche F)">⛶ Recadrer</button>
         </div>
         <div className="flex items-center gap-1">
@@ -909,6 +948,7 @@ export default function PlannerPage() {
             onError={(u, m) => setErreurs((e) => ({ ...e, [u]: m }))}
             captureRef={captureRef}
             recadrerRef={recadrerRef}
+            cameraRef={cameraRef}
           />
           {/* Outils de l'article sélectionné */}
           {item && (

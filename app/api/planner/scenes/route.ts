@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
         mode: s.mode,
         vue: s.vue,
         sol: s.sol || "bois",
+        camera: s.camera || null,
       })
       .select("id")
       .single();

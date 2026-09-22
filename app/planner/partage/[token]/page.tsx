@@ -39,6 +39,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
   const [info, setInfo] = useState<{ version: { numero: number; cree_le: string } | null; modifie_depuis?: boolean; url_actuelle?: string | null; updated_at?: string; sans_prix?: boolean; ambiance_url?: string | null }>({ version: null });
   const captureRef = useRef<(() => string | null) | null>(null);
   const recadrerRef = useRef<(() => void) | null>(null);
+  const cameraRef = useRef<{ lire: () => import("@/lib/planner-types").VueCamera | null; appliquer: (c: import("@/lib/planner-types").VueCamera) => void } | null>(null);
 
   useEffect(() => {
     fetch(`/api/planner/partage/${token}`)
@@ -57,7 +58,12 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
   // départ est calée sur la terrasse par le canvas, mais on s'assure du cadre).
   useEffect(() => {
     if (!scene) return;
-    const t = setTimeout(() => recadrerRef.current?.(), 300);
+    // Même angle que la fiche si le point de vue a été enregistré, sinon cadrage auto.
+    const t = setTimeout(() => {
+      const c = scene.camera?.[vue];
+      if (c && cameraRef.current) cameraRef.current.appliquer(c);
+      else recadrerRef.current?.();
+    }, 300);
     return () => clearTimeout(t);
   }, [scene, vue]);
 
@@ -143,6 +149,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
             onError={(u, m) => setErreurs((e) => ({ ...e, [u]: m }))}
             captureRef={captureRef}
             recadrerRef={recadrerRef}
+            cameraRef={cameraRef}
           />
           <div className="pointer-events-none absolute bottom-2 left-3 rounded bg-black/50 px-2 py-1 text-[11px] text-zinc-300">
             {MENTION_LEGALE} · {vue === "plan" ? "molette = zoom · glisser = déplacer la vue" : "glisser = tourner · molette = zoom · clic droit = déplacer"}

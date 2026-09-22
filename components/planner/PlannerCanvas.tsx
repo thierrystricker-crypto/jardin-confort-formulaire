@@ -24,7 +24,7 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Grid, Html, OrbitControls, OrthographicCamera, PerspectiveCamera, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import { SOLS, type SceneItem, type SolId, type Terrasse } from "@/lib/planner-types";
+import { SOLS, type SceneItem, type SolId, type Terrasse, type VueCamera } from "@/lib/planner-types";
 
 export type Dims = { l: number; p: number; h: number };
 
@@ -45,6 +45,8 @@ type Props = {
   // Calque « meubles seuls » (fond transparent, sol remplacé par un récepteur
   // d'ombres) pour l'ambiance IA : sert de masque et se recolle sur l'image.
   calqueRef?: React.MutableRefObject<(() => string | null) | null>;
+  // Lire / appliquer le point de vue (position, cible, zoom) — mémorisé avec le plan.
+  cameraRef?: React.MutableRefObject<{ lire: () => VueCamera | null; appliquer: (c: VueCamera) => void } | null>;
   // Paire capture + calque prise avec la caméra « photo » d'ambiance (hauteur
   // d'œil, bord avant de la terrasse hors champ) — vue 3D seulement.
   ambianceRef?: React.MutableRefObject<(() => { capture: string; calque: string } | null) | null>;
@@ -326,6 +328,39 @@ function Capture({ captureRef, calqueRef, ambianceRef, grilleRef, ombreRef, terr
   return null;
 }
 
+// ─── Point de vue ─────────────────────────────────────────────────────────────
+// Expose la caméra courante (et la cible des OrbitControls) pour l'enregistrer
+// avec le plan, et la réappliquer à la réouverture.
+
+function PointDeVue({ cameraRef }: { cameraRef?: Props["cameraRef"] }) {
+  const { camera, controls } = useThree();
+  useEffect(() => {
+    if (!cameraRef) return;
+    const ctrl = () => controls as unknown as { target: THREE.Vector3; update: () => void } | null;
+    cameraRef.current = {
+      lire: () => {
+        const c = ctrl();
+        const r = (v: number) => Math.round(v * 1000) / 1000;
+        return {
+          pos: camera.position.toArray().map(r) as [number, number, number],
+          target: (c ? c.target.toArray() : [0, 0, 0]).map(r) as [number, number, number],
+          zoom: (camera as THREE.OrthographicCamera).isOrthographicCamera ? r((camera as THREE.OrthographicCamera).zoom) : undefined,
+        };
+      },
+      appliquer: (v) => {
+        const c = ctrl();
+        camera.position.set(v.pos[0], v.pos[1], v.pos[2]);
+        if (v.zoom && (camera as THREE.OrthographicCamera).isOrthographicCamera) (camera as THREE.OrthographicCamera).zoom = v.zoom;
+        camera.updateProjectionMatrix();
+        if (c) { c.target.set(v.target[0], v.target[1], v.target[2]); c.update(); }
+        else camera.lookAt(v.target[0], v.target[1], v.target[2]);
+      },
+    };
+    return () => { cameraRef.current = null; };
+  }, [camera, controls, cameraRef]);
+  return null;
+}
+
 // ─── Recadrage ────────────────────────────────────────────────────────────────
 // Remet la caméra sur toute la terrasse (bouton « Recadrer » : on se perd vite
 // à la molette). En plan : zoom calculé sur la taille réelle du canvas ; en
@@ -356,7 +391,7 @@ function Recadrage({ recadrerRef, terrasse, vue }: { recadrerRef: Props["recadre
 // ─── Scène ────────────────────────────────────────────────────────────────────
 
 export default function PlannerCanvas(props: Props) {
-  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, calqueRef, ambianceRef, recadrerRef, lectureSeule = false } = props;
+  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, calqueRef, ambianceRef, cameraRef, recadrerRef, lectureSeule = false } = props;
   const [drag, setDrag] = useState<{ uid: string; dx: number; dz: number } | null>(null);
   const grilleRef = useRef<THREE.Mesh>(null);
   const ombreRef = useRef<THREE.Mesh>(null);
@@ -488,6 +523,7 @@ export default function PlannerCanvas(props: Props) {
 
       <Capture captureRef={captureRef} calqueRef={calqueRef} ambianceRef={ambianceRef} grilleRef={grilleRef} ombreRef={ombreRef} terrasse={terrasse} />
       <Recadrage recadrerRef={recadrerRef} terrasse={terrasse} vue={vue} />
+      <PointDeVue cameraRef={cameraRef} />
     </Canvas>
   );
 }

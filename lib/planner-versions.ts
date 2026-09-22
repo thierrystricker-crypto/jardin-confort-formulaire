@@ -63,7 +63,7 @@ export async function figerVersion(
 ): Promise<VersionFigee | { error: string; status: number }> {
   const { data: s, error } = await supabaseAdmin
     .from("planner_scenes")
-    .select("id, nom, terrasse, sol, items, mode, vue, cree_par, updated_at")
+    .select("id, nom, terrasse, sol, items, mode, vue, cree_par, updated_at, camera")
     .eq("id", sceneId)
     .maybeSingle();
   if (error) return { error: error.message, status: 500 };
@@ -97,7 +97,7 @@ export async function figerVersion(
       if (nouvelle) {
         captureUrl = nouvelle;
         await supabaseAdmin.from("planner_scenes_versions")
-          .update({ capture_url: captureUrl, pdf_url: null, pdf_sans_prix_url: null })
+          .update({ capture_url: captureUrl, pdf_url: null, pdf_sans_prix_url: null, camera: s.camera || null })
           .eq("id", derniere.id);
       }
     }
@@ -116,7 +116,7 @@ export async function figerVersion(
     .insert({
       scene_id: sceneId, numero, token, motif: motif.slice(0, 20),
       nom: s.nom, terrasse: s.terrasse, sol: s.sol || "bois", items, mode: s.mode, vue: s.vue,
-      cree_par: s.cree_par, capture_url: captureUrl,
+      cree_par: s.cree_par, capture_url: captureUrl, camera: s.camera || null,
     })
     .select("id, scene_id, numero, token, cree_le, capture_url, pdf_url, pdf_sans_prix_url")
     .single();

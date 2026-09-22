@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   // 1) Version figée ?
   const { data: v, error: ev } = await supabaseAdmin
     .from("planner_scenes_versions")
-    .select("scene_id, numero, nom, terrasse, sol, items, mode, vue, cree_le, ambiance_url")
+    .select("scene_id, numero, nom, terrasse, sol, items, mode, vue, cree_le, ambiance_url, camera")
     .eq("token", token)
     .maybeSingle();
   if (ev) return NextResponse.json({ error: ev.message }, { status: 500 });
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       .limit(1);
     const scene: Scene = {
       id: null, nom: v.nom, terrasse: v.terrasse, sol: v.sol || "bois",
-      items: epurer(v.items as SceneItem[]), mode: v.mode, vue: v.vue,
+      items: epurer(v.items as SceneItem[]), mode: v.mode, vue: v.vue, camera: v.camera || null,
     };
     const modifieDepuis = Boolean(s?.updated_at && new Date(s.updated_at as string) > new Date(v.cree_le as string)) || (plusRecente?.length || 0) > 0;
     return NextResponse.json({
@@ -69,14 +69,14 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   // 2) Lien vivant
   const { data, error } = await supabaseAdmin
     .from("planner_scenes")
-    .select("nom, terrasse, sol, items, mode, vue, updated_at, offre_slug")
+    .select("nom, terrasse, sol, items, mode, vue, updated_at, offre_slug, camera")
     .eq("partage_token", token)
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Ce lien n'est plus valable" }, { status: 404 });
   const scene: Scene = {
     id: null, nom: data.nom, terrasse: data.terrasse, sol: data.sol || "bois",
-    items: epurer(data.items as SceneItem[]), mode: data.mode, vue: data.vue,
+    items: epurer(data.items as SceneItem[]), mode: data.mode, vue: data.vue, camera: data.camera || null,
   };
   return NextResponse.json({ scene, version: null, updated_at: data.updated_at, sans_prix: Boolean(data.offre_slug) }, { headers: entetes });
 }

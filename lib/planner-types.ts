@@ -101,6 +101,10 @@ export const SOLS: { id: SolId; nom: string; couleur: string }[] = [
   { id: "blanc", nom: "Blanc", couleur: "#f2f2f0" },
 ];
 
+// Point de vue mémorisé par vue (SQL 028) : position, cible OrbitControls, zoom (ortho).
+export type VueCamera = { pos: [number, number, number]; target: [number, number, number]; zoom?: number };
+export type CameraScene = { plan?: VueCamera; "3d"?: VueCamera };
+
 export type Scene = {
   id: string | null;
   nom: string;
@@ -110,6 +114,7 @@ export type Scene = {
   mode: "couleurs" | "maquette";
   vue: "plan" | "3d";
   offre_slug?: string | null;
+  camera?: CameraScene | null;
 };
 
 export const SCENE_VIDE: Scene = {
