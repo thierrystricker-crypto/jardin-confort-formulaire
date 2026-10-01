@@ -58,6 +58,11 @@ function estRoutePublique(pathname: string, method: string): boolean {
   // révocable indépendamment) et refuse tout le reste.
   if (pathname.startsWith("/api/thunderai/")) return true;
 
+  // Panier borne (01.10.2026) : la borne du magasin n'a pas le cookie. Pas
+  // ouverte pour autant — la route refuse toute IP hors BORNE_IPS (env Vercel,
+  // fermée si absente), plafonne à 20/h, et n'écrit qu'une liste d'achat.
+  if (pathname === "/api/listes-achat/borne" && (method === "POST" || method === "OPTIONS")) return true;
+
   // API lues par les pages clients (lecture seule)
   if (pathname === "/api/revisions" && method === "GET") return true;
   if (pathname === "/api/corrections" && method === "GET") return true;
