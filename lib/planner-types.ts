@@ -17,6 +17,9 @@ export type Variante3d = {
   prix: number | null;
 };
 
+// Couleurs appliquées à l'affichage (Fermob) — voir lib/modeles-3d-zones.ts
+export type { ChoixCouleur, Peinture, VarianteZones, ZonesConfig } from "@/lib/modeles-3d-zones";
+
 export type CatalogueItem = {
   product_id: number;
   handle: string;
@@ -26,7 +29,7 @@ export type CatalogueItem = {
   categories: string[];
   image_url: string | null;
   prix_min: number | null;
-  source: "model3d" | "url" | null;
+  source: "model3d" | "url" | "zones" | null;
   url_glb: string | null;
   has_3d: boolean;
   size_mismatch_possible: boolean;
@@ -41,6 +44,10 @@ export type CatalogueItem = {
   has_size_option: boolean;
   model_level: "fiche" | "variante";
   variantes_3d: Variante3d[];
+  // Fiche à couleurs appliquées (Fermob) : forme + zones, et les variantes
+  // avec leurs options pour proposer les couleurs.
+  zones?: import("@/lib/modeles-3d-zones").ZonesConfig | null;
+  zones_variantes?: import("@/lib/modeles-3d-zones").VarianteZones[];
 };
 
 // Options qui ne changent pas la géométrie : ignorées pour libeller une taille
@@ -73,7 +80,12 @@ export type SceneItem = {
   titre: string;
   marque: string | null;
   url: string;              // URL du GLB (Model3d ou .bin)
-  source: "model3d" | "url";
+  source: "model3d" | "url" | "zones";
+  // Consignes de peinture (fiche à zones) : matières à repeindre, couleurs
+  // linéaires, textures. Appliquées au chargement et avant toute capture.
+  peinture?: import("@/lib/modeles-3d-zones").Peinture[];
+  couleur_code?: string | null;   // code de la couleur posée (« 47 »)
+  couleur_nom?: string | null;    // nom lisible (« Carbone »)
   x: number;                // m, centre de la terrasse = 0
   z: number;                // m
   rot: number;              // degrés, autour de Y (pas de 15°)
