@@ -88,6 +88,7 @@ function construirePeinture(objet: THREE.Object3D, peinture: Peinture[]): Map<TH
   if (!peinture?.length) return out;
   const parNom = new Map<string, Peinture>();
   for (const p of peinture) for (const n of p.materiaux || []) parNom.set(n, p);
+  const rencontres = new Set<string>();
   objet.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
@@ -100,6 +101,7 @@ function construirePeinture(objet: THREE.Object3D, peinture: Peinture[]): Map<TH
     for (const mat0 of mats) {
       const mat = mat0 as THREE.MeshStandardMaterial;
       if (!mat || out.has(mat)) continue;
+      rencontres.add(mat.name);
       const consigne = parNom.get(mat.name);
       if (!consigne) continue;
       const neuf = mat.clone();
@@ -135,6 +137,14 @@ function construirePeinture(objet: THREE.Object3D, peinture: Peinture[]): Map<TH
       out.set(mat, neuf);
     }
   });
+  if (!out.size) {
+    // Aucune zone reconnue : le nom des matieres du fichier 3D ne correspond
+    // pas aux zones declarees dans le metachamp. Trace pour diagnostic.
+    console.warn(
+      "[planner] couleur non appliquee : aucune zone reconnue",
+      { attendus: [...parNom.keys()], dans_le_fichier: [...rencontres] },
+    );
+  }
   return out;
 }
 
