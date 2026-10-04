@@ -91,7 +91,12 @@ function construirePeinture(objet: THREE.Object3D, peinture: Peinture[]): Map<TH
   objet.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
-    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    // TOUJOURS repartir du matériau d'origine du fichier : au 2e changement de
+    // couleur, m.material porte déjà la peinture précédente, et la carte serait
+    // alors indexée sur un clone — le meuble reprenait sa couleur de fichier
+    // (constaté 04.10.2026 : « une couleur sur deux ne marche pas »).
+    const source = (m.userData.materiauOrigine as THREE.Material | THREE.Material[] | undefined) ?? m.material;
+    const mats = Array.isArray(source) ? source : [source];
     for (const mat0 of mats) {
       const mat = mat0 as THREE.MeshStandardMaterial;
       if (!mat || out.has(mat)) continue;
