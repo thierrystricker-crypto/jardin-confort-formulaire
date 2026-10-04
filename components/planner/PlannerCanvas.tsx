@@ -24,7 +24,7 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Grid, Html, OrbitControls, OrthographicCamera, PerspectiveCamera, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import { SOLS, type SceneItem, type SolId, type Terrasse, type VueCamera } from "@/lib/planner-types";
+import { SOLS, type Peinture, type SceneItem, type SolId, type Terrasse, type VueCamera } from "@/lib/planner-types";
 
 export type Dims = { l: number; p: number; h: number };
 
@@ -62,6 +62,76 @@ function rotationY(item: SceneItem): number {
 }
 
 const CLAY = new THREE.MeshStandardMaterial({ color: 0xd6d3cd, roughness: 0.95, metalness: 0 });
+
+// ─── Couleurs appliquées à l'affichage (Fermob, 04.10.2026) ───────────────────
+// Une fiche à zones a UNE forme ; la couleur de la variante est posée ici, sur
+// des matériaux CLONÉS (deux exemplaires du même article peuvent avoir deux
+// couleurs). Les consignes viennent du serveur (lib/modeles-3d-zones.ts).
+
+const TEXTURES = new Map<string, THREE.Texture>();
+function chargerTexture(url: string): THREE.Texture {
+  let t = TEXTURES.get(url);
+  if (!t) {
+    t = new THREE.TextureLoader().load(url);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.flipY = false;
+    TEXTURES.set(url, t);
+  }
+  return t;
+}
+
+// Matériaux repeints, indexés par matériau d'origine. Le nom de la matière
+// dans le fichier (« zone_structure ») fait le lien avec la consigne.
+function construirePeinture(objet: THREE.Object3D, peinture: Peinture[]): Map<THREE.Material, THREE.Material> {
+  const out = new Map<THREE.Material, THREE.Material>();
+  if (!peinture?.length) return out;
+  const parNom = new Map<string, Peinture>();
+  for (const p of peinture) for (const n of p.materiaux || []) parNom.set(n, p);
+  objet.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    for (const mat0 of mats) {
+      const mat = mat0 as THREE.MeshStandardMaterial;
+      if (!mat || out.has(mat)) continue;
+      const consigne = parNom.get(mat.name);
+      if (!consigne) continue;
+      const neuf = mat.clone();
+      // gltfpack range la déquantification des UV dans la transformation de
+      // texture : une texture de remplacement doit reprendre l'échelle de
+      // celle d'origine (ou, à défaut, celle de la normal map).
+      const ref = mat.map || mat.normalMap || null;
+      if (typeof consigne.rugosite === "number") neuf.roughness = consigne.rugosite;
+      if (consigne.teinte) {
+        if (consigne.couleur) neuf.color.setRGB(consigne.couleur[0], consigne.couleur[1], consigne.couleur[2]);
+      } else if (consigne.garder_texture) {
+        // on garde la texture du fichier : rien à faire
+      } else if (consigne.texture) {
+        const t = chargerTexture(consigne.texture).clone();
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.flipY = false;
+        if (ref) {
+          t.repeat.copy(ref.repeat);
+          t.offset.copy(ref.offset);
+          t.rotation = ref.rotation;
+          t.center.copy(ref.center);
+        }
+        if (consigne.echelle) t.repeat.set(t.repeat.x * consigne.echelle[0], t.repeat.y * consigne.echelle[1]);
+        t.needsUpdate = true;
+        neuf.map = t;
+        neuf.color.setRGB(1, 1, 1);
+      } else if (consigne.couleur) {
+        neuf.map = null;
+        neuf.color.setRGB(consigne.couleur[0], consigne.couleur[1], consigne.couleur[2]);
+      }
+      neuf.needsUpdate = true;
+      out.set(mat, neuf);
+    }
+  });
+  return out;
+}
 
 function arrondir(v: number, pas: number): number {
   if (!pas) return v;
@@ -106,12 +176,24 @@ function Modele({
   onDimsRef.current = onDims;
   useEffect(() => { onDimsRef.current(dims); }, [dims]);
 
+  // Peinture de la variante : recalculée quand la couleur change (sélecteur du
+  // panneau de l'article) ou quand le fichier change.
+  const clePeinture = JSON.stringify(item.peinture || []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const peints = useMemo(() => construirePeinture(objet, item.peinture || []), [objet, clePeinture]);
+  useEffect(() => () => { peints.forEach((m) => m.dispose()); }, [peints]);
+
   useEffect(() => {
     objet.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh) m.material = mode === "maquette" ? CLAY : (m.userData.materiauOrigine as THREE.Material);
+      if (!m.isMesh) return;
+      const origine = m.userData.materiauOrigine as THREE.Material | THREE.Material[];
+      if (mode === "maquette") { m.material = CLAY; return; }
+      m.material = Array.isArray(origine)
+        ? origine.map((x) => peints.get(x) || x)
+        : (peints.get(origine) || origine);
     });
-  }, [objet, mode]);
+  }, [objet, mode, peints]);
 
   return (
     <group position={[item.x, 0, item.z]} rotation={[0, rotationY(item), 0]} onPointerDown={onPointerDown} userData={{ meuble: true }}>
