@@ -236,7 +236,7 @@ export default function PlannerPage() {
       titre: choix?.label && choix.variant_id ? `${c.titre} — ${choix.label}` : c.titre,
       marque: c.marque,
       url,
-      source: choix?.variant_id ? "url" : (c.source || "url"),
+      source: c.source === "zones" ? "zones" : choix?.variant_id ? "url" : (c.source || "url"),
       x: pos.x,
       z: pos.z,
       rot: 0,
@@ -1031,7 +1031,7 @@ export default function PlannerPage() {
             <div className="absolute left-3 top-3 flex items-center gap-1 rounded-xl border border-white/10 bg-[#1f2125]/90 p-1.5 shadow-lg backdrop-blur">
               <span className="max-w-[260px] truncate px-2 text-xs text-zinc-200" title={item.titre}>{item.titre}</span>
               {/* Couleur de la variante (fiches à zones, Fermob) */}
-              {item.source === "zones" && (
+              {(item.source === "zones" || (item.peinture?.length ?? 0) > 0) && (
                 <select
                   className="rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-xs text-zinc-100 outline-none"
                   value={item.couleur_code || ""}
