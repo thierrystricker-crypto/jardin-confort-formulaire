@@ -22,7 +22,8 @@ type Etat = {
   termine_le: string | null;
   message: string | null;
   stats: Partial<{
-    produits: number; avec_3d: number; model3d: number; url: number; anomalies: number;
+    produits: number; avec_3d: number; model3d: number; url: number; zones: number; palette_codes: number;
+    anomalies: number;
     supprimes: number; options_modifiees: number; nouveaux_modeles: number; duree_ms: number;
   }>;
   updated_at: string;
