@@ -54,8 +54,10 @@ export type CatalogueItem = {
 const OPTIONS_SANS_GEOMETRIE = /couleur|colou?r|farbe|coloris|tissu|finition|toile|structure|matière|material/i;
 
 // Choix proposés pour un article : une entrée par fichier distinct (les
-// variantes de couleur partagent le fichier de leur taille). Le défaut de la
-// fiche est ajouté s'il diffère de tous les fichiers de variante.
+// variantes de couleur partagent le fichier de leur taille). Le modèle de la
+// fiche n'est proposé QUE si l'article n'a aucun modèle de variante : quand les
+// variantes ont leur propre fichier, le .glb de la fiche est l'ancien modèle
+// générique et il n'a rien à faire dans le choix de la taille (Dedon, 07.10.2026).
 export type ChoixModele = { label: string; url: string; variant_id: string | null; sku: string | null; size_warn: boolean; prix: number | null };
 export function choixModeles(c: CatalogueItem): ChoixModele[] {
   const vus = new Set<string>();
@@ -68,8 +70,8 @@ export function choixModeles(c: CatalogueItem): ChoixModele[] {
       .map(([, val]) => val);
     out.push({ label: parts.join(" / ") || v.titre || "Variante", url: v.url, variant_id: v.variant_id, sku: v.sku, size_warn: false, prix: v.prix });
   }
-  if (c.url_glb && !vus.has(c.url_glb)) {
-    out.push({ label: out.length ? "Modèle par défaut de la fiche" : "", url: c.url_glb, variant_id: c.variant_id_1, sku: c.sku_1, size_warn: c.has_size_option, prix: null });
+  if (c.url_glb && !out.length) {
+    out.push({ label: "", url: c.url_glb, variant_id: c.variant_id_1, sku: c.sku_1, size_warn: c.has_size_option, prix: null });
   }
   return out;
 }
