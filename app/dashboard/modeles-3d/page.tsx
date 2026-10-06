@@ -22,7 +22,8 @@ type Etat = {
   termine_le: string | null;
   message: string | null;
   stats: Partial<{
-    produits: number; avec_3d: number; model3d: number; url: number; anomalies: number;
+    produits: number; avec_3d: number; model3d: number; url: number; zones: number; palette_codes: number;
+    anomalies: number;
     supprimes: number; options_modifiees: number; nouveaux_modeles: number; duree_ms: number;
   }>;
   updated_at: string;
@@ -30,7 +31,7 @@ type Etat = {
 
 type Marque = {
   marque: string; produits: number; actifs: number; avec_3d: number; actifs_avec_3d: number; actifs_sans_3d: number;
-  via_model3d: number; via_url: number; taille_non_garantie: number; couleur_non_garantie: number;
+  via_model3d: number; via_url: number; via_zones: number; taille_non_garantie: number; couleur_non_garantie: number;
   avec_anomalies: number; tag_no3dfile: number; collections: number;
 };
 
@@ -38,7 +39,7 @@ type Row = {
   product_id: number; handle: string; titre: string; marque: string | null; statut: string; publie: boolean;
   collection: string | null; categories: string[]; image_url: string | null; prix_min: number | null;
   variant_count: number; variant_mode: string; option_names: string[]; has_size_option: boolean; has_color_option: boolean;
-  source: "model3d" | "url" | null; url_glb: string | null; url_usdz: string | null; nom_fichier: string | null;
+  source: "model3d" | "url" | "zones" | null; url_glb: string | null; url_usdz: string | null; nom_fichier: string | null;
   taille_octets: number | null; fichier_partage_n: number; tag_no3dfile: boolean; has_3d: boolean;
   size_mismatch_possible: boolean; color_mismatch_possible: boolean; anomalies: string[];
   options_changed_at: string | null; model_attached_at: string | null; synced_at: string;
@@ -206,6 +207,7 @@ export default function Modeles3dPage() {
             ["Avec modèle 3D", avec3d, "text-emerald-300"],
             ["via Model3d", s.model3d ?? marques.reduce((n, m) => n + m.via_model3d, 0), ""],
             ["via URL .bin", s.url ?? marques.reduce((n, m) => n + m.via_url, 0), ""],
+            ["couleurs appliquées", s.zones ?? marques.reduce((n, m) => n + (m.via_zones || 0), 0), "forme + palette (Fermob)"],
             ["Avec anomalies", marques.reduce((n, m) => n + m.avec_anomalies, 0), "text-amber-300"],
             ["Nouveaux modèles (dernière synchro)", s.nouveaux_modeles ?? 0, "text-sky-300"],
           ].map(([l, v, cls]) => (
@@ -313,7 +315,7 @@ export default function Modeles3dPage() {
                   <td className="px-3 py-2 text-xs">
                     {r.source ? (
                       <>
-                        <div>{r.source === "model3d" ? "Model3d" : "URL .bin"}{r.taille_octets ? ` · ${mo(r.taille_octets)}` : ""}</div>
+                        <div>{r.source === "model3d" ? "Model3d" : r.source === "zones" ? "Forme + couleurs" : "URL .bin"}{r.taille_octets ? ` · ${mo(r.taille_octets)}` : ""}</div>
                         <div className="truncate max-w-[260px] text-zinc-500" title={r.nom_fichier || ""}>{r.nom_fichier}</div>
                       </>
                     ) : <span className="text-zinc-600">aucun{r.tag_no3dfile ? " (no3dfile)" : ""}</span>}

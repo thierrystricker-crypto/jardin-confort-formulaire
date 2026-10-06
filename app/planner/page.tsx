@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
-import { MENTION_IA, MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CameraScene, type CatalogueItem, type ChoixModele, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
+import { MENTION_IA, MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CameraScene, type CatalogueItem, type ChoixModele, type Peinture, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
 import { DECORS, MOMENTS, composerDescription, filtrerDecor } from "@/lib/planner-ambiance-cadre";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
@@ -57,6 +57,7 @@ export default function PlannerPage() {
   const [pdfEnCours, setPdfEnCours] = useState(false);
   // Galerie des images d'ambiance IA de la dernière version : chaque
   // génération S'AJOUTE (rien n'est écrasé) ; `retenue` = celle des documents.
+  type CouleurPlanner = { code: string; nom: string; apercu: string | null; variant_id: string; sku: string | null; prix: number | null; url: string | null; peinture: Peinture[] };
   type Ambiance = { id: string; url: string; prompt: string | null; modele: string | null; cree_le: string; numero?: number | null };
   const [ambiance, setAmbiance] = useState<{ numero: number; token: string; retenue: string | null; liste: Ambiance[] } | null>(null);
   const [ambianceEnCours, setAmbianceEnCours] = useState(false);
@@ -148,7 +149,7 @@ export default function PlannerPage() {
       const j = await r.json();
       if (j.error) throw new Error(j.error);
       const items: SceneItem[] = [];
-      const lignes = (j.lignes as Array<{ has_3d: boolean; qty: number; url: string | null; source: "model3d" | "url" | null; title: string; titre: string | null; marque: string | null; image: string | null; prix: number | null; prix_exact: boolean; sku: string | null; variant_id: string | null; size_warn: boolean; color_warn: boolean; product_id: number | null }>).filter((l) => l.has_3d && l.url);
+      const lignes = (j.lignes as Array<{ has_3d: boolean; qty: number; url: string | null; source: "model3d" | "url" | null; title: string; titre: string | null; marque: string | null; image: string | null; prix: number | null; prix_exact: boolean; sku: string | null; variant_id: string | null; size_warn: boolean; color_warn: boolean; product_id: number | null; peinture?: Peinture[] }>).filter((l) => l.has_3d && l.url);
       // Dépôt en grille sous la terrasse (même logique que caseLibre, sans état)
       const largeur = SCENE_VIDE.terrasse.largeur, profondeur = SCENE_VIDE.terrasse.profondeur;
       const nCol = Math.max(1, Math.floor(largeur / 1));
@@ -163,6 +164,9 @@ export default function PlannerPage() {
             url: l.url!, source: l.source || "url", x: +x.toFixed(2), z: +z.toFixed(2), rot: 0,
             size_warn: l.size_warn, color_warn: l.color_warn, image_url: l.image, prix: l.prix, prix_exact: l.prix_exact,
             sku: l.sku, variant_id: l.variant_id,
+            // Couleurs appliquées (Fermob) : la variante de la ligne donne déjà
+            // la bonne teinte — le plan né d'une offre est juste d'emblée.
+            peinture: l.peinture && l.peinture.length ? l.peinture : undefined,
           });
         }
       }
@@ -232,7 +236,7 @@ export default function PlannerPage() {
       titre: choix?.label && choix.variant_id ? `${c.titre} — ${choix.label}` : c.titre,
       marque: c.marque,
       url,
-      source: choix?.variant_id ? "url" : (c.source || "url"),
+      source: c.source === "zones" ? "zones" : choix?.variant_id ? "url" : (c.source || "url"),
       x: pos.x,
       z: pos.z,
       rot: 0,
@@ -250,6 +254,36 @@ export default function PlannerPage() {
     if (fix) nouveau.rot_fix = fix;
     patch({ items: [...scene.items, nouveau] });
     setSelected(nouveau.uid);
+    // Fiche à couleurs appliquées : on pose la 1re couleur de la fiche, le
+    // conseiller la change ensuite dans la barre de l'article sélectionné.
+    if (c.source === "zones") void chargerCouleurs(c.product_id).then((cs) => { if (cs[0]) appliquerCouleur(nouveau.uid, cs[0]); });
+  }
+
+  // ─── Couleurs d'une fiche à zones (Fermob) ──────────────────────────────
+  // Liste servie par /api/planner/couleurs : code, nom, pastille, fichier et
+  // consignes de peinture prêtes pour three.js. Gardée en mémoire par fiche.
+  const [couleurs, setCouleurs] = useState<Record<number, CouleurPlanner[]>>({});
+  async function chargerCouleurs(productId: number): Promise<CouleurPlanner[]> {
+    if (couleurs[productId]) return couleurs[productId];
+    try {
+      const r = await fetch(`/api/planner/couleurs?product_id=${productId}`);
+      const j = await r.json();
+      const cs = (j.couleurs || []) as CouleurPlanner[];
+      setCouleurs((m) => ({ ...m, [productId]: cs }));
+      return cs;
+    } catch { return []; }
+  }
+  function appliquerCouleur(itemUid: string, c: CouleurPlanner) {
+    patchItem(itemUid, {
+      url: c.url || undefined,
+      peinture: c.peinture,
+      couleur_code: c.code,
+      couleur_nom: c.nom,
+      color_warn: false,
+      variant_id: c.variant_id || null,
+      sku: c.sku ?? null,
+      ...(c.prix != null ? { prix: c.prix, prix_exact: true } : {}),
+    });
   }
 
   function supprimer(u: string) {
@@ -996,6 +1030,24 @@ export default function PlannerPage() {
           {item && (
             <div className="absolute left-3 top-3 flex items-center gap-1 rounded-xl border border-white/10 bg-[#1f2125]/90 p-1.5 shadow-lg backdrop-blur">
               <span className="max-w-[260px] truncate px-2 text-xs text-zinc-200" title={item.titre}>{item.titre}</span>
+              {/* Couleur de la variante (fiches à zones, Fermob) */}
+              {(item.source === "zones" || (item.peinture?.length ?? 0) > 0) && (
+                <select
+                  className="rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-xs text-zinc-100 outline-none"
+                  value={item.couleur_code || ""}
+                  onFocus={() => void chargerCouleurs(item.product_id)}
+                  onChange={(e) => {
+                    const c = (couleurs[item.product_id] || []).find((x) => x.code === e.target.value);
+                    if (c) appliquerCouleur(item.uid, c);
+                  }}
+                  title="Couleur du meuble : appliquée au modèle 3D, et donc aussi sur la fiche, le PDF et l'image d'ambiance"
+                >
+                  {!item.couleur_code && <option value="">Couleur…</option>}
+                  {(couleurs[item.product_id] || (item.couleur_code ? [{ code: item.couleur_code, nom: item.couleur_nom || item.couleur_code }] : [])).map((c) => (
+                    <option key={c.code} value={c.code}>{c.nom} {c.code}</option>
+                  ))}
+                </select>
+              )}
               <button type="button" onClick={() => tourner(item.uid, -15)} className={BTN_OFF} title="Tourner −15° (Maj+R)">⟲</button>
               <button type="button" onClick={() => tourner(item.uid, 15)} className={BTN_OFF} title="Tourner +15° (R)">⟳</button>
               <button type="button" onClick={() => tourner(item.uid, 90)} className={BTN_OFF} title="Tourner de 90°">90°</button>

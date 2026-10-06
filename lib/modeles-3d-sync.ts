@@ -21,6 +21,7 @@
 import { createHash } from "crypto";
 import { shopifyAdminGraphQL } from "@/lib/shopify-stock";
 import { supabaseAdmin } from "@/lib/supabase";
+import { fichierZones, type Palette, type VarianteZones, type ZonesConfig } from "@/lib/modeles-3d-zones";
 
 // ─── Requête bulk ─────────────────────────────────────────────────────────────
 // Pas de `first` sur les connexions : en bulk, Shopify renvoie tout.
@@ -43,6 +44,7 @@ const BULK_QUERY = `
         featuredMedia { preview { image { url } } }
         options { name optionValues { name } }
         m3d: metafield(namespace: "custom", key: "model_3d_url") { value }
+        zones: metafield(namespace: "custom", key: "model_3d_zones") { value }
         glb: metafield(namespace: "custom", key: "model_3d_glb") {
           value
           reference {
@@ -61,6 +63,7 @@ const BULK_QUERY = `
               id sku title price
               selectedOptions { name value }
               m3d: metafield(namespace: "custom", key: "model_3d_url") { value }
+              zones: metafield(namespace: "custom", key: "model_3d_zones") { value }
             }
           }
         }
@@ -86,6 +89,8 @@ export type StatsImport = {
   avec_3d: number;
   model3d: number;
   url: number;
+  zones: number;            // fiches à couleurs appliquées (custom.model_3d_zones)
+  palette_codes: number;    // codes copiés depuis le métachamp boutique palette_3d
   par_variante: number;
   anomalies: number;
   supprimes: number;
@@ -201,6 +206,12 @@ function nomFichierDepuisUrl(url: string): string {
   }
 }
 
+// Un métachamp json mal formé ne doit pas faire tomber la synchro entière.
+function lireJson<T>(valeur: string | null | undefined): T | null {
+  if (!valeur) return null;
+  try { return JSON.parse(valeur) as T; } catch { return null; }
+}
+
 type LigneProduit = {
   id: string;
   title: string;
@@ -213,6 +224,7 @@ type LigneProduit = {
   featuredMedia: { preview: { image: { url: string } | null } | null } | null;
   options: { name: string; optionValues: { name: string }[] }[];
   m3d: { value: string } | null;
+  zones: { value: string } | null;
   glb: {
     value: string;
     reference: {
@@ -229,6 +241,7 @@ type LigneVariante = {
   id: string; sku: string | null; title: string | null; price: string | null;
   selectedOptions?: { name: string; value: string }[];
   m3d?: { value: string } | null;
+  zones?: { value: string } | null;
   __parentId: string;
 };
 
@@ -274,7 +287,9 @@ export type RowModele3d = {
   model_level: "fiche" | "variante";
   variantes_3d: Variante3d[];
   variantes_3d_n: number;
-  source: "model3d" | "url" | null;
+  zones: ZonesConfig | null;
+  zones_variantes: VarianteZones[];
+  source: "model3d" | "url" | "zones" | null;
   url_glb: string | null;
   url_usdz: string | null;
   gid_model3d: string | null;
@@ -308,6 +323,21 @@ function construireRow(p: LigneProduit, variantes: LigneVariante[], maintenant: 
     .update(options.map((o) => `${o.name}=${[...o.values].sort().join("|")}`).sort().join("\n"))
     .digest("hex");
 
+  // Couleurs à l'affichage (Fermob, 04.10.2026) : si la fiche a
+  // custom.model_3d_zones, c'est LUI qui fait foi — l'ancien Model3d d'une
+  // fiche Fermob n'a qu'une couleur, parfois une géométrie fausse.
+  const zonesConfig = lireJson<ZonesConfig>(p.zones?.value);
+  const zonesVariantes: VarianteZones[] = zonesConfig
+    ? variantes.map((v) => ({
+        variant_id: v.id,
+        sku: v.sku?.trim() || null,
+        titre: v.title || null,
+        options: Object.fromEntries((v.selectedOptions || []).map((o) => [o.name, o.value])),
+        prix: v.price && Number.isFinite(Number(v.price)) ? Number(v.price) : null,
+        zones: lireJson<Record<string, string>>(v.zones?.value),
+      }))
+    : [];
+
   // Modèle 3D : Model3d (métachamp file_reference) prioritaire, sinon URL .bin.
   let source: RowModele3d["source"] = null;
   let urlGlb: string | null = null, urlUsdz: string | null = null, gid: string | null = null, nomFichier: string | null = null, taille: number | null = null;
@@ -325,6 +355,20 @@ function construireRow(p: LigneProduit, variantes: LigneVariante[], maintenant: 
     source = "url";
     urlGlb = p.m3d.value;
     nomFichier = nomFichierDepuisUrl(p.m3d.value);
+  }
+  // Les zones passent devant tout le reste : url_glb = la forme (ou le premier
+  // fichier d'un jeu « un fichier par couleur »), pour que les consommateurs
+  // qui ne connaissent que url_glb aient quand même un fichier à charger.
+  if (zonesConfig) {
+    const forme = fichierZones(zonesConfig) || Object.values(zonesConfig.formes?.par_code || {})[0] || null;
+    if (forme) {
+      source = "zones";
+      urlGlb = forme;
+      urlUsdz = null;
+      gid = null;
+      nomFichier = nomFichierDepuisUrl(forme);
+      taille = null;
+    }
   }
 
   // Cascade (thème et planner) : variante → Model3d fiche → URL fiche.
@@ -383,6 +427,8 @@ function construireRow(p: LigneProduit, variantes: LigneVariante[], maintenant: 
     model_level: variantes3d.length > 0 ? "variante" : "fiche",
     variantes_3d: variantes3d,
     variantes_3d_n: variantes3d.length,
+    zones: zonesConfig,
+    zones_variantes: zonesVariantes,
     source,
     url_glb: urlGlb,
     url_usdz: urlUsdz,
@@ -397,6 +443,32 @@ function construireRow(p: LigneProduit, variantes: LigneVariante[], maintenant: 
 }
 
 // ─── Import du JSONL ──────────────────────────────────────────────────────────
+
+/**
+ * Palette des couleurs 3D : métachamp BOUTIQUE custom.palette_3d, recopié dans
+ * modeles_3d_palette à chaque synchro (Shopify reste la source). Renvoie le
+ * nombre de codes copiés — 0 si le métachamp est absent ou illisible, sans
+ * faire échouer la synchro.
+ */
+export async function synchroniserPalette(): Promise<number> {
+  try {
+    const d = await shopifyAdminGraphQL<{ shop: { metafield: { value: string } | null } }>(
+      `{ shop { metafield(namespace: "custom", key: "palette_3d") { value } } }`,
+    );
+    const data = lireJson<Palette>(d.shop?.metafield?.value);
+    if (!data) return 0;
+    const { error } = await supabaseAdmin
+      .from("modeles_3d_palette")
+      .upsert({ id: 1, data, synced_at: new Date().toISOString() }, { onConflict: "id" });
+    if (error) throw new Error(error.message);
+    let n = 0;
+    for (const sous of Object.values(data)) for (const codes of Object.values(sous || {})) n += Object.keys(codes || {}).length;
+    return n;
+  } catch (e) {
+    console.warn("[modeles-3d] palette_3d :", (e as Error).message);
+    return 0;
+  }
+}
 
 type Existant = {
   product_id: number;
@@ -496,11 +568,15 @@ export async function importerDepuisUrl(url: string): Promise<StatsImport> {
     .lt("synced_at", maintenant);
   if (errDel) throw new Error(`modeles_3d (ménage) : ${errDel.message}`);
 
+  const palette = await synchroniserPalette();
+
   const stats: StatsImport = {
     produits: rows.length,
     avec_3d: rows.filter((r) => r.source).length,
     model3d: rows.filter((r) => r.source === "model3d").length,
     url: rows.filter((r) => r.source === "url").length,
+    zones: rows.filter((r) => r.source === "zones").length,
+    palette_codes: palette,
     par_variante: rows.filter((r) => r.variantes_3d_n > 0).length,
     anomalies: rows.filter((r) => r.anomalies.length > 0).length,
     supprimes: supprimes || 0,
