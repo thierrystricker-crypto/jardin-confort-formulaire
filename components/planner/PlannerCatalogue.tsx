@@ -8,14 +8,15 @@
 // manque. Source : table modeles_3d via /api/planner/catalogue.
 
 import React, { useEffect, useRef, useState } from "react";
-import { MURS, choixModeles, estVegetal, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
+import { ARBRES, MURS, choixModeles, estVegetal, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
 
 type Marque = { marque: string; avec_3d: number };
 type Collection = { collection: string; avec_3d: number; total: number };
 
-export default function PlannerCatalogue({ onAjouter, onAjouterMur }: {
+export default function PlannerCatalogue({ onAjouter, onAjouterMur, onAjouterArbre }: {
   onAjouter: (item: CatalogueItem, choix?: ChoixModele) => void;
   onAjouterMur?: (modele: (typeof MURS)[number]) => void;
+  onAjouterArbre?: (modele: (typeof ARBRES)[number]) => void;
 }) {
   // Fiche dont on est en train de choisir la taille (3D par variante)
   const [choixPour, setChoixPour] = useState<number | null>(null);
@@ -106,6 +107,17 @@ export default function PlannerCatalogue({ onAjouter, onAjouterMur }: {
               title={`${m.nom} ${m.sous_titre} — étirable à la longueur voulue avec les poignées bleues`}
             >
               {estVegetal(m.mur.texture) ? "🌿" : "🧱"} {m.nom} <span className="text-zinc-500">{Math.round(m.mur.hauteur * 100)}</span>
+            </button>
+          ))}
+          {onAjouterArbre && ARBRES.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => onAjouterArbre(a)}
+              className="rounded-lg border border-white/10 bg-[#2a2d31] px-1.5 py-1 text-[11px] text-zinc-200 transition hover:border-sky-500/40 hover:bg-sky-500/15"
+              title={`${a.nom} — ${a.sous_titre} ; la hauteur se règle ensuite au centimètre`}
+            >
+              🌳 <span className="text-zinc-500">{a.arbre.hauteur.toFixed(1).replace(".0", "").replace(".", ",")} m</span>
             </button>
           ))}
         </div>

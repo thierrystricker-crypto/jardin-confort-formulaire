@@ -144,11 +144,37 @@ export const MURS: { id: string; nom: string; sous_titre: string; mur: MurConfig
   { id: "haie",       nom: "Haie",       sous_titre: "100 × 45 × H 180 cm", mur: { type: "mur", longueur: 1, hauteur: 1.8, epaisseur: 0.45, texture: "thuya" } },
 ];
 
+// ─── Décors : arbres ──────────────────────────────────────────────────────────
+// Un seul fichier (chêne simplifié, CC0 Innerscene, meshopt 276 ko) mis à
+// l'échelle : les quatre hauteurs du catalogue sont la même géométrie, le
+// planner se contente de la redimensionner — et toute hauteur intermédiaire
+// reste possible (07.10.2026).
+
+export const ARBRE_FICHIER = "/decors/arbre-chene.glb";
+
+export type ArbreConfig = {
+  espece: string;      // « chêne » — sert aussi au prompt de l'image IA
+  hauteur: number;     // m, de la base du tronc au sommet du feuillage
+};
+
+export const ARBRES: { id: string; nom: string; sous_titre: string; arbre: ArbreConfig }[] = [
+  { id: "arbre-2",   nom: "Arbre", sous_titre: "chêne, 2 m",   arbre: { espece: "chêne", hauteur: 2 } },
+  { id: "arbre-3",   nom: "Arbre", sous_titre: "chêne, 3 m",   arbre: { espece: "chêne", hauteur: 3 } },
+  { id: "arbre-45",  nom: "Arbre", sous_titre: "chêne, 4,5 m", arbre: { espece: "chêne", hauteur: 4.5 } },
+  { id: "arbre-6",   nom: "Arbre", sous_titre: "chêne, 6 m",   arbre: { espece: "chêne", hauteur: 6 } },
+];
+
+/** Un décor (mur, haie, arbre) n'est jamais un article à vendre. */
+export function estDecor(it: SceneItem): boolean {
+  return Boolean(it.mur || it.arbre);
+}
+
 // Phrase pour le prompt de l'image d'ambiance : l'IA doit rendre un vrai mur,
 // pas un meuble. Sans décor, chaîne vide.
 export function decrireMurs(items: SceneItem[]): string {
   const murs = items.filter((i) => i.mur);
-  if (!murs.length) return "";
+  const arbres = items.filter((i) => i.arbre);
+  if (!murs.length && !arbres.length) return "";
   const m = (v: number) => v.toFixed(2).replace(".", ",");
   const parts = murs.map((i) => {
     const d = i.mur!;
@@ -158,11 +184,26 @@ export function decrireMurs(items: SceneItem[]): string {
     const quoi = d.hauteur <= 1.2 ? "muret" : "mur";
     return `un ${quoi} en ${(t?.nom || "crépi").toLowerCase()} ${dims}`;
   });
-  const vegetal = murs.some((i) => estVegetal(i.mur!.texture));
+  // Les arbres : regroupés par essence et hauteur, l'IA a juste besoin de
+  // savoir quoi mettre à cet endroit et à quelle taille.
+  const parEspece = new Map<string, number>();
+  for (const i of arbres) {
+    const cle = `${i.arbre!.espece}|${m(i.arbre!.hauteur)}`;
+    parEspece.set(cle, (parEspece.get(cle) || 0) + 1);
+  }
+  for (const [cle, n] of parEspece) {
+    const [espece, haut] = cle.split("|");
+    parts.push(`${n > 1 ? `${n} ` : "un "}${espece}${n > 1 ? "s" : ""} de ${haut} m de haut`);
+  }
+  const vegetal = arbres.length || murs.some((i) => estVegetal(i.mur!.texture));
   const nature = vegetal
-    ? "ce sont des éléments du jardin — haies taillées et maçonnerie"
+    ? "ce sont des éléments du jardin — arbres, haies taillées et maçonnerie"
     : "ce sont des éléments de maçonnerie du jardin";
-  return `La scène comporte ${parts.join(", ")} : ${nature}, à rendre comme tels, jamais comme du mobilier.`;
+  // Jamais de consigne fondée sur la COULEUR (« les volumes verts sont de la
+  // végétation ») : un canapé vert cactus ou un parasol vert se ferait
+  // transformer en buisson. On désigne les décors par leur nombre et leurs
+  // cotes, et on rappelle la règle inverse.
+  return `La scène comporte, en plus des meubles, ${parts.join(", ")} : ${nature}, à rendre comme tels et à la même place. À l'inverse, tout produit de couleur verte reste un meuble : ne jamais transformer un meuble en végétation ni en maçonnerie, quelle que soit sa couleur.`;
 }
 
 export type SceneItem = {
@@ -172,8 +213,10 @@ export type SceneItem = {
   marque: string | null;
   url: string;              // URL du GLB (Model3d ou .bin) — vide pour un décor
   source: "model3d" | "url" | "zones" | "decor";
-  // Décor paramétrique (mur, muret) : pas de fichier 3D, une boîte étirable.
+  // Décor paramétrique (mur, muret, haie) : pas de fichier 3D, une boîte étirable.
   mur?: MurConfig;
+  // Décor arbre : un fichier commun, mis à l'échelle de la hauteur voulue.
+  arbre?: ArbreConfig;
   // Consignes de peinture (fiche à zones) : matières à repeindre, couleurs
   // linéaires, textures. Appliquées au chargement et avant toute capture.
   peinture?: import("@/lib/modeles-3d-zones").Peinture[];

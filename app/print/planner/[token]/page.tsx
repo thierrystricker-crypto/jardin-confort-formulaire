@@ -10,7 +10,7 @@
 
 import React from "react";
 import { supabaseAdmin } from "@/lib/supabase";
-import { MENTION_IA, MENTION_LEGALE, type SceneItem } from "@/lib/planner-types";
+import { MENTION_IA, MENTION_LEGALE, type SceneItem, estDecor } from "@/lib/planner-types";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +52,7 @@ export default async function PagePrintPlanner({ params, searchParams }: { param
 
   // Les décors (murs, murets) sont des éléments de mise en scène : ils
   // apparaissent sur l'image, jamais dans la liste des articles.
-  const items = ((v.items as ItemVersion[]) || []).filter((it) => !it.mur);
+  const items = ((v.items as ItemVersion[]) || []).filter((it) => !estDecor(it));
   // Une ligne par fiche et variante, avec quantité
   const groupes = new Map<string, { it: ItemVersion; qty: number }>();
   for (const it of items) {

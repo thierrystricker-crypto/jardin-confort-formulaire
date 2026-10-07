@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
-import { MENTION_IA, MENTION_LEGALE, MUR_TEXTURES, MURS, SCENE_VIDE, SOLS, estVegetal, nomMur, uid, type AxeCouleur, type CameraScene, type CatalogueItem, type ChoixModele, type MurConfig, type Peinture, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
+import { ARBRES, MENTION_IA, MENTION_LEGALE, MUR_TEXTURES, MURS, SCENE_VIDE, SOLS, estDecor, estVegetal, nomMur, uid, type AxeCouleur, type CameraScene, type CatalogueItem, type ChoixModele, type MurConfig, type Peinture, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
 import { DECORS, MOMENTS, composerDescription, filtrerDecor } from "@/lib/planner-ambiance-cadre";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
@@ -288,6 +288,32 @@ export default function PlannerPage() {
     setSelected(nouveau.uid);
   }
 
+  function nomArbre(a: { espece: string; hauteur: number }): string {
+    const h = a.hauteur.toFixed(2).replace(/[.,]?0+$/, "").replace(".", ",");
+    return `${a.espece.charAt(0).toUpperCase()}${a.espece.slice(1)} ${h} m`;
+  }
+
+  function ajouterArbre(modele: (typeof ARBRES)[number]) {
+    const pos = caseLibre();
+    const nouveau: SceneItem = {
+      uid: uid(), product_id: 0,
+      titre: nomArbre(modele.arbre),
+      marque: null, url: "", source: "decor",
+      arbre: { ...modele.arbre },
+      x: pos.x, z: pos.z, rot: 0,
+      size_warn: false, color_warn: false, image_url: null, prix: null,
+    };
+    patch({ items: [...scene.items, nouveau] });
+    setSelected(nouveau.uid);
+  }
+
+  function patchArbre(u: string, hauteur: number) {
+    const it = scene.items.find((i) => i.uid === u);
+    if (!it?.arbre) return;
+    const a = { ...it.arbre, hauteur };
+    patchItem(u, { arbre: a, titre: nomArbre(a) });
+  }
+
   function patchMur(u: string, p: Partial<MurConfig>) {
     const it = scene.items.find((i) => i.uid === u);
     if (!it?.mur) return;
@@ -379,7 +405,7 @@ export default function PlannerPage() {
   function regrouper(items: SceneItem[]): Map<string, { it: SceneItem; qty: number }> {
     const m = new Map<string, { it: SceneItem; qty: number }>();
     for (const it of items) {
-      if (it.mur) continue;            // un mur n'est pas un article à commander
+      if (estDecor(it)) continue;      // un décor n'est pas un article à commander
       const cle = `${it.product_id}|${it.variant_id || ""}`;
       const e = m.get(cle);
       if (e) e.qty++; else m.set(cle, { it, qty: 1 });
@@ -905,7 +931,7 @@ export default function PlannerPage() {
   }
 
   void histoN; // force le rendu des boutons annuler/rétablir
-  const articles = useMemo(() => scene.items.filter((i) => !i.mur), [scene.items]);
+  const articles = useMemo(() => scene.items.filter((i) => !estDecor(i)), [scene.items]);
   const nbMurs = scene.items.length - articles.length;
   const total = articles.reduce((n, i) => n + (i.prix || 0), 0);
   const totalApprox = articles.some((i) => i.prix != null && !i.prix_exact);
@@ -1083,7 +1109,7 @@ export default function PlannerPage() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <PlannerCatalogue onAjouter={ajouter} onAjouterMur={ajouterMur} />
+        <PlannerCatalogue onAjouter={ajouter} onAjouterMur={ajouterMur} onAjouterArbre={ajouterArbre} />
 
         <div className="relative min-w-0 flex-1">
           <PlannerCanvas
@@ -1113,6 +1139,22 @@ export default function PlannerPage() {
           {item && (
             <div className="absolute left-3 top-3 flex items-center gap-1 rounded-xl border border-white/10 bg-[#1f2125]/90 p-1.5 shadow-lg backdrop-blur">
               <span className="max-w-[260px] truncate px-2 text-xs text-zinc-200" title={item.titre}>{item.titre}</span>
+              {/* Hauteur de l'arbre sélectionné */}
+              {item.arbre && (
+                <label className="flex items-center gap-1 rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-[11px] text-zinc-300" title="Hauteur de l'arbre, du sol au sommet du feuillage">
+                  haut.
+                  <input
+                    type="number" min={100} max={1200} step={25}
+                    value={Math.round(item.arbre.hauteur * 100)}
+                    onChange={(e) => {
+                      const v = Number(e.target.value) / 100;
+                      if (v >= 1 && v <= 12) patchArbre(item.uid, +v.toFixed(2));
+                    }}
+                    className="w-16 rounded bg-[#1f2125] px-1 py-0.5 text-right text-zinc-100 outline-none"
+                  />
+                  cm
+                </label>
+              )}
               {/* Cotes et matière du mur sélectionné (le plus simple reste
                   d'étirer les poignées bleues sur le plan). */}
               {item.mur && (
@@ -1154,7 +1196,7 @@ export default function PlannerPage() {
               {/* Couleurs de la variante (fiches à zones, Fermob) : UN MENU PAR
                   AXE — les canapés Bellevie et Rivage ont une couleur de
                   structure ET une couleur de tissu / coussin (07.10.2026). */}
-              {!item.mur && (item.source === "zones" || (item.peinture?.length ?? 0) > 0) && (() => {
+              {!estDecor(item) && (item.source === "zones" || (item.peinture?.length ?? 0) > 0) && (() => {
                 const f = couleurs[item.product_id];
                 const axes = f?.axes?.length
                   ? f.axes
@@ -1237,7 +1279,7 @@ export default function PlannerPage() {
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-xs">
             <span className="uppercase tracking-wide text-zinc-500">
               Articles posés · {articles.length}
-              {nbMurs > 0 && <span className="ml-1 normal-case text-zinc-600">+ {nbMurs} mur{nbMurs > 1 ? "s" : ""}</span>}
+              {nbMurs > 0 && <span className="ml-1 normal-case text-zinc-600">+ {nbMurs} décor{nbMurs > 1 ? "s" : ""}</span>}
             </span>
             {total > 0 && <span className="text-zinc-300" title={totalApprox ? "« dès » : au moins un article au prix le plus bas de sa fiche" : "Prix des variantes posées"}>{totalApprox ? "dès " : ""}{chf(total)}</span>}
           </div>
@@ -1253,13 +1295,15 @@ export default function PlannerPage() {
                   className={`flex w-full items-start gap-2 border-b border-white/5 px-3 py-2 text-left text-xs transition hover:bg-white/5 ${selected === i.uid ? "bg-sky-500/15" : ""}`}
                 >
                   <span className="mt-0.5 w-4 shrink-0 text-zinc-500">{idx + 1}</span>
-                  {i.mur
-                    ? <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-white/5 text-sm text-zinc-400" title="Décor">{estVegetal(i.mur.texture) ? "🌿" : "🧱"}</div>
+                  {estDecor(i)
+                    ? <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-white/5 text-sm text-zinc-400" title="Décor">{i.arbre ? "🌳" : i.mur && estVegetal(i.mur.texture) ? "🌿" : "🧱"}</div>
                     : i.image_url ? <img src={i.image_url} alt="" className="h-9 w-9 shrink-0 rounded bg-white object-contain" /> : <div className="h-9 w-9 shrink-0 rounded bg-white/5" />}
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 text-zinc-200">{i.titre}</span>
                     <span className="block text-[10px] text-zinc-500">
-                      {i.mur
+                      {i.arbre
+                        ? `Végétal · H ${i.arbre.hauteur.toFixed(2).replace(".", ",")} m`
+                        : i.mur
                         ? `${estVegetal(i.mur.texture) ? "Végétal" : "Décor"} · ${Math.round(i.mur.longueur * 100)}×${Math.round(i.mur.epaisseur * 100)}×H${Math.round(i.mur.hauteur * 100)} cm`
                         : `${i.marque || ""}${d ? ` · ${Math.round(d.l * 100)}×${Math.round(d.p * 100)}×H${Math.round(d.h * 100)} cm` : ""}`}{i.rot ? ` · ${i.rot}°` : ""}
                     </span>

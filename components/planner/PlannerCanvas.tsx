@@ -24,7 +24,7 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Grid, Html, OrbitControls, OrthographicCamera, PerspectiveCamera, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import { MUR_TEXTURES, SOLS, estVegetal, type MurTextureId, type Peinture, type SceneItem, type SolId, type Terrasse, type VueCamera } from "@/lib/planner-types";
+import { ARBRE_FICHIER, MUR_TEXTURES, SOLS, estVegetal, type MurTextureId, type Peinture, type SceneItem, type SolId, type Terrasse, type VueCamera } from "@/lib/planner-types";
 
 export type Dims = { l: number; p: number; h: number };
 
@@ -487,6 +487,69 @@ function Decor({ item, mode, selected, lectureSeule, onPointerDown, onEtirer }: 
 }
 
 
+// ─── Décor : arbre ────────────────────────────────────────────────────────────
+// Un seul fichier pour toutes les tailles : le modèle d'origine fait 3 m, on
+// le met simplement à l'échelle de la hauteur voulue. Chêne simplifié CC0.
+
+function Arbre({ item, mode, selected, onPointerDown }: {
+  item: SceneItem; mode: "couleurs" | "maquette"; selected: boolean;
+  onPointerDown: (e: ThreeEvent<PointerEvent>) => void;
+}) {
+  const a = item.arbre!;
+  const gltf = useGLTF(ARBRE_FICHIER, true, true);
+  const { objet, hauteurFichier } = useMemo(() => {
+    const clone = gltf.scene.clone(true);
+    clone.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) {
+        m.userData.materiauOrigine = m.material;
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
+    });
+    const b = new THREE.Box3().setFromObject(clone);
+    const t = new THREE.Vector3();
+    b.getSize(t);
+    const c = new THREE.Vector3();
+    b.getCenter(c);
+    clone.position.set(-c.x, -b.min.y, -c.z);     // pied au sol, centré
+    return { objet: clone, hauteurFichier: t.y || 3 };
+  }, [gltf]);
+
+  const k = a.hauteur / hauteurFichier;
+  const largeur = 0.9 * a.hauteur;                // l'arbre est ~0,9 × sa hauteur
+
+  useEffect(() => {
+    objet.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const origine = m.userData.materiauOrigine as THREE.Material | THREE.Material[];
+      m.material = mode === "maquette" ? CLAY : origine;
+    });
+  }, [objet, mode]);
+
+  return (
+    <group position={[item.x, 0, item.z]} rotation={[0, rotationY(item), 0]} onPointerDown={onPointerDown} userData={{ meuble: true }}>
+      <group scale={[k, k, k]}>
+        <primitive object={objet} />
+      </group>
+      {selected && (
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]}>
+            <circleGeometry args={[largeur / 2 + 0.05, 32]} />
+            <meshBasicMaterial color={0x38bdf8} transparent opacity={0.22} depthWrite={false} />
+          </mesh>
+          <Html position={[0, a.hauteur + 0.25, 0]} center style={{ pointerEvents: "none" }}>
+            <div className="whitespace-nowrap rounded bg-black/65 px-1.5 py-0.5 text-[11px] text-white">
+              {a.espece} · H {a.hauteur.toFixed(2).replace(".", ",")} m
+            </div>
+          </Html>
+        </>
+      )}
+    </group>
+  );
+}
+
 // Boîte rouge à la place d'un modèle qui ne charge pas (CORS, fichier absent…)
 function ModeleEnErreur({ item, onPointerDown }: { item: SceneItem; onPointerDown: (e: ThreeEvent<PointerEvent>) => void }) {
   return (
@@ -909,6 +972,15 @@ export default function PlannerCanvas(props: Props) {
           onDragStart();
           setDrag({ uid: item.uid, dx: e.point.x - item.x, dz: e.point.z - item.z });
         };
+        if (item.arbre) {
+          return (
+            <Garde key={item.uid} onError={(m) => onError(item.uid, m)} fallback={<ModeleEnErreur item={item} onPointerDown={debut} />}>
+              <Suspense fallback={null}>
+                <Arbre item={item} mode={mode} selected={item.uid === selectedUid} onPointerDown={debut} />
+              </Suspense>
+            </Garde>
+          );
+        }
         if (item.mur) {
           return (
             <Decor

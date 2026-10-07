@@ -27,7 +27,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { PNG } from "pngjs";
 import { supabaseAdmin } from "@/lib/supabase";
 import { BUCKET, figerVersion, urlPublique } from "@/lib/planner-versions";
-import { MENTION_IA, decrireMurs, type SceneItem } from "@/lib/planner-types";
+import { MENTION_IA, decrireMurs, estDecor, type SceneItem } from "@/lib/planner-types";
 import { listerScene } from "@/lib/planner-ambiances";
 import { filtrerDecor } from "@/lib/planner-ambiance-cadre";
 import { textureDedon } from "@/lib/textures-dedon";
@@ -199,7 +199,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const tous = (Array.isArray(vv?.items) ? vv!.items : []) as SceneItem[];
   // Les murs du planner ne sont pas des meubles : ils sortent du comptage
   // (sinon l'IA cherche un article de plus) et sont décrits à part.
-  const items = tous.filter((it) => !it.mur) as unknown as { titre?: string; marque?: string | null; sku?: string | null; variant_id?: string | null; image_url?: string | null }[];
+  const items = tous.filter((it) => !estDecor(it)) as unknown as { titre?: string; marque?: string | null; sku?: string | null; variant_id?: string | null; image_url?: string | null }[];
   const nbArticles = items.length;
   const phraseMurs = decrireMurs(tous);
   const blocMurs = phraseMurs
