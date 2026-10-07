@@ -879,7 +879,7 @@ export default function PlannerCanvas(props: Props) {
           const et = etireRef.current;
           if (et) {
             const it = itemsRef.current.find((i) => i.uid === et.uid);
-            if (!it?.decor || !onResize) return;
+            if (!it?.mur || !onResize) return;
             const th = rotationY(it);
             const ax = Math.cos(th), az = -Math.sin(th);
             const L = it.mur.longueur;
