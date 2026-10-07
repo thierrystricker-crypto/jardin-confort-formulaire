@@ -9,6 +9,7 @@ import { isStockCritical } from "@/lib/jc-print-types";
 import { manqueNumero, adresseLivraisonEffective } from "@/lib/adresse-utils";
 import { badgeStockPicker } from "@/lib/badge-stock-picker";
 import ShopifyPickerEtendu from "@/components/ShopifyPickerEtendu";
+import { cleModeService, cleValeurService, type ModeService } from "@/lib/service-affichage";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
@@ -810,6 +811,60 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
     if (borne !== line.qty) updateLine(line.id, { qty: borne });
   }
 
+  // Services « Offert » / « Inclus » (07.10.2026, lib/service-affichage.ts).
+  // Le prix du service passe a "0" : les totaux, partout, n'ont rien a savoir.
+  // Offert : le champ prix devient la VALEUR du cadeau (affichee « (119.-) Offert »,
+  // jamais additionnee). Inclus : pas de montant. Recliquer le meme bouton
+  // revient au mode normal et restaure le prix d'avant.
+  function modeServiceForm(code: string): ModeService | null {
+    const m = servicePrices[cleModeService(code)];
+    return m === "offert" || m === "inclus" ? m : null;
+  }
+  function basculerModeService(code: string, mode: ModeService) {
+    const actuel = modeServiceForm(code);
+    const kMode = cleModeService(code), kVal = cleValeurService(code);
+    setServicePrices((c) => {
+      const n = { ...c };
+      if (actuel === mode) {
+        n[code] = c[kVal] || "";
+        delete n[kMode]; delete n[kVal];
+      } else {
+        if (!actuel) n[kVal] = Number(c[code]) > 0 ? c[code] : (c[kVal] || "");
+        n[kMode] = mode;
+        n[code] = "0";
+      }
+      return n;
+    });
+    if (actuel !== mode) setEnabledServices((c) => ({ ...c, [code]: true }));
+  }
+  function renderModeService(code: string) {
+    const mode = modeServiceForm(code);
+    return (
+      <span className="jc-svc-modes">
+        <button type="button" className={`jc-svc-mode${mode === "offert" ? " jc-svc-mode-on" : ""}`}
+          aria-pressed={mode === "offert"}
+          title="Offert : le client voit la valeur entre parentheses, rien n'est facture"
+          onClick={() => basculerModeService(code, "offert")}>Offert</button>
+        <button type="button" className={`jc-svc-mode${mode === "inclus" ? " jc-svc-mode-on" : ""}`}
+          aria-pressed={mode === "inclus"}
+          title="Inclus : compris dans le prix d'un article, aucun montant"
+          onClick={() => basculerModeService(code, "inclus")}>Inclus</button>
+      </span>
+    );
+  }
+  // Valeur affichee / ecrite par le champ prix selon le mode.
+  function prixServiceAffiche(code: string): string {
+    const mode = modeServiceForm(code);
+    if (mode === "inclus") return "";
+    if (mode === "offert") return servicePrices[cleValeurService(code)] ?? "";
+    return servicePrices[code] ?? "";
+  }
+  function ecrirePrixService(code: string, v: string) {
+    const mode = modeServiceForm(code);
+    if (mode === "inclus") return;
+    setServicePrices((c) => mode === "offert" ? { ...c, [cleValeurService(code)]: v } : { ...c, [code]: v });
+  }
+
   function updateLine(id: string, patch: Partial<QuoteLine>) {
     setLines((c) => c.map((l) => {
       if (l.id !== id) return l;
@@ -912,6 +967,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   const servicePersoSansPrix =
     !!enabledServices["custom"] &&
     (servicePrices["custom_label"] || "").trim() !== "" &&
+    !servicePrices[cleModeService("custom")] &&
     (servicePrices["custom"] ?? "").toString().trim() === "";
 
   function confirmerServicePerso(): boolean {
@@ -2944,15 +3000,16 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                     <span>{srv.label}</span>
                   </label>
                   <div className="jc-service-price-wrap" onClick={(e) => e.stopPropagation()}>
-                    <span className="jc-muted-sm">CHF</span>
+                    {renderModeService(srv.code)}
+                    <span className="jc-muted-sm">{modeServiceForm(srv.code) === "offert" ? "valeur" : "CHF"}</span>
                     <input
                       className="jc-service-price no-spin"
                       type="number"
                       step="1"
-                      placeholder="0"
-                      value={servicePrices[srv.code]}
-                      disabled={!enabledServices[srv.code]}
-                      onChange={(e) => setServicePrices((c) => ({ ...c, [srv.code]: e.target.value }))}
+                      placeholder={modeServiceForm(srv.code) === "inclus" ? "—" : "0"}
+                      value={prixServiceAffiche(srv.code)}
+                      disabled={!enabledServices[srv.code] || modeServiceForm(srv.code) === "inclus"}
+                      onChange={(e) => ecrirePrixService(srv.code, e.target.value)}
                       onFocus={(e) => e.currentTarget.select()}
                     />
                   </div>
@@ -2990,14 +3047,15 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                   />
                 </div>
                 <div className="jc-service-price-wrap">
-                  <span className="jc-muted-sm">CHF</span>
+                  {renderModeService("custom")}
+                  <span className="jc-muted-sm">{modeServiceForm("custom") === "offert" ? "valeur" : "CHF"}</span>
                   <input
                     ref={servicePersoPrixRef}
                     className={`jc-service-price no-spin${servicePersoSansPrix ? " jc-error" : ""}`}
-                    type="number" step="1" placeholder="0"
-                    value={servicePrices["custom"] ?? ""}
-                    disabled={!enabledServices["custom"]}
-                    onChange={(e) => setServicePrices((c) => ({ ...c, custom: e.target.value }))}
+                    type="number" step="1" placeholder={modeServiceForm("custom") === "inclus" ? "—" : "0"}
+                    value={prixServiceAffiche("custom")}
+                    disabled={!enabledServices["custom"] || modeServiceForm("custom") === "inclus"}
+                    onChange={(e) => ecrirePrixService("custom", e.target.value)}
                     onFocus={(e) => e.currentTarget.select()}
                     title={servicePersoSansPrix ? "Prix manquant — saisir un montant (0 accepté)" : undefined}
                   />
@@ -4133,6 +4191,13 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
         .jc-addr-item:hover { background: rgba(59,130,246,0.1); color: var(--accent); }
 
         /* ── SERVICE VIERGE ── */
+        .jc-svc-modes { display: inline-flex; gap: 4px; margin-right: 4px; }
+        .jc-svc-mode {
+          border: 1px solid var(--border-2); background: transparent; color: var(--text-dim);
+          border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; cursor: pointer;
+        }
+        .jc-svc-mode:hover { color: var(--text); border-color: var(--accent); }
+        .jc-svc-mode-on { background: #2C7E3F; border-color: #2C7E3F; color: #fff; }
         .jc-service-custom-row { border-style: dashed !important; cursor: default; align-items: start; }
         .jc-service-custom-main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
         .jc-service-custom-check { width: 15px !important; height: 15px; flex-shrink: 0; margin-top: 7px !important; cursor: pointer; }

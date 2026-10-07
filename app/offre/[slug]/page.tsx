@@ -3,6 +3,7 @@
 // Page UNIQUE : détails offre + signature + validation
 // Layout : colonne gauche sticky (résumé + boutons) | colonne droite (infos → articles → totaux → signature)
 
+import { infoService, texteMontantService } from "@/lib/service-affichage";
 import React, { useEffect, useRef, useState } from "react";
 
 const C = {
@@ -544,7 +545,13 @@ useEffect(() => {
   const discountValue = discountPct > 0 ? Math.round(subTotal * discountPct) / 100 : Number(d.discount || 0);
   const activeServices = Object.entries(d.enabledServices || {})
     .filter(([, v]) => v)
-    .map(([code]) => ({ code, label: serviceLabels[code] || code, amount: Number(d.servicePrices?.[code] || 0) }));
+    .map(([code]) => ({
+      code,
+      // Le service personnalise porte son libelle dans servicePrices (avant le 07.10.2026 la page affichait « custom »).
+      label: code === "custom" ? (d.servicePrices?.["custom_label"] || "Service personnalisé") : (serviceLabels[code] || code),
+      amount: Number(d.servicePrices?.[code] || 0),
+      ...infoService(d.servicePrices, code),
+    }));
   const serviceTotal = activeServices.reduce((s, srv) => s + srv.amount, 0);
   const roundingValue = Number(d.manualRounding || 0);
   const totalAfterAll = subTotal - discountValue + serviceTotal + roundingValue;
@@ -1107,7 +1114,7 @@ useEffect(() => {
                       {activeServices.map(srv => (
                         <div key={srv.code} style={{ display: "flex", justifyContent: "space-between", padding: "5px 24px 5px 36px", fontSize: 14, gap: 16, alignItems: "flex-start" }}>
                           <span style={{ color: C.grey, flex: 1, minWidth: 0 }}>↳ {srv.label}</span>
-                          <span style={{ flexShrink: 0, whiteSpace: "nowrap" }}>{srv.amount === 0 ? "Offert" : fmt(srv.amount)}</span>
+                          <span style={{ flexShrink: 0, whiteSpace: "nowrap" }}>{texteMontantService(srv, fmt)}</span>
                         </div>
                       ))}
                     </>

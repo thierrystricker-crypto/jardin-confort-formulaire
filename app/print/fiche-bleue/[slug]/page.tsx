@@ -13,6 +13,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from "react";
+import { infoService, texteMontantService } from "@/lib/service-affichage";
 import {
   PrintData, QuoteLine,
   serviceOptions, formatMoney, formatDate,
@@ -82,9 +83,9 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
   const activeServices = [
     ...serviceOptions
       .filter((s) => data.enabledServices[s.code])
-      .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code] || 0) })),
+      .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code] || 0), ...infoService(data.servicePrices, s.code) })),
     ...(data.enabledServices["custom"]
-      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices["custom"] || 0) }]
+      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices["custom"] || 0), ...infoService(data.servicePrices, "custom") }]
       : []),
   ];
 
@@ -744,7 +745,7 @@ export default function PrintFicheBleueSlug({ params }: { params: Promise<{ slug
                     {activeServices.map((srv, i) => (
                       <div key={i} className="fb-services-list-row">
                         <span>↳ {srv.label}</span>
-                        <span style={{fontWeight: 700}}>{srv.amount === 0 ? "Offert" : formatMoney(srv.amount)}</span>
+                        <span style={{fontWeight: 700}}>{texteMontantService(srv, formatMoney)}</span>
                       </div>
                     ))}
                   </div>

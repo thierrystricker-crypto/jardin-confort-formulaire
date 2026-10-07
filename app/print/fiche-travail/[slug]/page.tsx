@@ -8,6 +8,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState, useRef } from "react";
+import { infoService, texteMontantService } from "@/lib/service-affichage";
 
 const THEME  = "#2b8ad1";
 const BLACK  = "#000000";
@@ -349,9 +350,9 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
   const activeServices = [
     ...serviceOptions
       .filter((s) => data.enabledServices?.[s.code])
-      .map((s) => ({ label: s.label, amount: Number(data.servicePrices?.[s.code] || 0) })),
+      .map((s) => ({ label: s.label, amount: Number(data.servicePrices?.[s.code] || 0), ...infoService(data.servicePrices, s.code) })),
     ...(data.enabledServices?.["custom"]
-      ? [{ label: data.servicePrices?.["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices?.["custom"] || 0) }]
+      ? [{ label: data.servicePrices?.["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices?.["custom"] || 0), ...infoService(data.servicePrices, "custom") }]
       : []),
   ];
 
@@ -1509,7 +1510,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
                       <tr key={i}>
                         <td className="pt-sub">↳ {srv.label}</td>
                         <td className="pt-value" style={{fontSize:10.5}}>
-                          {srv.amount === 0 ? "Offert" : formatMoney(srv.amount)}
+                          {texteMontantService(srv, formatMoney)}
                         </td>
                       </tr>
                     ))}

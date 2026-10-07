@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState, useRef } from "react";
+import { infoService, texteMontantService } from "@/lib/service-affichage";
 import {
   PrintData, QuoteLine, AmbianceImage,
   serviceOptions, formatMoney, formatDate,
@@ -231,9 +232,9 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
   const activeServices = [
     ...serviceOptions
       .filter((s) => data.enabledServices[s.code])
-      .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code] || 0) })),
+      .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code] || 0), ...infoService(data.servicePrices, s.code) })),
     ...(data.enabledServices["custom"]
-      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices["custom"] || 0) }]
+      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices["custom"] || 0), ...infoService(data.servicePrices, "custom") }]
       : []),
   ];
 
@@ -1113,7 +1114,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                   <>
                     <tr><td className="ft-pt-label">Services</td><td className="ft-pt-value" style={{fontSize:11, fontStyle:"italic", color:"#888"}}>inclus</td></tr>
                     {activeServices.map((srv, i) => (
-                      <tr key={i}><td className="ft-pt-sub">↳ {srv.label}</td><td className="ft-pt-value" style={{fontSize:10.5}}>{srv.amount === 0 ? "Offert" : formatMoney(srv.amount)}</td></tr>
+                      <tr key={i}><td className="ft-pt-sub">↳ {srv.label}</td><td className="ft-pt-value" style={{fontSize:10.5}}>{texteMontantService(srv, formatMoney)}</td></tr>
                     ))}
                   </>
                 )}
@@ -1457,7 +1458,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                       <tr key={i}>
                         <td className="cc-pt-label cc-pt-sub">↳ {srv.label}</td>
                         <td className="cc-pt-value" style={{fontSize:11}}>
-                          {srv.amount === 0 ? "Offert" : formatMoney(srv.amount)}
+                          {texteMontantService(srv, formatMoney)}
                         </td>
                       </tr>
                     ))}
@@ -2111,7 +2112,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                       {activeServices.map((srv, i) => (
                         <div key={i} className="fb-services-list-row">
                           <span>↳ {srv.label}</span>
-                          <span style={{fontWeight: 700}}>{srv.amount === 0 ? "Offert" : formatMoney(srv.amount)}</span>
+                          <span style={{fontWeight: 700}}>{texteMontantService(srv, formatMoney)}</span>
                         </div>
                       ))}
                     </div>

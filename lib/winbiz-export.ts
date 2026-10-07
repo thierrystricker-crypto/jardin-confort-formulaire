@@ -29,6 +29,7 @@
 // le total recalculé, il n'y a PAS de fichier.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { infoService, montantCourt } from "@/lib/service-affichage";
 import { computeTotals, serviceOptions, type PrintData, type QuoteLine } from "./jc-print-types";
 
 // ── Gabarits de référence (fichier 54063 du 18.04.2026, VALIDÉ à l'import) ──
@@ -558,7 +559,12 @@ export function buildWinbizCsv(
   for (const s of services) {
     if (!d.enabledServices[s.code]) continue;
     const prixSvcCts = cts(Number(d.servicePrices[s.code] || 0));
-    const libelle = prixSvcCts === 0 ? `${s.label}: Offert` : s.label;
+    // Offert avec valeur / Inclus (07.10.2026, lib/service-affichage.ts) : le prix reste 0.
+    const info = infoService(d.servicePrices as Record<string, string>, s.code);
+    const libelle = prixSvcCts !== 0 ? s.label
+      : info.mode === "inclus" ? `${s.label}: Inclus`
+      : info.valeur ? `${s.label}: Offert (valeur CHF ${montantCourt(info.valeur)})`
+      : `${s.label}: Offert`;
     pousserArticle(numService, libelle, 1, prixSvcCts);
     numService++;
   }

@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from "react";
+import { infoService, texteMontantService } from "@/lib/service-affichage";
 import { useSearchParams } from "next/navigation";
 import {
   PrintData, QuoteLine, AmbianceImage,
@@ -168,9 +169,9 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
   const activeServices = [
     ...serviceOptions
       .filter((s) => data.enabledServices[s.code])
-      .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code] || 0) })),
+      .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code] || 0), ...infoService(data.servicePrices, s.code) })),
     ...(data.enabledServices["custom"]
-      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices["custom"] || 0) }]
+      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices["custom"] || 0), ...infoService(data.servicePrices, "custom") }]
       : []),
   ];
 
@@ -641,7 +642,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                       <tr key={i}>
                         <td className="pt-label pt-sub">↳ {srv.label}</td>
                         <td className="pt-value" style={{fontSize:11}}>
-                          {srv.amount === 0 ? "Offert" : formatMoney(srv.amount)}
+                          {texteMontantService(srv, formatMoney)}
                         </td>
                       </tr>
                     ))}
