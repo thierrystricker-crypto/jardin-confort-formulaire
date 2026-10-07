@@ -40,6 +40,24 @@ function chf(n: number): string {
   return `CHF ${n.toLocaleString("fr-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\s/g, "'")}`;
 }
 
+// Page d'attente des onglets ouverts pendant une génération (fiche, PDF).
+// Même fond sombre que le planner : passer du sombre au blanc en plein écran
+// est désagréable, et on croit un instant avoir perdu la page (07.10.2026).
+function attentePage(titre: string, detail: string): string {
+  return `<!doctype html><html lang="fr"><meta charset="utf-8"><title>${titre}</title>
+<meta name="color-scheme" content="dark">
+<body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Raleway,Arial,sans-serif;color:#e4e4e7;background:#1f2125">
+<div style="text-align:center;padding:24px">
+  <div style="font-size:18px;font-weight:600">${titre}</div>
+  <div style="margin-top:8px;font-size:13px;color:#a1a1aa">${detail}</div>
+  <div style="margin:18px auto 0;width:220px;height:4px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden">
+    <div style="width:40%;height:100%;background:#38bdf8;border-radius:2px;animation:jc 1.2s infinite linear"></div>
+  </div>
+</div>
+<style>@keyframes jc{0%{margin-left:-40%}100%{margin-left:100%}}</style>
+</body></html>`;
+}
+
 const BTN = "rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40";
 const BTN_OFF = `${BTN} border-white/10 bg-[#2a2d31] text-zinc-300 hover:bg-[#34383d]`;
 const BTN_ON = `${BTN} border-sky-500/40 bg-sky-500/20 text-sky-200`;
@@ -763,7 +781,7 @@ export default function PlannerPage() {
     if (scene.items.length === 0) { setMessage("Aucun article à imprimer"); return; }
     const w = window.open("", "_blank");           // dans le clic, sinon bloqué
     if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
-    w.document.write("<p style='font-family:sans-serif;padding:24px;color:#666'>Préparation de la fiche…</p>");
+    w.document.write(attentePage("Préparation de la fiche…", avecPrix ? "avec prix" : "sans prix"));
     const version = await lienPartagePourExport("fiche");
     if (!version) { w.close(); return; }
     w.location.href = `/print/planner/${version.token}?prix=${avecPrix ? 1 : 0}`;
@@ -894,7 +912,7 @@ export default function PlannerPage() {
     // conseiller voit qu'il se passe quelque chose et ne reclique pas.
     const w = window.open("", "_blank");
     if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
-    w.document.write(`<!doctype html><title>PDF du plan 3D</title><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Raleway,Arial,sans-serif;color:#555;background:#fafafa"><div style="text-align:center"><div style="font-size:18px;font-weight:600">Génération du PDF du plan 3D…</div><div style="margin-top:8px;font-size:13px;color:#888">10 à 20 secondes — ${avecPrix ? "avec prix" : "sans prix"}</div><div style="margin:18px auto 0;width:220px;height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden"><div style="width:40%;height:100%;background:#2563eb;animation:jc 1.2s infinite linear"></div></div><style>@keyframes jc{0%{margin-left:-40%}100%{margin-left:100%}}</style></div></body>`);
+    w.document.write(attentePage("Génération du PDF du plan 3D…", `10 à 20 secondes — ${avecPrix ? "avec prix" : "sans prix"}`));
     setPdfEnCours(true);
     setMessage("Génération du PDF… (10 à 20 s)");
     try {
