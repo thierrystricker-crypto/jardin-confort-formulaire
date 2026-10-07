@@ -815,11 +815,13 @@ export default function PlannerCanvas(props: Props) {
       <hemisphereLight args={[0xffffff, 0x999999, 0.9]} />
       {/* Ombres : la caméra d'ombre est serrée sur la terrasse (+ 2 m de marge
           pour les articles posés à côté) et la carte fait 4096² → ~5 mm par
-          texel sur une terrasse de 8 m au lieu de ~12 mm sur ±12 m fixes. */}
+          texel sur une terrasse de 8 m au lieu de ~12 mm sur ±12 m fixes.
+          En vue plan, pas d'ombre : vue de dessus, l'ombre portée décale
+          visuellement les meubles et fausse la lecture des distances. */}
       <directionalLight
         position={[demiL + 4, 9, demiP + 3]}
-        intensity={1.5}
-        castShadow
+        intensity={vue === "plan" ? 1.15 : 1.5}
+        castShadow={vue === "3d"}
         shadow-mapSize={[4096, 4096]}
         shadow-camera-left={-(demiL + 2)}
         shadow-camera-right={demiL + 2}
