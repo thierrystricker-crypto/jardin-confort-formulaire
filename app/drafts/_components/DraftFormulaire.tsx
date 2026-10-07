@@ -47,6 +47,14 @@ type ShopifyItem = {
 // Badge de stock du picker (P1-47) : deplace dans lib/badge-stock-picker.ts
 // le 07.10.2026, partage avec la vue etendue (components/ShopifyPickerEtendu.tsx).
 
+// Cle de resolution 3D d'une ligne : "gid|sku" ("" si ni l'un ni l'autre).
+// Sert au cache du badge 3D des lignes (voir /api/modeles-3d/lignes).
+function cle3dLigne(l: { shopifyVariantId?: string; sku?: string }): string {
+  const gid = (l.shopifyVariantId || "").trim();
+  const sku = (l.sku || "").trim();
+  return gid || sku ? `${gid}|${sku}` : "";
+}
+
 type QuoteLine = {
   id: string;
   type: "product" | "custom" | "comment" | "media";
@@ -364,6 +372,9 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   const [filterInStock, setFilterInStock]   = useState(false);
   // Vue etendue du picker Shopify (panneau plein ecran, meme recherche).
   const [pickerEtendu, setPickerEtendu]     = useState(false);
+  // Badge 3D des lignes : cle "gid|sku" -> modele 3D dans l'index (lecture seule,
+  // jamais enregistre dans le document : la 3D peut arriver apres l'offre).
+  const [cache3d, setCache3d]               = useState<Record<string, boolean>>({});
   // Garde-fou stock : ids des lignes critiques (non-réassortables + qté > stock)
   // que le commercial a explicitement confirmées. Vidé si la ligne sort de l'état critique.
   const [confirmedCritical, setConfirmedCritical] = useState<Record<string, boolean>>({});
@@ -640,6 +651,48 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
     return () => { clearTimeout(timer); controller.abort(); };
   }, [search]);
 
+  // ── Badge 3D des lignes : resolution par /api/modeles-3d/lignes ──
+  // Une cle n'est demandee qu'une fois par session (cache3d). Debounce 400 ms
+  // pour ne pas interroger a chaque frappe dans un SKU libre.
+  const cles3d = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of lines) {
+      if (l.type !== "product" && l.type !== "custom") continue;
+      const k = cle3dLigne(l);
+      if (k) set.add(k);
+    }
+    return Array.from(set).sort().join("\n");
+  }, [lines]);
+
+  useEffect(() => {
+    const manquantes = cles3d ? cles3d.split("\n").filter((k) => !(k in cache3d)) : [];
+    if (!manquantes.length) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch("/api/modeles-3d/lignes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lignes: manquantes.map((k) => {
+              const [gid, sku] = k.split("|");
+              return { id: k, shopifyVariantId: gid || null, sku: sku || null };
+            }),
+          }),
+          signal: controller.signal,
+        });
+        const json = (await res.json()) as { has3d?: Record<string, boolean> };
+        const has3d = json.has3d || {};
+        setCache3d((c) => {
+          const n = { ...c };
+          for (const k of manquantes) n[k] = Boolean(has3d[k]);
+          return n;
+        });
+      } catch { /* jamais bloquant : pas de badge */ }
+    }, 400);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [cles3d, cache3d]);
+
   const subTotal = useMemo(() =>
     lines.reduce((s, l) => {
       if (l.type === "comment" || l.type === "media") return s;
@@ -737,6 +790,22 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
     setCustomSku(""); setCustomTitle(""); setCustomPrice(""); setCustomQty("1"); setCustomStock(""); setCustomImage("");
     if (customImageInputRef.current) customImageInputRef.current.value = "";
     highlightAdded(id);
+  }
+
+  // Boutons +/- de la quantite (07.10.2026). Memes regles que la saisie au clavier :
+  // pas de N pour un article vendu par multiple (orderunit), minimum 1 (ou N),
+  // et en revision jamais au-dessus de la qte d'origine (hausse = nouvelle ligne).
+  function capQtyLigne(line: QuoteLine): number {
+    return revisionMode && inheritedQty.has(line.id) ? (inheritedQty.get(line.id) as number) : Infinity;
+  }
+  function pasQtyLigne(line: QuoteLine): number {
+    return line.orderUnit && line.orderUnit > 1 ? line.orderUnit : 1;
+  }
+  function stepQty(line: QuoteLine, sens: 1 | -1) {
+    const u = pasQtyLigne(line);
+    const next = sens > 0 ? Math.floor(line.qty / u) * u + u : Math.ceil(line.qty / u) * u - u;
+    const borne = Math.min(Math.max(next, u), capQtyLigne(line));
+    if (borne !== line.qty) updateLine(line.id, { qty: borne });
   }
 
   function updateLine(id: string, patch: Partial<QuoteLine>) {
@@ -2445,7 +2514,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                 <tr>
                   <th style={{ width: 48 }}>#</th>
                   <th style={{ width: 82 }}>Img</th>
-                  <th style={{ width: 72 }}>Qté</th>
+                  <th style={{ width: 96 }}>Qté</th>
                   <th style={{ width: 130 }}>SKU</th>
                   <th style={{ maxWidth: 280 }}>Désignation</th>
                   <th style={{ width: 130 }}>Prix/pce</th>
@@ -2574,6 +2643,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                             </div>
                           </td>
                           <td style={{ paddingRight: 16 }}>
+                            <div className="jc-qty-wrap">
                             <input className="jc-qty-input no-spin" type="number" min="1" max={revisionMode && inheritedQty.has(line.id) ? inheritedQty.get(line.id) : undefined} value={line.qty} onChange={(e) => {
                               const raw = Math.max(1, parseInt(e.target.value || "1", 10));
                               const cap = revisionMode && inheritedQty.has(line.id) ? (inheritedQty.get(line.id) as number) : Infinity;
@@ -2593,6 +2663,23 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                               const cap = revisionMode && inheritedQty.has(line.id) ? (inheritedQty.get(line.id) as number) : Infinity;
                               if (rounded !== raw) updateLine(line.id, { qty: Math.min(rounded, cap) });
                             }} onFocus={(e) => e.currentTarget.select()} />
+                            <span className="jc-qty-btns screenOnly">
+                              <button
+                                type="button" className="jc-move-btn"
+                                title={line.qty >= capQtyLigne(line) ? "Quantité d'origine atteinte — pour en ajouter, nouvelle ligne via le picker" : `+${pasQtyLigne(line)}`}
+                                aria-label="Augmenter la quantité"
+                                disabled={line.qty >= capQtyLigne(line)}
+                                onClick={() => stepQty(line, 1)}
+                              >▲</button>
+                              <button
+                                type="button" className="jc-move-btn"
+                                title={`-${pasQtyLigne(line)}`}
+                                aria-label="Diminuer la quantité"
+                                disabled={line.qty <= pasQtyLigne(line)}
+                                onClick={() => stepQty(line, -1)}
+                              >▼</button>
+                            </span>
+                            </div>
                             {line.orderUnit && line.orderUnit > 1 ? (
                               <div className="jc-qty-orderunit">par {line.orderUnit}</div>
                             ) : null}
@@ -2605,6 +2692,9 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                               readOnly={isLocked}
                               title={isLocked ? "🔒 SKU Shopify verrouillé — utilisez « Dupliquer comme modèle » pour créer une variante" : undefined}
                             />
+                            {cache3d[cle3dLigne(line)] && (
+                              <span className="jc-line-3d screenOnly" title="Modèle 3D disponible (planner)">3D</span>
+                            )}
                           </td>
                           <td>
                             <textarea
@@ -3708,7 +3798,15 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
         }
         .jc-line-img img { width: 100%; height: 100%; object-fit: cover; }
         .jc-img-file-input { font-size: 11px; padding: 4px; margin-top: 4px; max-width: 140px; }
-        .jc-qty-input { width: 64px; text-align: center; }
+        .jc-qty-input { width: 56px; text-align: center; }
+        .jc-qty-wrap { display: flex; align-items: center; gap: 3px; }
+        .jc-qty-btns { display: flex; flex-direction: column; gap: 2px; }
+        .jc-line-3d {
+          display: inline-block; margin-top: 4px; padding: 0 5px; border-radius: 4px;
+          background: rgba(16,185,129,.18); color: #34d399;
+          font-size: 10px; font-weight: 700; line-height: 16px;
+        }
+        .light-mode .jc-line-3d { color: #047857; background: rgba(16,185,129,.16); }
         .jc-cell-input { border-radius: 6px; padding: 8px; background: rgba(255,255,255,0.03); }
         .jc-table tbody td { vertical-align: top; padding-top: 10px; }
         .jc-title-input { width: 100%; resize: none; overflow: hidden; min-height: 32px; line-height: 1.4; padding-top: 6px; padding-bottom: 6px; }
