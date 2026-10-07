@@ -7,6 +7,8 @@ import ListeAchatImport from "@/components/ListeAchatImport";
 import TransformerModal from "@/components/TransformerModal";
 import { isStockCritical } from "@/lib/jc-print-types";
 import { manqueNumero, adresseLivraisonEffective } from "@/lib/adresse-utils";
+import { badgeStockPicker } from "@/lib/badge-stock-picker";
+import ShopifyPickerEtendu from "@/components/ShopifyPickerEtendu";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
@@ -33,25 +35,17 @@ type ShopifyItem = {
   image3: string;
   delaiLivraison?: string;
   orderUnit?: number | null;
+  // Champs produit (07.10.2026) : regroupement produit/variante de la vue etendue.
+  productHandle?: string;
+  productTitle?: string;
+  variantTitle?: string;
+  vendor?: string;
+  productImage?: string;
   has3d?: boolean;                 // modèle 3D dans l'index (badge « 3D », planner)
 };
 
-// Badge de stock du picker (P1-47).
-// Le stock seul ne veut rien dire : un 0 en CONTINUE reste commandable au
-// fournisseur (cas courant chez Jardin-Confort), un 0 en DENY est une piece
-// perdue. On lit donc toujours stock ET inventoryPolicy dans la meme main, avec
-// le vocabulaire deja employe sur la ligne du tableau (voir doc 03 par.3).
-// Politique inconnue (API Admin injoignable) = on ne sait pas : neutre, jamais rouge.
-function badgeStockPicker(
-  stock: number | null,
-  policy: "DENY" | "CONTINUE" | null
-): { texte: string; couleur: string } {
-  if (stock === null || policy === null) return { texte: "Stock à vérifier", couleur: "#888" };
-  if (stock > 2) return { texte: "✓ " + stock, couleur: "#2C7E3F" };
-  if (stock > 0) return { texte: "⚠ " + stock, couleur: "#E67E22" };
-  if (policy === "CONTINUE") return { texte: "Sur commande", couleur: "#E67E22" };
-  return { texte: "Rupture", couleur: "#dc2626" };
-}
+// Badge de stock du picker (P1-47) : deplace dans lib/badge-stock-picker.ts
+// le 07.10.2026, partage avec la vue etendue (components/ShopifyPickerEtendu.tsx).
 
 type QuoteLine = {
   id: string;
@@ -368,6 +362,8 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   const [darkMode, setDarkMode]             = useState(true);
   const [wideMode, setWideMode]             = useState(true);
   const [filterInStock, setFilterInStock]   = useState(false);
+  // Vue etendue du picker Shopify (panneau plein ecran, meme recherche).
+  const [pickerEtendu, setPickerEtendu]     = useState(false);
   // Garde-fou stock : ids des lignes critiques (non-réassortables + qté > stock)
   // que le commercial a explicitement confirmées. Vidé si la ligne sort de l'état critique.
   const [confirmedCritical, setConfirmedCritical] = useState<Record<string, boolean>>({});
@@ -2220,6 +2216,9 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                   />
                   <span>En stock uniquement</span>
                 </label>
+                <button type="button" className="jc-btn jc-btn-ghost" onClick={() => setPickerEtendu(true)} title="Ouvrir les resultats en plein ecran : produits / variantes, filtres et tri">
+                  Vue étendue{shopifyItems.length ? ` (${shopifyItems.length})` : ""}
+                </button>
               </div>
 
               {/* État vide / loading / erreur */}
@@ -3016,6 +3015,9 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                       <input type="checkbox" checked={filterInStock} onChange={(e) => setFilterInStock(e.target.checked)} />
                       <span>En stock uniquement</span>
                     </label>
+                    <button type="button" className="jc-btn jc-btn-ghost" onClick={() => setPickerEtendu(true)} title="Ouvrir les resultats en plein ecran : produits / variantes, filtres et tri">
+                      Vue étendue{shopifyItems.length ? ` (${shopifyItems.length})` : ""}
+                    </button>
                   </div>
                   {!search.trim() && <div className="jc-shopify-hint">Tapez un SKU ou nom de produit…</div>}
                   {shopifyLoading && <div className="jc-shopify-loading"><div className="jc-spinner" /> Recherche…</div>}
@@ -3209,6 +3211,19 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
         </section>
 
       </div>{/* end sheet */}
+
+      {/* Vue etendue du picker Shopify — panneau plein ecran, meme recherche que les pickers */}
+      <ShopifyPickerEtendu
+        open={pickerEtendu}
+        onClose={() => setPickerEtendu(false)}
+        search={search}
+        onSearchChange={(v) => { setSearch(v); if (!v) setShopifyItems([]); }}
+        items={shopifyItems}
+        loading={shopifyLoading}
+        error={shopifyError}
+        onAdd={addShopifyItem}
+        flashId={flashProductId}
+      />
 
       {/* ── Modal de transformation brouillon → offre ──
           Montée conditionnellement, alimentée par le state local du formulaire.

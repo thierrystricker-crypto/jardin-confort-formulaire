@@ -9,6 +9,7 @@ const ADMIN_CLIENT_SECRET = process.env.SHOPIFY_ADMIN_CLIENT_SECRET;
 type ShopifyProduct = {
   title: string;
   handle: string;
+  vendor?: string | null; // marque (filtre de la vue etendue du picker)
   onlineStoreUrl: string | null;
   tags: string[]; // ← tags pour délais de livraison
   images?: {
@@ -113,6 +114,13 @@ type ResultItem = {
   image3: string;
   delaiLivraison: string; // ← délai basé sur les tags
   orderUnit: number | null; // ← vente par multiple de N pièces (tag produit orderunitN)
+  // Champs produit (07.10.2026) — regroupement produit/variante de la vue etendue du picker.
+  // Purement additifs : les consommateurs existants lisent toujours `variant`.
+  productHandle: string;
+  productTitle: string;
+  variantTitle: string;
+  vendor: string;
+  productImage: string;
 };
 
 let cachedAdminToken: string | null = null;
@@ -134,6 +142,7 @@ async function runStorefrontSearch(query: string): Promise<ShopifyProduct[]> {
           ... on Product {
             title
             handle
+            vendor
             onlineStoreUrl
             tags
             images(first: 4) {
@@ -349,6 +358,11 @@ function buildStorefrontItems(products: ShopifyProduct[], words: string[]): Resu
           image3: productImages[3]?.url || '',
           delaiLivraison,
           orderUnit,
+          productHandle: product.handle,
+          productTitle: product.title,
+          variantTitle: variant.title && variant.title !== 'Default Title' ? variant.title : '',
+          vendor: product.vendor ?? '',
+          productImage: productImages[0]?.url || '',
         };
       });
   });
