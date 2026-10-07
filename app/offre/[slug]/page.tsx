@@ -4,6 +4,7 @@
 // Layout : colonne gauche sticky (résumé + boutons) | colonne droite (infos → articles → totaux → signature)
 
 import { infoService, texteMontantService } from "@/lib/service-affichage";
+import { dateExpirationOffre } from "@/lib/validite-offre";
 import React, { useEffect, useRef, useState } from "react";
 
 const C = {
@@ -535,7 +536,8 @@ useEffect(() => {
   const validiteDuree = offre.validite_duree || d.validiteDuree || "30 jours"
   const joursValidite = parseInt(validiteDuree) || 30
   const dateDocument = offre.date_document ? new Date(offre.date_document) : null
-  const dateExpiration = dateDocument ? new Date(dateDocument.getTime() + joursValidite * 86400000) : null
+  // Prolongation (08.10.2026) : data.validiteJusquau, posee par une correction tracee, prime.
+  const dateExpiration = dateExpirationOffre(offre.date_document, validiteDuree, (d as Record<string, unknown>).validiteJusquau)
   const isExpire = dateExpiration ? new Date() > dateExpiration : false
   const joursRestants = dateExpiration ? Math.ceil((dateExpiration.getTime() - Date.now()) / 86400000) : null
 

@@ -59,6 +59,7 @@ const FIELD_LABELS: Record<string, string> = {
   accesLivraison: "Accès livraison",
   remarks: "Remarques",
   notesInternes: "Notes internes",
+  validiteJusquau: "Offre valable jusqu'au (prolongation)",
 };
 
 function fieldLabel(key: string): string {

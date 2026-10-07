@@ -4,6 +4,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import CorrectionDrawer from "@/components/CorrectionDrawer";
+import ProlongerOffreModal from "@/components/ProlongerOffreModal";
+import { dateExpirationOffre, estProlongee } from "@/lib/validite-offre";
 import CorrectionsHistoryBlock from "@/components/CorrectionsHistoryBlock";
 import RevisionsHistoryBlock from "@/components/RevisionsHistoryBlock";
 import StockMovementsBlock from "@/components/StockMovementsBlock";
@@ -224,6 +226,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [livraisonSaving,setLivraisonSaving]=useState(false)
   const [converting,setConverting]=useState(false)
   const [correctionDrawerOpen, setCorrectionDrawerOpen] = useState(false)
+  const [prolongerOpen, setProlongerOpen] = useState(false)
 
   // Contourne le cache d'une heure du Storage Supabase : le fichier est
   // remplacé au même chemin à chaque régénération, mais l'URL nue peut servir
@@ -1638,6 +1641,23 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                 >
                   ✏️ Corriger
                 </button>
+                {isOffre && !isAbandonne && (() => {
+                  // Prolonger (08.10.2026) : repousse la fin de validite, la date de l'offre ne bouge pas.
+                  const exp = dateExpirationOffre(offre.date_document, (d.validiteDuree as string) || null, d.validiteJusquau)
+                  const expiree = exp ? exp.getTime() < Date.now() : false
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setProlongerOpen(true)}
+                      className={`rounded-xl border px-4 py-2 text-sm transition ${expiree
+                        ? "border-rose-500/40 bg-rose-500/15 text-rose-300 hover:bg-rose-500/20"
+                        : "border-violet-500/30 bg-violet-500/15 text-violet-300 hover:bg-violet-500/20"}`}
+                      title={exp ? `${expiree ? "Expirée depuis le" : "Valable jusqu'au"} ${fmtDate(exp.toISOString())}${estProlongee(d.validiteJusquau) ? " (déjà prolongée)" : ""}` : "Prolonger la validité"}
+                    >
+                      ⏳ Prolonger{exp ? ` · ${expiree ? "expirée" : "jusqu'au"} ${fmtDate(exp.toISOString())}` : ""}
+                    </button>
+                  )
+                })()}
                 {offre.type_document === "Commande" && (
                   <a
                   href={`/dashboard/${offre.slug}/reviser`}
@@ -2007,6 +2027,19 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
         </div>
 
       </div>
+
+      {offre && (
+        <ProlongerOffreModal
+          open={prolongerOpen}
+          slug={slug}
+          numero={offre.numero_affiche}
+          dateDocument={offre.date_document}
+          validiteDuree={((offre.data as Record<string, unknown>)?.validiteDuree as string) || null}
+          validiteJusquau={(offre.data as Record<string, unknown>)?.validiteJusquau}
+          onClose={() => setProlongerOpen(false)}
+          onSuccess={() => window.location.reload()}
+        />
+      )}
 
       {/* Drawer de correction (Session 2 chantier corrections) */}
       {offre && (

@@ -11,6 +11,7 @@ import {
   FLAT_COLUMN_MAP,
   isCorrectibleField,
 } from "@/lib/corrections-config";
+import { CHAMP_PROLONGATION } from "@/lib/validite-offre";
 
 // ============================================================================
 // Helper - regeneration PDF (Session 4a chantier corrections)
@@ -114,8 +115,11 @@ export async function POST(request: NextRequest) {
 
     // -- Whitelist : refuser tout champ hors scope v1 --
 
+    // Prolongation d'offre (08.10.2026) : seul champ hors liste v1, et
+    // uniquement sur une offre (verifie plus bas : ni signee ni convertie).
+    const estProlongation = (f: string) => f === CHAMP_PROLONGATION && body.entity_type === "offre";
     const rejectedFields = Object.keys(body.fields_changed).filter(
-      (f) => !isCorrectibleField(f)
+      (f) => !isCorrectibleField(f) && !estProlongation(f)
     );
     if (rejectedFields.length > 0) {
       return NextResponse.json(
@@ -131,7 +135,7 @@ export async function POST(request: NextRequest) {
 
     const { data: entity, error: fetchError } = await supabase
       .from("offres")
-      .select("id, slug, numero_offre, numero_commande, type_document, data")
+      .select("id, slug, numero_offre, numero_commande, type_document, statut, data")
       .eq("slug", body.entity_slug)
       .single();
 
@@ -152,6 +156,25 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    // -- Prolongation : offre encore ouverte, date au format YYYY-MM-DD, pas dans le passé --
+    if (CHAMP_PROLONGATION in body.fields_changed) {
+      const statut = String((entity as { statut?: string }).statut || "");
+      if (["Convertie", "Acceptée", "Abandonnée"].includes(statut)) {
+        return NextResponse.json(
+          { error: `Une offre « ${statut} » ne se prolonge pas.` },
+          { status: 400 }
+        );
+      }
+      const nouvelle = body.fields_changed[CHAMP_PROLONGATION]?.new;
+      const aujourdhui = new Date().toISOString().slice(0, 10);
+      if (typeof nouvelle !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(nouvelle) || nouvelle < aujourdhui) {
+        return NextResponse.json(
+          { error: "Nouvelle date de validité invalide (format AAAA-MM-JJ, pas dans le passé)." },
+          { status: 400 }
+        );
+      }
     }
 
     // -- Numéro métier figé au moment de la correction --

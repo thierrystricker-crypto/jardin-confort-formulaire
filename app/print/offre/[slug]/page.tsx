@@ -6,6 +6,7 @@
 
 import React, { useEffect, useState } from "react";
 import { infoService, texteMontantService } from "@/lib/service-affichage";
+import { estProlongee, formatJourCH } from "@/lib/validite-offre";
 import { useSearchParams } from "next/navigation";
 import {
   PrintData, QuoteLine, AmbianceImage,
@@ -345,7 +346,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                   <tr><td className="doc-meta-label">Délai de livraison</td><td>{data.leadTime}</td></tr>
                 )}
                 {(data as any).validiteDuree && (
-                  <tr><td className="doc-meta-label">Validité de l&apos;offre</td><td>{(data as any).validiteDuree}</td></tr>
+                  <tr><td className="doc-meta-label">Validité de l&apos;offre</td><td>{estProlongee((data as any).validiteJusquau) ? `jusqu'au ${formatJourCH((data as any).validiteJusquau)}` : (data as any).validiteDuree}</td></tr>
                 )}
                 {(data as any).deliveryMode && (
                   <tr><td className="doc-meta-label">Mode de livraison</td><td>{(data as any).deliveryMode}</td></tr>

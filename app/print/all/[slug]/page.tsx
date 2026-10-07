@@ -21,6 +21,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { infoService, texteMontantService } from "@/lib/service-affichage";
+import { estProlongee, formatJourCH } from "@/lib/validite-offre";
 import {
   PrintData, QuoteLine, AmbianceImage,
   serviceOptions, formatMoney, formatDate,
@@ -1191,7 +1192,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {(data as any).validiteDuree && (
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  <tr><td className="cc-meta-label">Validité de l&apos;offre</td><td>{(data as any).validiteDuree}</td></tr>
+                  <tr><td className="cc-meta-label">Validité de l&apos;offre</td><td>{estProlongee((data as any).validiteJusquau) ? `jusqu'au ${formatJourCH((data as any).validiteJusquau)}` : (data as any).validiteDuree}</td></tr>
                 )}
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {(data as any).deliveryMode && (
