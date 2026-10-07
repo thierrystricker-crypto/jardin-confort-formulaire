@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
-import { MENTION_IA, MENTION_LEGALE, MUR_TEXTURES, MURS, SCENE_VIDE, SOLS, estVegetal, nomMur, uid, type CameraScene, type CatalogueItem, type ChoixModele, type MurConfig, type Peinture, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
+import { MENTION_IA, MENTION_LEGALE, MUR_TEXTURES, MURS, SCENE_VIDE, SOLS, estVegetal, nomMur, uid, type AxeCouleur, type CameraScene, type CatalogueItem, type ChoixModele, type MurConfig, type Peinture, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
 import { DECORS, MOMENTS, composerDescription, filtrerDecor } from "@/lib/planner-ambiance-cadre";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
@@ -57,7 +57,11 @@ export default function PlannerPage() {
   const [pdfEnCours, setPdfEnCours] = useState(false);
   // Galerie des images d'ambiance IA de la dernière version : chaque
   // génération S'AJOUTE (rien n'est écrasé) ; `retenue` = celle des documents.
-  type CouleurPlanner = { code: string; nom: string; apercu: string | null; variant_id: string; sku: string | null; prix: number | null; url: string | null; peinture: Peinture[] };
+  // Une fiche à zones a un ou DEUX axes de couleur (Bellevie, Rivage :
+  // structure + tissu). `axes` sert aux menus, `variantes` à retrouver la
+  // ligne qui correspond à la combinaison choisie.
+  type VariantePlanner = { variant_id: string; sku: string | null; prix: number | null; codes: Record<string, string>; url: string | null; peinture: Peinture[] };
+  type CouleursFiche = { axes: AxeCouleur[]; variantes: VariantePlanner[] };
   type Ambiance = { id: string; url: string; prompt: string | null; modele: string | null; cree_le: string; numero?: number | null };
   const [ambiance, setAmbiance] = useState<{ numero: number; token: string; retenue: string | null; liste: Ambiance[] } | null>(null);
   const [ambianceEnCours, setAmbianceEnCours] = useState(false);
@@ -256,7 +260,7 @@ export default function PlannerPage() {
     setSelected(nouveau.uid);
     // Fiche à couleurs appliquées : on pose la 1re couleur de la fiche, le
     // conseiller la change ensuite dans la barre de l'article sélectionné.
-    if (c.source === "zones") void chargerCouleurs(c.product_id).then((cs) => { if (cs[0]) appliquerCouleur(nouveau.uid, cs[0]); });
+    if (c.source === "zones") void chargerCouleurs(c.product_id).then((f) => { if (f.variantes[0]) appliquerVariante(nouveau.uid, f.variantes[0], f.axes); });
   }
 
   // ─── Murs et murets ─────────────────────────────────────────────────────
@@ -294,28 +298,54 @@ export default function PlannerPage() {
   // ─── Couleurs d'une fiche à zones (Fermob) ──────────────────────────────
   // Liste servie par /api/planner/couleurs : code, nom, pastille, fichier et
   // consignes de peinture prêtes pour three.js. Gardée en mémoire par fiche.
-  const [couleurs, setCouleurs] = useState<Record<number, CouleurPlanner[]>>({});
-  async function chargerCouleurs(productId: number): Promise<CouleurPlanner[]> {
+  const [couleurs, setCouleurs] = useState<Record<number, CouleursFiche>>({});
+  async function chargerCouleurs(productId: number): Promise<CouleursFiche> {
     if (couleurs[productId]) return couleurs[productId];
+    const vide: CouleursFiche = { axes: [], variantes: [] };
     try {
       const r = await fetch(`/api/planner/couleurs?product_id=${productId}`);
       const j = await r.json();
-      const cs = (j.couleurs || []) as CouleurPlanner[];
-      setCouleurs((m) => ({ ...m, [productId]: cs }));
-      return cs;
-    } catch { return []; }
+      const f: CouleursFiche = { axes: (j.axes || []) as AxeCouleur[], variantes: (j.variantes || []) as VariantePlanner[] };
+      setCouleurs((m) => ({ ...m, [productId]: f }));
+      return f;
+    } catch { return vide; }
   }
-  function appliquerCouleur(itemUid: string, c: CouleurPlanner) {
+
+  /** Pose une variante : fichier, peinture, prix, et la combinaison choisie. */
+  function appliquerVariante(itemUid: string, v: VariantePlanner, axes: AxeCouleur[]) {
+    const principal = axes[0]?.option;
+    const code = principal ? v.codes[principal] : undefined;
+    const nom = axes[0]?.valeurs.find((x) => x.code === code)?.nom || code || null;
     patchItem(itemUid, {
-      url: c.url || undefined,
-      peinture: c.peinture,
-      couleur_code: c.code,
-      couleur_nom: c.nom,
+      url: v.url || undefined,
+      peinture: v.peinture,
+      couleur_options: v.codes,
+      couleur_code: code || null,
+      couleur_nom: nom,
       color_warn: false,
-      variant_id: c.variant_id || null,
-      sku: c.sku ?? null,
-      ...(c.prix != null ? { prix: c.prix, prix_exact: true } : {}),
+      variant_id: v.variant_id || null,
+      sku: v.sku ?? null,
+      ...(v.prix != null ? { prix: v.prix, prix_exact: true } : {}),
     });
+  }
+
+  /** Changement d'un axe : on cherche la variante la plus proche de la
+   *  combinaison voulue (une combinaison peut ne pas être vendue). */
+  function choisirCouleur(itemUid: string, option: string, code: string) {
+    const it = scene.items.find((i) => i.uid === itemUid);
+    if (!it) return;
+    const f = couleurs[it.product_id];
+    if (!f) return;
+    const voulu: Record<string, string> = { ...(it.couleur_options || {}), [option]: code };
+    let meilleure: VariantePlanner | null = null;
+    let score = -1;
+    for (const v of f.variantes) {
+      if (v.codes[option] !== code) continue;          // l'axe changé est impératif
+      let n = 0;
+      for (const [o, c] of Object.entries(voulu)) if (v.codes[o] === c) n++;
+      if (n > score) { score = n; meilleure = v; }
+    }
+    if (meilleure) appliquerVariante(itemUid, meilleure, f.axes);
   }
 
   function supprimer(u: string) {
@@ -1108,24 +1138,36 @@ export default function PlannerPage() {
                   </select>
                 </div>
               )}
-              {/* Couleur de la variante (fiches à zones, Fermob) */}
-              {!item.mur && (item.source === "zones" || (item.peinture?.length ?? 0) > 0) && (
-                <select
-                  className="rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-xs text-zinc-100 outline-none"
-                  value={item.couleur_code || ""}
-                  onFocus={() => void chargerCouleurs(item.product_id)}
-                  onChange={(e) => {
-                    const c = (couleurs[item.product_id] || []).find((x) => x.code === e.target.value);
-                    if (c) appliquerCouleur(item.uid, c);
-                  }}
-                  title="Couleur du meuble : appliquée au modèle 3D, et donc aussi sur la fiche, le PDF et l'image d'ambiance"
-                >
-                  {!item.couleur_code && <option value="">Couleur…</option>}
-                  {(couleurs[item.product_id] || (item.couleur_code ? [{ code: item.couleur_code, nom: item.couleur_nom || item.couleur_code }] : [])).map((c) => (
-                    <option key={c.code} value={c.code}>{c.nom} {c.code}</option>
-                  ))}
-                </select>
-              )}
+              {/* Couleurs de la variante (fiches à zones, Fermob) : UN MENU PAR
+                  AXE — les canapés Bellevie et Rivage ont une couleur de
+                  structure ET une couleur de tissu / coussin (07.10.2026). */}
+              {!item.mur && (item.source === "zones" || (item.peinture?.length ?? 0) > 0) && (() => {
+                const f = couleurs[item.product_id];
+                const axes = f?.axes?.length
+                  ? f.axes
+                  : [{ option: "Couleur", zone: "structure", valeurs: item.couleur_code ? [{ code: item.couleur_code, nom: item.couleur_nom || item.couleur_code, apercu: null }] : [] }];
+                return axes.map((axe) => {
+                  const choisi = item.couleur_options?.[axe.option] || (axe === axes[0] ? item.couleur_code || "" : "");
+                  // Libellé court : « structure », « tissu », « coussin »…
+                  const etiquette = axe.option.replace(/^couleur\s*/i, "").trim() || "couleur";
+                  return (
+                    <label key={axe.option} className="flex items-center gap-1 text-[11px] text-zinc-400" title={`${axe.option} : appliquée au modèle 3D, et donc aussi sur la fiche, le PDF et l'image d'ambiance`}>
+                      {axes.length > 1 && <span className="capitalize">{etiquette}</span>}
+                      <select
+                        className="max-w-[190px] rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-xs text-zinc-100 outline-none"
+                        value={choisi}
+                        onFocus={() => void chargerCouleurs(item.product_id)}
+                        onChange={(e) => choisirCouleur(item.uid, axe.option, e.target.value)}
+                      >
+                        {!choisi && <option value="">{axes.length > 1 ? "Choisir…" : "Couleur…"}</option>}
+                        {axe.valeurs.map((v) => (
+                          <option key={v.code} value={v.code}>{v.nom} {v.code}</option>
+                        ))}
+                      </select>
+                    </label>
+                  );
+                });
+              })()}
               <button type="button" onClick={() => tourner(item.uid, -15)} className={BTN_OFF} title="Tourner −15° (Maj+R)">⟲</button>
               <button type="button" onClick={() => tourner(item.uid, 15)} className={BTN_OFF} title="Tourner +15° (R)">⟳</button>
               <button type="button" onClick={() => tourner(item.uid, 90)} className={BTN_OFF} title="Tourner de 90°">90°</button>

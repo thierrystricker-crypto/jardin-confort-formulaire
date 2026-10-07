@@ -187,7 +187,7 @@ export default function PlannerCatalogue({ onAjouter, onAjouterMur }: {
                       key={c.url}
                       type="button"
                       onClick={() => { setChoixPour(null); onAjouter(r, c); }}
-                      className="block w-full truncate rounded px-1.5 py-1 text-left text-[11px] text-zinc-100 hover:bg-sky-500/20"
+                      className="block w-full rounded px-1.5 py-1 text-left text-[11px] leading-tight text-zinc-100 hover:bg-sky-500/20"
                     >
                       {c.label}{c.size_warn ? " (indicatif)" : ""}
                     </button>

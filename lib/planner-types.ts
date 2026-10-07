@@ -18,7 +18,7 @@ export type Variante3d = {
 };
 
 // Couleurs appliquées à l'affichage (Fermob) — voir lib/modeles-3d-zones.ts
-export type { ChoixCouleur, Peinture, VarianteZones, ZonesConfig } from "@/lib/modeles-3d-zones";
+export type { AxeCouleur, ChoixCouleur, Peinture, ValeurCouleur, VarianteZones, ZonesConfig } from "@/lib/modeles-3d-zones";
 
 export type CatalogueItem = {
   product_id: number;
@@ -162,8 +162,11 @@ export type SceneItem = {
   // Consignes de peinture (fiche à zones) : matières à repeindre, couleurs
   // linéaires, textures. Appliquées au chargement et avant toute capture.
   peinture?: import("@/lib/modeles-3d-zones").Peinture[];
-  couleur_code?: string | null;   // code de la couleur posée (« 47 »)
+  couleur_code?: string | null;   // code de la couleur posée (« 47 ») — axe principal
   couleur_nom?: string | null;    // nom lisible (« Carbone »)
+  // Fiches à plusieurs axes de couleur (Bellevie, Rivage : structure + tissu) :
+  // la combinaison choisie, option → code. C'est elle qui désigne la variante.
+  couleur_options?: Record<string, string>;
   x: number;                // m, centre de la terrasse = 0
   z: number;                // m
   rot: number;              // degrés, autour de Y (pas de 15°)
