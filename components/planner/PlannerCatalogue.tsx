@@ -8,14 +8,15 @@
 // manque. Source : table modeles_3d via /api/planner/catalogue.
 
 import React, { useEffect, useRef, useState } from "react";
-import { MURS, choixModeles, estVegetal, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
+import { ARBRES, MURS, choixModeles, estVegetal, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
 
 type Marque = { marque: string; avec_3d: number };
 type Collection = { collection: string; avec_3d: number; total: number };
 
-export default function PlannerCatalogue({ onAjouter, onAjouterMur }: {
+export default function PlannerCatalogue({ onAjouter, onAjouterMur, onAjouterArbre }: {
   onAjouter: (item: CatalogueItem, choix?: ChoixModele) => void;
   onAjouterMur?: (modele: (typeof MURS)[number]) => void;
+  onAjouterArbre?: (modele: (typeof ARBRES)[number]) => void;
 }) {
   // Fiche dont on est en train de choisir la taille (3D par variante)
   const [choixPour, setChoixPour] = useState<number | null>(null);
@@ -108,6 +109,17 @@ export default function PlannerCatalogue({ onAjouter, onAjouterMur }: {
               {estVegetal(m.mur.texture) ? "🌿" : "🧱"} {m.nom} <span className="text-zinc-500">{Math.round(m.mur.hauteur * 100)}</span>
             </button>
           ))}
+          {onAjouterArbre && ARBRES.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => onAjouterArbre(a)}
+              className="rounded-lg border border-white/10 bg-[#2a2d31] px-1.5 py-1 text-[11px] text-zinc-200 transition hover:border-sky-500/40 hover:bg-sky-500/15"
+              title={`${a.nom} — ${a.sous_titre} ; la hauteur se règle ensuite au centimètre`}
+            >
+              🌳 <span className="text-zinc-500">{a.arbre.hauteur.toFixed(1).replace(".0", "").replace(".", ",")} m</span>
+            </button>
+          ))}
         </div>
       )}
       <div className="space-y-2 border-b border-white/10 p-3">
@@ -180,18 +192,20 @@ export default function PlannerCatalogue({ onAjouter, onAjouterMur }: {
                 </div>
               </button>
               {choixPour === r.product_id && (
-                <div className="absolute inset-x-1 bottom-1 z-10 rounded-lg border border-white/15 bg-[#15171a] p-1 shadow-xl">
+                <div className="absolute inset-x-1 bottom-1 z-10 flex max-h-64 flex-col rounded-lg border border-white/15 bg-[#15171a] p-1 shadow-xl">
                   <div className="px-1 pb-1 text-[10px] text-zinc-400">Quelle taille ?</div>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                   {choixModeles(r).map((c) => (
                     <button
                       key={c.url}
                       type="button"
                       onClick={() => { setChoixPour(null); onAjouter(r, c); }}
-                      className="block w-full truncate rounded px-1.5 py-1 text-left text-[11px] text-zinc-100 hover:bg-sky-500/20"
+                      className="block w-full rounded px-1.5 py-1 text-left text-[11px] leading-tight text-zinc-100 hover:bg-sky-500/20"
                     >
                       {c.label}{c.size_warn ? " (indicatif)" : ""}
                     </button>
                   ))}
+                  </div>
                 </div>
               )}
               {q.trim().length >= 2 && r.collection && (

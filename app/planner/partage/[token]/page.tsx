@@ -11,7 +11,7 @@
 
 import React, { use, useEffect, useMemo, useRef, useState } from "react";
 import PlannerCanvas from "@/components/planner/PlannerCanvas";
-import { MENTION_IA, MENTION_LEGALE, type Scene } from "@/lib/planner-types";
+import { MENTION_IA, MENTION_LEGALE, estDecor, type Scene } from "@/lib/planner-types";
 
 const LOGO = "https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698";
 const BTN = "rounded-xl border px-3 py-1.5 text-xs transition";
@@ -72,6 +72,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
     if (!scene) return [];
     const m = new Map<string, { titre: string; image_url?: string | null; sku?: string | null; prix?: number | null; prix_exact?: boolean; qty: number; size_warn: boolean; color_warn: boolean }>();
     for (const it of scene.items) {
+      if (estDecor(it)) continue;      // décor : visible sur le plan, jamais un article
       const cle = `${it.product_id}|${it.sku || ""}`;
       const e = m.get(cle);
       if (e) e.qty++;
@@ -159,7 +160,7 @@ export default function PagePartage({ params }: { params: Promise<{ token: strin
         {/* Liste des articles */}
         <aside className="hidden w-[300px] shrink-0 flex-col border-l border-white/10 bg-[#25282c] md:flex">
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-xs">
-            <span className="uppercase tracking-wide text-zinc-500">Articles · {scene.items.length}</span>
+            <span className="uppercase tracking-wide text-zinc-500">Articles · {lignes.reduce((n, l) => n + l.qty, 0)}</span>
             {total > 0 && !info.sans_prix && <span className="text-zinc-300">{totalApprox ? "dès " : ""}{chf(total)}</span>}
           </div>
           <div className="flex-1 overflow-y-auto">

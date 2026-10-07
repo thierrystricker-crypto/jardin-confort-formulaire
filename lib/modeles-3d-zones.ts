@@ -151,6 +151,94 @@ export function couleursDisponibles(zones: ZonesConfig | null | undefined, palet
   return out;
 }
 
+/**
+ * Axes de couleur d'une fiche : UNE entrée par option Shopify distincte, avec
+ * les valeurs vues sur les variantes. Les canapés Bellevie et Rivage en ont
+ * deux (« Couleur structure » et « Couleur tissu » / « Couleur coussin ») :
+ * `couleursDisponibles` ci-dessus n'en rend qu'une, d'où un seul menu dans le
+ * planner avant le 07.10.2026.
+ */
+export type ValeurCouleur = { code: string; nom: string; apercu: string | null };
+export type AxeCouleur = { option: string; zone: string; valeurs: ValeurCouleur[] };
+
+export function axesCouleurs(
+  zones: ZonesConfig | null | undefined,
+  palette: Palette | null | undefined,
+  variantes: VarianteZones[],
+): AxeCouleur[] {
+  if (!zones) return [];
+  const marque = (zones.marque || "").toLowerCase();
+  const zs = zones.zones || {};
+  // Une option peut être portée par plusieurs zones (rare) : la première gagne
+  // pour la pastille. L'option du jeu de formes compte aussi comme un axe.
+  const axes = new Map<string, { zone: string; sousPalette: Record<string, EntreePalette> }>();
+  const ordre = ["structure", ...Object.keys(zs).filter((k) => k !== "structure")];
+  for (const nomZone of ordre) {
+    const z = zs[nomZone];
+    if (!z?.option) continue;
+    const cle = z.option.trim().toLowerCase();
+    if (axes.has(cle)) continue;
+    axes.set(cle, { zone: nomZone, sousPalette: palette?.[marque]?.[z.palette] || {} });
+  }
+  if (zones.formes?.option) {
+    const cle = zones.formes.option.trim().toLowerCase();
+    if (!axes.has(cle)) axes.set(cle, { zone: "forme", sousPalette: {} });
+  }
+  if (!axes.size) return [];
+
+  // Nom d'option tel qu'il apparaît sur les variantes (espaces compris)
+  const nomReel = new Map<string, string>();
+  for (const v of variantes || []) {
+    for (const k of Object.keys(v.options || {})) {
+      const cle = k.trim().toLowerCase();
+      if (axes.has(cle) && !nomReel.has(cle)) nomReel.set(cle, k);
+    }
+  }
+
+  const out: AxeCouleur[] = [];
+  for (const [cle, info] of axes) {
+    const vus = new Set<string>();
+    const valeurs: ValeurCouleur[] = [];
+    for (const v of variantes || []) {
+      const valeur = valeurOption(v.options, nomReel.get(cle) || cle);
+      const code = codeCouleur(valeur);
+      if (!code || vus.has(code)) continue;
+      vus.add(code);
+      valeurs.push({
+        code,
+        nom: info.sousPalette[code]?.n || String(valeur || code),
+        apercu: hexDepuisLineaire(info.sousPalette[code]?.c),
+      });
+    }
+    if (valeurs.length) {
+      valeurs.sort((x, y) => x.nom.localeCompare(y.nom, "fr"));
+      out.push({ option: nomReel.get(cle) || cle, zone: info.zone, valeurs });
+    }
+  }
+  return out;
+}
+
+/** La variante qui correspond à une combinaison de codes (option → code). */
+export function varianteParCodes(
+  variantes: VarianteZones[],
+  codes: Record<string, string>,
+): VarianteZones | null {
+  const entrees = Object.entries(codes).filter(([, c]) => c);
+  if (!entrees.length) return null;
+  let repli: VarianteZones | null = null;
+  let meilleur = 0;
+  for (const v of variantes || []) {
+    let n = 0;
+    for (const [option, code] of entrees) {
+      if (codeCouleur(valeurOption(v.options, option)) === code.toUpperCase()) n++;
+    }
+    if (n === entrees.length) return v;
+    // Combinaison non vendue : on garde celle qui satisfait le plus d'axes.
+    if (n > meilleur) { meilleur = n; repli = v; }
+  }
+  return repli;
+}
+
 /** Couleur linéaire → #rrggbb (pastille d'interface seulement). */
 export function hexDepuisLineaire(c?: [number, number, number] | null): string | null {
   if (!c || c.length < 3) return null;

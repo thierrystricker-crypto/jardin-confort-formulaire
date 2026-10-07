@@ -22,7 +22,8 @@ function epurer(items: SceneItem[]): SceneItem[] {
     // Nécessaires au RENDU, et sans rien d'interne : sans `mur` le décor n'a
     // pas de fichier à charger et tombe en « Modèle non chargé » ; sans
     // `peinture` le client voit la couleur du fichier, pas celle choisie.
-    mur: it.mur, peinture: it.peinture, couleur_code: it.couleur_code, couleur_nom: it.couleur_nom,
+    mur: it.mur, arbre: it.arbre, peinture: it.peinture, couleur_code: it.couleur_code, couleur_nom: it.couleur_nom,
+    couleur_options: it.couleur_options,
   }));
 }
 

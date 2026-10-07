@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
-import { MENTION_IA, MENTION_LEGALE, MUR_TEXTURES, MURS, SCENE_VIDE, SOLS, estVegetal, nomMur, uid, type CameraScene, type CatalogueItem, type ChoixModele, type MurConfig, type Peinture, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
+import { ARBRES, MENTION_IA, MENTION_LEGALE, MUR_TEXTURES, MURS, SCENE_VIDE, SOLS, estDecor, estVegetal, nomMur, uid, type AxeCouleur, type CameraScene, type CatalogueItem, type ChoixModele, type MurConfig, type Peinture, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
 import { DECORS, MOMENTS, composerDescription, filtrerDecor } from "@/lib/planner-ambiance-cadre";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
@@ -40,9 +40,61 @@ function chf(n: number): string {
   return `CHF ${n.toLocaleString("fr-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\s/g, "'")}`;
 }
 
+// Page d'attente des onglets ouverts pendant une génération (fiche, PDF).
+// Même fond sombre que le planner : passer du sombre au blanc en plein écran
+// est désagréable, et on croit un instant avoir perdu la page (07.10.2026).
+function attentePage(titre: string, detail: string): string {
+  return `<!doctype html><html lang="fr"><meta charset="utf-8"><title>${titre}</title>
+<meta name="color-scheme" content="dark">
+<body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Raleway,Arial,sans-serif;color:#e4e4e7;background:#1f2125">
+<div style="text-align:center;padding:24px">
+  <div style="font-size:18px;font-weight:600">${titre}</div>
+  <div style="margin-top:8px;font-size:13px;color:#a1a1aa">${detail}</div>
+  <div style="margin:18px auto 0;width:220px;height:4px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden">
+    <div style="width:40%;height:100%;background:#38bdf8;border-radius:2px;animation:jc 1.2s infinite linear"></div>
+  </div>
+</div>
+<style>@keyframes jc{0%{margin-left:-40%}100%{margin-left:100%}}</style>
+</body></html>`;
+}
+
 const BTN = "rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40";
 const BTN_OFF = `${BTN} border-white/10 bg-[#2a2d31] text-zinc-300 hover:bg-[#34383d]`;
 const BTN_ON = `${BTN} border-sky-500/40 bg-sky-500/20 text-sky-200`;
+
+// ─── Attente de l'image IA ────────────────────────────────────────────────────
+// 20 à 60 s sans aucun retour visuel : on croit que ça a planté. Barre qui
+// avance vite au début puis ralentit (asymptote à 95 %) — la durée réelle n'est
+// pas connue à l'avance, on ne promet donc pas une fin précise. Composant à
+// part : son horloge ne redessine pas le canvas 3D (07.10.2026).
+function BandeauAmbiance() {
+  const [secondes, setSecondes] = useState(0);
+  useEffect(() => {
+    const t0 = Date.now();
+    const id = window.setInterval(() => setSecondes((Date.now() - t0) / 1000), 250);
+    return () => window.clearInterval(id);
+  }, []);
+  const progres = Math.min(95, 100 * (1 - Math.exp(-secondes / 20)));
+  const etape = secondes < 4
+    ? "Envoi de la vue 3D…"
+    : secondes < 45
+    ? "L'IA compose le décor autour des meubles…"
+    : "Presque fini — les grandes images demandent parfois une minute…";
+  return (
+    <div className="border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">
+      <div className="flex items-center justify-between gap-3">
+        <span>🎨 {etape} La vignette apparaîtra ici.</span>
+        <span className="shrink-0 tabular-nums text-pink-200/70">{Math.floor(secondes)} s · 20 à 60 s</span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-pink-500/20">
+        <div
+          className="h-full rounded-full bg-pink-400/80 transition-[width] duration-300 ease-out"
+          style={{ width: `${progres}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function PlannerPage() {
   const [scene, setScene] = useState<Scene>(SCENE_VIDE);
@@ -57,7 +109,11 @@ export default function PlannerPage() {
   const [pdfEnCours, setPdfEnCours] = useState(false);
   // Galerie des images d'ambiance IA de la dernière version : chaque
   // génération S'AJOUTE (rien n'est écrasé) ; `retenue` = celle des documents.
-  type CouleurPlanner = { code: string; nom: string; apercu: string | null; variant_id: string; sku: string | null; prix: number | null; url: string | null; peinture: Peinture[] };
+  // Une fiche à zones a un ou DEUX axes de couleur (Bellevie, Rivage :
+  // structure + tissu). `axes` sert aux menus, `variantes` à retrouver la
+  // ligne qui correspond à la combinaison choisie.
+  type VariantePlanner = { variant_id: string; sku: string | null; prix: number | null; codes: Record<string, string>; url: string | null; peinture: Peinture[] };
+  type CouleursFiche = { axes: AxeCouleur[]; variantes: VariantePlanner[] };
   type Ambiance = { id: string; url: string; prompt: string | null; modele: string | null; cree_le: string; numero?: number | null };
   const [ambiance, setAmbiance] = useState<{ numero: number; token: string; retenue: string | null; liste: Ambiance[] } | null>(null);
   const [ambianceEnCours, setAmbianceEnCours] = useState(false);
@@ -256,7 +312,7 @@ export default function PlannerPage() {
     setSelected(nouveau.uid);
     // Fiche à couleurs appliquées : on pose la 1re couleur de la fiche, le
     // conseiller la change ensuite dans la barre de l'article sélectionné.
-    if (c.source === "zones") void chargerCouleurs(c.product_id).then((cs) => { if (cs[0]) appliquerCouleur(nouveau.uid, cs[0]); });
+    if (c.source === "zones") void chargerCouleurs(c.product_id).then((f) => { if (f.variantes[0]) appliquerVariante(nouveau.uid, f.variantes[0], f.axes); });
   }
 
   // ─── Murs et murets ─────────────────────────────────────────────────────
@@ -284,6 +340,32 @@ export default function PlannerPage() {
     setSelected(nouveau.uid);
   }
 
+  function nomArbre(a: { espece: string; hauteur: number }): string {
+    const h = a.hauteur.toFixed(2).replace(/[.,]?0+$/, "").replace(".", ",");
+    return `${a.espece.charAt(0).toUpperCase()}${a.espece.slice(1)} ${h} m`;
+  }
+
+  function ajouterArbre(modele: (typeof ARBRES)[number]) {
+    const pos = caseLibre();
+    const nouveau: SceneItem = {
+      uid: uid(), product_id: 0,
+      titre: nomArbre(modele.arbre),
+      marque: null, url: "", source: "decor",
+      arbre: { ...modele.arbre },
+      x: pos.x, z: pos.z, rot: 0,
+      size_warn: false, color_warn: false, image_url: null, prix: null,
+    };
+    patch({ items: [...scene.items, nouveau] });
+    setSelected(nouveau.uid);
+  }
+
+  function patchArbre(u: string, hauteur: number) {
+    const it = scene.items.find((i) => i.uid === u);
+    if (!it?.arbre) return;
+    const a = { ...it.arbre, hauteur };
+    patchItem(u, { arbre: a, titre: nomArbre(a) });
+  }
+
   function patchMur(u: string, p: Partial<MurConfig>) {
     const it = scene.items.find((i) => i.uid === u);
     if (!it?.mur) return;
@@ -294,28 +376,67 @@ export default function PlannerPage() {
   // ─── Couleurs d'une fiche à zones (Fermob) ──────────────────────────────
   // Liste servie par /api/planner/couleurs : code, nom, pastille, fichier et
   // consignes de peinture prêtes pour three.js. Gardée en mémoire par fiche.
-  const [couleurs, setCouleurs] = useState<Record<number, CouleurPlanner[]>>({});
-  async function chargerCouleurs(productId: number): Promise<CouleurPlanner[]> {
+  const [couleurs, setCouleurs] = useState<Record<number, CouleursFiche>>({});
+  async function chargerCouleurs(productId: number): Promise<CouleursFiche> {
     if (couleurs[productId]) return couleurs[productId];
+    const vide: CouleursFiche = { axes: [], variantes: [] };
     try {
       const r = await fetch(`/api/planner/couleurs?product_id=${productId}`);
       const j = await r.json();
-      const cs = (j.couleurs || []) as CouleurPlanner[];
-      setCouleurs((m) => ({ ...m, [productId]: cs }));
-      return cs;
-    } catch { return []; }
+      const f: CouleursFiche = { axes: (j.axes || []) as AxeCouleur[], variantes: (j.variantes || []) as VariantePlanner[] };
+      setCouleurs((m) => ({ ...m, [productId]: f }));
+      return f;
+    } catch { return vide; }
   }
-  function appliquerCouleur(itemUid: string, c: CouleurPlanner) {
+
+  /** Pose une variante : fichier, peinture, prix, et la combinaison choisie. */
+  function appliquerVariante(itemUid: string, v: VariantePlanner, axes: AxeCouleur[]) {
+    const principal = axes[0]?.option;
+    const code = principal ? v.codes[principal] : undefined;
+    const nom = axes[0]?.valeurs.find((x) => x.code === code)?.nom || code || null;
     patchItem(itemUid, {
-      url: c.url || undefined,
-      peinture: c.peinture,
-      couleur_code: c.code,
-      couleur_nom: c.nom,
+      url: v.url || undefined,
+      peinture: v.peinture,
+      couleur_options: v.codes,
+      couleur_code: code || null,
+      couleur_nom: nom,
       color_warn: false,
-      variant_id: c.variant_id || null,
-      sku: c.sku ?? null,
-      ...(c.prix != null ? { prix: c.prix, prix_exact: true } : {}),
+      variant_id: v.variant_id || null,
+      sku: v.sku ?? null,
+      ...(v.prix != null ? { prix: v.prix, prix_exact: true } : {}),
     });
+  }
+
+  /** Changement d'un axe. Les valeurs impossibles sont déjà grisées dans les
+   *  menus (voir `codesPossibles`), donc la combinaison existe : on ne touche
+   *  JAMAIS aux autres axes. Le repli ne sert que par sécurité. */
+  function choisirCouleur(itemUid: string, option: string, code: string) {
+    const it = scene.items.find((i) => i.uid === itemUid);
+    if (!it) return;
+    const f = couleurs[it.product_id];
+    if (!f) return;
+    const voulu: Record<string, string> = { ...(it.couleur_options || {}), [option]: code };
+    const exacte = f.variantes.find((v) => Object.entries(voulu).every(([o, c]) => v.codes[o] === c));
+    const v = exacte || f.variantes.find((x) => x.codes[option] === code) || null;
+    if (v) appliquerVariante(itemUid, v, f.axes);
+  }
+
+  /** Codes réellement vendus pour un axe, compte tenu des AUTRES axes déjà
+   *  choisis. Fermob ne propose pas tous les tissus sur toutes les armatures :
+   *  sans ce filtre, on choisit une combinaison inexistante et le planner
+   *  change l'autre couleur dans le dos du conseiller (07.10.2026). */
+  function codesPossibles(f: CouleursFiche, option: string, choisis: Record<string, string>): Set<string> {
+    const out = new Set<string>();
+    for (const v of f.variantes) {
+      let ok = true;
+      for (const a of f.axes) {
+        if (a.option === option) continue;
+        const c = choisis[a.option];
+        if (c && v.codes[a.option] !== c) { ok = false; break; }
+      }
+      if (ok && v.codes[option]) out.add(v.codes[option]);
+    }
+    return out;
   }
 
   function supprimer(u: string) {
@@ -336,7 +457,7 @@ export default function PlannerPage() {
   function regrouper(items: SceneItem[]): Map<string, { it: SceneItem; qty: number }> {
     const m = new Map<string, { it: SceneItem; qty: number }>();
     for (const it of items) {
-      if (it.mur) continue;            // un mur n'est pas un article à commander
+      if (estDecor(it)) continue;      // un décor n'est pas un article à commander
       const cle = `${it.product_id}|${it.variant_id || ""}`;
       const e = m.get(cle);
       if (e) e.qty++; else m.set(cle, { it, qty: 1 });
@@ -660,7 +781,7 @@ export default function PlannerPage() {
     if (scene.items.length === 0) { setMessage("Aucun article à imprimer"); return; }
     const w = window.open("", "_blank");           // dans le clic, sinon bloqué
     if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
-    w.document.write("<p style='font-family:sans-serif;padding:24px;color:#666'>Préparation de la fiche…</p>");
+    w.document.write(attentePage("Préparation de la fiche…", avecPrix ? "avec prix" : "sans prix"));
     const version = await lienPartagePourExport("fiche");
     if (!version) { w.close(); return; }
     w.location.href = `/print/planner/${version.token}?prix=${avecPrix ? 1 : 0}`;
@@ -791,7 +912,7 @@ export default function PlannerPage() {
     // conseiller voit qu'il se passe quelque chose et ne reclique pas.
     const w = window.open("", "_blank");
     if (!w) { setMessage("Fenêtre bloquée par le navigateur"); return; }
-    w.document.write(`<!doctype html><title>PDF du plan 3D</title><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Raleway,Arial,sans-serif;color:#555;background:#fafafa"><div style="text-align:center"><div style="font-size:18px;font-weight:600">Génération du PDF du plan 3D…</div><div style="margin-top:8px;font-size:13px;color:#888">10 à 20 secondes — ${avecPrix ? "avec prix" : "sans prix"}</div><div style="margin:18px auto 0;width:220px;height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden"><div style="width:40%;height:100%;background:#2563eb;animation:jc 1.2s infinite linear"></div></div><style>@keyframes jc{0%{margin-left:-40%}100%{margin-left:100%}}</style></div></body>`);
+    w.document.write(attentePage("Génération du PDF du plan 3D…", `10 à 20 secondes — ${avecPrix ? "avec prix" : "sans prix"}`));
     setPdfEnCours(true);
     setMessage("Génération du PDF… (10 à 20 s)");
     try {
@@ -862,7 +983,7 @@ export default function PlannerPage() {
   }
 
   void histoN; // force le rendu des boutons annuler/rétablir
-  const articles = useMemo(() => scene.items.filter((i) => !i.mur), [scene.items]);
+  const articles = useMemo(() => scene.items.filter((i) => !estDecor(i)), [scene.items]);
   const nbMurs = scene.items.length - articles.length;
   const total = articles.reduce((n, i) => n + (i.prix || 0), 0);
   const totalApprox = articles.some((i) => i.prix != null && !i.prix_exact);
@@ -987,9 +1108,7 @@ export default function PlannerPage() {
           </div>
         );
       })()}
-      {ambianceEnCours && (
-        <div className="border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">🎨 Génération de l&apos;image d&apos;ambiance en cours… 20 à 40 secondes, la vignette apparaîtra ici.</div>
-      )}
+      {ambianceEnCours && <BandeauAmbiance />}
       {ambianceErreur && (
         <div className="flex items-center gap-3 border-b border-white/10 bg-rose-500/10 px-4 py-2 text-xs text-rose-100">
           <span className="min-w-0 flex-1">🎨 Ambiance IA impossible : {ambianceErreur}</span>
@@ -1040,7 +1159,7 @@ export default function PlannerPage() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <PlannerCatalogue onAjouter={ajouter} onAjouterMur={ajouterMur} />
+        <PlannerCatalogue onAjouter={ajouter} onAjouterMur={ajouterMur} onAjouterArbre={ajouterArbre} />
 
         <div className="relative min-w-0 flex-1">
           <PlannerCanvas
@@ -1070,6 +1189,22 @@ export default function PlannerPage() {
           {item && (
             <div className="absolute left-3 top-3 flex items-center gap-1 rounded-xl border border-white/10 bg-[#1f2125]/90 p-1.5 shadow-lg backdrop-blur">
               <span className="max-w-[260px] truncate px-2 text-xs text-zinc-200" title={item.titre}>{item.titre}</span>
+              {/* Hauteur de l'arbre sélectionné */}
+              {item.arbre && (
+                <label className="flex items-center gap-1 rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-[11px] text-zinc-300" title="Hauteur de l'arbre, du sol au sommet du feuillage">
+                  haut.
+                  <input
+                    type="number" min={100} max={1200} step={25}
+                    value={Math.round(item.arbre.hauteur * 100)}
+                    onChange={(e) => {
+                      const v = Number(e.target.value) / 100;
+                      if (v >= 1 && v <= 12) patchArbre(item.uid, +v.toFixed(2));
+                    }}
+                    className="w-16 rounded bg-[#1f2125] px-1 py-0.5 text-right text-zinc-100 outline-none"
+                  />
+                  cm
+                </label>
+              )}
               {/* Cotes et matière du mur sélectionné (le plus simple reste
                   d'étirer les poignées bleues sur le plan). */}
               {item.mur && (
@@ -1108,24 +1243,55 @@ export default function PlannerPage() {
                   </select>
                 </div>
               )}
-              {/* Couleur de la variante (fiches à zones, Fermob) */}
-              {!item.mur && (item.source === "zones" || (item.peinture?.length ?? 0) > 0) && (
-                <select
-                  className="rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-xs text-zinc-100 outline-none"
-                  value={item.couleur_code || ""}
-                  onFocus={() => void chargerCouleurs(item.product_id)}
-                  onChange={(e) => {
-                    const c = (couleurs[item.product_id] || []).find((x) => x.code === e.target.value);
-                    if (c) appliquerCouleur(item.uid, c);
-                  }}
-                  title="Couleur du meuble : appliquée au modèle 3D, et donc aussi sur la fiche, le PDF et l'image d'ambiance"
-                >
-                  {!item.couleur_code && <option value="">Couleur…</option>}
-                  {(couleurs[item.product_id] || (item.couleur_code ? [{ code: item.couleur_code, nom: item.couleur_nom || item.couleur_code }] : [])).map((c) => (
-                    <option key={c.code} value={c.code}>{c.nom} {c.code}</option>
-                  ))}
-                </select>
-              )}
+              {/* Couleurs de la variante (fiches à zones, Fermob) : UN MENU PAR
+                  AXE — les canapés Bellevie et Rivage ont une couleur de
+                  structure ET une couleur de tissu / coussin (07.10.2026). */}
+              {!estDecor(item) && (item.source === "zones" || (item.peinture?.length ?? 0) > 0) && (() => {
+                const f = couleurs[item.product_id];
+                const axes = f?.axes?.length
+                  ? f.axes
+                  : [{ option: "Couleur", zone: "structure", valeurs: item.couleur_code ? [{ code: item.couleur_code, nom: item.couleur_nom || item.couleur_code, apercu: null }] : [] }];
+                const choisis = item.couleur_options || (item.couleur_code && axes[0] ? { [axes[0].option]: item.couleur_code } : {});
+                return axes.map((axe) => {
+                  const choisi = choisis[axe.option] || "";
+                  const possibles = f ? codesPossibles(f, axe.option, choisis) : null;
+                  const nbPossibles = possibles ? axe.valeurs.filter((v) => possibles.has(v.code)).length : axe.valeurs.length;
+                  // Libellé court : « structure », « tissu », « coussin »…
+                  const etiquette = axe.option.replace(/^couleur\s*/i, "").trim() || "couleur";
+                  return (
+                    <label
+                      key={axe.option}
+                      className="flex items-center gap-1 text-[11px] text-zinc-400"
+                      title={
+                        axes.length > 1 && possibles && nbPossibles < axe.valeurs.length
+                          ? `${axe.option} — ${nbPossibles} sur ${axe.valeurs.length} proposées avec les autres couleurs choisies ; les autres combinaisons n'existent pas au catalogue`
+                          : `${axe.option} : appliquée au modèle 3D, et donc aussi sur la fiche, le PDF et l'image d'ambiance`
+                      }
+                    >
+                      {axes.length > 1 && <span className="capitalize">{etiquette}</span>}
+                      <select
+                        className="max-w-[190px] rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-xs text-zinc-100 outline-none"
+                        value={choisi}
+                        onFocus={() => void chargerCouleurs(item.product_id)}
+                        onChange={(e) => choisirCouleur(item.uid, axe.option, e.target.value)}
+                      >
+                        {!choisi && <option value="">{axes.length > 1 ? "Choisir…" : "Couleur…"}</option>}
+                        {axe.valeurs.map((v) => {
+                          const ok = !possibles || possibles.has(v.code);
+                          return (
+                            <option key={v.code} value={v.code} disabled={!ok} className={ok ? undefined : "text-zinc-500"}>
+                              {ok ? "" : "— "}{v.nom} {v.code}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      {axes.length > 1 && possibles && nbPossibles < axe.valeurs.length && (
+                        <span className="text-[10px] text-zinc-500">{nbPossibles}/{axe.valeurs.length}</span>
+                      )}
+                    </label>
+                  );
+                });
+              })()}
               <button type="button" onClick={() => tourner(item.uid, -15)} className={BTN_OFF} title="Tourner −15° (Maj+R)">⟲</button>
               <button type="button" onClick={() => tourner(item.uid, 15)} className={BTN_OFF} title="Tourner +15° (R)">⟳</button>
               <button type="button" onClick={() => tourner(item.uid, 90)} className={BTN_OFF} title="Tourner de 90°">90°</button>
@@ -1163,7 +1329,7 @@ export default function PlannerPage() {
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-xs">
             <span className="uppercase tracking-wide text-zinc-500">
               Articles posés · {articles.length}
-              {nbMurs > 0 && <span className="ml-1 normal-case text-zinc-600">+ {nbMurs} mur{nbMurs > 1 ? "s" : ""}</span>}
+              {nbMurs > 0 && <span className="ml-1 normal-case text-zinc-600">+ {nbMurs} décor{nbMurs > 1 ? "s" : ""}</span>}
             </span>
             {total > 0 && <span className="text-zinc-300" title={totalApprox ? "« dès » : au moins un article au prix le plus bas de sa fiche" : "Prix des variantes posées"}>{totalApprox ? "dès " : ""}{chf(total)}</span>}
           </div>
@@ -1179,13 +1345,15 @@ export default function PlannerPage() {
                   className={`flex w-full items-start gap-2 border-b border-white/5 px-3 py-2 text-left text-xs transition hover:bg-white/5 ${selected === i.uid ? "bg-sky-500/15" : ""}`}
                 >
                   <span className="mt-0.5 w-4 shrink-0 text-zinc-500">{idx + 1}</span>
-                  {i.mur
-                    ? <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-white/5 text-sm text-zinc-400" title="Décor">{estVegetal(i.mur.texture) ? "🌿" : "🧱"}</div>
+                  {estDecor(i)
+                    ? <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-white/5 text-sm text-zinc-400" title="Décor">{i.arbre ? "🌳" : i.mur && estVegetal(i.mur.texture) ? "🌿" : "🧱"}</div>
                     : i.image_url ? <img src={i.image_url} alt="" className="h-9 w-9 shrink-0 rounded bg-white object-contain" /> : <div className="h-9 w-9 shrink-0 rounded bg-white/5" />}
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 text-zinc-200">{i.titre}</span>
                     <span className="block text-[10px] text-zinc-500">
-                      {i.mur
+                      {i.arbre
+                        ? `Végétal · H ${i.arbre.hauteur.toFixed(2).replace(".", ",")} m`
+                        : i.mur
                         ? `${estVegetal(i.mur.texture) ? "Végétal" : "Décor"} · ${Math.round(i.mur.longueur * 100)}×${Math.round(i.mur.epaisseur * 100)}×H${Math.round(i.mur.hauteur * 100)} cm`
                         : `${i.marque || ""}${d ? ` · ${Math.round(d.l * 100)}×${Math.round(d.p * 100)}×H${Math.round(d.h * 100)} cm` : ""}`}{i.rot ? ` · ${i.rot}°` : ""}
                     </span>

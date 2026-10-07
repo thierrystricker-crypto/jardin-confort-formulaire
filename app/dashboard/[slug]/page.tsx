@@ -38,6 +38,21 @@ type OffreRecord = {
   data: Record<string,unknown>; created_at: string; updated_at: string|null
 }
 
+// Page d'attente d'un onglet ouvert pendant une génération : même fond sombre
+// que le dashboard, le plein écran blanc donnait l'impression d'avoir perdu la
+// page (07.10.2026).
+function attenteSombre(titre: string, detail: string): string {
+  return `<!doctype html><html lang="fr"><meta charset="utf-8"><title>${titre}</title>`
+    + `<meta name="color-scheme" content="dark">`
+    + `<body style="margin:0;display:flex;align-items:center;justify-content:center;`
+    + `height:100vh;font-family:system-ui,sans-serif;color:#e4e4e7;background:#1f2125">`
+    + `<div style="text-align:center;padding:24px"><div style="font-size:15px">${titre}</div>`
+    + `<div style="margin-top:8px;font-size:13px;color:#a1a1aa">${detail}</div>`
+    + `<div style="margin:18px auto 0;width:200px;height:4px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden">`
+    + `<div style="width:40%;height:100%;background:#38bdf8;border-radius:2px;animation:jc 1.2s infinite linear"></div></div></div>`
+    + `<style>@keyframes jc{0%{margin-left:-40%}100%{margin-left:100%}}</style></body></html>`
+}
+
 function fmtDate(iso: string|null) {
   if (!iso) return "—"
   return new Date(iso).toLocaleDateString("fr-CH", { day:"2-digit", month:"2-digit", year:"numeric" })
@@ -348,11 +363,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     const onglet = window.open("", "_blank")
     if (onglet) {
       onglet.document.write(
-        `<!doctype html><meta charset="utf-8"><title>PDF en cours…</title>` +
-        `<body style="margin:0;display:flex;align-items:center;justify-content:center;` +
-        `height:100vh;font-family:system-ui,sans-serif;color:#334;background:#f6f7f9">` +
-        `<div style="text-align:center"><div style="font-size:15px">Génération du PDF à jour…</div>` +
-        `<div style="margin-top:8px;font-size:13px;color:#889">10 à 20 secondes</div></div>`
+        attenteSombre("Génération du PDF à jour…", "10 à 20 secondes")
       )
     }
     setPdfOpening(true)
@@ -387,11 +398,7 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
     const onglet = window.open("", "_blank")
     if (onglet) {
       onglet.document.write(
-        `<!doctype html><meta charset="utf-8"><title>QR en cours…</title>` +
-        `<body style="margin:0;display:flex;align-items:center;justify-content:center;` +
-        `height:100vh;font-family:system-ui,sans-serif;color:#334;background:#f6f7f9">` +
-        `<div style="text-align:center"><div style="font-size:15px">Génération du QR de paiement au montant courant…</div>` +
-        `<div style="margin-top:8px;font-size:13px;color:#889">10 à 20 secondes</div></div>`
+        attenteSombre("Génération du QR de paiement au montant courant…", "10 à 20 secondes")
       )
     }
     setQrGenerating(true)
