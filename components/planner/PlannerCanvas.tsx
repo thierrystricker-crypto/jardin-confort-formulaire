@@ -24,7 +24,7 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Grid, Html, OrbitControls, OrthographicCamera, PerspectiveCamera, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import { SOLS, type Peinture, type SceneItem, type SolId, type Terrasse, type VueCamera } from "@/lib/planner-types";
+import { MUR_TEXTURES, SOLS, estVegetal, type MurTextureId, type Peinture, type SceneItem, type SolId, type Terrasse, type VueCamera } from "@/lib/planner-types";
 
 export type Dims = { l: number; p: number; h: number };
 
@@ -39,6 +39,9 @@ type Props = {
   onSelect: (uid: string | null) => void;
   onDragStart: () => void;
   onMove: (uid: string, x: number, z: number) => void;
+  // Étirement d'un décor : nouvelle longueur + nouveau centre (l'extrémité
+  // opposée à la poignée reste en place).
+  onResize?: (uid: string, longueur: number, x: number, z: number) => void;
   onDims: (uid: string, dims: Dims) => void;
   onError: (uid: string, message: string) => void;
   captureRef: React.MutableRefObject<(() => string | null) | null>;
@@ -69,16 +72,32 @@ const CLAY = new THREE.MeshStandardMaterial({ color: 0xd6d3cd, roughness: 0.95, 
 // couleurs). Les consignes viennent du serveur (lib/modeles-3d-zones.ts).
 
 const TEXTURES = new Map<string, THREE.Texture>();
+const TEXTURES_PRETES = new Set<string>();
+const TEXTURES_ABONNES = new Map<string, Set<() => void>>();
+
 function chargerTexture(url: string): THREE.Texture {
   let t = TEXTURES.get(url);
   if (!t) {
-    t = new THREE.TextureLoader().load(url);
+    t = new THREE.TextureLoader().load(url, () => {
+      TEXTURES_PRETES.add(url);
+      for (const f of TEXTURES_ABONNES.get(url) || []) f();
+    });
     t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.flipY = false;
     TEXTURES.set(url, t);
   }
   return t;
+}
+
+// Le chargement est asynchrone : un clone fabriqué avant l'arrivée de l'image
+// reste vide. On s'abonne pour lui recoller l'image dès qu'elle est là.
+function quandPrete(url: string, f: () => void): () => void {
+  if (TEXTURES_PRETES.has(url)) { f(); return () => {}; }
+  let abonnes = TEXTURES_ABONNES.get(url);
+  if (!abonnes) { abonnes = new Set(); TEXTURES_ABONNES.set(url, abonnes); }
+  abonnes.add(f);
+  return () => { abonnes!.delete(f); };
 }
 
 // Matériaux repeints, indexés par matériau d'origine. Le nom de la matière
@@ -230,6 +249,243 @@ function Modele({
     </group>
   );
 }
+
+// ─── Décors : murs et murets étirables ────────────────────────────────────────
+// Pas de fichier 3D : une boîte paramétrique habillée d'une texture générée.
+// Les deux poignées bleues des extrémités allongent le mur en gardant l'autre
+// bout en place, comme sur les planners fabricants (07.10.2026).
+
+const TEX_MUR = new Map<MurTextureId, THREE.CanvasTexture>();
+
+function textureMur(id: MurTextureId): THREE.CanvasTexture | null {
+  const deja = TEX_MUR.get(id);
+  if (deja) return deja;
+  if (typeof document === "undefined") return null;
+  const N = 256;                      // 1 tuile = 1 m
+  const c = document.createElement("canvas");
+  c.width = c.height = N;
+  const g = c.getContext("2d");
+  if (!g) return null;
+  const base = MUR_TEXTURES.find((t) => t.id === id)?.couleur || "#dcd7ce";
+  g.fillStyle = base;
+  g.fillRect(0, 0, N, N);
+
+  if (id === "crepi") {
+    for (let i = 0; i < 14000; i++) {
+      const v = Math.random() < 0.5 ? 0 : 255;
+      g.fillStyle = `rgba(${v},${v},${v},${0.04 + Math.random() * 0.06})`;
+      g.fillRect(Math.random() * N, Math.random() * N, 2, 2);
+    }
+  } else if (id === "pierre") {
+    const h = N / 5;                  // assises de 20 cm
+    for (let r = 0; r < 5; r++) {
+      // La rangée démarre avant 0 et finit après N : les pierres coupées se
+      // raccordent d'une tuile à l'autre quand le mur est étiré.
+      let x = (r % 2 ? -0.45 : -0.15) * N;
+      while (x < N) {
+        const w = N * (0.26 + Math.random() * 0.2);
+        const t = 18 + Math.random() * 26;
+        g.fillStyle = `rgb(${175 + t},${168 + t},${152 + t})`;
+        g.fillRect(x + 2, r * h + 2, w - 4, h - 4);
+        x += w;
+      }
+    }
+    g.strokeStyle = "rgba(0,0,0,0.10)";
+    g.lineWidth = 2;
+    for (let r = 0; r <= 5; r++) { g.beginPath(); g.moveTo(0, r * h); g.lineTo(N, r * h); g.stroke(); }
+  } else if (id === "beton") {
+    for (let i = 0; i < 2600; i++) {
+      g.fillStyle = `rgba(255,255,255,${Math.random() * 0.07})`;
+      g.beginPath();
+      g.arc(Math.random() * N, Math.random() * N, Math.random() * 7, 0, Math.PI * 2);
+      g.fill();
+    }
+  } else if (id === "thuya" || id === "laurier" || id === "buis") {
+    // Haie taillée : fond sombre puis des milliers de touches de feuillage,
+    // plus claires vers le haut de chaque touffe. La taille des touches fait
+    // la différence entre une écaille de thuya et une feuille de laurier.
+    const reglage = id === "thuya"
+      ? { n: 11000, lmin: 3, lmax: 9, larg: 0.42, teinte: [52, 92, 46], ecart: 26 }
+      : id === "laurier"
+      ? { n: 5200, lmin: 7, lmax: 17, larg: 0.52, teinte: [40, 96, 44], ecart: 34 }
+      : { n: 15000, lmin: 2, lmax: 5, larg: 0.78, teinte: [74, 110, 58], ecart: 22 };
+    // Le motif est RÉPÉTÉ, jamais étiré (repeat en mètres, voir useMatsMur) :
+    // une touche de feuillage qui dépasse d'un bord est donc redessinée sur le
+    // bord opposé, sinon le raccord des tuiles se voit sur un mur étiré.
+    const boucler = (x: number, y: number, marge: number, dessiner: (x: number, y: number) => void) => {
+      for (const dx of [0, -N, N]) {
+        for (const dy of [0, -N, N]) {
+          if ((dx || dy) && Math.min(x, N - x) > marge && Math.min(y, N - y) > marge) continue;
+          dessiner(x + dx, y + dy);
+        }
+      }
+    };
+    g.fillStyle = "#1d2d1b";
+    g.fillRect(0, 0, N, N);
+    for (let i = 0; i < reglage.n; i++) {
+      const x = Math.random() * N;
+      const y = Math.random() * N;
+      const l = reglage.lmin + Math.random() * (reglage.lmax - reglage.lmin);
+      const t = (Math.random() - 0.35) * reglage.ecart;
+      const [r0, v0, b0] = reglage.teinte;
+      const angle = (Math.random() - 0.5) * (id === "thuya" ? 0.7 : Math.PI);
+      g.fillStyle = `rgb(${Math.max(0, r0 + t)},${Math.max(0, v0 + t)},${Math.max(0, b0 + t * 0.7)})`;
+      boucler(x, y, l + 1, (px, py) => {
+        g.save();
+        g.translate(px, py);
+        g.rotate(angle);
+        g.beginPath();
+        g.ellipse(0, 0, l * reglage.larg, l, 0, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
+      });
+    }
+    // Quelques trouées sombres : une haie n'est jamais uniforme
+    for (let i = 0; i < 160; i++) {
+      const x = Math.random() * N, y = Math.random() * N, r = 3 + Math.random() * 11;
+      g.fillStyle = `rgba(14,26,13,${0.12 + Math.random() * 0.22})`;
+      boucler(x, y, r + 1, (px, py) => { g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.fill(); });
+    }
+  } else if (id === "bois") {
+    const n = 7;                      // lames verticales de ~14 cm
+    for (let i = 0; i < n; i++) {
+      const t = -16 + Math.random() * 32;
+      g.fillStyle = `rgb(${173 + t},${141 + t},${97 + t})`;
+      g.fillRect((i * N) / n, 0, N / n - 2, N);
+    }
+    g.strokeStyle = "rgba(0,0,0,0.16)";
+    g.lineWidth = 2;
+    for (let i = 0; i <= n; i++) { g.beginPath(); g.moveTo((i * N) / n, 0); g.lineTo((i * N) / n, N); g.stroke(); }
+  }
+
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  TEX_MUR.set(id, t);
+  return t;
+}
+
+// Un matériau par face du cube pour que la texture garde son échelle réelle
+// (1 tuile = 1 m) quelles que soient les cotes du mur.
+// Ordre BoxGeometry : +x, -x, +y, -y, +z, -z.
+function useMatsMur(id: MurTextureId, l: number, h: number, e: number, maquette: boolean): THREE.Material[] {
+  const def = MUR_TEXTURES.find((t) => t.id === id);
+  const fichier = def?.fichier;
+  const mats = useMemo(() => {
+    if (maquette) return [CLAY, CLAY, CLAY, CLAY, CLAY, CLAY];
+    // Texture photo si la matière en a une (/public/textures), sinon motif
+    // dessiné. Dans les deux cas 1 tuile = `metres` m : on répète, jamais étirer.
+    const base = def?.fichier ? chargerTexture(def.fichier) : textureMur(id);
+    const ech = def?.metres || 1;
+    const couleur = def?.couleur || "#dcd7ce";
+    return ([[e, h], [e, h], [l, e], [l, e], [l, h], [l, h]] as [number, number][]).map(([u0, v0]) => {
+      const u = u0 / ech, v = v0 / ech;
+      const m = new THREE.MeshStandardMaterial({ color: base ? 0xffffff : new THREE.Color(couleur), roughness: 0.95, metalness: 0 });
+      if (base) {
+        const t = base.clone();
+        t.needsUpdate = true;
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(Math.max(0.2, u), Math.max(0.2, v));
+        m.map = t;
+      }
+      return m;
+    });
+  }, [id, l, h, e, maquette]);
+  useEffect(() => {
+    if (!fichier || maquette) return;
+    return quandPrete(fichier, () => {
+      const source = TEXTURES.get(fichier);
+      if (!source) return;
+      for (const m of mats) {
+        const mm = m as THREE.MeshStandardMaterial;
+        if (mm.map) { mm.map.image = source.image; mm.map.needsUpdate = true; }
+        mm.needsUpdate = true;
+      }
+    });
+  }, [mats, fichier, maquette]);
+  useEffect(() => () => {
+    if (maquette) return;
+    for (const m of mats) { (m as THREE.MeshStandardMaterial).map?.dispose(); m.dispose(); }
+  }, [mats, maquette]);
+  return mats;
+}
+
+// Silhouette d'une haie taillée : une boîte subdivisée dont les sommets sont
+// déplacés par un bruit déterministe (même position de départ = même
+// déplacement, donc aucune fissure sur les arêtes). C'est le contour hérissé,
+// plus que la matière, qui distingue une vraie haie d'un parallélépipède.
+function bruit(x: number, y: number, z: number): number {
+  const v = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+  return (v - Math.floor(v)) * 2 - 1;
+}
+
+function geoHaie(l: number, h: number, e: number): THREE.BufferGeometry {
+  const parSegment = 0.12;            // une subdivision tous les 12 cm
+  const n = (v: number) => Math.max(2, Math.min(80, Math.round(v / parSegment)));
+  const g = new THREE.BoxGeometry(l, h, e, n(l), n(h), n(e));
+  const pos = g.attributes.position as THREE.BufferAttribute;
+  const ampl = 0.045;                 // ± 4,5 cm de pousse désordonnée
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    // rien au ras du sol (la haie reste posée), tout en haut et sur les flancs
+    const k = Math.min(1, (y + h / 2) / 0.25);
+    const a = ampl * k;
+    pos.setXYZ(
+      i,
+      x + bruit(x, y, z) * a,
+      y + bruit(y, z, x) * a * (y > 0 ? 1.6 : 1),
+      z + bruit(z, x, y) * a,
+    );
+  }
+  pos.needsUpdate = true;
+  g.computeVertexNormals();
+  return g;
+}
+
+function Decor({ item, mode, selected, lectureSeule, onPointerDown, onEtirer }: {
+  item: SceneItem; mode: "couleurs" | "maquette"; selected: boolean; lectureSeule: boolean;
+  onPointerDown: (e: ThreeEvent<PointerEvent>) => void;
+  onEtirer: (cote: 1 | -1, e: ThreeEvent<PointerEvent>) => void;
+}) {
+  const d = item.mur!;
+  const vegetal = estVegetal(d.texture);
+  const mats = useMatsMur(d.texture, d.longueur, d.hauteur, d.epaisseur, mode === "maquette");
+  const geo = useMemo(
+    () => (vegetal ? geoHaie(d.longueur, d.hauteur, d.epaisseur) : new THREE.BoxGeometry(d.longueur, d.hauteur, d.epaisseur)),
+    [vegetal, d.longueur, d.hauteur, d.epaisseur],
+  );
+  useEffect(() => () => geo.dispose(), [geo]);
+  return (
+    <group position={[item.x, 0, item.z]} rotation={[0, rotationY(item), 0]} userData={{ meuble: true }}>
+      <mesh position={[0, d.hauteur / 2, 0]} castShadow receiveShadow material={mats} geometry={geo} onPointerDown={onPointerDown} />
+      {selected && (
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]}>
+            <planeGeometry args={[d.longueur + 0.06, d.epaisseur + 0.06]} />
+            <meshBasicMaterial color={0x38bdf8} transparent opacity={0.22} depthWrite={false} />
+          </mesh>
+          {!lectureSeule && ([1, -1] as const).map((cote) => (
+            <mesh
+              key={cote}
+              position={[(cote * d.longueur) / 2, d.hauteur / 2, 0]}
+              onPointerDown={(e) => onEtirer(cote, e)}
+            >
+              <sphereGeometry args={[Math.min(0.12, Math.max(0.07, d.hauteur / 12)), 14, 10]} />
+              <meshBasicMaterial color={0x38bdf8} />
+            </mesh>
+          ))}
+          <Html position={[0, d.hauteur + 0.18, 0]} center style={{ pointerEvents: "none" }}>
+            <div className="whitespace-nowrap rounded bg-black/65 px-1.5 py-0.5 text-[11px] text-white">
+              {Math.round(d.longueur * 100)} × {Math.round(d.epaisseur * 100)} × H {Math.round(d.hauteur * 100)} cm
+            </div>
+          </Html>
+        </>
+      )}
+    </group>
+  );
+}
+
 
 // Boîte rouge à la place d'un modèle qui ne charge pas (CORS, fichier absent…)
 function ModeleEnErreur({ item, onPointerDown }: { item: SceneItem; onPointerDown: (e: ThreeEvent<PointerEvent>) => void }) {
@@ -509,15 +765,20 @@ function Recadrage({ recadrerRef, terrasse, vue }: { recadrerRef: Props["recadre
 // ─── Scène ────────────────────────────────────────────────────────────────────
 
 export default function PlannerCanvas(props: Props) {
-  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onDims, onError, captureRef, calqueRef, ambianceRef, bordsRef, cameraRef, recadrerRef, lectureSeule = false } = props;
+  const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onResize, onDims, onError, captureRef, calqueRef, ambianceRef, bordsRef, cameraRef, recadrerRef, lectureSeule = false } = props;
   const [drag, setDrag] = useState<{ uid: string; dx: number; dz: number } | null>(null);
+  const [etire, setEtire] = useState<{ uid: string; cote: 1 | -1 } | null>(null);
+  const etireRef = useRef(etire);
+  etireRef.current = etire;
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
   const grilleRef = useRef<THREE.Mesh>(null);
   const ombreRef = useRef<THREE.Mesh>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
 
   useEffect(() => {
-    const fin = () => setDrag(null);
+    const fin = () => { setDrag(null); setEtire(null); };
     window.addEventListener("pointerup", fin);
     return () => window.removeEventListener("pointerup", fin);
   }, []);
@@ -543,7 +804,7 @@ export default function PlannerCanvas(props: Props) {
       )}
       <OrbitControls
         makeDefault
-        enabled={!drag}
+        enabled={!drag && !etire}
         enableRotate={vue === "3d"}
         enableDamping={false}
         maxPolarAngle={Math.PI / 2 - 0.05}
@@ -554,11 +815,13 @@ export default function PlannerCanvas(props: Props) {
       <hemisphereLight args={[0xffffff, 0x999999, 0.9]} />
       {/* Ombres : la caméra d'ombre est serrée sur la terrasse (+ 2 m de marge
           pour les articles posés à côté) et la carte fait 4096² → ~5 mm par
-          texel sur une terrasse de 8 m au lieu de ~12 mm sur ±12 m fixes. */}
+          texel sur une terrasse de 8 m au lieu de ~12 mm sur ±12 m fixes.
+          En vue plan, pas d'ombre : vue de dessus, l'ombre portée décale
+          visuellement les meubles et fausse la lecture des distances. */}
       <directionalLight
         position={[demiL + 4, 9, demiP + 3]}
-        intensity={1.5}
-        castShadow
+        intensity={vue === "plan" ? 1.15 : 1.5}
+        castShadow={vue === "3d"}
         shadow-mapSize={[4096, 4096]}
         shadow-camera-left={-(demiL + 2)}
         shadow-camera-right={demiL + 2}
@@ -613,6 +876,22 @@ export default function PlannerCanvas(props: Props) {
         position={[0, -0.01, 0]}
         onPointerDown={() => { if (!dragRef.current) onSelect(null); }}
         onPointerMove={(e) => {
+          // Étirement d'un mur : l'extrémité opposée à la poignée reste fixe,
+          // on recalcule la longueur et on recentre la boîte sur son axe.
+          const et = etireRef.current;
+          if (et) {
+            const it = itemsRef.current.find((i) => i.uid === et.uid);
+            if (!it?.mur || !onResize) return;
+            const th = rotationY(it);
+            const ax = Math.cos(th), az = -Math.sin(th);
+            const L = it.mur.longueur;
+            const fx = it.x - (et.cote * L * ax) / 2;
+            const fz = it.z - (et.cote * L * az) / 2;
+            let nl = ((e.point.x - fx) * ax + (e.point.z - fz) * az) * et.cote;
+            nl = Math.max(0.2, arrondir(nl, snap || 0.05));
+            onResize(et.uid, +nl.toFixed(3), +(fx + (et.cote * nl * ax) / 2).toFixed(3), +(fz + (et.cote * nl * az) / 2).toFixed(3));
+            return;
+          }
           const d = dragRef.current;
           if (!d) return;
           onMove(d.uid, arrondir(e.point.x - d.dx, snap), arrondir(e.point.z - d.dz, snap));
@@ -630,6 +909,25 @@ export default function PlannerCanvas(props: Props) {
           onDragStart();
           setDrag({ uid: item.uid, dx: e.point.x - item.x, dz: e.point.z - item.z });
         };
+        if (item.mur) {
+          return (
+            <Decor
+              key={item.uid}
+              item={item}
+              mode={mode}
+              selected={item.uid === selectedUid}
+              lectureSeule={lectureSeule}
+              onPointerDown={debut}
+              onEtirer={(cote, e) => {
+                if (lectureSeule) return;
+                e.stopPropagation();
+                onSelect(item.uid);
+                onDragStart();
+                setEtire({ uid: item.uid, cote });
+              }}
+            />
+          );
+        }
         return (
           <Garde key={item.uid} onError={(m) => onError(item.uid, m)} fallback={<ModeleEnErreur item={item} onPointerDown={debut} />}>
             <Suspense fallback={null}>

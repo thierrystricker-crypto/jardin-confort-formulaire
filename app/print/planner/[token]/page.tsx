@@ -50,7 +50,9 @@ export default async function PagePrintPlanner({ params, searchParams }: { param
     return <div style={{ padding: 40, textAlign: "center", color: GREY, fontFamily: "sans-serif" }}>Version de plan introuvable.</div>;
   }
 
-  const items = (v.items as ItemVersion[]) || [];
+  // Les décors (murs, murets) sont des éléments de mise en scène : ils
+  // apparaissent sur l'image, jamais dans la liste des articles.
+  const items = ((v.items as ItemVersion[]) || []).filter((it) => !it.mur);
   // Une ligne par fiche et variante, avec quantité
   const groupes = new Map<string, { it: ItemVersion; qty: number }>();
   for (const it of items) {

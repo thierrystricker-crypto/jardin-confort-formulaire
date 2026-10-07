@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
-import { MENTION_IA, MENTION_LEGALE, SCENE_VIDE, SOLS, uid, type CameraScene, type CatalogueItem, type ChoixModele, type Peinture, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
+import { MENTION_IA, MENTION_LEGALE, MUR_TEXTURES, MURS, SCENE_VIDE, SOLS, estVegetal, nomMur, uid, type CameraScene, type CatalogueItem, type ChoixModele, type MurConfig, type Peinture, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
 import { DECORS, MOMENTS, composerDescription, filtrerDecor } from "@/lib/planner-ambiance-cadre";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
@@ -259,6 +259,38 @@ export default function PlannerPage() {
     if (c.source === "zones") void chargerCouleurs(c.product_id).then((cs) => { if (cs[0]) appliquerCouleur(nouveau.uid, cs[0]); });
   }
 
+  // ─── Murs et murets ─────────────────────────────────────────────────────
+  // Pas d'article Shopify derrière : une boîte étirable, sans prix, qui ne
+  // part ni dans la liste d'achat ni dans la fiche client.
+  function ajouterMur(modele: (typeof MURS)[number]) {
+    const pos = caseLibre();
+    const nouveau: SceneItem = {
+      uid: uid(),
+      product_id: 0,
+      titre: nomMur(modele.mur),
+      marque: null,
+      url: "",
+      source: "decor",
+      mur: { ...modele.mur },
+      x: pos.x,
+      z: pos.z,
+      rot: 0,
+      size_warn: false,
+      color_warn: false,
+      image_url: null,
+      prix: null,
+    };
+    patch({ items: [...scene.items, nouveau] });
+    setSelected(nouveau.uid);
+  }
+
+  function patchMur(u: string, p: Partial<MurConfig>) {
+    const it = scene.items.find((i) => i.uid === u);
+    if (!it?.mur) return;
+    const m = { ...it.mur, ...p };
+    patchItem(u, { mur: m, titre: nomMur(m) });
+  }
+
   // ─── Couleurs d'une fiche à zones (Fermob) ──────────────────────────────
   // Liste servie par /api/planner/couleurs : code, nom, pastille, fichier et
   // consignes de peinture prêtes pour three.js. Gardée en mémoire par fiche.
@@ -304,6 +336,7 @@ export default function PlannerPage() {
   function regrouper(items: SceneItem[]): Map<string, { it: SceneItem; qty: number }> {
     const m = new Map<string, { it: SceneItem; qty: number }>();
     for (const it of items) {
+      if (it.mur) continue;            // un mur n'est pas un article à commander
       const cle = `${it.product_id}|${it.variant_id || ""}`;
       const e = m.get(cle);
       if (e) e.qty++; else m.set(cle, { it, qty: 1 });
@@ -829,9 +862,11 @@ export default function PlannerPage() {
   }
 
   void histoN; // force le rendu des boutons annuler/rétablir
-  const total = scene.items.reduce((n, i) => n + (i.prix || 0), 0);
-  const totalApprox = scene.items.some((i) => i.prix != null && !i.prix_exact);
-  const nbAvert = scene.items.filter((i) => i.size_warn || i.color_warn).length;
+  const articles = useMemo(() => scene.items.filter((i) => !i.mur), [scene.items]);
+  const nbMurs = scene.items.length - articles.length;
+  const total = articles.reduce((n, i) => n + (i.prix || 0), 0);
+  const totalApprox = articles.some((i) => i.prix != null && !i.prix_exact);
+  const nbAvert = articles.filter((i) => i.size_warn || i.color_warn).length;
 
   return (
     <main className="flex h-screen flex-col bg-[#1f2125] text-zinc-100">
@@ -1005,7 +1040,7 @@ export default function PlannerPage() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <PlannerCatalogue onAjouter={ajouter} />
+        <PlannerCatalogue onAjouter={ajouter} onAjouterMur={ajouterMur} />
 
         <div className="relative min-w-0 flex-1">
           <PlannerCanvas
@@ -1019,6 +1054,11 @@ export default function PlannerPage() {
             onSelect={setSelected}
             onDragStart={empiler}
             onMove={(u, x, z) => patchItem(u, { x: +x.toFixed(3), z: +z.toFixed(3) }, false)}
+            onResize={(u, longueur, x, z) => {
+              const it = scene.items.find((i) => i.uid === u);
+              if (!it?.mur) return;
+              patchItem(u, { mur: { ...it.mur, longueur }, x: +x.toFixed(3), z: +z.toFixed(3) }, false);
+            }}
             onDims={(u, d) => setDims((m) => (m[u] && Math.abs(m[u].l - d.l) < 1e-6 ? m : { ...m, [u]: d }))}
             onError={(u, m) => setErreurs((e) => ({ ...e, [u]: m }))}
             captureRef={captureRef}
@@ -1030,8 +1070,46 @@ export default function PlannerPage() {
           {item && (
             <div className="absolute left-3 top-3 flex items-center gap-1 rounded-xl border border-white/10 bg-[#1f2125]/90 p-1.5 shadow-lg backdrop-blur">
               <span className="max-w-[260px] truncate px-2 text-xs text-zinc-200" title={item.titre}>{item.titre}</span>
+              {/* Cotes et matière du mur sélectionné (le plus simple reste
+                  d'étirer les poignées bleues sur le plan). */}
+              {item.mur && (
+                <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-[11px] text-zinc-300">
+                  {([
+                    ["longueur", "long.", 0.2, 30],
+                    ["hauteur", "haut.", 0.2, 4],
+                    ["epaisseur", "ép.", 0.05, 1],
+                  ] as const).map(([cle, libelle, min, max]) => (
+                    <label key={cle} className="flex items-center gap-1" title={`${libelle} du mur en centimètres`}>
+                      {libelle}
+                      <input
+                        type="number"
+                        min={min * 100}
+                        max={max * 100}
+                        step={5}
+                        value={Math.round(item.mur![cle] * 100)}
+                        onChange={(e) => {
+                          const v = Number(e.target.value) / 100;
+                          if (v >= min && v <= max) patchMur(item.uid, { [cle]: +v.toFixed(3) } as Partial<MurConfig>);
+                        }}
+                        className="w-14 rounded bg-[#1f2125] px-1 py-0.5 text-right text-zinc-100 outline-none"
+                      />
+                      cm
+                    </label>
+                  ))}
+                  <select
+                    value={item.mur.texture}
+                    onChange={(e) => patchMur(item.uid, { texture: e.target.value as MurConfig["texture"] })}
+                    className="rounded border border-white/10 bg-[#1f2125] px-1 py-0.5 text-zinc-100 outline-none"
+                    title="Matière du mur"
+                  >
+                    {MUR_TEXTURES.map((t) => (
+                      <option key={t.id} value={t.id}>{t.nom}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {/* Couleur de la variante (fiches à zones, Fermob) */}
-              {(item.source === "zones" || (item.peinture?.length ?? 0) > 0) && (
+              {!item.mur && (item.source === "zones" || (item.peinture?.length ?? 0) > 0) && (
                 <select
                   className="rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-xs text-zinc-100 outline-none"
                   value={item.couleur_code || ""}
@@ -1083,7 +1161,10 @@ export default function PlannerPage() {
         {/* Liste des articles posés */}
         <aside className="flex w-[300px] shrink-0 flex-col border-l border-white/10 bg-[#25282c]">
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-xs">
-            <span className="uppercase tracking-wide text-zinc-500">Articles posés · {scene.items.length}</span>
+            <span className="uppercase tracking-wide text-zinc-500">
+              Articles posés · {articles.length}
+              {nbMurs > 0 && <span className="ml-1 normal-case text-zinc-600">+ {nbMurs} mur{nbMurs > 1 ? "s" : ""}</span>}
+            </span>
             {total > 0 && <span className="text-zinc-300" title={totalApprox ? "« dès » : au moins un article au prix le plus bas de sa fiche" : "Prix des variantes posées"}>{totalApprox ? "dès " : ""}{chf(total)}</span>}
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -1098,11 +1179,15 @@ export default function PlannerPage() {
                   className={`flex w-full items-start gap-2 border-b border-white/5 px-3 py-2 text-left text-xs transition hover:bg-white/5 ${selected === i.uid ? "bg-sky-500/15" : ""}`}
                 >
                   <span className="mt-0.5 w-4 shrink-0 text-zinc-500">{idx + 1}</span>
-                  {i.image_url ? <img src={i.image_url} alt="" className="h-9 w-9 shrink-0 rounded bg-white object-contain" /> : <div className="h-9 w-9 shrink-0 rounded bg-white/5" />}
+                  {i.mur
+                    ? <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-white/5 text-sm text-zinc-400" title="Décor">{estVegetal(i.mur.texture) ? "🌿" : "🧱"}</div>
+                    : i.image_url ? <img src={i.image_url} alt="" className="h-9 w-9 shrink-0 rounded bg-white object-contain" /> : <div className="h-9 w-9 shrink-0 rounded bg-white/5" />}
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 text-zinc-200">{i.titre}</span>
                     <span className="block text-[10px] text-zinc-500">
-                      {i.marque}{d ? ` · ${Math.round(d.l * 100)}×${Math.round(d.p * 100)}×H${Math.round(d.h * 100)} cm` : ""}{i.rot ? ` · ${i.rot}°` : ""}
+                      {i.mur
+                        ? `${estVegetal(i.mur.texture) ? "Végétal" : "Décor"} · ${Math.round(i.mur.longueur * 100)}×${Math.round(i.mur.epaisseur * 100)}×H${Math.round(i.mur.hauteur * 100)} cm`
+                        : `${i.marque || ""}${d ? ` · ${Math.round(d.l * 100)}×${Math.round(d.p * 100)}×H${Math.round(d.h * 100)} cm` : ""}`}{i.rot ? ` · ${i.rot}°` : ""}
                     </span>
                     {(i.size_warn || i.color_warn || err) && (
                       <span className="mt-0.5 flex flex-wrap gap-1">
