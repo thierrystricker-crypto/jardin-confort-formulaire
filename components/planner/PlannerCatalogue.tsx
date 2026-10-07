@@ -8,12 +8,15 @@
 // manque. Source : table modeles_3d via /api/planner/catalogue.
 
 import React, { useEffect, useRef, useState } from "react";
-import { choixModeles, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
+import { MURS, choixModeles, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
 
 type Marque = { marque: string; avec_3d: number };
 type Collection = { collection: string; avec_3d: number; total: number };
 
-export default function PlannerCatalogue({ onAjouter }: { onAjouter: (item: CatalogueItem, choix?: ChoixModele) => void }) {
+export default function PlannerCatalogue({ onAjouter, onAjouterMur }: {
+  onAjouter: (item: CatalogueItem, choix?: ChoixModele) => void;
+  onAjouterMur?: (modele: (typeof MURS)[number]) => void;
+}) {
   // Fiche dont on est en train de choisir la taille (3D par variante)
   const [choixPour, setChoixPour] = useState<number | null>(null);
   const [marques, setMarques] = useState<Marque[]>([]);
@@ -91,6 +94,22 @@ export default function PlannerCatalogue({ onAjouter }: { onAjouter: (item: Cata
 
   return (
     <aside className="flex h-full w-[340px] shrink-0 flex-col border-r border-white/10 bg-[#25282c]">
+      {onAjouterMur && (
+        <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
+          <span className="text-[10px] uppercase tracking-wide text-zinc-500">Décor</span>
+          {MURS.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onAjouterMur(m)}
+              className="rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-[11px] text-zinc-200 transition hover:border-sky-500/40 hover:bg-sky-500/15"
+              title={`${m.nom} ${m.sous_titre} — étirable à la longueur voulue avec les poignées bleues`}
+            >
+              🧱 {m.nom} <span className="text-zinc-500">{Math.round(m.mur.hauteur * 100)} cm</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="space-y-2 border-b border-white/10 p-3">
         <input
           type="search"

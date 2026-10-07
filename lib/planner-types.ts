@@ -76,13 +76,87 @@ export function choixModeles(c: CatalogueItem): ChoixModele[] {
   return out;
 }
 
+// ─── Décors : murs et murets ──────────────────────────────────────────────────
+// Un décor n'est pas un article du catalogue : aucun produit Shopify, aucun
+// prix, et il reste hors de la liste d'achat, de la fiche et des documents
+// client. C'est une boîte paramétrique que le conseiller étire à la souris,
+// comme les murs des planners fabricants (07.10.2026).
+
+export type MurTextureId = "crepi" | "pierre" | "beton" | "bois" | "thuya" | "laurier" | "buis";
+
+// `vegetal` : la boîte devient une haie taillée — même objet, même étirement,
+// mais un autre vocabulaire dans l'app et dans le prompt de l'image IA.
+// `fichier` : texture photo servie depuis /public (ambientCG, CC0 — aucune
+// attribution requise). `metres` = côté réel couvert par une tuile, pour que la
+// texture se RÉPÈTE à la bonne échelle et ne s'étire jamais.
+export const MUR_TEXTURES: { id: MurTextureId; nom: string; couleur: string; vegetal?: true; plante?: string; fichier?: string; metres?: number }[] = [
+  { id: "crepi", nom: "Crépi clair", couleur: "#dcd7ce" },
+  { id: "pierre", nom: "Pierre sèche", couleur: "#b5aea1" },
+  { id: "beton", nom: "Béton", couleur: "#adadaa" },
+  { id: "bois", nom: "Bois", couleur: "#ad8d61" },
+  { id: "thuya", nom: "Haie de thuyas", couleur: "#3c5c38", vegetal: true, plante: "thuyas", fichier: "/textures/haie.jpg", metres: 1 },
+  { id: "laurier", nom: "Haie de lauriers", couleur: "#2f5e33", vegetal: true, plante: "lauriers" },
+  { id: "buis", nom: "Haie de buis", couleur: "#537040", vegetal: true, plante: "buis" },
+];
+
+export function estVegetal(t: MurTextureId): boolean {
+  return !!MUR_TEXTURES.find((x) => x.id === t)?.vegetal;
+}
+
+// Nom affiché d'un décor selon sa matière et sa hauteur.
+export function nomMur(m: MurConfig): string {
+  if (estVegetal(m.texture)) return `Haie ${Math.round(m.hauteur * 100)} cm`;
+  return `${m.hauteur <= 1.2 ? "Muret" : "Mur"} ${Math.round(m.hauteur * 100)} cm`;
+}
+
+export type MurConfig = {
+  type: "mur";
+  longueur: number;    // m, étirable par les poignées du plan
+  hauteur: number;     // m
+  epaisseur: number;   // m
+  texture: MurTextureId;
+};
+
+// Décors proposés au clic. Les cotes de départ sont celles demandées :
+// muret 100 × 20 × H 100 cm, mur 100 × 20 × H 200 cm.
+export const MURS: { id: string; nom: string; sous_titre: string; mur: MurConfig }[] = [
+  { id: "muret", nom: "Muret", sous_titre: "100 × 20 × H 100 cm", mur: { type: "mur", longueur: 1, hauteur: 1, epaisseur: 0.2, texture: "crepi" } },
+  { id: "mur",   nom: "Mur",   sous_titre: "100 × 20 × H 200 cm", mur: { type: "mur", longueur: 1, hauteur: 2, epaisseur: 0.2, texture: "crepi" } },
+  // Même boîte étirable, habillée de feuillage : une haie taillée est plus
+  // épaisse qu'un mur (60 cm) et monte en général à 1,80 m.
+  { id: "haie",  nom: "Haie",  sous_titre: "100 × 60 × H 180 cm", mur: { type: "mur", longueur: 1, hauteur: 1.8, epaisseur: 0.6, texture: "thuya" } },
+];
+
+// Phrase pour le prompt de l'image d'ambiance : l'IA doit rendre un vrai mur,
+// pas un meuble. Sans décor, chaîne vide.
+export function decrireMurs(items: SceneItem[]): string {
+  const murs = items.filter((i) => i.mur);
+  if (!murs.length) return "";
+  const m = (v: number) => v.toFixed(2).replace(".", ",");
+  const parts = murs.map((i) => {
+    const d = i.mur!;
+    const t = MUR_TEXTURES.find((x) => x.id === d.texture);
+    const dims = `de ${m(d.longueur)} m de long, ${m(d.epaisseur)} m d'épaisseur et ${m(d.hauteur)} m de haut`;
+    if (t?.vegetal) return `une haie de ${t.plante} taillée au cordeau ${dims}`;
+    const quoi = d.hauteur <= 1.2 ? "muret" : "mur";
+    return `un ${quoi} en ${(t?.nom || "crépi").toLowerCase()} ${dims}`;
+  });
+  const vegetal = murs.some((i) => estVegetal(i.mur!.texture));
+  const nature = vegetal
+    ? "ce sont des éléments du jardin — haies taillées et maçonnerie"
+    : "ce sont des éléments de maçonnerie du jardin";
+  return `La scène comporte ${parts.join(", ")} : ${nature}, à rendre comme tels, jamais comme du mobilier.`;
+}
+
 export type SceneItem = {
   uid: string;              // identifiant local de l'instance (un produit peut être posé plusieurs fois)
-  product_id: number;
+  product_id: number;       // 0 pour un décor (pas de produit Shopify)
   titre: string;
   marque: string | null;
-  url: string;              // URL du GLB (Model3d ou .bin)
-  source: "model3d" | "url" | "zones";
+  url: string;              // URL du GLB (Model3d ou .bin) — vide pour un décor
+  source: "model3d" | "url" | "zones" | "decor";
+  // Décor paramétrique (mur, muret) : pas de fichier 3D, une boîte étirable.
+  mur?: MurConfig;
   // Consignes de peinture (fiche à zones) : matières à repeindre, couleurs
   // linéaires, textures. Appliquées au chargement et avant toute capture.
   peinture?: import("@/lib/modeles-3d-zones").Peinture[];

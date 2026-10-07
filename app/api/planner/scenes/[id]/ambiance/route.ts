@@ -27,7 +27,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { PNG } from "pngjs";
 import { supabaseAdmin } from "@/lib/supabase";
 import { BUCKET, figerVersion, urlPublique } from "@/lib/planner-versions";
-import { MENTION_IA } from "@/lib/planner-types";
+import { MENTION_IA, decrireMurs, type SceneItem } from "@/lib/planner-types";
 import { listerScene } from "@/lib/planner-ambiances";
 import { filtrerDecor } from "@/lib/planner-ambiance-cadre";
 import { textureDedon } from "@/lib/textures-dedon";
@@ -61,7 +61,7 @@ const LARG = 1536, HAUT = 1024;          // format paysage 3:2
 // comptage final. Seuls ajouts conservés : les échantillons de fibre Dedon
 // (validés) et une lumière qui suit le moment choisi (la ligne fixe
 // « lumière naturelle » écrasait « soirée éclairée » en plein jour).
-function construirePrompt(description: string, sol: string, nbArticles: number, echantillons: string[] = []): string {
+function construirePrompt(description: string, sol: string, nbArticles: number, echantillons: string[] = [], murs = ""): string {
   const ech = echantillons.length
     ? `\nLes images suivantes (${echantillons.length}) sont des ÉCHANTILLONS DE MATIÈRE (gros plan du tressage, sans aucun meuble) : ${echantillons.map((t, i) => `image ${i + 2} = ${t}`).join(" ; ")}. Utilise-les UNIQUEMENT pour reproduire la texture, le motif de tressage et la teinte exacte de ces meubles. Ce ne sont pas des objets à placer dans la scène.`
     : "";
@@ -72,7 +72,7 @@ CONTRAINTE ABSOLUE ET PRIORITAIRE : les meubles visibles dans l'image sont les p
 Ne jamais inventer une partie non visible du meuble. Ne jamais ajouter, supprimer ou déplacer un pied, coussin, accoudoir, élément de structure ou détail. Ne pas remplacer le mobilier par un meuble similaire. Ne pas « améliorer » le design du produit. Ne pas changer son style. Considère les meubles comme une couche visuelle verrouillée et intangible : le travail créatif porte uniquement sur le décor qui les entoure.
 L'angle de caméra et la taille des meubles peuvent varier d'une image source à l'autre : respecter systématiquement la perspective et l'échelle de l'export fourni, sans essayer de reproduire une composition précédente.
 Le sol provisoire du planner (${sol}), l'arrière-plan blanc et les lignes techniques peuvent être supprimés et remplacés par le décor. Faire en sorte que le nouveau sol passe naturellement sous les meubles en conservant précisément leurs points de contact avec le sol. Créer des ombres réalistes et cohérentes avec le nouvel environnement, sans modifier les meubles eux-mêmes.
-
+${murs}
 AMBIANCE À CRÉER :
 ${description}
 Atmosphère élégante, calme, contemporaine et haut de gamme. Quelques végétaux méditerranéens ou locaux peuvent encadrer la scène, mais ils ne doivent jamais masquer les meubles.
@@ -196,8 +196,15 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     capture = Buffer.from(await src.arrayBuffer());
     calque = null;
   }
-  const items = (Array.isArray(vv?.items) ? vv!.items : []) as { titre?: string; marque?: string | null; sku?: string | null; variant_id?: string | null; image_url?: string | null }[];
+  const tous = (Array.isArray(vv?.items) ? vv!.items : []) as SceneItem[];
+  // Les murs du planner ne sont pas des meubles : ils sortent du comptage
+  // (sinon l'IA cherche un article de plus) et sont décrits à part.
+  const items = tous.filter((it) => !it.mur) as unknown as { titre?: string; marque?: string | null; sku?: string | null; variant_id?: string | null; image_url?: string | null }[];
   const nbArticles = items.length;
+  const phraseMurs = decrireMurs(tous);
+  const blocMurs = phraseMurs
+    ? `${phraseMurs} Ils gardent exactement leur position, leur longueur et leur hauteur, et ne comptent pas parmi les meubles.\n`
+    : "";
   // Options de la variante posée (coloris, taille) : lecture Shopify par ID
   // de variante (lecture seule), repli sur l'index 3D. Sert à la
   // bibliothèque de matières / couleurs et aux échantillons Dedon.
@@ -262,7 +269,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   const prep = MODE === "calque" ? preparer(capture, calque) : { image: capture, masque: null as Buffer | null, calque: null as PNG | null };
 
-  const prompt = construirePrompt(description, SOLS[String(vv?.sol || "bois")] || "lames de bois", nbArticles, echantillons.map((e) => e.libelle));
+  const prompt = construirePrompt(description, SOLS[String(vv?.sol || "bois")] || "lames de bois", nbArticles, echantillons.map((e) => e.libelle), blocMurs);
   const appeler = async (modele: string, fidelite: boolean) => {
     const form = new FormData();
     form.append("model", modele);
