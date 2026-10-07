@@ -8,7 +8,7 @@
 // manque. Source : table modeles_3d via /api/planner/catalogue.
 
 import React, { useEffect, useRef, useState } from "react";
-import { MURS, choixModeles, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
+import { MURS, choixModeles, estVegetal, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
 
 type Marque = { marque: string; avec_3d: number };
 type Collection = { collection: string; avec_3d: number; total: number };
@@ -95,17 +95,17 @@ export default function PlannerCatalogue({ onAjouter, onAjouterMur }: {
   return (
     <aside className="flex h-full w-[340px] shrink-0 flex-col border-r border-white/10 bg-[#25282c]">
       {onAjouterMur && (
-        <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
-          <span className="text-[10px] uppercase tracking-wide text-zinc-500">Décor</span>
+        <div className="flex flex-wrap items-center gap-1 border-b border-white/10 px-3 py-2">
+          <span className="mr-0.5 text-[10px] uppercase tracking-wide text-zinc-500">Décor</span>
           {MURS.map((m) => (
             <button
               key={m.id}
               type="button"
               onClick={() => onAjouterMur(m)}
-              className="rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-[11px] text-zinc-200 transition hover:border-sky-500/40 hover:bg-sky-500/15"
+              className="rounded-lg border border-white/10 bg-[#2a2d31] px-1.5 py-1 text-[11px] text-zinc-200 transition hover:border-sky-500/40 hover:bg-sky-500/15"
               title={`${m.nom} ${m.sous_titre} — étirable à la longueur voulue avec les poignées bleues`}
             >
-              🧱 {m.nom} <span className="text-zinc-500">{Math.round(m.mur.hauteur * 100)} cm</span>
+              {estVegetal(m.mur.texture) ? "🌿" : "🧱"} {m.nom} <span className="text-zinc-500">{Math.round(m.mur.hauteur * 100)}</span>
             </button>
           ))}
         </div>

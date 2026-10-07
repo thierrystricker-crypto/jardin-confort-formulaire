@@ -122,9 +122,11 @@ export type MurConfig = {
 export const MURS: { id: string; nom: string; sous_titre: string; mur: MurConfig }[] = [
   { id: "muret", nom: "Muret", sous_titre: "100 × 20 × H 100 cm", mur: { type: "mur", longueur: 1, hauteur: 1, epaisseur: 0.2, texture: "crepi" } },
   { id: "mur",   nom: "Mur",   sous_titre: "100 × 20 × H 200 cm", mur: { type: "mur", longueur: 1, hauteur: 2, epaisseur: 0.2, texture: "crepi" } },
-  // Même boîte étirable, habillée de feuillage : une haie taillée est plus
-  // épaisse qu'un mur (60 cm) et monte en général à 1,80 m.
-  { id: "haie",  nom: "Haie",  sous_titre: "100 × 60 × H 180 cm", mur: { type: "mur", longueur: 1, hauteur: 1.8, epaisseur: 0.6, texture: "thuya" } },
+  // Même boîte étirable, habillée de feuillage. Deux hauteurs comme pour la
+  // maçonnerie : une haie basse de séparation et une haie brise-vue. 45 cm
+  // d'épaisseur, la largeur d'une haie taillée au cordeau.
+  { id: "haie-basse", nom: "Haie basse", sous_titre: "100 × 45 × H 100 cm", mur: { type: "mur", longueur: 1, hauteur: 1, epaisseur: 0.45, texture: "thuya" } },
+  { id: "haie",       nom: "Haie",       sous_titre: "100 × 45 × H 180 cm", mur: { type: "mur", longueur: 1, hauteur: 1.8, epaisseur: 0.45, texture: "thuya" } },
 ];
 
 // Phrase pour le prompt de l'image d'ambiance : l'IA doit rendre un vrai mur,
