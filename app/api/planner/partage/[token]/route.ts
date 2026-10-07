@@ -19,6 +19,10 @@ function epurer(items: SceneItem[]): SceneItem[] {
     url: it.url, source: it.source, x: it.x, z: it.z, rot: it.rot, rot_fix: it.rot_fix,
     size_warn: it.size_warn, color_warn: it.color_warn,
     image_url: it.image_url, prix: it.prix, prix_exact: it.prix_exact, sku: it.sku,
+    // Nécessaires au RENDU, et sans rien d'interne : sans `mur` le décor n'a
+    // pas de fichier à charger et tombe en « Modèle non chargé » ; sans
+    // `peinture` le client voit la couleur du fichier, pas celle choisie.
+    mur: it.mur, peinture: it.peinture, couleur_code: it.couleur_code, couleur_nom: it.couleur_nom,
   }));
 }
 
