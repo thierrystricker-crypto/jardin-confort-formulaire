@@ -62,14 +62,29 @@ export type ChoixModele = { label: string; url: string; variant_id: string | nul
 export function choixModeles(c: CatalogueItem): ChoixModele[] {
   const vus = new Set<string>();
   const out: ChoixModele[] = [];
+  const brut: Record<string, string>[] = [];
   for (const v of c.variantes_3d || []) {
     if (vus.has(v.url)) continue;
     vus.add(v.url);
     const parts = Object.entries(v.options || {})
       .filter(([n]) => !OPTIONS_SANS_GEOMETRIE.test(n))
       .map(([, val]) => val);
+    brut.push(v.options || {});
     out.push({ label: parts.join(" / ") || v.titre || "Variante", url: v.url, variant_id: v.variant_id, sku: v.sku, size_warn: false, prix: v.prix });
   }
+  // Deux fichiers peuvent porter le même libellé de taille (Biohort : une
+  // teinte par fichier, même dimension). On complète alors avec les options
+  // écartées plus haut, sinon le menu affiche quatre lignes identiques.
+  const compte = new Map<string, number>();
+  for (const o of out) compte.set(o.label, (compte.get(o.label) || 0) + 1);
+  out.forEach((o, i) => {
+    if ((compte.get(o.label) || 0) < 2) return;
+    const reste = Object.entries(brut[i] || {})
+      .filter(([n]) => OPTIONS_SANS_GEOMETRIE.test(n))
+      .map(([, val]) => val)
+      .join(" / ");
+    if (reste) o.label = `${o.label} — ${reste}`;
+  });
   if (c.url_glb && !out.length) {
     out.push({ label: "", url: c.url_glb, variant_id: c.variant_id_1, sku: c.sku_1, size_warn: c.has_size_option, prix: null });
   }

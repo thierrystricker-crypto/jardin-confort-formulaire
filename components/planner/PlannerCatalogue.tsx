@@ -180,8 +180,9 @@ export default function PlannerCatalogue({ onAjouter, onAjouterMur }: {
                 </div>
               </button>
               {choixPour === r.product_id && (
-                <div className="absolute inset-x-1 bottom-1 z-10 rounded-lg border border-white/15 bg-[#15171a] p-1 shadow-xl">
+                <div className="absolute inset-x-1 bottom-1 z-10 flex max-h-64 flex-col rounded-lg border border-white/15 bg-[#15171a] p-1 shadow-xl">
                   <div className="px-1 pb-1 text-[10px] text-zinc-400">Quelle taille ?</div>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                   {choixModeles(r).map((c) => (
                     <button
                       key={c.url}
@@ -192,6 +193,7 @@ export default function PlannerCatalogue({ onAjouter, onAjouterMur }: {
                       {c.label}{c.size_warn ? " (indicatif)" : ""}
                     </button>
                   ))}
+                  </div>
                 </div>
               )}
               {q.trim().length >= 2 && r.collection && (

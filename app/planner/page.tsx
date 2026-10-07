@@ -329,23 +329,36 @@ export default function PlannerPage() {
     });
   }
 
-  /** Changement d'un axe : on cherche la variante la plus proche de la
-   *  combinaison voulue (une combinaison peut ne pas être vendue). */
+  /** Changement d'un axe. Les valeurs impossibles sont déjà grisées dans les
+   *  menus (voir `codesPossibles`), donc la combinaison existe : on ne touche
+   *  JAMAIS aux autres axes. Le repli ne sert que par sécurité. */
   function choisirCouleur(itemUid: string, option: string, code: string) {
     const it = scene.items.find((i) => i.uid === itemUid);
     if (!it) return;
     const f = couleurs[it.product_id];
     if (!f) return;
     const voulu: Record<string, string> = { ...(it.couleur_options || {}), [option]: code };
-    let meilleure: VariantePlanner | null = null;
-    let score = -1;
+    const exacte = f.variantes.find((v) => Object.entries(voulu).every(([o, c]) => v.codes[o] === c));
+    const v = exacte || f.variantes.find((x) => x.codes[option] === code) || null;
+    if (v) appliquerVariante(itemUid, v, f.axes);
+  }
+
+  /** Codes réellement vendus pour un axe, compte tenu des AUTRES axes déjà
+   *  choisis. Fermob ne propose pas tous les tissus sur toutes les armatures :
+   *  sans ce filtre, on choisit une combinaison inexistante et le planner
+   *  change l'autre couleur dans le dos du conseiller (07.10.2026). */
+  function codesPossibles(f: CouleursFiche, option: string, choisis: Record<string, string>): Set<string> {
+    const out = new Set<string>();
     for (const v of f.variantes) {
-      if (v.codes[option] !== code) continue;          // l'axe changé est impératif
-      let n = 0;
-      for (const [o, c] of Object.entries(voulu)) if (v.codes[o] === c) n++;
-      if (n > score) { score = n; meilleure = v; }
+      let ok = true;
+      for (const a of f.axes) {
+        if (a.option === option) continue;
+        const c = choisis[a.option];
+        if (c && v.codes[a.option] !== c) { ok = false; break; }
+      }
+      if (ok && v.codes[option]) out.add(v.codes[option]);
     }
-    if (meilleure) appliquerVariante(itemUid, meilleure, f.axes);
+    return out;
   }
 
   function supprimer(u: string) {
@@ -1146,12 +1159,23 @@ export default function PlannerPage() {
                 const axes = f?.axes?.length
                   ? f.axes
                   : [{ option: "Couleur", zone: "structure", valeurs: item.couleur_code ? [{ code: item.couleur_code, nom: item.couleur_nom || item.couleur_code, apercu: null }] : [] }];
+                const choisis = item.couleur_options || (item.couleur_code && axes[0] ? { [axes[0].option]: item.couleur_code } : {});
                 return axes.map((axe) => {
-                  const choisi = item.couleur_options?.[axe.option] || (axe === axes[0] ? item.couleur_code || "" : "");
+                  const choisi = choisis[axe.option] || "";
+                  const possibles = f ? codesPossibles(f, axe.option, choisis) : null;
+                  const nbPossibles = possibles ? axe.valeurs.filter((v) => possibles.has(v.code)).length : axe.valeurs.length;
                   // Libellé court : « structure », « tissu », « coussin »…
                   const etiquette = axe.option.replace(/^couleur\s*/i, "").trim() || "couleur";
                   return (
-                    <label key={axe.option} className="flex items-center gap-1 text-[11px] text-zinc-400" title={`${axe.option} : appliquée au modèle 3D, et donc aussi sur la fiche, le PDF et l'image d'ambiance`}>
+                    <label
+                      key={axe.option}
+                      className="flex items-center gap-1 text-[11px] text-zinc-400"
+                      title={
+                        axes.length > 1 && possibles && nbPossibles < axe.valeurs.length
+                          ? `${axe.option} — ${nbPossibles} sur ${axe.valeurs.length} proposées avec les autres couleurs choisies ; les autres combinaisons n'existent pas au catalogue`
+                          : `${axe.option} : appliquée au modèle 3D, et donc aussi sur la fiche, le PDF et l'image d'ambiance`
+                      }
+                    >
                       {axes.length > 1 && <span className="capitalize">{etiquette}</span>}
                       <select
                         className="max-w-[190px] rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-xs text-zinc-100 outline-none"
@@ -1160,10 +1184,18 @@ export default function PlannerPage() {
                         onChange={(e) => choisirCouleur(item.uid, axe.option, e.target.value)}
                       >
                         {!choisi && <option value="">{axes.length > 1 ? "Choisir…" : "Couleur…"}</option>}
-                        {axe.valeurs.map((v) => (
-                          <option key={v.code} value={v.code}>{v.nom} {v.code}</option>
-                        ))}
+                        {axe.valeurs.map((v) => {
+                          const ok = !possibles || possibles.has(v.code);
+                          return (
+                            <option key={v.code} value={v.code} disabled={!ok} className={ok ? undefined : "text-zinc-500"}>
+                              {ok ? "" : "— "}{v.nom} {v.code}
+                            </option>
+                          );
+                        })}
                       </select>
+                      {axes.length > 1 && possibles && nbPossibles < axe.valeurs.length && (
+                        <span className="text-[10px] text-zinc-500">{nbPossibles}/{axe.valeurs.length}</span>
+                      )}
                     </label>
                   );
                 });
