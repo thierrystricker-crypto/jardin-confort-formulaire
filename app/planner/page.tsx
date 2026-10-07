@@ -44,6 +44,40 @@ const BTN = "rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-4
 const BTN_OFF = `${BTN} border-white/10 bg-[#2a2d31] text-zinc-300 hover:bg-[#34383d]`;
 const BTN_ON = `${BTN} border-sky-500/40 bg-sky-500/20 text-sky-200`;
 
+// ─── Attente de l'image IA ────────────────────────────────────────────────────
+// 20 à 60 s sans aucun retour visuel : on croit que ça a planté. Barre qui
+// avance vite au début puis ralentit (asymptote à 95 %) — la durée réelle n'est
+// pas connue à l'avance, on ne promet donc pas une fin précise. Composant à
+// part : son horloge ne redessine pas le canvas 3D (07.10.2026).
+function BandeauAmbiance() {
+  const [secondes, setSecondes] = useState(0);
+  useEffect(() => {
+    const t0 = Date.now();
+    const id = window.setInterval(() => setSecondes((Date.now() - t0) / 1000), 250);
+    return () => window.clearInterval(id);
+  }, []);
+  const progres = Math.min(95, 100 * (1 - Math.exp(-secondes / 20)));
+  const etape = secondes < 4
+    ? "Envoi de la vue 3D…"
+    : secondes < 45
+    ? "L'IA compose le décor autour des meubles…"
+    : "Presque fini — les grandes images demandent parfois une minute…";
+  return (
+    <div className="border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">
+      <div className="flex items-center justify-between gap-3">
+        <span>🎨 {etape} La vignette apparaîtra ici.</span>
+        <span className="shrink-0 tabular-nums text-pink-200/70">{Math.floor(secondes)} s · 20 à 60 s</span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-pink-500/20">
+        <div
+          className="h-full rounded-full bg-pink-400/80 transition-[width] duration-300 ease-out"
+          style={{ width: `${progres}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function PlannerPage() {
   const [scene, setScene] = useState<Scene>(SCENE_VIDE);
   const [selected, setSelected] = useState<string | null>(null);
@@ -1056,9 +1090,7 @@ export default function PlannerPage() {
           </div>
         );
       })()}
-      {ambianceEnCours && (
-        <div className="border-b border-white/10 bg-pink-500/10 px-4 py-2 text-xs text-pink-100">🎨 Génération de l&apos;image d&apos;ambiance en cours… 20 à 40 secondes, la vignette apparaîtra ici.</div>
-      )}
+      {ambianceEnCours && <BandeauAmbiance />}
       {ambianceErreur && (
         <div className="flex items-center gap-3 border-b border-white/10 bg-rose-500/10 px-4 py-2 text-xs text-rose-100">
           <span className="min-w-0 flex-1">🎨 Ambiance IA impossible : {ambianceErreur}</span>
