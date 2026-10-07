@@ -375,6 +375,8 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   // Badge 3D des lignes : cle "gid|sku" -> modele 3D dans l'index (lecture seule,
   // jamais enregistre dans le document : la 3D peut arriver apres l'offre).
   const [cache3d, setCache3d]               = useState<Record<string, boolean>>({});
+  // Champ prix du service personnalise : focus apres l'avertissement « sans prix ».
+  const servicePersoPrixRef = useRef<HTMLInputElement>(null);
   // Garde-fou stock : ids des lignes critiques (non-réassortables + qté > stock)
   // que le commercial a explicitement confirmées. Vidé si la ligne sort de l'état critique.
   const [confirmedCritical, setConfirmedCritical] = useState<Record<string, boolean>>({});
@@ -904,6 +906,26 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   // Important : on ne touche PAS au client en base de l'auto-save (POST /api/clients
   // est gardé uniquement pour le save manuel — un brouillon abandonné ne doit pas
   // créer un client fantôme).
+  // Service personnalise coche, avec un libelle, mais sans montant : oubli
+  // frequent (retour metier du 07.10.2026). Un montant est attendu, 0 compris :
+  // seul le champ VIDE declenche l'avertissement. Jamais en auto-save.
+  const servicePersoSansPrix =
+    !!enabledServices["custom"] &&
+    (servicePrices["custom_label"] || "").trim() !== "" &&
+    (servicePrices["custom"] ?? "").toString().trim() === "";
+
+  function confirmerServicePerso(): boolean {
+    if (!servicePersoSansPrix) return true;
+    const ok = window.confirm(
+      `⚠ Service personnalisé sans prix.\n\n` +
+      `« ${(servicePrices["custom_label"] || "").trim()} » est coché mais aucun montant n'a été saisi.\n` +
+      `Saisissez un montant (0 accepté pour un service offert).\n\n` +
+      `Enregistrer quand même ?`
+    );
+    if (!ok) window.setTimeout(() => servicePersoPrixRef.current?.focus(), 0);
+    return ok;
+  }
+
   async function saveDraft(opts: { silent?: boolean } = {}): Promise<boolean> {
     const silent = opts.silent ?? false;
 
@@ -933,6 +955,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
       if (!nom.trim()) { setSaveError("Le nom du client est obligatoire."); setSaveStatus("error"); return false; }
       if (!email.trim()) { setSaveError("L'email du client est obligatoire."); setSaveStatus("error"); return false; }
       if (!ville.trim()) { setSaveError("La ville du client est obligatoire."); setSaveStatus("error"); return false; }
+      if (!confirmerServicePerso()) return false;
     } else if (!hasMinimum) {
       // Auto-save silencieux : on ne fait rien tant que les 3 champs ne sont pas là
       return false;
@@ -1109,6 +1132,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
 
     // Si modifs non sauvées, on save d'abord (validation stricte = affiche l'alerte
     // si nom/email/commercial/ville manquants, exactement comme le bouton manuel)
+    if (!isDirty && !confirmerServicePerso()) return;
     if (isDirty) {
       const ok = await saveDraft({ silent: false });
       if (!ok) return; // saveDraft a dÃ©jÃ  settÃ© saveError, modal pas ouverte
@@ -2936,31 +2960,51 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
               ))}
               {/* Service vierge à la volée */}
               <div className="jc-service-row jc-service-custom-row">
-                <div className="jc-check-label">
+                <div className="jc-service-custom-main">
                   <input
                     type="checkbox"
+                    className="jc-service-custom-check"
                     checked={enabledServices["custom"] || false}
                     onChange={(e) => setEnabledServices((c) => ({ ...c, custom: e.target.checked }))}
                   />
-                  <input
+                  {/* Textarea (et non input) : la regle .jc-check-label input imposait
+                      15 px de haut au champ, d'ou une zone cliquable minuscule. Le
+                      texte passe a la ligne et la case est agrandissable. */}
+                  <textarea
                     className="jc-service-custom-label"
-                    placeholder="Service personnalisé…"
+                    placeholder="Service personnalisé… (cliquer pour saisir)"
+                    rows={1}
                     value={servicePrices["custom_label"] || ""}
-                    onChange={(e) => setServicePrices((c) => ({ ...c, custom_label: e.target.value }))}
-                    onClick={(e) => e.stopPropagation()}
+                    ref={(el) => { if (el && el.scrollHeight > el.clientHeight) el.style.height = el.scrollHeight + "px"; }}
+                    onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); /* libelle sur une seule ligne (documents, export) : le retour a la ligne n'est que visuel */ }}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      // Ecrire un libelle coche le service : sinon le prix reste grise.
+                      if (v.trim() && !(servicePrices["custom_label"] || "").trim() && !enabledServices["custom"]) {
+                        setEnabledServices((c) => ({ ...c, custom: true }));
+                      }
+                      setServicePrices((c) => ({ ...c, custom_label: v }));
+                      e.target.style.height = "auto";
+                      e.target.style.height = e.target.scrollHeight + "px";
+                    }}
                   />
                 </div>
-                <div className="jc-service-price-wrap" onClick={(e) => e.stopPropagation()}>
+                <div className="jc-service-price-wrap">
                   <span className="jc-muted-sm">CHF</span>
                   <input
-                    className="jc-service-price no-spin"
+                    ref={servicePersoPrixRef}
+                    className={`jc-service-price no-spin${servicePersoSansPrix ? " jc-error" : ""}`}
                     type="number" step="1" placeholder="0"
-                    value={servicePrices["custom"] || ""}
+                    value={servicePrices["custom"] ?? ""}
                     disabled={!enabledServices["custom"]}
                     onChange={(e) => setServicePrices((c) => ({ ...c, custom: e.target.value }))}
                     onFocus={(e) => e.currentTarget.select()}
+                    title={servicePersoSansPrix ? "Prix manquant — saisir un montant (0 accepté)" : undefined}
                   />
                 </div>
+                {servicePersoSansPrix && (
+                  <div className="jc-service-custom-warn">Prix manquant — saisir un montant (0 accepté pour un service offert)</div>
+                )}
               </div>
             </div>
           </div>
@@ -4089,8 +4133,14 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
         .jc-addr-item:hover { background: rgba(59,130,246,0.1); color: var(--accent); }
 
         /* ── SERVICE VIERGE ── */
-        .jc-service-custom-row { border-style: dashed !important; }
+        .jc-service-custom-row { border-style: dashed !important; cursor: default; align-items: start; }
+        .jc-service-custom-main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+        .jc-service-custom-check { width: 15px !important; height: 15px; flex-shrink: 0; margin-top: 7px !important; cursor: pointer; }
+        .jc-service-custom-row .jc-service-price-wrap { padding-top: 2px; }
+        .jc-service-custom-warn { grid-column: 1 / -1; font-size: 12px; font-weight: 600; color: #f59e0b; }
         .jc-service-custom-label {
+          resize: vertical !important; overflow: hidden; min-height: 30px; line-height: 1.4;
+          white-space: pre-wrap; word-break: break-word; cursor: text;
           width: 100% !important;
           background: transparent !important;
           border: 0 !important;
