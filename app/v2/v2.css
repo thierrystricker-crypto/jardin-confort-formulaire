@@ -31,6 +31,7 @@
   --v2-texte: #1b1d21;
   --v2-attenue: #5f6670;
   --v2-pale: #8f96a0;
+  --v2-titre-menu: #1f2328;
   --v2-sb-bg: #ffffff;
   --v2-ombre: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.06);
   --v2-ombre-pop: 0 10px 30px rgba(16, 24, 40, 0.14);
@@ -52,6 +53,7 @@
   --v2-texte: #eceef1;
   --v2-attenue: #a1a6ae;
   --v2-pale: #71767e;
+  --v2-titre-menu: #f1f2f4;
   --v2-sb-bg: #25282c;
   --v2-ombre: none;
   --v2-ombre-pop: 0 10px 30px rgba(0, 0, 0, 0.45);
@@ -79,7 +81,7 @@
 .v2-brand b { display: block; font-size: 15px; white-space: nowrap; }
 .v2-brand small { display: block; color: var(--v2-attenue); font-size: 11.5px; white-space: nowrap; }
 .v2-nav { flex: 1; overflow-y: auto; padding: 2px 10px 10px; }
-.v2-nav h6 { margin: 12px 8px 3px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--v2-pale); font-weight: 600; white-space: nowrap; }
+.v2-nav h6 { margin: 14px 8px 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--v2-titre-menu); font-weight: 700; white-space: nowrap; }
 .v2-nav a {
   display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px;
   color: var(--v2-attenue); white-space: nowrap; text-decoration: none; position: relative;
@@ -139,7 +141,17 @@
 .v2-page-h { display: flex; align-items: stretch; justify-content: space-between; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
 .v2-page-h h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; font-weight: 700; }
 .v2-page-h p { margin: 2px 0 0; color: var(--v2-attenue); font-size: 13px; }
-.v2-page-h .v2-stats { flex: 1 1 520px; max-width: 640px; display: flex; }
+.v2-stats { display: flex; margin-bottom: 14px; }
+.v2-stats > .v2-legacy { flex: 1; display: flex; min-width: 0; }
+.v2-semaine { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 16px; }
+.v2-semaine-num { font-size: 22px; font-weight: 600; color: var(--v2-attenue); letter-spacing: -.01em; white-space: nowrap; }
+.v2-semaine-num b { font-size: 46px; line-height: 1; font-weight: 800; color: var(--v2-texte); margin-left: 6px; font-variant-numeric: tabular-nums; }
+.v2-semaine-date { display: flex; flex-direction: column; border-left: 2px solid var(--v2-bord); padding-left: 16px; }
+.v2-semaine-date span { font-size: 17px; font-weight: 600; }
+.v2-semaine-date small { font-size: 13px; color: var(--v2-attenue); }
+.v2-btn-jardi { background: rgba(14, 165, 233, .12); border-color: rgba(14, 165, 233, .35); color: #0369a1; font-weight: 600; padding: 10px 18px; font-size: 15px; }
+.v2-btn-jardi:hover { background: rgba(14, 165, 233, .2); }
+.v2-root[data-theme="dark"] .v2-btn-jardi { color: #7dd3fc; }
 
 .v2-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
 .v2-kpi {
@@ -286,7 +298,9 @@ button.v2-chip:hover { background: var(--v2-surface-2); }
   .v2-page, .v2-entete { padding-left: 16px; padding-right: 16px; }
   .v2-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .v2-recherche kbd, .v2-masque-mobile, .v2-col-opt { display: none !important; }
-  .v2-page-h .v2-stats { display: none; }
+  .v2-stats { display: none; }
+  .v2-semaine-num b { font-size: 34px; }
+  .v2-semaine { gap: 12px; }
   .v2-entete-nom { font-size: 26px; }
   .v2-entete-numero b { font-size: 22px; }
   .v2-entete-droite { align-items: flex-start; }
@@ -302,7 +316,6 @@ button.v2-chip:hover { background: var(--v2-surface-2); }
  *      classe par classe.
  * CSS hors @layer : passe devant les utilitaires Tailwind sans !important.
  * En mode sombre, cette section ne s'applique pas. */
-.v2-page-h .v2-stats > .v2-legacy { flex: 1; display: flex; min-width: 0; }
 .v2-root[data-theme="light"] .v2-legacy {
   --color-zinc-50: #16181c;
   --color-zinc-100: #1b1d21;

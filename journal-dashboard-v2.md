@@ -40,6 +40,18 @@
 sombre / mobile sur API simulées ; interception des liens testée (clic sur un
 `<Link>` v1 et `window.location.href`).
 
+## 09.10.2026 — Retours après premier essai
+
+- Ctrl+K cherche aussi les **fiches clients** (`/api/clients?q=…&limit=6`, même
+  recherche par pertinence que la page Clients), en plus des documents.
+- Menu Vente : Offres & commandes, Clients, Listes d'achat, **To-do en dernier**.
+- « Revue des e-mails » retirée du menu (page orpheline, aucun lien en v1) ;
+  reste trouvable par Ctrl+K, comme le fichier clients WinBiz.
+- Titres de catégories du menu plus contrastés (quasi blanc en sombre, quasi
+  noir en clair).
+- Accueil : ligne complète « Semaine NN » en grand + date + bouton 💬 Jardi.
+  La semaine est calculée au montage (la page est pré-rendue au build).
+
 ### Phase 2 (à faire)
 
 1. Fiche : ranger les ~70 boutons en menus Documents ▾ / Paiement ▾ / ⋯ et en

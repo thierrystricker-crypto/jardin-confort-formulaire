@@ -156,7 +156,7 @@ function computeStats(offres: OffreRecord[]) {
     caCommandes: commandes.reduce((s, o) => s + (o.total_ttc || 0), 0),
   };
 }
-function todayLabel() {
+function aujourdhui() {
   const now = new Date();
   const t = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
   const day = (t.getUTCDay() + 6) % 7;
@@ -166,7 +166,7 @@ function todayLabel() {
   jan4.setUTCDate(jan4.getUTCDate() - dayJ + 3);
   const semaine = 1 + Math.round((t.getTime() - jan4.getTime()) / 604800000);
   const date = new Intl.DateTimeFormat("fr-CH", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(now);
-  return `${date.charAt(0).toUpperCase()}${date.slice(1)} · semaine ${semaine}`;
+  return { semaine, date: `${date.charAt(0).toUpperCase()}${date.slice(1)}` };
 }
 
 // ─── Petits composants ───
@@ -219,6 +219,14 @@ export default function DashboardV2Page() {
   const [searchArticles, setSearchArticles] = useState(true);
 
   const refFiltres = useRef<HTMLDivElement>(null);
+  // Calculée au montage (la page est pré-rendue au build : la date du build serait fausse)
+  const [jour, setJour] = useState<{ semaine: number; date: string } | null>(null);
+  useEffect(() => {
+    const maj = () => setJour(aujourdhui());
+    maj();
+    const t = setInterval(maj, 60_000); // onglet resté ouvert le lundi matin
+    return () => clearInterval(t);
+  }, []);
 
   // Clé distincte de la v1 : les deux versions ne se marchent pas dessus.
   useFiltresMemorises("v2:dashboard:filtres", {
@@ -452,17 +460,26 @@ export default function DashboardV2Page() {
 
   return (
     <div className="v2-page">
-      {/* ─── En-tête : titre + chiffres du jour / du mois ─── */}
-      <div className="v2-page-h">
-        <div>
-          <h1>Offres & commandes</h1>
-          <p>{todayLabel()}</p>
+      {/* ─── Ligne 1 : la semaine en grand + Jardi ─── */}
+      <div className="v2-semaine">
+        <div className="v2-semaine-num">
+          Semaine <b>{jour?.semaine ?? "\u00a0"}</b>
         </div>
-        <div className="v2-stats">
-          <Legacy>
-            <StatsCards />
-          </Legacy>
+        <div className="v2-semaine-date">
+          <span>{jour?.date ?? "\u00a0"}</span>
+          <small>Offres & commandes</small>
         </div>
+        <div className="v2-spacer" />
+        <a href="/dashboard/jardi" target="_blank" rel="noopener noreferrer" className="v2-btn v2-btn-jardi" title="Ouvrir Jardi, l'assistant, dans un nouvel onglet">
+          💬 Jardi
+        </a>
+      </div>
+
+      {/* ─── Ligne 2 : chiffres du jour / du mois ─── */}
+      <div className="v2-stats">
+        <Legacy>
+          <StatsCards />
+        </Legacy>
       </div>
 
       {/* ─── Indicateurs cliquables ─── */}

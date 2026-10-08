@@ -32,9 +32,9 @@ const MENU: Groupe[] = [
     titre: "Vente",
     entrees: [
       { href: "/v2", label: "Offres & commandes", icon: "🏠" },
-      { href: "/v2/todo", label: "To-do du jour", icon: "☑️" },
       { href: "/v2/clients", label: "Clients", icon: "👥" },
       { href: "/v2/listes-achat", label: "Listes d'achat", icon: "🛒" },
+      { href: "/v2/todo", label: "To-do du jour", icon: "☑️" },
     ],
   },
   {
@@ -63,9 +63,14 @@ const MENU: Groupe[] = [
       { href: "/v2/comptabilite", label: "Comptabilité", icon: "🧾" },
       { href: "/v2/notifications", label: "Notifications", icon: "🔔" },
       { href: "/v2/brand-logos", label: "Logos des marques", icon: "🏷" },
-      { href: "/v2/clients/review-emails", label: "Revue des e-mails", icon: "✉️" },
     ],
   },
+];
+
+// Pages rarement utilisées : hors du menu, mais toujours trouvables par Ctrl+K.
+const PAGES_SECONDAIRES: Entree[] = [
+  { href: "/v2/clients/review-emails", label: "Revue des e-mails clients importés", icon: "✉️" },
+  { href: "/v2/winbiz-adresses", label: "Fichier clients WinBiz", icon: "🏦" },
 ];
 
 // ─── Palette Ctrl+K : documents chargés à la première ouverture ───
@@ -80,6 +85,16 @@ type DocPalette = {
 };
 let cacheDocs: DocPalette[] | null = null;
 
+type ClientPalette = {
+  id: number;
+  numero_client: string | null;
+  nom?: string | null;
+  prenom?: string | null;
+  societe?: string | null;
+  ville?: string | null;
+  email?: string | null;
+};
+
 function normaliser(s: string | null | undefined) {
   return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
@@ -91,7 +106,33 @@ function Palette({ ouverte, fermer }: { ouverte: boolean; fermer: () => void }) 
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const [docs, setDocs] = useState<DocPalette[]>(cacheDocs || []);
+  const [clients, setClients] = useState<ClientPalette[]>([]);
+  const [chercheClients, setChercheClients] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Clients : même recherche que la page Clients (/api/clients, pertinence,
+  // multi-mots, téléphone…), en différé de 300 ms.
+  useEffect(() => {
+    const t = q.trim();
+    if (!ouverte || t.length < 2) {
+      setClients([]);
+      setChercheClients(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    const minuterie = setTimeout(() => {
+      setChercheClients(true);
+      fetch(`/api/clients?q=${encodeURIComponent(t)}&limit=6`, { signal: ctrl.signal })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => setClients(Array.isArray(j?.clients) ? (j.clients as ClientPalette[]).slice(0, 6) : []))
+        .catch(() => {})
+        .finally(() => setChercheClients(false));
+    }, 300);
+    return () => {
+      clearTimeout(minuterie);
+      ctrl.abort();
+    };
+  }, [q, ouverte]);
 
   useEffect(() => {
     if (!ouverte) return;
@@ -119,6 +160,16 @@ function Palette({ ouverte, fermer }: { ouverte: boolean; fermer: () => void }) 
     };
     const out: ItemPalette[] = [];
     if (mots.length) {
+      clients.forEach((c) => {
+        const nom = [c.prenom, c.nom].filter(Boolean).join(" ") || c.societe || "—";
+        const detail = [nom !== c.societe ? c.societe : null, c.ville].filter(Boolean).join(" · ");
+        out.push({
+          groupe: "Clients",
+          label: `👤  ${nom}${detail ? ` — ${detail}` : ""}`,
+          detail: c.numero_client ? `fiche n° ${c.numero_client}` : "fiche client",
+          aller: () => router.push(`/v2/clients/${c.id}`),
+        });
+      });
       docs
         .filter((d) =>
           ok([d.numero_affiche, d.client_prenom, d.client_nom, d.client_societe, d.client_ville]),
@@ -133,7 +184,7 @@ function Palette({ ouverte, fermer }: { ouverte: boolean; fermer: () => void }) 
           }),
         );
     }
-    MENU.flatMap((g) => g.entrees)
+    [...MENU.flatMap((g) => g.entrees), ...PAGES_SECONDAIRES]
       .filter((e) => ok([e.label]))
       .forEach((e) =>
         out.push({
@@ -159,7 +210,7 @@ function Palette({ ouverte, fermer }: { ouverte: boolean; fermer: () => void }) 
     ];
     actions.filter((a) => ok([a.label])).forEach((a) => out.push(a));
     return out;
-  }, [q, docs, router]);
+  }, [q, docs, clients, router]);
 
   useEffect(() => {
     if (sel >= items.length) setSel(0);
@@ -197,10 +248,10 @@ function Palette({ ouverte, fermer }: { ouverte: boolean; fermer: () => void }) 
               fermer();
             }
           }}
-          placeholder="Aller à une page, ouvrir un n° (CMD-…), chercher un client…"
+          placeholder="Chercher un client, un document (n°, nom), ou aller à une page…"
         />
         <div className="v2-palette-res">
-          {items.length === 0 && <div className="v2-palette-grp">Aucun résultat</div>}
+          {items.length === 0 && <div className="v2-palette-grp">{chercheClients ? "Recherche…" : "Aucun résultat"}</div>}
           {items.map((it) => {
             i++;
             const idx = i;
@@ -484,7 +535,7 @@ export default function V2Shell({ children }: { children: React.ReactNode }) {
             </button>
             <button type="button" className="v2-recherche" onClick={() => setPalette(true)}>
               <span>🔍</span>
-              <span className="v2-recherche-txt">Rechercher un client, un n°, une page…</span>
+              <span className="v2-recherche-txt">Rechercher un client, un document, une page…</span>
               <kbd>Ctrl K</kbd>
             </button>
             <div className="v2-spacer" />
