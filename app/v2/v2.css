@@ -1037,3 +1037,48 @@ button.v2-chip:hover { background: var(--v2-surface-2); }
 /* Client et Offre l'un SOUS l'autre dans la colonne de gauche (demande du
    09.10.2026) : la colonne de droite est réservée à l'aperçu. */
 .v2-root .v2-legacy .xl\:grid-cols-\[minmax\(0\,1fr\)_660px\] > * > .lg\:grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
+
+/* ═══ 7. Fiche : les groupes de boutons du haut deviennent des menus ═══
+ * Les VRAIS boutons de la fiche v1 restent en place (logique, états, Wallee,
+ * bandeau de rappel PDF) ; MenusFiche.tsx marque leurs conteneurs et ouvre /
+ * ferme les panneaux. Ici, uniquement de la mise en forme. */
+.v2-fiche .v2-top { padding: 14px 18px; }
+.v2-fiche .v2-top > .grid { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.v2-fiche .v2-top > .grid > div { display: contents; }
+.v2-fiche .v2-top .v2-groupe { position: relative; margin: 0; }
+.v2-fiche .v2-groupe[data-v2-ordre="1"] { order: 1; }
+.v2-fiche .v2-groupe[data-v2-ordre="2"] { order: 2; }
+.v2-fiche .v2-groupe[data-v2-ordre="3"] { order: 3; }
+.v2-fiche .v2-groupe[data-v2-ordre="4"] { order: 4; }
+.v2-fiche .v2-groupe:has(> div:nth-child(2):empty) { display: none; }
+/* L'intitulé du groupe devient le bouton du menu */
+.v2-fiche .v2-groupe > div:first-child {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; user-select: none;
+  padding: 8px 14px; border: 1px solid var(--v2-bord); border-radius: 10px; background: var(--v2-surface-2);
+  color: var(--v2-texte); font-size: 14px; font-weight: 600; text-transform: none; letter-spacing: 0;
+}
+.v2-fiche .v2-groupe > div:first-child:hover { border-color: var(--v2-accent); }
+.v2-fiche .v2-groupe > div:first-child > span { display: none; }
+.v2-fiche .v2-groupe > div:first-child::after { content: "▾"; font-size: 11px; opacity: .6; }
+.v2-fiche .v2-groupe[data-v2-ordre="1"] > div:first-child::before { content: "📄"; }
+.v2-fiche .v2-groupe[data-v2-ordre="2"] > div:first-child::before { content: "🌐"; }
+.v2-fiche .v2-groupe[data-v2-ordre="3"] > div:first-child::before { content: "✉️"; }
+.v2-fiche .v2-groupe[data-v2-ordre="4"] > div:first-child::before { content: "🧰"; }
+.v2-fiche .v2-groupe.v2-ouvert > div:first-child { border-color: var(--v2-accent); color: var(--v2-accent); background: var(--v2-accent-doux); }
+/* Le panneau */
+.v2-fiche .v2-groupe > div:nth-child(2) {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 45;
+  flex-direction: column; align-items: stretch; gap: 6px; padding: 10px;
+  width: max-content; min-width: min(280px, calc(100vw - 72px)); max-width: min(440px, calc(100vw - 72px));
+  background: var(--v2-surface); border: 1px solid var(--v2-bord); border-radius: 12px; box-shadow: var(--v2-ombre-pop);
+}
+.v2-fiche .v2-groupe.v2-ouvert > div:nth-child(2) { display: flex; }
+.v2-fiche .v2-groupe > div:nth-child(2) > * { width: 100%; justify-content: flex-start; text-align: left; white-space: normal; }
+/* Bloc dossier : le n°, le logo et le montant sont déjà dans l'en-tête v2 ;
+   restent les badges (jours, probabilité, acompte, livraison) et « Marquer livrée ». */
+.v2-fiche .v2-top .v2-dossier { order: 10; flex-basis: 100%; margin: 0; padding-top: 4px; }
+.v2-fiche .v2-dossier img, .v2-fiche .v2-dossier h1, .v2-fiche .v2-dossier div:has(+ h1), .v2-fiche .v2-dossier > .text-right { display: none; }
+.v2-fiche .v2-dossier h1 + div { margin-top: 0; }
+/* Moins de vide entre l'en-tête v2 et la fiche ; la ligne « ← Dashboard », vide en v2, disparaît */
+.v2-fiche .v2-legacy > main { padding-top: 18px; }
+.v2-root .v2-legacy div.mb-4.flex:has(> a[href="/dashboard"]:only-child) { display: none; }

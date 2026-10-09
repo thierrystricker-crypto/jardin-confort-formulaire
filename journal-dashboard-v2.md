@@ -83,10 +83,27 @@ colonne, Montants passe en 2×2 dès 416 px ; Client et Offre restent l'un SOUS 
 dans la colonne de gauche (demande de Thierry), la droite étant réservée à l'aperçu.
 Mesuré : aperçu à droite à 1280, 1440 et 1920 px, aucun débordement.
 
+## 09.10.2026 — Phase 2 (fiche) : les boutons du haut rangés en menus
+
+Les 4 groupes du haut de la fiche v1 (Documents PDF, Pages web, Navigation &
+contact, Outils internes — ~15 boutons) deviennent 4 menus déroulants.
+**Aucun bouton n'est recopié** : `_components/MenusFiche.tsx` repère les vrais
+groupes de la fiche v1 (par leur intitulé), les marque (`v2-top`, `v2-groupe`,
+`v2-dossier`) et ouvre / ferme le panneau au clic ; v2.css §7 fait la mise en
+forme. Les boutons gardent donc leur logique, leurs états (« Génération… »,
+« ✓ Lien copié »), le composant Wallee, le bandeau de rappel PDF. Un clic dans
+un panneau le laisse ouvert (on voit le retour) ; clic dehors ou Échap ferme.
+Un bouton ajouté plus tard dans un de ces groupes v1 apparaît tout seul dans le
+bon menu. Groupe vide (ex. pas d'e-mail client → pas d'« Email relance ») =
+menu masqué. Le bloc dossier v1 perd logo, n° et montant (déjà dans l'en-tête v2)
+et garde ses badges et « Marquer livrée ».
+⚠️ Dépend des intitulés v1 (« Documents PDF », « Pages web », « Navigation »,
+« Outils internes ») : les renommer en v1 = le menu correspondant redevient un
+groupe de boutons ordinaire (rien ne casse, rien ne disparaît).
+
 ### Phase 2 (à faire)
 
-1. Fiche : ranger les ~70 boutons en menus Documents ▾ / Paiement ▾ / ⋯ et en
-   onglets (Résumé / Suivi commercial / Livraison & délais / Historique / Annexes),
-   l'aperçu restant visible dans Résumé.
+1. Fiche : ~~menus~~ ✅ fait ; reste éventuellement les onglets (Résumé / Suivi
+   commercial / Historique / Annexes), l'aperçu restant à droite.
 2. Clients et fiche client en natif v2.
 3. Si adopté : redirection `/dashboard` → `/v2`, puis nettoyage.
