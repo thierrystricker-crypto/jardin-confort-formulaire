@@ -52,6 +52,25 @@ sombre / mobile sur API simulées ; interception des liens testée (clic sur un
 - Accueil : ligne complète « Semaine NN » en grand + date + bouton 💬 Jardi.
   La semaine est calculée au montage (la page est pré-rendue au build).
 
+## 09.10.2026 — Cartes trop serrées / textes qui débordent (pages v1 dans la v2)
+
+**Cause :** les pages v1 choisissent leurs colonnes (`sm:/md:/lg:/xl:`) selon la
+largeur de l'**écran**. Avec le menu latéral, la place réelle est ~250 px plus
+étroite : à 1440 px, la fiche gardait ses 2 colonnes (aperçu à droite) et la
+carte Montants ses 4 cases dans ~400 px → les montants sortaient des cases.
+
+**Correction (v2.css §5, aucune page v1 touchée) :** `.v2-legacy` devient un
+conteneur (`container-type: inline-size`) et les classes `grid-cols-*`,
+`col-span-*`, `flex-row/col` des pages v1 sont rejouées en `@container` sur la
+**largeur disponible**, avec les mêmes seuils que Tailwind. Une page v1 se met
+donc en page exactement comme en v1 pour la même largeur utile. Filet : dans une
+grille, un texte trop long passe à la ligne au lieu de déborder.
+Conséquence visible : sur un écran de 1440 px, la fiche passe en une colonne
+(aperçu dessous) ; menu réduit ou écran ≥ ~1550 px → aperçu à droite comme avant.
+Les classes arbitraires (`xl:grid-cols-[minmax(0,1fr)_660px]`…) sont relevées
+dans le code au moment de la génération : une NOUVELLE valeur arbitraire dans
+une page v1 retombera sur le comportement écran tant que le CSS n'est pas regénéré.
+
 ### Phase 2 (à faire)
 
 1. Fiche : ranger les ~70 boutons en menus Documents ▾ / Paiement ▾ / ⋯ et en
