@@ -101,6 +101,20 @@ et garde ses badges et « Marquer livrée ».
 « Outils internes ») : les renommer en v1 = le menu correspondant redevient un
 groupe de boutons ordinaire (rien ne casse, rien ne disparaît).
 
+## 09.10.2026 — Retours sur la fiche et la liste
+
+- En-tête de fiche : **Société, puis Nom, puis Prénom** (société un ton plus
+  discret). Bandeau compact idem.
+- Liste, brouillons, Ctrl+K : **Nom puis Prénom** (affichage, tri par client et
+  pertinence de recherche). Sans nom, la société prend la place du nom.
+- Raccourci direct **« Page commande client » / « Page de l'offre »** à gauche des
+  menus : copie du lien v1 du menu Pages web (même adresse, même libellé),
+  recréée par MenusFiche si la v1 le change.
+- Menu Pages web : « 🔗 Copier le lien client » (offres) reste en tête, puis la
+  page commande / la page de l'offre, puis le reste (CSS `order`, v1 intacte).
+- Bouton « 👁 Aperçu » de l'en-tête (et du bandeau) : ouvre `/print/offre/[slug]`
+  dans un nouvel onglet au lieu de descendre sur la carte d'aperçu.
+
 ### Phase 2 (à faire)
 
 1. Fiche : ~~menus~~ ✅ fait ; reste éventuellement les onglets (Résumé / Suivi

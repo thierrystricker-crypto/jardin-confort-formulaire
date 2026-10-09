@@ -1,10 +1,11 @@
 "use client";
 // app/v2/_components/EnteteDocument.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-// Dashboard 2.0 — en-tête de la fiche offre / commande (demande du 09.10.2026) :
-// le NOM et le PRÉNOM du client en grand, avec le NUMÉRO du document, tout en
-// haut. Un bandeau compact reprend nom + numéro quand on fait défiler la page.
-// Le bouton « Aperçu » descend sur la carte d'aperçu de la fiche v1 (conservée).
+// Dashboard 2.0 — en-tête de la fiche offre / commande.
+// 09.10.2026 : le client en grand — SOCIÉTÉ, puis NOM, puis PRÉNOM — avec le
+// NUMÉRO du document. Un bandeau compact reprend client + numéro quand on fait
+// défiler. Le bouton « 👁 Aperçu » ouvre la page web de la commande / de l'offre
+// (/print/offre/[slug]) dans un nouvel onglet.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useEffect, useRef, useState } from "react";
@@ -45,22 +46,12 @@ function classeStatut(statut: string, type: string) {
   return "b-warn";
 }
 
-/** La carte « Aperçu commande / offre » de la fiche v1. */
-function trouverApercu(): HTMLElement | null {
-  const iframe = document.querySelector<HTMLIFrameElement>(
-    '.v2-legacy iframe[title="Aperçu commande"], .v2-legacy iframe[title="Aperçu offre"]',
-  );
-  if (!iframe) return null;
-  return (iframe.closest(".rounded-2xl") as HTMLElement | null) ?? iframe;
-}
-
 export default function EnteteDocument() {
   const params = useParams<{ slug: string }>();
   const slug = params?.slug;
   const [e, setE] = useState<Entete | null>(null);
   const [erreur, setErreur] = useState(false);
   const [bandeau, setBandeau] = useState(false);
-  const [apercu, setApercu] = useState(false);
   const carte = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -84,42 +75,24 @@ export default function EnteteDocument() {
     return () => io.disconnect();
   }, [e]);
 
-  // La carte d'aperçu est montée par la fiche v1 après son propre chargement
-  useEffect(() => {
-    if (trouverApercu()) {
-      setApercu(true);
-      return;
-    }
-    const mo = new MutationObserver(() => {
-      if (trouverApercu()) {
-        setApercu(true);
-        mo.disconnect();
-      }
-    });
-    mo.observe(document.body, { childList: true, subtree: true });
-    return () => mo.disconnect();
-  }, []);
-
-  const allerApercu = () => trouverApercu()?.scrollIntoView({ behavior: "smooth", block: "start" });
-
   if (erreur) return null; // la fiche v1 dessous affiche déjà son propre message
-  const nom = e ? [e.client_prenom, e.client_nom].filter(Boolean).join(" ") : "";
-  const titre = nom || e?.client_societe || "Client";
+  const nomPrenom = e ? [e.client_nom, e.client_prenom].filter(Boolean).join(" ") : "";
+  const societe = e?.client_societe || "";
   const isCmd = e?.type_document === "Commande";
+  const urlPage = slug ? `/print/offre/${slug}` : "#";
+  const libellePage = isCmd ? "Page commande client" : "Page de l'offre";
 
   return (
     <>
       {bandeau && e && (
         <div className="v2-bandeau">
-          <b>{titre}</b>
+          <b>{[societe, nomPrenom].filter(Boolean).join(" · ") || "Client"}</b>
           <span className="num">{e.numero_affiche}</span>
           <span className={`v2-badge ${classeStatut(e.statut, e.type_document)}`}>{e.statut}</span>
           <span className="v2-spacer" />
-          {apercu && (
-            <button type="button" className="v2-btn v2-btn-petit" onClick={allerApercu}>
-              👁 Aperçu
-            </button>
-          )}
+          <a href={urlPage} target="_blank" rel="noopener noreferrer" className="v2-btn v2-btn-petit" title={`${libellePage} — nouvel onglet`}>
+            👁 Aperçu
+          </a>
           <button type="button" className="v2-btn v2-btn-petit" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
             ↑ Haut
           </button>
@@ -143,8 +116,18 @@ export default function EnteteDocument() {
                   <span className="v2-badge b-warn">⏳ À livrer</span>
                 ))}
             </div>
-            <h1 className="v2-entete-nom">{e ? titre : " "}</h1>
-            {e && nom && e.client_societe && <div className="v2-entete-societe">{e.client_societe}</div>}
+            <h1 className="v2-entete-nom">
+              {!e ? (
+                " "
+              ) : (
+                <>
+                  {societe && <span className="v2-entete-soc">{societe}</span>}
+                  {societe && nomPrenom && " "}
+                  {nomPrenom}
+                  {!societe && !nomPrenom && "Client"}
+                </>
+              )}
+            </h1>
             {e && (
               <div className="v2-entete-meta">
                 {e.reference && <span className="v2-badge b-warn" title="Référence client">📌 {e.reference}</span>}
@@ -164,10 +147,10 @@ export default function EnteteDocument() {
               </div>
             )}
             <div className="v2-entete-actions">
-              {apercu && (
-                <button type="button" className="v2-btn" onClick={allerApercu}>
+              {e && (
+                <a href={urlPage} target="_blank" rel="noopener noreferrer" className="v2-btn" title={`${libellePage} — s'ouvre dans un nouvel onglet`}>
                   👁 Aperçu {isCmd ? "de la commande" : "de l'offre"}
-                </button>
+                </a>
               )}
             </div>
           </div>

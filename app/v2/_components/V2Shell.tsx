@@ -161,7 +161,7 @@ function Palette({ ouverte, fermer }: { ouverte: boolean; fermer: () => void }) 
     const out: ItemPalette[] = [];
     if (mots.length) {
       clients.forEach((c) => {
-        const nom = [c.prenom, c.nom].filter(Boolean).join(" ") || c.societe || "—";
+        const nom = [c.nom, c.prenom].filter(Boolean).join(" ") || c.societe || "—";
         const detail = [nom !== c.societe ? c.societe : null, c.ville].filter(Boolean).join(" · ");
         out.push({
           groupe: "Clients",
@@ -178,7 +178,7 @@ function Palette({ ouverte, fermer }: { ouverte: boolean; fermer: () => void }) 
         .forEach((d) =>
           out.push({
             groupe: "Documents",
-            label: `${d.numero_affiche} — ${[d.client_prenom, d.client_nom].filter(Boolean).join(" ") || d.client_societe || "—"}`,
+            label: `${d.numero_affiche} — ${[d.client_societe, [d.client_nom, d.client_prenom].filter(Boolean).join(" ")].filter(Boolean).join(" · ") || "—"}`,
             detail: d.type_document,
             aller: () => router.push(`/v2/${d.slug}`),
           }),

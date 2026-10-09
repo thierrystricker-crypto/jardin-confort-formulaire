@@ -88,8 +88,9 @@ function fmtMoney(v: number | null | undefined) {
 function fmtMoneyCourt(v: number) {
   return "CHF " + new Intl.NumberFormat("de-CH", { maximumFractionDigits: 0 }).format(v);
 }
+// Nom PUIS prénom (demande du 09.10.2026) — affichage, tri et pertinence.
 function nomClient(o: { client_prenom: string | null; client_nom: string | null }) {
-  return [o.client_prenom, o.client_nom].filter(Boolean).join(" ") || "—";
+  return [o.client_nom, o.client_prenom].filter(Boolean).join(" ") || "—";
 }
 function normalize(s: string | null | undefined): string {
   return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -339,7 +340,7 @@ export default function DashboardV2Page() {
     const qNorm = normalize(search.trim());
     const qWords = tokenize(qNorm);
     if (qNorm) {
-      const nomD = (d: DraftRecord) => [d.client_prenom, d.client_nom].filter(Boolean).join(" ");
+      const nomD = (d: DraftRecord) => [d.client_nom, d.client_prenom].filter(Boolean).join(" ");
       const fieldsOf = (d: DraftRecord) => [nomD(d), d.numero_affiche, d.client_email, d.client_societe, d.commercial, d.reference];
       list = list.filter((d) => matchesAllWords(fieldsOf(d), qWords));
       list = [...list].sort((a, b) => {
@@ -727,8 +728,14 @@ export default function DashboardV2Page() {
                           )}
                         </td>
                         <td>
-                          <div style={{ fontWeight: 500 }}>{nomClient(o)}</div>
-                          {o.client_societe && <span className="v2-sous">{o.client_societe}</span>}
+                          {nomClient(o) === "—" && o.client_societe ? (
+                            <div style={{ fontWeight: 500 }}>{o.client_societe}</div>
+                          ) : (
+                            <>
+                              <div style={{ fontWeight: 500 }}>{nomClient(o)}</div>
+                              {o.client_societe && <span className="v2-sous">{o.client_societe}</span>}
+                            </>
+                          )}
                           {o.client_email && <span className="v2-sous">{o.client_email}</span>}
                         </td>
                         <td className="v2-col-opt v2-pale">{o.client_ville || "—"}</td>

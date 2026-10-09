@@ -1082,3 +1082,11 @@ button.v2-chip:hover { background: var(--v2-surface-2); }
 /* Moins de vide entre l'en-tête v2 et la fiche ; la ligne « ← Dashboard », vide en v2, disparaît */
 .v2-fiche .v2-legacy > main { padding-top: 18px; }
 .v2-root .v2-legacy div.mb-4.flex:has(> a[href="/dashboard"]:only-child) { display: none; }
+/* Raccourci « Page commande client / Page de l'offre », premier à gauche des menus */
+.v2-fiche .v2-top a.v2-raccourci { order: 0; margin: 0; font-weight: 600; }
+/* Menu Pages web : « 🔗 Copier le lien client » (offres) reste en tête,
+   puis la page commande / la page de l'offre, puis le reste */
+.v2-fiche .v2-groupe[data-v2-ordre="2"] > div:nth-child(2) > button.border-2 { order: -2; }
+.v2-fiche .v2-groupe[data-v2-ordre="2"] > div:nth-child(2) > a[href*="/print/offre/"] { order: -1; }
+/* En-tête : la société avant nom et prénom, un ton plus discret */
+.v2-entete-soc { color: var(--v2-attenue); font-weight: 650; margin-right: .1em; }

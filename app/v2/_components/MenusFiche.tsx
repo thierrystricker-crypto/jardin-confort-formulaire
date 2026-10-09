@@ -45,6 +45,23 @@ function appliquer() {
     }
   }
   top.querySelector("h1")?.closest(".pt-2")?.classList.add("v2-dossier");
+
+  // Raccourci direct à côté des menus (09.10.2026) : « Page commande client »
+  // ou « Page de l'offre ». C'est une COPIE du lien v1 du menu Pages web
+  // (même adresse, même libellé), recréée si la v1 le change.
+  const grille = top.querySelector<HTMLElement>(":scope > .grid");
+  const source = top.querySelector<HTMLAnchorElement>('.v2-groupe[data-v2-ordre="2"] a[href*="/print/offre/"]');
+  const existant = grille?.querySelector<HTMLAnchorElement>(":scope > a.v2-raccourci") ?? null;
+  if (grille && source) {
+    if (!existant || existant.getAttribute("href") !== source.getAttribute("href") || existant.textContent !== source.textContent) {
+      existant?.remove();
+      const copie = source.cloneNode(true) as HTMLAnchorElement;
+      copie.classList.add("v2-raccourci");
+      grille.appendChild(copie);
+    }
+  } else {
+    existant?.remove();
+  }
 }
 
 function fermerTout(sauf?: Element | null) {
