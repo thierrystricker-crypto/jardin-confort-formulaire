@@ -10,8 +10,6 @@
 
 /** Pages v1 qui restent en v1, même depuis la v2. */
 const RESTENT_EN_V1: RegExp[] = [
-  /^\/dashboard\/jardi(\/|$)/, // chat plein écran, ouvert dans son onglet
-  /^\/dashboard\/thunderai(\/|$)/, // simple redirection vers Jardi
   /^\/dashboard\/[^/]+\/reviser\/?$/, // formulaire de révision (DraftFormulaire)
 ];
 
@@ -25,6 +23,9 @@ export function versV2(chemin: string): string | null {
   const [, pathname, suite] = m;
   if (pathname !== "/dashboard" && !pathname.startsWith("/dashboard/")) return null;
   if (RESTENT_EN_V1.some((r) => r.test(pathname))) return null;
+  // 10.10.2026 : Jardi a sa page v2 (/v2/jardi, même API, même base).
+  // L'ancienne adresse ThunderAI ouvre Jardi sur la source Thunderbird.
+  if (/^\/dashboard\/thunderai\/?$/.test(pathname)) return "/v2/jardi?source=thunderai";
   const reste = pathname.slice("/dashboard".length);
   return "/v2" + (reste === "/" ? "" : reste) + suite;
 }

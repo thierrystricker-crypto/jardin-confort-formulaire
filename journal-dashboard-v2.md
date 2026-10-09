@@ -115,9 +115,44 @@ groupe de boutons ordinaire (rien ne casse, rien ne disparaît).
 - Bouton « 👁 Aperçu » de l'en-tête (et du bandeau) : ouvre `/print/offre/[slug]`
   dans un nouvel onglet au lieu de descendre sur la carte d'aperçu.
 
+## 10.10.2026 — Jardi dans la v2 : design pro + tri et filtres de l'historique
+
+Nouvelle page **`/v2/jardi`** (la v1 `/dashboard/jardi` n'est PAS touchée : même
+API `/api/claude/*`, même base, les deux pages voient les mêmes conversations).
+Fichiers : `app/v2/jardi/page.tsx` (copie restylée de la v1, logique reprise telle
+quelle : streaming, pièces jointes + TTL 24 h, dictée, sauvegarde auto, `?c=`
+`?s=` `?q=` `?source=`, ThunderAI en lecture, identité par appareil, panneau
+d'utilisation), `historique-v2.tsx`, `outils.ts`, `jardi.css`.
+
+- **Design** : jetons v2 (clair ET sombre) ; en-tête de conversation (titre,
+  auteur, date, nb d'échanges) ; réponses sans bulle avec avatar Jardi et puces
+  d'outils lisibles (icône + nom) ; tableaux encadrés, rayés, avec « Copier le
+  tableau » (collage Excel) ; zone de saisie en carte (Joindre, Dicter, envoi) ;
+  accueil « Bonjour Prénom » + Reprendre + modèles en cartes.
+- **Actions en plus** : 🔗 copier le lien de la conversation, ⬇ exporter en
+  `.md`, ✎ reprendre / reformuler une question.
+- **Historique** : tri (activité récente, plus anciennes, date de création, plus
+  d'échanges, titre A→Z) ; filtres période (aujourd'hui / 7 j / 30 j / 3 mois),
+  personne, thème (ce que Jardi a consulté : clients, mails & PJ, brouillons
+  d'offre, commandes, stock, délais, stats, listes d'achat — avec compteurs) ;
+  📌 épingles en haut ; puces des filtres actifs + compteur ; groupes par mois
+  au-delà du mois courant. Liste chargée jusqu'à 500 (plafond serveur), tri et
+  filtres côté navigateur. Réglages et épingles mémorisés **par appareil**
+  (`jardi-v2-historique`, `jardi-v2-epingles`) — aucune écriture en base.
+- Touche **`/`** = recherche de l'historique (Ctrl+K reste la recherche globale).
+- Coquille : Jardi devient une page interne du menu (plus de nouvel onglet), le
+  menu latéral se **replie tout seul** sur cette page (bouton ⇥ pour le rouvrir,
+  réglage mémorisé inchangé). Liens v1 vers `/dashboard/jardi` (to-do « Préparer
+  une réponse »…) → `/v2/jardi` ; `/dashboard/thunderai` → `/v2/jardi?source=thunderai`.
+- ⚠️ Les modales v1 réutilisées (choix de l'utilisateur au 1er passage, panneau
+  d'utilisation) restent en thème sombre.
+- Vérifié : `next build` + captures clair / sombre / filtres / accueil / mobile
+  sur API simulée ; envoi → streaming → sauvegarde (POST) → `?c=` dans l'adresse.
+
 ### Phase 2 (à faire)
 
 1. Fiche : ~~menus~~ ✅ fait ; reste éventuellement les onglets (Résumé / Suivi
    commercial / Historique / Annexes), l'aperçu restant à droite.
 2. Clients et fiche client en natif v2.
-3. Si adopté : redirection `/dashboard` → `/v2`, puis nettoyage.
+3. Si adopté : redirection `/dashboard` → `/v2` (dont `/dashboard/jardi` →
+   `/v2/jardi`), puis nettoyage.

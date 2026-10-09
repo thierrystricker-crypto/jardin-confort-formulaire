@@ -50,7 +50,7 @@ const MENU: Groupe[] = [
   {
     titre: "Outils",
     entrees: [
-      { href: "/dashboard/jardi", label: "Jardi", icon: "💬", externe: true },
+      { href: "/v2/jardi", label: "Jardi", icon: "💬" },
       { href: "/planner", label: "Planner 3D", icon: "🪑", externe: true },
       { href: "/v2/modeles-3d", label: "Index 3D", icon: "🧊" },
       { href: "/v2/qr-libre", label: "QR paiement libre", icon: "💳" },
@@ -414,6 +414,11 @@ export default function V2Shell({ children }: { children: React.ReactNode }) {
   const racine = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<Theme>("light");
   const [reduit, setReduit] = useState(false);
+  // Jardi (10.10.2026) : le chat a sa propre colonne d'historique — le menu
+  // se replie tout seul sur cette page, sans toucher au réglage mémorisé.
+  const estJardi = pathname === "/v2/jardi" || pathname.startsWith("/v2/jardi/");
+  const [deplieJardi, setDeplieJardi] = useState(false);
+  const reduitEffectif = estJardi ? !deplieJardi : reduit;
   const [menuMobile, setMenuMobile] = useState(false);
   const [palette, setPalette] = useState(false);
   const { nonLues, alerteMake, remises } = useCompteurs();
@@ -438,6 +443,10 @@ export default function V2Shell({ children }: { children: React.ReactNode }) {
     } catch {}
   };
   const changerMenu = () => {
+    if (estJardi) {
+      setDeplieJardi((d) => !d);
+      return;
+    }
     const r = !reduit;
     setReduit(r);
     try {
@@ -460,13 +469,13 @@ export default function V2Shell({ children }: { children: React.ReactNode }) {
 
   const actif = (href: string) =>
     href === "/v2"
-      ? pathname === "/v2" || /^\/v2\/(?!todo|clients|listes-achat|stock-|arrivages|delais|modeles-3d|qr-libre|statistiques|comptabilite|notifications|brand-logos|winbiz-adresses)[^/]+$/.test(pathname)
+      ? pathname === "/v2" || /^\/v2\/(?!todo|jardi|clients|listes-achat|stock-|arrivages|delais|modeles-3d|qr-libre|statistiques|comptabilite|notifications|brand-logos|winbiz-adresses)[^/]+$/.test(pathname)
       : pathname === href || pathname.startsWith(href + "/");
 
   return (
     <div
       ref={racine}
-      className={`v2-root${reduit ? " v2-reduit" : ""}`}
+      className={`v2-root${reduitEffectif ? " v2-reduit" : ""}`}
       data-theme={theme}
       suppressHydrationWarning
     >
@@ -522,7 +531,7 @@ export default function V2Shell({ children }: { children: React.ReactNode }) {
               <span className="v2-lbl">Version actuelle</span>
             </a>
             <button type="button" onClick={changerMenu} className="v2-masque-mobile" title="Réduire / agrandir le menu">
-              <span className="v2-ic">{reduit ? "⇥" : "⇤"}</span>
+              <span className="v2-ic">{reduitEffectif ? "⇥" : "⇤"}</span>
               <span className="v2-lbl">Réduire le menu</span>
             </button>
           </div>

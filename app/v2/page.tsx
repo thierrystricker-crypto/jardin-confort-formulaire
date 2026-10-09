@@ -471,7 +471,7 @@ export default function DashboardV2Page() {
           <small>Offres & commandes</small>
         </div>
         <div className="v2-spacer" />
-        <a href="/dashboard/jardi" target="_blank" rel="noopener noreferrer" className="v2-btn v2-btn-jardi" title="Ouvrir Jardi, l'assistant, dans un nouvel onglet">
+        <a href="/v2/jardi" className="v2-btn v2-btn-jardi" title="Ouvrir Jardi, l'assistant">
           💬 Jardi
         </a>
       </div>
