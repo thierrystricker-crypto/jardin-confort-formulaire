@@ -71,6 +71,18 @@ Les classes arbitraires (`xl:grid-cols-[minmax(0,1fr)_660px]`…) sont relevées
 dans le code au moment de la génération : une NOUVELLE valeur arbitraire dans
 une page v1 retombera sur le comportement écran tant que le CSS n'est pas regénéré.
 
+## 09.10.2026 — L'aperçu de la commande était tombé en bas de page
+
+Effet de bord de la correction précédente : à 1440 px avec le menu, la largeur
+utile (~1190 px) n'atteignait plus le palier xl (1280) → fiche en une colonne,
+aperçu sous toutes les cartes. **L'aperçu est la carte la plus précieuse.**
+v2.css §6 : la grille principale de la fiche (`xl:grid-cols-[minmax(0,1fr)_660px]`,
+fiche ET brouillon) passe en 2 colonnes dès ~990 px utiles, aperçu =
+`clamp(480px, 50%, 660px)`. Chaque colonne devient un conteneur ; dans une
+colonne, Montants passe en 2×2 dès 416 px ; Client et Offre restent l'un SOUS l'autre
+dans la colonne de gauche (demande de Thierry), la droite étant réservée à l'aperçu.
+Mesuré : aperçu à droite à 1280, 1440 et 1920 px, aucun débordement.
+
 ### Phase 2 (à faire)
 
 1. Fiche : ranger les ~70 boutons en menus Documents ▾ / Paiement ▾ / ⋯ et en

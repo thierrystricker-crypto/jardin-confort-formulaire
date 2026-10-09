@@ -1018,3 +1018,22 @@ button.v2-chip:hover { background: var(--v2-surface-2); }
 }
 /* Filet : dans une grille, un texte trop long passe à la ligne au lieu de sortir de sa carte. */
 .v2-root .v2-legacy .grid > * { min-width: 0; overflow-wrap: break-word; }
+
+/* ═══ 6. Fiche offre / commande (et brouillon) : l'APERÇU reste à droite ═══
+ * Demande du 09.10.2026 : l'aperçu est la carte la plus précieuse, il ne doit
+ * pas tomber en bas de page. La grille principale de la fiche (colonne de
+ * gauche + aperçu 660 px, v1 : dès 1280 px d'écran) passe ici en 2 colonnes
+ * dès ~990 px de largeur UTILE, l'aperçu prenant la moitié (480 à 660 px).
+ * Chaque colonne devient à son tour un conteneur : les cartes de gauche
+ * (Montants…) se règlent sur la largeur de LEUR colonne. */
+.v2-root .v2-legacy .xl\:grid-cols-\[minmax\(0\,1fr\)_660px\] > * { container-type: inline-size; min-width: 0; }
+@container (min-width: 62rem) {
+  .v2-root .v2-legacy .xl\:grid-cols-\[minmax\(0\,1fr\)_660px\] { grid-template-columns: minmax(0, 1fr) clamp(480px, 50%, 660px); }
+}
+/* Dans une colonne de fiche : 2 colonnes de cartes dès qu'il y a la place */
+@container (min-width: 26rem) {
+  .v2-root .v2-legacy .xl\:grid-cols-\[minmax\(0\,1fr\)_660px\] > * .sm\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Client et Offre l'un SOUS l'autre dans la colonne de gauche (demande du
+   09.10.2026) : la colonne de droite est réservée à l'aperçu. */
+.v2-root .v2-legacy .xl\:grid-cols-\[minmax\(0\,1fr\)_660px\] > * > .lg\:grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
