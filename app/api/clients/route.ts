@@ -484,12 +484,124 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// ─── Anti-doublon (10.10.2026) ──────────────────────────────────────────────
+// Un brouillon ou une offre enregistrés sans fiche rattachée appelaient ce POST
+// et créaient une fiche à chaque fois. Cas typique : la fiche existe (souvent
+// importée de WinBiz, SANS e-mail), le vendeur la choisit puis tape l'e-mail
+// (obligatoire pour un brouillon) → le formulaire se détache de la fiche → une
+// 2e fiche « draft » naît, avec l'e-mail. 69 doublons sur 198 fiches « draft »
+// au 10.10.2026. Désormais, pour source = "draft" | "offre" :
+//   1. même e-mail (casse ignorée)                     → on réutilise la fiche ;
+//   2. même nom + prénom + NPA, fiche SANS e-mail       → on la réutilise et on
+//      la complète avec l'e-mail ;
+//   3. sinon                                           → création comme avant.
+// On ne remplace JAMAIS une donnée présente : seuls les champs vides sont
+// complétés ; l'adresse (rue, n°, NPA, ville) seulement si la fiche n'en a pas.
+// Une fiche de même nom + NPA mais avec un AUTRE e-mail n'est pas touchée
+// (ce peut être une autre personne) : création d'une nouvelle fiche.
+// La création manuelle (page Clients, source « manuel ») ne change pas.
+
+const SOURCES_ANTI_DOUBLON = new Set(["draft", "offre"])
+const CHAMPS_IDENTITE = ["prenom", "societe", "complement_nom", "livr_complement_nom", "email", "tel1", "tel2"] as const
+const CHAMPS_ADRESSE = ["rue", "rue2", "numero_rue", "npa", "ville"] as const
+
+function vide(v: unknown): boolean {
+  return v == null || (typeof v === "string" && v.trim() === "")
+}
+
+// ilike sans joker : % et _ du texte saisi pris littéralement.
+function motifExact(s: string): string {
+  return s.replace(/[\\%_]/g, (m) => "\\" + m)
+}
+
+async function trouverClientExistant(f: {
+  nom: string
+  prenom: string | null
+  email: string | null
+  npa: string | null
+}): Promise<Client | null> {
+  if (f.email) {
+    const { data } = await supabaseAdmin
+      .from("clients")
+      .select("*")
+      .ilike("email", motifExact(f.email))
+      .order("updated_at", { ascending: false })
+      .limit(1)
+    if (data && data.length) return data[0] as Client
+  }
+  if (f.nom && f.npa) {
+    let q = supabaseAdmin
+      .from("clients")
+      .select("*")
+      .ilike("nom", motifExact(f.nom))
+      .eq("npa", f.npa)
+    q = f.prenom ? q.ilike("prenom", motifExact(f.prenom)) : q.or('prenom.is.null,prenom.eq.""')
+    const { data } = await q.order("updated_at", { ascending: false }).limit(10)
+    const sansEmail = ((data || []) as Client[]).filter((c) => vide(c.email))
+    if (sansEmail.length) return sansEmail[0]
+  }
+  return null
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { nom, prenom, societe, email, tel1, tel2, rue, rue2, numero_rue, npa, ville, pays, notes, source, complement_nom, livr_complement_nom } = body
 
     if (!nom?.trim()) return NextResponse.json({ error: "Nom requis" }, { status: 400 })
+
+    if (SOURCES_ANTI_DOUBLON.has(source)) {
+      const saisie: Record<string, string | null> = {
+        prenom: prenom?.trim() || null,
+        societe: societe?.trim() || null,
+        complement_nom: complement_nom?.trim() || null,
+        livr_complement_nom: livr_complement_nom?.trim() || null,
+        email: email?.trim().toLowerCase() || null,
+        tel1: tel1?.trim() || null,
+        tel2: tel2?.trim() || null,
+        rue: rue?.trim() || null,
+        rue2: rue2?.trim() || null,
+        numero_rue: numero_rue?.trim() || null,
+        npa: npa?.trim() || null,
+        ville: ville?.trim() || null,
+      }
+      const existant = await trouverClientExistant({
+        nom: nom.trim(),
+        prenom: saisie.prenom,
+        email: saisie.email,
+        npa: saisie.npa,
+      })
+      if (existant) {
+        const maj: Record<string, string> = {}
+        for (const k of CHAMPS_IDENTITE) {
+          const v = saisie[k]
+          if (v && vide(existant[k])) maj[k] = v
+        }
+        // Adresse en bloc : seulement si la fiche n'a pas d'adresse du tout
+        // (sinon « Avenue du Midi 41 » + n° 41 donnerait « 41 41 »).
+        if (vide(existant.rue) && vide(existant.ville)) {
+          for (const k of CHAMPS_ADRESSE) {
+            const v = saisie[k]
+            if (v && vide(existant[k])) maj[k] = v
+          }
+        }
+        if (Object.keys(maj).length === 0) {
+          return NextResponse.json({ client: existant, reutilise: true })
+        }
+        const { data: complete, error: errMaj } = await supabaseAdmin
+          .from("clients")
+          .update(maj)
+          .eq("id", existant.id)
+          .select()
+          .single()
+        if (errMaj) {
+          // La fiche existe : mieux vaut la rendre telle quelle que d'en créer une 2e.
+          console.error("[clients POST] complément de fiche échoué:", errMaj.message)
+          return NextResponse.json({ client: existant, reutilise: true })
+        }
+        return NextResponse.json({ client: complete, reutilise: true, complete: Object.keys(maj) })
+      }
+    }
 
     const { data, error } = await supabaseAdmin
       .from("clients")

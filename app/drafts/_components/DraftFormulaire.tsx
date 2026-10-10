@@ -1026,9 +1026,12 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
 
       // Création du client en base (seulement au save manuel — éviter de créer
       // des clients fantômes pour des brouillons jamais finalisés)
+      // 10.10.2026 : l'API réutilise / complète une fiche existante (même e-mail,
+      // ou même nom + prénom + NPA sans e-mail) au lieu d'en créer une 2e ; la
+      // fiche retournée est rattachée au formulaire pour les saves suivants.
       if (!silent && !selectedClientId && nom.trim()) {
         try {
-          await fetch("/api/clients", {
+          const resClient = await fetch("/api/clients", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1048,6 +1051,8 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
               source: "draft",
             })
           });
+          const jsonClient = await resClient.json().catch(() => null);
+          if (resClient.ok && jsonClient?.client?.id) setSelectedClientId(jsonClient.client.id);
         } catch { /* non bloquant */ }
       }
 

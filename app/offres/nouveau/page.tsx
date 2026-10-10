@@ -652,9 +652,10 @@ const [savedSlug, setSavedSlug]           = useState("");
       setDraftSavedAt(new Date().toLocaleString("fr-CH"));
 
       // Créer le client en base s'il n'est pas déjà sélectionné
+      // 10.10.2026 : réutilise / complète une fiche existante côté API (anti-doublon).
       if (!selectedClientId && nom.trim()) {
         try {
-          await fetch("/api/clients", {
+          const resClient = await fetch("/api/clients", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -674,6 +675,8 @@ const [savedSlug, setSavedSlug]           = useState("");
               source: "offre",
             })
           })
+          const jsonClient = await resClient.json().catch(() => null)
+          if (resClient.ok && jsonClient?.client?.id) setSelectedClientId(jsonClient.client.id)
         } catch { /* non bloquant */ }
       }
 
