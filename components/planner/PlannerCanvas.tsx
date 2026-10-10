@@ -508,7 +508,7 @@ function textureEau(): THREE.CanvasTexture | null {
   c.width = c.height = N;
   const g = c.getContext("2d");
   if (!g) return null;
-  g.fillStyle = "#2f93bf";
+  g.fillStyle = "#3fa9d1";
   g.fillRect(0, 0, N, N);
   // Moirage : des ondes claires de longueur et d'orientation variables, toutes
   // redessinées sur le bord opposé pour que la tuile boucle (même principe que
@@ -554,16 +554,20 @@ function Bassin({ item, mode, selected, lectureSeule, onPointerDown, onEtirer }:
 }) {
   const b = item.bassin!;
   const maquette = mode === "maquette";
-  const ep = 0.06;                                   // épaisseur de la margelle
-  const L = b.longueur + 2 * b.margelle;
-  const W = b.largeur + 2 * b.margelle;
-  // Margelle : la même boîte texturée que les murets, en béton clair. Un
-  // matériau par face pour que le grain garde son échelle réelle.
-  const matsMargelle = useMatsMur("beton", L, ep, W, maquette);
+  const H = 0.08;                                    // hauteur du rebord
+  const EAU = 0.055;                                 // niveau de l'eau, 2,5 cm sous le rebord
+  const m = b.margelle;
+  const L = b.longueur + 2 * m;
+  const W = b.largeur + 2 * m;
+  // Margelle en CADRE (quatre longrines), pas en dalle pleine : une dalle de
+  // L × W recouvre la surface d'eau et le bassin apparaît gris — c'était le
+  // cas de la première version (11.10.2026).
+  const matsLong = useMatsMur("beton", L, H, m, maquette);
+  const matsCourt = useMatsMur("beton", m, H, b.largeur, maquette);
   const matEau = useMemo(() => {
     const tex = maquette ? null : textureEau();
-    const m = new THREE.MeshStandardMaterial({
-      color: maquette ? 0xe8e6e1 : tex ? 0xffffff : 0x2f93bf,
+    const mat = new THREE.MeshStandardMaterial({
+      color: maquette ? 0xe8e6e1 : tex ? 0xffffff : 0x3fa9d1,
       roughness: maquette ? 1 : 0.14,
       metalness: maquette ? 0 : 0.1,
     });
@@ -572,41 +576,42 @@ function Bassin({ item, mode, selected, lectureSeule, onPointerDown, onEtirer }:
       t.needsUpdate = true;
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
       t.repeat.set(Math.max(0.3, b.longueur / 2), Math.max(0.3, b.largeur / 2));
-      m.map = t;
+      mat.map = t;
     }
-    return m;
+    return mat;
   }, [maquette, b.longueur, b.largeur]);
   useEffect(() => () => { matEau.map?.dispose(); matEau.dispose(); }, [matEau]);
 
   // Les quatre poignées : deux sur la longueur, deux sur la largeur.
   const poignees: { axe: "l" | "w"; cote: 1 | -1; p: [number, number, number] }[] = [
-    { axe: "l", cote: 1, p: [L / 2, ep, 0] },
-    { axe: "l", cote: -1, p: [-L / 2, ep, 0] },
-    { axe: "w", cote: 1, p: [0, ep, W / 2] },
-    { axe: "w", cote: -1, p: [0, ep, -W / 2] },
+    { axe: "l", cote: 1, p: [L / 2, H, 0] },
+    { axe: "l", cote: -1, p: [-L / 2, H, 0] },
+    { axe: "w", cote: 1, p: [0, H, W / 2] },
+    { axe: "w", cote: -1, p: [0, H, -W / 2] },
   ];
 
   return (
     // Pas de `userData.meuble` : une piscine de 8 m sort presque toujours du
     // cadre, et l'alerte « article au bord » n'aurait plus aucun sens.
     <group position={[item.x, 0, item.z]} rotation={[0, rotationY(item), 0]}>
-      {b.margelle > 0 && (
-        <mesh position={[0, ep / 2, 0]} material={matsMargelle} receiveShadow onPointerDown={onPointerDown}>
-          <boxGeometry args={[L, ep, W]} />
+      {m > 0 && ([1, -1] as const).map((c) => (
+        <mesh key={`long${c}`} position={[0, H / 2, (c * (b.largeur + m)) / 2]} material={matsLong} castShadow receiveShadow onPointerDown={onPointerDown}>
+          <boxGeometry args={[L, H, m]} />
         </mesh>
-      )}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, b.margelle > 0 ? ep - 0.015 : 0.01, 0]}
-        material={matEau}
-        receiveShadow
-        onPointerDown={onPointerDown}
-      >
-        <planeGeometry args={[b.longueur, b.largeur]} />
+      ))}
+      {m > 0 && ([1, -1] as const).map((c) => (
+        <mesh key={`court${c}`} position={[(c * (b.longueur + m)) / 2, H / 2, 0]} material={matsCourt} castShadow receiveShadow onPointerDown={onPointerDown}>
+          <boxGeometry args={[m, H, b.largeur]} />
+        </mesh>
+      ))}
+      {/* Cuve d'eau : une boîte et non un plan — de côté on voit la tranche
+          d'eau sous le rebord, de dessus le rectangle bleu attendu. */}
+      <mesh position={[0, EAU / 2, 0]} material={matEau} receiveShadow onPointerDown={onPointerDown}>
+        <boxGeometry args={[b.longueur, EAU, b.largeur]} />
       </mesh>
       {selected && (
         <>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, ep + 0.004, 0]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, H + 0.004, 0]}>
             <planeGeometry args={[L + 0.08, W + 0.08]} />
             <meshBasicMaterial color={0x38bdf8} transparent opacity={0.18} depthWrite={false} />
           </mesh>
@@ -616,7 +621,7 @@ function Bassin({ item, mode, selected, lectureSeule, onPointerDown, onEtirer }:
               <meshBasicMaterial color={0x38bdf8} />
             </mesh>
           ))}
-          <Html position={[0, ep + 0.3, 0]} center style={{ pointerEvents: "none" }}>
+          <Html position={[0, H + 0.3, 0]} center style={{ pointerEvents: "none" }}>
             <div className="whitespace-nowrap rounded bg-black/65 px-1.5 py-0.5 text-[11px] text-white">
               {Math.round(b.longueur * 100)} × {Math.round(b.largeur * 100)} cm
             </div>

@@ -49,9 +49,30 @@ export async function deposerCapture(token: string, dataUrl: string): Promise<st
 // Empreinte du contenu d'un plan : ce qui compte pour le client. Les cotes
 // mesurées (dims) sont ajoutées par le canvas et ignorées ; position au cm,
 // rotation au degré (rot et rot_fix sont déjà en degrés).
+//
+// Un article est identifié par son produit, sa variante et son fichier : une
+// autre couleur = un autre variant_id, c'est couvert. Un DÉCOR n'a rien de
+// tout ça (product_id 0, ni SKU, ni URL) : sans ses cotes, allonger un mur,
+// changer sa matière, la hauteur d'un arbre ou la taille d'une piscine donnait
+// la même empreinte, donc la version était réutilisée — et le PDF comme le
+// lien client continuaient de montrer l'ancien plan (11.10.2026).
 function empreinte(nom: unknown, terrasse: unknown, sol: unknown, items: unknown): string {
+  const cm = (v: number) => Math.round(v * 100);
+  const decor = (it: SceneItem): string => {
+    if (it.mur) return `mur:${it.mur.texture}:${cm(it.mur.longueur)}x${cm(it.mur.epaisseur)}x${cm(it.mur.hauteur)}`;
+    if (it.arbre) return `arbre:${it.arbre.espece}:${cm(it.arbre.hauteur)}`;
+    if (it.bassin) return `bassin:${it.bassin.genre}:${cm(it.bassin.longueur)}x${cm(it.bassin.largeur)}:${cm(it.bassin.margelle)}`;
+    return "";
+  };
+  // Le segment du décor n'est ajouté QUE s'il existe : sinon l'empreinte de
+  // toutes les scènes déjà figées changerait de forme et une V+1 inutile
+  // serait créée partout au premier enregistrement.
   const its = (Array.isArray(items) ? (items as SceneItem[]) : [])
-    .map((it) => [it.product_id, it.variant_id || "", it.sku || "", it.url || "", Math.round(it.x * 100), Math.round(it.z * 100), Math.round((it.rot || 0) + (it.rot_fix || 0))].join("|"))
+    .map((it) => {
+      const base = [it.product_id, it.variant_id || "", it.sku || "", it.url || "", cm(it.x), cm(it.z), Math.round((it.rot || 0) + (it.rot_fix || 0))];
+      const d = decor(it);
+      return (d ? [...base, d] : base).join("|");
+    })
     .sort();
   return JSON.stringify([String(nom || ""), terrasse, sol || "bois", its]);
 }
