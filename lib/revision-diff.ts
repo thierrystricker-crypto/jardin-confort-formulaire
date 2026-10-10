@@ -388,4 +388,4 @@ export function computeRevisionDiff(
     autres.length > 0;
 
   return { diff, retraits, ajouts, hasChanges };
-}
+}

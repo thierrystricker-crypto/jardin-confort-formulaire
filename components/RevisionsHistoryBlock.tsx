@@ -280,4 +280,4 @@ export default function RevisionsHistoryBlock({ commandeSlug }: Props) {
       )}
     </section>
   );
-}
+}
