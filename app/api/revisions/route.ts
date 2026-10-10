@@ -16,6 +16,8 @@ type RevisionDiffShape = {
   prixChanges?: { sku: string; title: string; avant: number; apres: number }[];
   remiseChanges?: { sku: string; title: string; avant: number; apres: number }[];
   enteteChanges?: { champ: string; avant: string; apres: string }[];
+  // Depuis le 10.10.2026 : texte, SKU, image, commentaires, logos, ordre.
+  autresChanges?: { quoi: string; sku?: string; title?: string; avant?: string; apres?: string }[];
 };
 
 type RevisionRow = {
@@ -93,4 +95,4 @@ export async function GET(request: NextRequest) {
     versionVivante: revisions.length + 1,
     idsOrigine,
   });
-}
+}

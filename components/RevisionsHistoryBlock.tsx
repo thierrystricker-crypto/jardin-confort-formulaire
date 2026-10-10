@@ -17,6 +17,9 @@ import { CLES_HORS_FORMULAIRE } from "@/lib/revision-diff";
 type LineChange = { sku: string; title: string; avant: number; apres: number };
 type LineItem = { sku: string; title: string; qty: number };
 type EnteteChange = { champ: string; avant: string; apres: string };
+// Ajoute le 10.10.2026 (lib/revision-diff.ts) : texte, SKU, image, commentaires,
+// logos, ordre des lignes. Absent des revisions archivees avant cette date.
+type AutreChange = { quoi: string; sku?: string; title?: string; avant?: string; apres?: string };
 
 interface RevisionDiff {
   ajouts?: LineItem[];
@@ -25,6 +28,7 @@ interface RevisionDiff {
   prixChanges?: LineChange[];
   remiseChanges?: LineChange[];
   enteteChanges?: EnteteChange[];
+  autresChanges?: AutreChange[];
 }
 
 interface Revision {
@@ -201,6 +205,23 @@ export default function RevisionsHistoryBlock({ commandeSlug }: Props) {
       }
     }
 
+    for (const c of diff.autresChanges || []) {
+      const cible = c.title ? `${c.title}${c.sku ? ` (${c.sku})` : ""} : ` : c.sku ? `${c.sku} : ` : "";
+      const aValeurs = (c.avant ?? "") !== "" || (c.apres ?? "") !== "";
+      out.push(
+        <li key={`o-${out.length}`} className="text-violet-200">
+          {cible}{c.quoi}
+          {aValeurs && (
+            <>
+              {" : "}
+              {(c.avant ?? "") !== "" && <>{fmtVal(c.avant as string)} &rarr; </>}
+              {fmtVal(c.apres ?? "")}
+            </>
+          )}
+        </li>
+      );
+    }
+
     if (out.length === 0) {
       out.push(
         <li key="none" className="text-white/40 italic">
@@ -259,4 +280,4 @@ export default function RevisionsHistoryBlock({ commandeSlug }: Props) {
       )}
     </section>
   );
-}
+}

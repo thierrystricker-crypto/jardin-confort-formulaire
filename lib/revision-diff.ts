@@ -5,6 +5,9 @@
 //   - un diff lisible (audit + fiche de travail)
 //   - la liste des retraits à remettre en stock (tous types : Shopify ET à la volée)
 //   - la liste des ajouts/augmentations (delta à décrémenter sur Shopify)
+//   - depuis le 10.10.2026, autresChanges : texte / SKU / image d'une ligne,
+//     commentaires, logos, ordre — sans effet sur le stock, mais suffisant
+//     pour creer une version (avant : « Aucun changement detecte »).
 
 import { isShopifyLine } from "@/lib/jc-print-types";
 
@@ -29,6 +32,11 @@ export type RevisionLine = {
   // Cle REELLEMENT portee par les lignes du data. Releve en base le 15.08.2026
   // sur les 219 lignes des snapshots : 219 shopifyVariantId, 0 variantId/variant_id.
   shopifyVariantId?: string;
+  // Champs suivis par autresChanges (10.10.2026) — aucun effet sur le stock.
+  image?: string;
+  stock?: number | string | null;
+  mediaUrl?: string;
+  mediaSize?: string;
 };
 
 // Un retrait à insérer dans stock_remises_attente
@@ -60,6 +68,21 @@ export type RevisionDiff = {
   prixChanges: { sku: string; title: string; avant: number; apres: number }[];
   remiseChanges: { sku: string; title: string; avant: number; apres: number }[];
   enteteChanges: { champ: string; avant: string; apres: string }[];
+  // Ajoute le 10.10.2026. Tout ce qui change le DOCUMENT sans toucher au stock
+  // ni aux montants : texte ou SKU d'une ligne, image, stock saisi d'un article
+  // a la volee, lignes commentaire / logo, ordre des lignes. Avant, ces
+  // changements seuls etaient refuses (« Aucun changement detecte »).
+  // Optionnel : les diffs archives avant cette date ne le portent pas.
+  autresChanges?: AutreChange[];
+};
+
+// Une valeur vide (avant ou apres) = pas de texte a montrer (image, ordre…).
+export type AutreChange = {
+  quoi: string;
+  sku?: string;
+  title?: string;
+  avant?: string;
+  apres?: string;
 };
 
 // Le résultat complet du calcul
@@ -92,6 +115,61 @@ function getLocationId(l: RevisionLine): string | null {
 // On ignore les lignes non-matérielles pour le stock (commentaires, media)
 function isStockRelevant(l: RevisionLine): boolean {
   return l.type !== "comment" && l.type !== "media";
+}
+
+// ── autresChanges : helpers ──
+// Comparaison tolerante : undefined, null et "" sont la meme absence, et les
+// espaces de bord ne comptent pas (un titre retape a l'identique n'est pas
+// une version).
+function txt(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  return String(v).trim();
+}
+
+// Texte court pour le resume (un commentaire peut etre long).
+function court(s: string, max = 160): string {
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+}
+
+function libelleLigne(l: RevisionLine): string {
+  return txt(l.title) || txt(l.sku) || "(ligne sans titre)";
+}
+
+// Changements d'une ligne CONSERVEE (meme id avant / apres), hors qty / prix /
+// remise qui ont deja leurs listes.
+function changementsLigne(b: RevisionLine, a: RevisionLine): AutreChange[] {
+  const out: AutreChange[] = [];
+  const sku = txt(a.sku), title = libelleLigne(a);
+  if (a.type === "comment") {
+    if (txt(b.title) !== txt(a.title)) {
+      out.push({ quoi: "Commentaire modifié", avant: court(txt(b.title)), apres: court(txt(a.title)) });
+    }
+    return out;
+  }
+  if (a.type === "media") {
+    if (txt(b.mediaUrl) !== txt(a.mediaUrl) || txt(b.title) !== txt(a.title)) {
+      out.push({ quoi: "Image / logo remplacé", title: txt(a.title) || undefined });
+    }
+    if (txt(b.mediaSize) !== txt(a.mediaSize)) {
+      out.push({ quoi: "Taille de l'image / logo", avant: txt(b.mediaSize), apres: txt(a.mediaSize) });
+    }
+    return out;
+  }
+  if (txt(b.title) !== txt(a.title)) {
+    out.push({ quoi: "Désignation", sku, avant: court(txt(b.title), 300), apres: court(txt(a.title), 300) });
+  }
+  if (txt(b.sku) !== txt(a.sku)) {
+    out.push({ quoi: "SKU", title, avant: txt(b.sku), apres: txt(a.sku) });
+  }
+  if (txt(b.image) !== txt(a.image)) {
+    out.push({ quoi: "Image de l'article", sku, title });
+  }
+  // Stock SAISI d'un article a la volee. Celui d'une ligne Shopify est fige J0 :
+  // il ne bouge pas en revision, et s'il bougeait ce ne serait pas a annoncer ici.
+  if (!isShopifyLine(a) && txt(b.stock) !== txt(a.stock)) {
+    out.push({ quoi: "Stock indiqué", sku, title, avant: txt(b.stock), apres: txt(a.stock) });
+  }
+  return out;
 }
 
 /**
@@ -160,7 +238,9 @@ export function computeRevisionDiff(
     prixChanges: [],
     remiseChanges: [],
     enteteChanges: [],
+    autresChanges: [],
   };
+  const autres = diff.autresChanges as AutreChange[];
   const retraits: Retrait[] = [];
   const ajouts: Ajout[] = [];
 
@@ -194,9 +274,18 @@ export function computeRevisionDiff(
             is_shopify: isShopifyLine(a),
           });
         }
+      } else if (a.type === "comment") {
+        // Ligne commentaire / logo ajoutee : rien pour le stock, mais le
+        // document change.
+        autres.push({ quoi: "Commentaire ajouté", apres: court(txt(a.title)) });
+      } else if (a.type === "media") {
+        autres.push({ quoi: "Image / logo ajouté", title: txt(a.title) || undefined });
       }
       continue;
     }
+
+    // Ligne CONSERVEE : texte, SKU, image, commentaires, logos.
+    autres.push(...changementsLigne(b, a));
 
     // Ligne CONSERVÉE → comparer qty, prix, remise
     const qtyAvant = b.qty || 0;
@@ -245,6 +334,14 @@ export function computeRevisionDiff(
   for (const b of before) {
     if (!b.id) continue;
     if (afterById.has(b.id)) continue; // conservée, déjà traitée
+    if (b.type === "comment") {
+      autres.push({ quoi: "Commentaire supprimé", avant: court(txt(b.title)) });
+      continue;
+    }
+    if (b.type === "media") {
+      autres.push({ quoi: "Image / logo supprimé", title: txt(b.title) || undefined });
+      continue;
+    }
     if (!isStockRelevant(b)) continue;
 
     const qty = b.qty || 0;
@@ -252,6 +349,14 @@ export function computeRevisionDiff(
       diff.retraits.push({ sku: b.sku || "", title: b.title || "", qty });
       retraits.push(buildRetrait(b, qty));
     }
+  }
+
+  // Ordre des lignes : on compare l'ordre RELATIF des lignes presentes des deux
+  // cotes. Un ajout ou un retrait seul ne compte donc pas comme un reordonnancement.
+  const ordreAvant = before.map((l) => l.id).filter((id): id is string => !!id && afterById.has(id));
+  const ordreApres = after.map((l) => l.id).filter((id): id is string => !!id && beforeById.has(id));
+  if (ordreAvant.join("|") !== ordreApres.join("|")) {
+    autres.push({ quoi: "Ordre des lignes modifié" });
   }
 
   // Comparaison des champs d'en-tête (tout sauf lines/_totals/immuables).
@@ -279,7 +384,8 @@ export function computeRevisionDiff(
     diff.qtyChanges.length > 0 ||
     diff.prixChanges.length > 0 ||
     diff.remiseChanges.length > 0 ||
-    diff.enteteChanges.length > 0;
+    diff.enteteChanges.length > 0 ||
+    autres.length > 0;
 
   return { diff, retraits, ajouts, hasChanges };
-}
+}
