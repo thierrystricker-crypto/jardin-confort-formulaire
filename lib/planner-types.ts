@@ -183,13 +183,13 @@ export type BassinConfig = {
   margelle: number;    // m, largeur du rebord clair autour de l'eau ; 0 = sans
 };
 
-// Formats de départ : les deux tailles de piscine les plus courantes chez nos
-// clients, un spa carré et un bassin d'agrément. Tout est réglable ensuite.
+// Un seul format par genre : la place dans la barre « Décor » est comptée, et
+// les cotes se reprennent de toute façon aux poignées ou au clavier juste
+// après la pose (11.10.2026).
 export const BASSINS: { id: string; nom: string; sous_titre: string; bassin: BassinConfig }[] = [
-  { id: "piscine",   nom: "Piscine", sous_titre: "800 × 400 cm", bassin: { type: "bassin", genre: "piscine", longueur: 8,   largeur: 4,   margelle: 0.4 } },
-  { id: "piscine-s", nom: "Piscine", sous_titre: "600 × 300 cm", bassin: { type: "bassin", genre: "piscine", longueur: 6,   largeur: 3,   margelle: 0.4 } },
-  { id: "spa",       nom: "Spa",     sous_titre: "220 × 220 cm", bassin: { type: "bassin", genre: "spa",     longueur: 2.2, largeur: 2.2, margelle: 0.25 } },
-  { id: "bassin",    nom: "Bassin",  sous_titre: "300 × 120 cm", bassin: { type: "bassin", genre: "bassin",  longueur: 3,   largeur: 1.2, margelle: 0.2 } },
+  { id: "piscine", nom: "Piscine", sous_titre: "800 × 400 cm", bassin: { type: "bassin", genre: "piscine", longueur: 8,   largeur: 4,   margelle: 0.4 } },
+  { id: "spa",     nom: "Spa",     sous_titre: "220 × 220 cm", bassin: { type: "bassin", genre: "spa",     longueur: 2.2, largeur: 2.2, margelle: 0.25 } },
+  { id: "bassin",  nom: "Bassin",  sous_titre: "300 × 120 cm", bassin: { type: "bassin", genre: "bassin",  longueur: 3,   largeur: 1.2, margelle: 0.2 } },
 ];
 
 export function nomBassin(b: BassinConfig): string {

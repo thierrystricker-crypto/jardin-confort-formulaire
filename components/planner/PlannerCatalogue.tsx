@@ -10,6 +10,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ARBRES, BASSINS, MURS, choixModeles, estVegetal, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
 
+// Cote en mètres, sans zéro inutile : 8, 4, 2,2, 1,8. Toute la barre « Décor »
+// s'écrit comme ça — « Piscine 8×4 » et « Haie 1,8 m » tiennent sur une ligne
+// là où « Piscine 800×400 » et « Haie 180 » en prenaient deux (11.10.2026).
+const metres = (v: number) => v.toFixed(2).replace(/[.,]?0+$/, "").replace(".", ",");
+
 type Marque = { marque: string; avec_3d: number };
 type Collection = { collection: string; avec_3d: number; total: number };
 
@@ -107,7 +112,7 @@ export default function PlannerCatalogue({ onAjouter, onAjouterMur, onAjouterArb
               className="rounded-lg border border-white/10 bg-[#2a2d31] px-1.5 py-1 text-[11px] text-zinc-200 transition hover:border-sky-500/40 hover:bg-sky-500/15"
               title={`${m.nom} ${m.sous_titre} — étirable à la longueur voulue avec les poignées bleues`}
             >
-              {estVegetal(m.mur.texture) ? "🌿" : "🧱"} {m.nom} <span className="text-zinc-500">{Math.round(m.mur.hauteur * 100)}</span>
+              {estVegetal(m.mur.texture) ? "🌿" : "🧱"} {m.nom} <span className="text-zinc-500">{metres(m.mur.hauteur)} m</span>
             </button>
           ))}
           {onAjouterArbre && ARBRES.map((a) => (
@@ -118,7 +123,7 @@ export default function PlannerCatalogue({ onAjouter, onAjouterMur, onAjouterArb
               className="rounded-lg border border-white/10 bg-[#2a2d31] px-1.5 py-1 text-[11px] text-zinc-200 transition hover:border-sky-500/40 hover:bg-sky-500/15"
               title={`${a.nom} — ${a.sous_titre} ; la hauteur se règle ensuite au centimètre`}
             >
-              🌳 <span className="text-zinc-500">{a.arbre.hauteur.toFixed(1).replace(".0", "").replace(".", ",")} m</span>
+              🌳 <span className="text-zinc-500">{metres(a.arbre.hauteur)} m</span>
             </button>
           ))}
           {/* Zones d'eau : réglables dans les deux sens par les quatre
@@ -131,7 +136,7 @@ export default function PlannerCatalogue({ onAjouter, onAjouterMur, onAjouterArb
               className="rounded-lg border border-white/10 bg-[#2a2d31] px-1.5 py-1 text-[11px] text-zinc-200 transition hover:border-sky-500/40 hover:bg-sky-500/15"
               title={`${b.nom} ${b.sous_titre} — rectangle réglable en longueur et en largeur avec les quatre poignées bleues`}
             >
-              💧 {b.nom} <span className="text-zinc-500">{Math.round(b.bassin.longueur * 100)}×{Math.round(b.bassin.largeur * 100)}</span>
+              💧 {b.nom} <span className="text-zinc-500">{metres(b.bassin.longueur)}×{metres(b.bassin.largeur)}</span>
             </button>
           ))}
         </div>
