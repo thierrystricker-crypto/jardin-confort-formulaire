@@ -119,6 +119,13 @@
 .v2-recherche kbd { margin-left: auto; font: 11px/1 inherit; border: 1px solid var(--v2-bord); border-bottom-width: 2px; border-radius: 5px; padding: 3px 6px; color: var(--v2-attenue); }
 .v2-spacer { flex: 1; }
 .v2-contenu { min-width: 0; }
+/* Accueil (10.10.2026) : sur grand ecran, « Nouvelle offre » s'aligne sur le bord
+   droit du contenu (.v2-page, 1700px dont 24px de marge) au lieu de partir dans
+   le coin de l'ecran. La barre garde toute la largeur (fond, bordure). Limite a
+   l'accueil, seule page en .v2-page : les pages heritees ont leurs propres largeurs. */
+@media (min-width: 821px) {
+  .v2-main:has(.v2-page) > .v2-topbar { padding-right: max(24px, calc(100% - 1676px)); }
+}
 
 .v2-voile { position: fixed; inset: 0; background: rgba(10, 12, 16, .35); z-index: 55; }
 
