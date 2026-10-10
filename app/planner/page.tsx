@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import RetourDashboard, { CLASSE_BOUTON_NAV } from "@/components/RetourDashboard";
 import PlannerCatalogue from "@/components/planner/PlannerCatalogue";
 import type { Dims } from "@/components/planner/PlannerCanvas";
-import { ARBRES, MENTION_IA, MENTION_LEGALE, MUR_TEXTURES, MURS, SCENE_VIDE, SOLS, estDecor, estVegetal, nomMur, uid, type AxeCouleur, type CameraScene, type CatalogueItem, type ChoixModele, type MurConfig, type Peinture, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
+import { ARBRES, BASSINS, MENTION_IA, MENTION_LEGALE, MUR_TEXTURES, MURS, SCENE_VIDE, SOLS, estDecor, estVegetal, nomBassin, nomMur, uid, type AxeCouleur, type BassinConfig, type CameraScene, type CatalogueItem, type ChoixModele, type MurConfig, type Peinture, type Scene, type SceneItem, type VueCamera } from "@/lib/planner-types";
 import { DECORS, MOMENTS, composerDescription, filtrerDecor } from "@/lib/planner-ambiance-cadre";
 
 // three.js n'existe que dans le navigateur : pas de rendu serveur pour le canvas.
@@ -371,6 +371,30 @@ export default function PlannerPage() {
     if (!it?.mur) return;
     const m = { ...it.mur, ...p };
     patchItem(u, { mur: m, titre: nomMur(m) });
+  }
+
+  // ─── Zones d'eau (piscine, spa, bassin) ─────────────────────────────────
+  // Posée au centre de la terrasse plutôt que sur une case libre : une
+  // piscine de 8 m n'a aucun sens posée dans un coin, et le conseiller la
+  // déplace de toute façon tout de suite.
+  function ajouterBassin(modele: (typeof BASSINS)[number]) {
+    const nouveau: SceneItem = {
+      uid: uid(), product_id: 0,
+      titre: nomBassin(modele.bassin),
+      marque: null, url: "", source: "decor",
+      bassin: { ...modele.bassin },
+      x: 0, z: 0, rot: 0,
+      size_warn: false, color_warn: false, image_url: null, prix: null,
+    };
+    patch({ items: [...scene.items, nouveau] });
+    setSelected(nouveau.uid);
+  }
+
+  function patchBassin(u: string, p: Partial<BassinConfig>) {
+    const it = scene.items.find((i) => i.uid === u);
+    if (!it?.bassin) return;
+    const b = { ...it.bassin, ...p };
+    patchItem(u, { bassin: b, titre: nomBassin(b) });
   }
 
   // ─── Couleurs d'une fiche à zones (Fermob) ──────────────────────────────
@@ -1159,7 +1183,7 @@ export default function PlannerPage() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <PlannerCatalogue onAjouter={ajouter} onAjouterMur={ajouterMur} onAjouterArbre={ajouterArbre} />
+        <PlannerCatalogue onAjouter={ajouter} onAjouterMur={ajouterMur} onAjouterArbre={ajouterArbre} onAjouterBassin={ajouterBassin} />
 
         <div className="relative min-w-0 flex-1">
           <PlannerCanvas
@@ -1173,10 +1197,15 @@ export default function PlannerPage() {
             onSelect={setSelected}
             onDragStart={empiler}
             onMove={(u, x, z) => patchItem(u, { x: +x.toFixed(3), z: +z.toFixed(3) }, false)}
-            onResize={(u, longueur, x, z) => {
+            onResize={(u, taille, x, z, axe) => {
               const it = scene.items.find((i) => i.uid === u);
+              if (it?.bassin) {
+                const b = axe === "w" ? { ...it.bassin, largeur: taille } : { ...it.bassin, longueur: taille };
+                patchItem(u, { bassin: b, titre: nomBassin(b), x: +x.toFixed(3), z: +z.toFixed(3) }, false);
+                return;
+              }
               if (!it?.mur) return;
-              patchItem(u, { mur: { ...it.mur, longueur }, x: +x.toFixed(3), z: +z.toFixed(3) }, false);
+              patchItem(u, { mur: { ...it.mur, longueur: taille }, x: +x.toFixed(3), z: +z.toFixed(3) }, false);
             }}
             onDims={(u, d) => setDims((m) => (m[u] && Math.abs(m[u].l - d.l) < 1e-6 ? m : { ...m, [u]: d }))}
             onError={(u, m) => setErreurs((e) => ({ ...e, [u]: m }))}
@@ -1204,6 +1233,44 @@ export default function PlannerPage() {
                   />
                   cm
                 </label>
+              )}
+              {/* Cotes de la zone d'eau sélectionnée. Les quatre poignées
+                  bleues du plan font la même chose à la souris. */}
+              {item.bassin && (
+                <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#2a2d31] px-2 py-1 text-[11px] text-zinc-300">
+                  {([
+                    ["longueur", "long.", 0.5, 30],
+                    ["largeur", "larg.", 0.5, 30],
+                    ["margelle", "margelle", 0, 1.5],
+                  ] as const).map(([cle, libelle, min, max]) => (
+                    <label key={cle} className="flex items-center gap-1" title={`${libelle} en centimètres`}>
+                      {libelle}
+                      <input
+                        type="number"
+                        min={min * 100}
+                        max={max * 100}
+                        step={cle === "margelle" ? 5 : 10}
+                        value={Math.round(item.bassin![cle] * 100)}
+                        onChange={(e) => {
+                          const v = Number(e.target.value) / 100;
+                          if (v >= min && v <= max) patchBassin(item.uid, { [cle]: +v.toFixed(3) } as Partial<BassinConfig>);
+                        }}
+                        className="w-14 rounded bg-[#1f2125] px-1 py-0.5 text-right text-zinc-100 outline-none"
+                      />
+                      cm
+                    </label>
+                  ))}
+                  <select
+                    value={item.bassin.genre}
+                    onChange={(e) => patchBassin(item.uid, { genre: e.target.value as BassinConfig["genre"] })}
+                    className="rounded border border-white/10 bg-[#1f2125] px-1 py-0.5 text-zinc-100 outline-none"
+                    title="Ce que l'image IA doit rendre à cet endroit"
+                  >
+                    <option value="piscine">Piscine</option>
+                    <option value="spa">Spa</option>
+                    <option value="bassin">Bassin</option>
+                  </select>
+                </div>
               )}
               {/* Cotes et matière du mur sélectionné (le plus simple reste
                   d'étirer les poignées bleues sur le plan). */}
@@ -1346,12 +1413,14 @@ export default function PlannerPage() {
                 >
                   <span className="mt-0.5 w-4 shrink-0 text-zinc-500">{idx + 1}</span>
                   {estDecor(i)
-                    ? <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-white/5 text-sm text-zinc-400" title="Décor">{i.arbre ? "🌳" : i.mur && estVegetal(i.mur.texture) ? "🌿" : "🧱"}</div>
+                    ? <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-white/5 text-sm text-zinc-400" title="Décor">{i.bassin ? "💧" : i.arbre ? "🌳" : i.mur && estVegetal(i.mur.texture) ? "🌿" : "🧱"}</div>
                     : i.image_url ? <img src={i.image_url} alt="" className="h-9 w-9 shrink-0 rounded bg-white object-contain" /> : <div className="h-9 w-9 shrink-0 rounded bg-white/5" />}
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 text-zinc-200">{i.titre}</span>
                     <span className="block text-[10px] text-zinc-500">
-                      {i.arbre
+                      {i.bassin
+                        ? `Eau · ${Math.round(i.bassin.longueur * 100)}×${Math.round(i.bassin.largeur * 100)} cm`
+                        : i.arbre
                         ? `Végétal · H ${i.arbre.hauteur.toFixed(2).replace(".", ",")} m`
                         : i.mur
                         ? `${estVegetal(i.mur.texture) ? "Végétal" : "Décor"} · ${Math.round(i.mur.longueur * 100)}×${Math.round(i.mur.epaisseur * 100)}×H${Math.round(i.mur.hauteur * 100)} cm`

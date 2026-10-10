@@ -8,15 +8,16 @@
 // manque. Source : table modeles_3d via /api/planner/catalogue.
 
 import React, { useEffect, useRef, useState } from "react";
-import { ARBRES, MURS, choixModeles, estVegetal, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
+import { ARBRES, BASSINS, MURS, choixModeles, estVegetal, type CatalogueItem, type ChoixModele } from "@/lib/planner-types";
 
 type Marque = { marque: string; avec_3d: number };
 type Collection = { collection: string; avec_3d: number; total: number };
 
-export default function PlannerCatalogue({ onAjouter, onAjouterMur, onAjouterArbre }: {
+export default function PlannerCatalogue({ onAjouter, onAjouterMur, onAjouterArbre, onAjouterBassin }: {
   onAjouter: (item: CatalogueItem, choix?: ChoixModele) => void;
   onAjouterMur?: (modele: (typeof MURS)[number]) => void;
   onAjouterArbre?: (modele: (typeof ARBRES)[number]) => void;
+  onAjouterBassin?: (modele: (typeof BASSINS)[number]) => void;
 }) {
   // Fiche dont on est en train de choisir la taille (3D par variante)
   const [choixPour, setChoixPour] = useState<number | null>(null);
@@ -118,6 +119,19 @@ export default function PlannerCatalogue({ onAjouter, onAjouterMur, onAjouterArb
               title={`${a.nom} — ${a.sous_titre} ; la hauteur se règle ensuite au centimètre`}
             >
               🌳 <span className="text-zinc-500">{a.arbre.hauteur.toFixed(1).replace(".0", "").replace(".", ",")} m</span>
+            </button>
+          ))}
+          {/* Zones d'eau : réglables dans les deux sens par les quatre
+              poignées bleues, contrairement aux murs. */}
+          {onAjouterBassin && BASSINS.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => onAjouterBassin(b)}
+              className="rounded-lg border border-white/10 bg-[#2a2d31] px-1.5 py-1 text-[11px] text-zinc-200 transition hover:border-sky-500/40 hover:bg-sky-500/15"
+              title={`${b.nom} ${b.sous_titre} — rectangle réglable en longueur et en largeur avec les quatre poignées bleues`}
+            >
+              💧 {b.nom} <span className="text-zinc-500">{Math.round(b.bassin.longueur * 100)}×{Math.round(b.bassin.largeur * 100)}</span>
             </button>
           ))}
         </div>

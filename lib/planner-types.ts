@@ -164,17 +164,51 @@ export const ARBRES: { id: string; nom: string; sous_titre: string; arbre: Arbre
   { id: "arbre-6",   nom: "Arbre", sous_titre: "chêne, 6 m",   arbre: { espece: "chêne", hauteur: 6 } },
 ];
 
-/** Un décor (mur, haie, arbre) n'est jamais un article à vendre. */
+// ─── Décors : piscine, spa, bassin ────────────────────────────────────────────
+// Une zone d'eau posée sur le plan : un rectangle réglable en longueur ET en
+// largeur (les murs ne s'étirent que dans un sens), avec une margelle claire
+// tout autour. Volontairement SANS règle de collision : rien n'empêche de
+// poser un meuble dessus, c'est au conseiller de ne pas le faire. Un blocage
+// dur gênerait plus qu'il n'aiderait — les transats se posent au ras de la
+// margelle, et un chevauchement de quelques centimètres est normal
+// (11.10.2026).
+
+export type BassinGenre = "piscine" | "spa" | "bassin";
+
+export type BassinConfig = {
+  type: "bassin";
+  genre: BassinGenre;
+  longueur: number;    // m, étirable (axe local X)
+  largeur: number;     // m, étirable (axe local Z)
+  margelle: number;    // m, largeur du rebord clair autour de l'eau ; 0 = sans
+};
+
+// Formats de départ : les deux tailles de piscine les plus courantes chez nos
+// clients, un spa carré et un bassin d'agrément. Tout est réglable ensuite.
+export const BASSINS: { id: string; nom: string; sous_titre: string; bassin: BassinConfig }[] = [
+  { id: "piscine",   nom: "Piscine", sous_titre: "800 × 400 cm", bassin: { type: "bassin", genre: "piscine", longueur: 8,   largeur: 4,   margelle: 0.4 } },
+  { id: "piscine-s", nom: "Piscine", sous_titre: "600 × 300 cm", bassin: { type: "bassin", genre: "piscine", longueur: 6,   largeur: 3,   margelle: 0.4 } },
+  { id: "spa",       nom: "Spa",     sous_titre: "220 × 220 cm", bassin: { type: "bassin", genre: "spa",     longueur: 2.2, largeur: 2.2, margelle: 0.25 } },
+  { id: "bassin",    nom: "Bassin",  sous_titre: "300 × 120 cm", bassin: { type: "bassin", genre: "bassin",  longueur: 3,   largeur: 1.2, margelle: 0.2 } },
+];
+
+export function nomBassin(b: BassinConfig): string {
+  const n = b.genre === "spa" ? "Spa" : b.genre === "bassin" ? "Bassin" : "Piscine";
+  return `${n} ${Math.round(b.longueur * 100)} × ${Math.round(b.largeur * 100)} cm`;
+}
+
+/** Un décor (mur, haie, arbre, piscine) n'est jamais un article à vendre. */
 export function estDecor(it: SceneItem): boolean {
-  return Boolean(it.mur || it.arbre);
+  return Boolean(it.mur || it.arbre || it.bassin);
 }
 
 // Phrase pour le prompt de l'image d'ambiance : l'IA doit rendre un vrai mur,
-// pas un meuble. Sans décor, chaîne vide.
+// un vrai arbre, une vraie piscine — pas un meuble. Sans décor, chaîne vide.
 export function decrireMurs(items: SceneItem[]): string {
   const murs = items.filter((i) => i.mur);
   const arbres = items.filter((i) => i.arbre);
-  if (!murs.length && !arbres.length) return "";
+  const bassins = items.filter((i) => i.bassin);
+  if (!murs.length && !arbres.length && !bassins.length) return "";
   const m = (v: number) => v.toFixed(2).replace(".", ",");
   const parts = murs.map((i) => {
     const d = i.mur!;
@@ -195,15 +229,30 @@ export function decrireMurs(items: SceneItem[]): string {
     const [espece, haut] = cle.split("|");
     parts.push(`${n > 1 ? `${n} ` : "un "}${espece}${n > 1 ? "s" : ""} de ${haut} m de haut`);
   }
+  // Les zones d'eau : le rectangle bleu du plan est un bassin creusé, bordé
+  // d'une margelle claire. À dire explicitement, sinon l'IA y voit un tapis
+  // d'extérieur ou une dalle teintée.
+  for (const i of bassins) {
+    const b = i.bassin!;
+    const quoi = b.genre === "spa" ? "un spa encastré" : b.genre === "bassin" ? "un bassin d'agrément" : "une piscine enterrée";
+    const marg = b.margelle > 0 ? `, bordé${b.genre === "piscine" ? "e" : ""} d'une margelle claire d'environ ${m(b.margelle)} m` : "";
+    parts.push(`${quoi} rectangulaire de ${m(b.longueur)} m sur ${m(b.largeur)} m, remplie d'eau claire${marg}`);
+  }
   const vegetal = arbres.length || murs.some((i) => estVegetal(i.mur!.texture));
-  const nature = vegetal
+  const nature = bassins.length
+    ? `ce sont des aménagements du jardin — ${vegetal ? "végétation, maçonnerie et plan d'eau" : "maçonnerie et plan d'eau"}`
+    : vegetal
     ? "ce sont des éléments du jardin — arbres, haies taillées et maçonnerie"
     : "ce sont des éléments de maçonnerie du jardin";
+  const eau = bassins.length
+    ? " La surface d'eau reste exactement à sa place et garde ses proportions : ne jamais la déplacer, l'agrandir ni la supprimer, et ne déplacer aucun meuble pour le faire entrer dedans — les meubles posés au bord de la margelle restent au bord."
+    : "";
   // Jamais de consigne fondée sur la COULEUR (« les volumes verts sont de la
-  // végétation ») : un canapé vert cactus ou un parasol vert se ferait
-  // transformer en buisson. On désigne les décors par leur nombre et leurs
-  // cotes, et on rappelle la règle inverse.
-  return `La scène comporte, en plus des meubles, ${parts.join(", ")} : ${nature}, à rendre comme tels et à la même place. À l'inverse, tout produit de couleur verte reste un meuble : ne jamais transformer un meuble en végétation ni en maçonnerie, quelle que soit sa couleur.`;
+  // végétation », « les rectangles bleus sont de l'eau ») : un canapé vert
+  // cactus se ferait transformer en buisson et un tapis bleu en bassin. On
+  // désigne les décors par leur nombre et leurs cotes, et on rappelle la
+  // règle inverse.
+  return `La scène comporte, en plus des meubles, ${parts.join(", ")} : ${nature}, à rendre comme tels et à la même place.${eau} À l'inverse, tout produit de couleur verte ou bleue reste un meuble : ne jamais transformer un meuble en végétation, en maçonnerie ni en eau, quelle que soit sa couleur.`;
 }
 
 export type SceneItem = {
@@ -217,6 +266,8 @@ export type SceneItem = {
   mur?: MurConfig;
   // Décor arbre : un fichier commun, mis à l'échelle de la hauteur voulue.
   arbre?: ArbreConfig;
+  // Zone d'eau (piscine, spa, bassin) : rectangle réglable dans les deux sens.
+  bassin?: BassinConfig;
   // Consignes de peinture (fiche à zones) : matières à repeindre, couleurs
   // linéaires, textures. Appliquées au chargement et avant toute capture.
   peinture?: import("@/lib/modeles-3d-zones").Peinture[];

@@ -41,7 +41,10 @@ type Props = {
   onMove: (uid: string, x: number, z: number) => void;
   // Étirement d'un décor : nouvelle longueur + nouveau centre (l'extrémité
   // opposée à la poignée reste en place).
-  onResize?: (uid: string, longueur: number, x: number, z: number) => void;
+  // Étirement d'un décor : `taille` est la longueur (axe local X) ou, si
+  // `axe === "w"`, la largeur (axe local Z) — seules les zones d'eau
+  // s'étirent dans les deux sens.
+  onResize?: (uid: string, taille: number, x: number, z: number, axe?: "l" | "w") => void;
   onDims: (uid: string, dims: Dims) => void;
   onError: (uid: string, message: string) => void;
   captureRef: React.MutableRefObject<(() => string | null) | null>;
@@ -487,6 +490,143 @@ function Decor({ item, mode, selected, lectureSeule, onPointerDown, onEtirer }: 
 }
 
 
+// ─── Décor : zone d'eau (piscine, spa, bassin) ────────────────────────────────
+// Un rectangle d'eau bordé d'une margelle claire, étirable dans les DEUX sens
+// (quatre poignées). La piscine n'est pas creusée dans le sol — on ne peut pas
+// percer le plan de la terrasse — mais posée en bassin affleurant : margelle
+// de 6 cm d'épaisseur, surface d'eau juste en dessous de son arête. En vue de
+// dessus c'est exactement le rectangle attendu, et en 3D ça se lit comme un
+// bassin à débordement (11.10.2026).
+
+let TEX_EAU: THREE.CanvasTexture | null = null;
+
+function textureEau(): THREE.CanvasTexture | null {
+  if (TEX_EAU) return TEX_EAU;
+  if (typeof document === "undefined") return null;
+  const N = 256;                      // 1 tuile = 2 m (voir matsBassin)
+  const c = document.createElement("canvas");
+  c.width = c.height = N;
+  const g = c.getContext("2d");
+  if (!g) return null;
+  g.fillStyle = "#2f93bf";
+  g.fillRect(0, 0, N, N);
+  // Moirage : des ondes claires de longueur et d'orientation variables, toutes
+  // redessinées sur le bord opposé pour que la tuile boucle (même principe que
+  // les murs : l'eau se RÉPÈTE quand le bassin s'agrandit, elle ne s'étire pas).
+  const boucler = (x: number, y: number, f: (x: number, y: number) => void) => {
+    for (const dx of [0, N, -N]) for (const dy of [0, N, -N]) f(x + dx, y + dy);
+  };
+  g.lineCap = "round";
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * N, y = Math.random() * N;
+    const l = 10 + Math.random() * 46;
+    const a = (Math.random() - 0.5) * 0.7;
+    g.strokeStyle = `rgba(255,255,255,${0.05 + Math.random() * 0.13})`;
+    g.lineWidth = 1 + Math.random() * 2.5;
+    boucler(x, y, (px, py) => {
+      g.beginPath();
+      g.moveTo(px, py);
+      g.quadraticCurveTo(px + l / 2, py + Math.sin(a) * 9, px + l, py);
+      g.stroke();
+    });
+  }
+  for (let i = 0; i < 40; i++) {
+    const x = Math.random() * N, y = Math.random() * N;
+    g.fillStyle = `rgba(10,60,90,${0.05 + Math.random() * 0.08})`;
+    boucler(x, y, (px, py) => {
+      g.beginPath();
+      g.ellipse(px, py, 12 + Math.random() * 26, 5 + Math.random() * 9, Math.random() * Math.PI, 0, Math.PI * 2);
+      g.fill();
+    });
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  TEX_EAU = t;
+  return t;
+}
+
+function Bassin({ item, mode, selected, lectureSeule, onPointerDown, onEtirer }: {
+  item: SceneItem; mode: "couleurs" | "maquette"; selected: boolean; lectureSeule: boolean;
+  onPointerDown: (e: ThreeEvent<PointerEvent>) => void;
+  onEtirer: (axe: "l" | "w", cote: 1 | -1, e: ThreeEvent<PointerEvent>) => void;
+}) {
+  const b = item.bassin!;
+  const maquette = mode === "maquette";
+  const ep = 0.06;                                   // épaisseur de la margelle
+  const L = b.longueur + 2 * b.margelle;
+  const W = b.largeur + 2 * b.margelle;
+  // Margelle : la même boîte texturée que les murets, en béton clair. Un
+  // matériau par face pour que le grain garde son échelle réelle.
+  const matsMargelle = useMatsMur("beton", L, ep, W, maquette);
+  const matEau = useMemo(() => {
+    const tex = maquette ? null : textureEau();
+    const m = new THREE.MeshStandardMaterial({
+      color: maquette ? 0xe8e6e1 : tex ? 0xffffff : 0x2f93bf,
+      roughness: maquette ? 1 : 0.14,
+      metalness: maquette ? 0 : 0.1,
+    });
+    if (tex) {
+      const t = tex.clone();
+      t.needsUpdate = true;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(Math.max(0.3, b.longueur / 2), Math.max(0.3, b.largeur / 2));
+      m.map = t;
+    }
+    return m;
+  }, [maquette, b.longueur, b.largeur]);
+  useEffect(() => () => { matEau.map?.dispose(); matEau.dispose(); }, [matEau]);
+
+  // Les quatre poignées : deux sur la longueur, deux sur la largeur.
+  const poignees: { axe: "l" | "w"; cote: 1 | -1; p: [number, number, number] }[] = [
+    { axe: "l", cote: 1, p: [L / 2, ep, 0] },
+    { axe: "l", cote: -1, p: [-L / 2, ep, 0] },
+    { axe: "w", cote: 1, p: [0, ep, W / 2] },
+    { axe: "w", cote: -1, p: [0, ep, -W / 2] },
+  ];
+
+  return (
+    // Pas de `userData.meuble` : une piscine de 8 m sort presque toujours du
+    // cadre, et l'alerte « article au bord » n'aurait plus aucun sens.
+    <group position={[item.x, 0, item.z]} rotation={[0, rotationY(item), 0]}>
+      {b.margelle > 0 && (
+        <mesh position={[0, ep / 2, 0]} material={matsMargelle} receiveShadow onPointerDown={onPointerDown}>
+          <boxGeometry args={[L, ep, W]} />
+        </mesh>
+      )}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, b.margelle > 0 ? ep - 0.015 : 0.01, 0]}
+        material={matEau}
+        receiveShadow
+        onPointerDown={onPointerDown}
+      >
+        <planeGeometry args={[b.longueur, b.largeur]} />
+      </mesh>
+      {selected && (
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, ep + 0.004, 0]}>
+            <planeGeometry args={[L + 0.08, W + 0.08]} />
+            <meshBasicMaterial color={0x38bdf8} transparent opacity={0.18} depthWrite={false} />
+          </mesh>
+          {!lectureSeule && poignees.map((h) => (
+            <mesh key={`${h.axe}${h.cote}`} position={h.p} onPointerDown={(e) => onEtirer(h.axe, h.cote, e)}>
+              <sphereGeometry args={[0.1, 14, 10]} />
+              <meshBasicMaterial color={0x38bdf8} />
+            </mesh>
+          ))}
+          <Html position={[0, ep + 0.3, 0]} center style={{ pointerEvents: "none" }}>
+            <div className="whitespace-nowrap rounded bg-black/65 px-1.5 py-0.5 text-[11px] text-white">
+              {Math.round(b.longueur * 100)} × {Math.round(b.largeur * 100)} cm
+            </div>
+          </Html>
+        </>
+      )}
+    </group>
+  );
+}
+
 // ─── Décor : arbre ────────────────────────────────────────────────────────────
 // Un seul fichier pour toutes les tailles : le modèle d'origine fait 3 m, on
 // le met simplement à l'échelle de la hauteur voulue. Chêne simplifié CC0.
@@ -830,7 +970,7 @@ function Recadrage({ recadrerRef, terrasse, vue }: { recadrerRef: Props["recadre
 export default function PlannerCanvas(props: Props) {
   const { items, terrasse, vue, mode, sol, snap, selectedUid, onSelect, onDragStart, onMove, onResize, onDims, onError, captureRef, calqueRef, ambianceRef, bordsRef, cameraRef, recadrerRef, lectureSeule = false } = props;
   const [drag, setDrag] = useState<{ uid: string; dx: number; dz: number } | null>(null);
-  const [etire, setEtire] = useState<{ uid: string; cote: 1 | -1 } | null>(null);
+  const [etire, setEtire] = useState<{ uid: string; cote: 1 | -1; axe: "l" | "w" } | null>(null);
   const etireRef = useRef(etire);
   etireRef.current = etire;
   const itemsRef = useRef(items);
@@ -939,20 +1079,29 @@ export default function PlannerCanvas(props: Props) {
         position={[0, -0.01, 0]}
         onPointerDown={() => { if (!dragRef.current) onSelect(null); }}
         onPointerMove={(e) => {
-          // Étirement d'un mur : l'extrémité opposée à la poignée reste fixe,
-          // on recalcule la longueur et on recentre la boîte sur son axe.
+          // Étirement d'un décor : le côté opposé à la poignée reste fixe, on
+          // recalcule la cote et on recentre la boîte sur son axe. Un mur ne
+          // s'étire qu'en longueur ; une zone d'eau dans les deux sens, d'où
+          // l'axe porté par la poignée.
           const et = etireRef.current;
           if (et) {
             const it = itemsRef.current.find((i) => i.uid === et.uid);
-            if (!it?.mur || !onResize) return;
+            if (!it || !onResize) return;
+            const actuelle = it.mur
+              ? it.mur.longueur
+              : it.bassin
+              ? (et.axe === "w" ? it.bassin.largeur : it.bassin.longueur)
+              : null;
+            if (actuelle == null) return;
             const th = rotationY(it);
-            const ax = Math.cos(th), az = -Math.sin(th);
-            const L = it.mur.longueur;
-            const fx = it.x - (et.cote * L * ax) / 2;
-            const fz = it.z - (et.cote * L * az) / 2;
+            // Axe local X = (cos θ, −sin θ) ; axe local Z = (sin θ, cos θ).
+            const ax = et.axe === "w" ? Math.sin(th) : Math.cos(th);
+            const az = et.axe === "w" ? Math.cos(th) : -Math.sin(th);
+            const fx = it.x - (et.cote * actuelle * ax) / 2;
+            const fz = it.z - (et.cote * actuelle * az) / 2;
             let nl = ((e.point.x - fx) * ax + (e.point.z - fz) * az) * et.cote;
-            nl = Math.max(0.2, arrondir(nl, snap || 0.05));
-            onResize(et.uid, +nl.toFixed(3), +(fx + (et.cote * nl * ax) / 2).toFixed(3), +(fz + (et.cote * nl * az) / 2).toFixed(3));
+            nl = Math.max(it.bassin ? 0.5 : 0.2, arrondir(nl, snap || 0.05));
+            onResize(et.uid, +nl.toFixed(3), +(fx + (et.cote * nl * ax) / 2).toFixed(3), +(fz + (et.cote * nl * az) / 2).toFixed(3), et.axe);
             return;
           }
           const d = dragRef.current;
@@ -981,6 +1130,25 @@ export default function PlannerCanvas(props: Props) {
             </Garde>
           );
         }
+        if (item.bassin) {
+          return (
+            <Bassin
+              key={item.uid}
+              item={item}
+              mode={mode}
+              selected={item.uid === selectedUid}
+              lectureSeule={lectureSeule}
+              onPointerDown={debut}
+              onEtirer={(axe, cote, e) => {
+                if (lectureSeule) return;
+                e.stopPropagation();
+                onSelect(item.uid);
+                onDragStart();
+                setEtire({ uid: item.uid, cote, axe });
+              }}
+            />
+          );
+        }
         if (item.mur) {
           return (
             <Decor
@@ -995,7 +1163,7 @@ export default function PlannerCanvas(props: Props) {
                 e.stopPropagation();
                 onSelect(item.uid);
                 onDragStart();
-                setEtire({ uid: item.uid, cote });
+                setEtire({ uid: item.uid, cote, axe: "l" });
               }}
             />
           );
