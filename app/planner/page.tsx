@@ -127,6 +127,9 @@ export default function PlannerPage() {
   const [ambianceErreur, setAmbianceErreur] = useState<string | null>(null);
   const [scenes, setScenes] = useState<ResumeScene[]>([]);
   const [modifie, setModifie] = useState(false);
+  // Plan joint aux documents : la dernière version figée correspond-elle au
+  // plan enregistré ? Null = plan non joint, rien à surveiller.
+  const [docEtat, setDocEtat] = useState<{ a_jour: boolean; numero: number | null } | null>(null);
   const captureRef = useRef<(() => string | null) | null>(null);
   const recadrerRef = useRef<(() => void) | null>(null);
   const bordsRef = useRef(0);   // meubles au bord de la dernière capture
@@ -250,7 +253,7 @@ export default function PlannerPage() {
     if (!id) { setScene((sc) => ({ ...sc, nom: nomPropose() })); setModifie(false); return; }
     fetch(`/api/planner/scenes/${id}`)
       .then((r) => r.json())
-      .then((j) => { if (j.scene) { setScene(j.scene); setModifie(false); chargerAmbiances(id); } else setMessage(j.error || "Scène introuvable"); })
+      .then((j) => { if (j.scene) { setScene(j.scene); setModifie(false); setDocEtat(j.document || null); chargerAmbiances(id); } else setMessage(j.error || "Scène introuvable"); })
       .catch((e) => setMessage((e as Error).message));
   }, []);
 
@@ -657,7 +660,10 @@ export default function PlannerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene.id, scene.vue]);
 
-  async function enregistrer(): Promise<string | null> {
+  // Écart entre le plan et ce que portent les documents : null = pas
+  // concerné (plan non joint), sinon le numéro de la dernière version figée
+  // et si elle correspond au plan enregistré.
+  async function enregistrer(figerPourDocuments = true): Promise<string | null> {
     setEnregistrement(true);
     setMessage("");
     let idScene: string | null = scene.id;
@@ -681,6 +687,11 @@ export default function PlannerPage() {
       setModifie(false);
       setMessage("Scène enregistrée");
       setTimeout(() => setMessage(""), 2500);
+      // Le plan joint aux documents suit l'enregistrement : sans ça, l'offre
+      // garde l'ancienne version figée et on croit que l'ajout n'a pas été
+      // pris (11.10.2026). figerVersion réutilise la version quand le plan
+      // n'a pas bougé, donc rien ne s'empile pour rien.
+      if (figerPourDocuments && aEnvoyer.sur_documents && idScene) await majDocuments(idScene);
     } catch (e) {
       setMessage((e as Error).message);
       return null;
@@ -688,6 +699,28 @@ export default function PlannerPage() {
       setEnregistrement(false);
     }
     return idScene;
+  }
+
+  // Fige une version pour les documents (offre / commande) et note que
+  // l'écart est résorbé. Silencieux en cas d'échec : l'enregistrement du plan,
+  // lui, a réussi — on le signale par le bandeau plutôt que par une erreur.
+  async function majDocuments(idScene: string) {
+    try {
+      const capture = await capturerSansSelection();
+      const r = await fetch(`/api/planner/scenes/${idScene}/versions`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motif: "document", capture, dims, pour_documents: true }),
+      });
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      setDocEtat({ a_jour: true, numero: j.numero as number });
+      if (!j.reutilisee) {
+        setMessage(`Scène enregistrée · plan des documents mis à jour (V${j.numero})`);
+        setTimeout(() => setMessage(""), 3000);
+      }
+    } catch {
+      setDocEtat((d) => (d ? { ...d, a_jour: false } : { a_jour: false, numero: null }));
+    }
   }
 
   // Lien client pour la fiche et la capture : ENREGISTRE le plan (sans
@@ -704,13 +737,14 @@ export default function PlannerPage() {
     const capture = captureDejaPrise ?? (await capturerSansSelection());
     let id = scene.id;
     if (!id || modifie) {
-      id = await enregistrer();
+      id = await enregistrer(false);   // la version est figée juste en dessous
       if (!id) return null;
     }
     try {
       const r = await fetch(`/api/planner/scenes/${id}/versions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ motif, capture, dims }) });
       const j = await r.json();
       if (j.error) throw new Error(j.error);
+      setDocEtat({ a_jour: true, numero: j.numero as number });
       setMessage(j.reutilisee ? `Plan inchangé : version V${j.numero} réutilisée` : `Version V${j.numero} figée pour ce document`);
       setTimeout(() => setMessage(""), 3000);
       return { url: j.url as string, numero: j.numero as number, token: j.token as string };
@@ -821,7 +855,7 @@ export default function PlannerPage() {
   // Retenir une image pour les documents / n'en retenir aucune / supprimer.
   async function gererAmbiance(action: "retenir" | "exclure" | "supprimer", a: { id: string; url: string }) {
     if (!scene.id || !ambiance) return;
-    if (action === "supprimer" && !window.confirm("Supprimer définitivement cette image d'ambiance ?\n(Le fichier est effacé ; si elle était sur les documents, ils n'en auront plus.)")) return;
+    if (action === "supprimer" && !window.confirm("Supprimer définitivement cette image d'ambiance ?\n\nElle a été payée à la génération et ne pourra pas être récupérée.\nPour seulement la retirer des documents en la gardant de côté, annule et clique sur son badge vert « ✓ sur les documents ».")) return;
     try {
       const r = await fetch(`/api/planner/scenes/${scene.id}/ambiances`, {
         method: action === "supprimer" ? "DELETE" : "PATCH",
@@ -871,6 +905,9 @@ export default function PlannerPage() {
         body: JSON.stringify({ sur_documents: actif }),
       });
       if (!r.ok) throw new Error(`Réponse ${r.status}`);
+      // Cocher la case doit suffire : on pose tout de suite le plan courant
+      // sur les documents au lieu d'attendre un export.
+      if (actif) await majDocuments(scene.id); else setDocEtat(null);
       setMessage(actif
         ? `Plan joint aux documents de ${scene.offre_slug} : il apparaît en dernière page de l'offre / commande (sans prix). Régénère le PDF ou recharge la page print pour le voir.`
         : `Plan retiré des documents de ${scene.offre_slug}.`);
@@ -1075,7 +1112,7 @@ export default function PlannerPage() {
           )}
           <button type="button" onClick={nouvelleScene} className={BTN_OFF}>＋ Nouvelle</button>
           <button type="button" onClick={ouvrirListe} className={BTN_OFF}>📂 Ouvrir</button>
-          <button type="button" onClick={enregistrer} disabled={enregistrement} className={`${BTN} border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25`}>
+          <button type="button" onClick={() => void enregistrer()} disabled={enregistrement} className={`${BTN} border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25`}>
             {enregistrement ? "…" : modifie ? "💾 Enregistrer *" : "💾 Enregistrer"}
           </button>
           {scene.offre_slug && (
@@ -1132,6 +1169,26 @@ export default function PlannerPage() {
           </div>
         );
       })()}
+      {/* Écart entre le plan et ce que portent les documents. Ne devrait
+          apparaître que transitoirement (modifications non enregistrées) ou
+          si la mise à jour automatique a échoué — mais mieux vaut le dire que
+          laisser croire que l'offre a suivi (11.10.2026). */}
+      {scene.sur_documents && (modifie || docEtat?.a_jour === false) && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-white/10 bg-amber-500/10 px-4 py-2 text-xs text-amber-100">
+          <span className="min-w-0 flex-1">
+            ⚠ Le plan joint à {scene.offre_slug || "l'offre"} {docEtat?.numero ? `date de la version V${docEtat.numero} et ` : ""}ne correspond pas à ce que tu vois ici.
+            {modifie ? " Enregistre pour le mettre à jour." : ""}
+          </span>
+          <button
+            type="button"
+            onClick={() => void (modifie ? enregistrer() : scene.id && majDocuments(scene.id))}
+            disabled={enregistrement}
+            className={BTN_OFF}
+          >
+            Mettre à jour le document
+          </button>
+        </div>
+      )}
       {ambianceEnCours && <BandeauAmbiance />}
       {ambianceErreur && (
         <div className="flex items-center gap-3 border-b border-white/10 bg-rose-500/10 px-4 py-2 text-xs text-rose-100">
@@ -1158,10 +1215,14 @@ export default function PlannerPage() {
                     {a.numero != null && <span className={`absolute left-1 top-1 rounded px-1 text-[10px] ${a.numero === ambiance.numero ? "bg-black/60 text-white" : "bg-amber-500/80 text-black"}`} title={a.numero === ambiance.numero ? "Générée sur la version courante" : "Générée sur une version antérieure du plan (articles ou positions différents)"}>V{a.numero}</span>}
                   </a>
                   <div className="mt-1 flex items-center gap-1">
+                    {/* Le badge vert est un INTERRUPTEUR : un clic décroche
+                        l'image des documents sans l'effacer. Sans ça, le seul
+                        geste évident pour « ne plus la mettre » était la
+                        corbeille — et une image IA, c'est payé (11.10.2026). */}
                     {retenue
-                      ? <span className="rounded bg-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-100">✓ sur les documents</span>
+                      ? <button type="button" onClick={() => gererAmbiance("exclure", a)} className="rounded bg-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-100 hover:bg-emerald-500/50" title="Cliquer pour la retirer des documents — elle reste dans la galerie, rien n'est supprimé">✓ sur les documents</button>
                       : <button type="button" onClick={() => gererAmbiance("retenir", a)} className="rounded border border-white/10 bg-[#2a2d31] px-1.5 py-0.5 text-[10px] text-zinc-300 hover:bg-[#34383d]">Retenir</button>}
-                    <button type="button" onClick={() => gererAmbiance("supprimer", a)} className="rounded border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-500/25" title="Supprimer définitivement">🗑</button>
+                    <button type="button" onClick={() => gererAmbiance("supprimer", a)} className="rounded border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-500/25" title="Supprimer définitivement le fichier. Pour seulement la retirer des documents en la gardant, clique sur son badge vert.">🗑</button>
                   </div>
                   {/* Modèle utilisé : le message de génération disparaît vite, ici il reste (22.09.2026) */}
                   {a.modele && <div className="mt-0.5 max-w-[160px] truncate text-[9px] text-zinc-500" title={a.modele}>{a.modele}</div>}

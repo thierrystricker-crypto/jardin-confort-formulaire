@@ -56,7 +56,7 @@ export async function deposerCapture(token: string, dataUrl: string): Promise<st
 // changer sa matière, la hauteur d'un arbre ou la taille d'une piscine donnait
 // la même empreinte, donc la version était réutilisée — et le PDF comme le
 // lien client continuaient de montrer l'ancien plan (11.10.2026).
-function empreinte(nom: unknown, terrasse: unknown, sol: unknown, items: unknown): string {
+export function empreinte(nom: unknown, terrasse: unknown, sol: unknown, items: unknown): string {
   const cm = (v: number) => Math.round(v * 100);
   const decor = (it: SceneItem): string => {
     if (it.mur) return `mur:${it.mur.texture}:${cm(it.mur.longueur)}x${cm(it.mur.epaisseur)}x${cm(it.mur.hauteur)}`;
@@ -77,10 +77,28 @@ function empreinte(nom: unknown, terrasse: unknown, sol: unknown, items: unknown
   return JSON.stringify([String(nom || ""), terrasse, sol || "bois", its]);
 }
 
+// Le plan JOINT AUX DOCUMENTS est la dernière version FIGÉE, pas la scène
+// enregistrée : tant qu'aucune version n'est figée après une modification,
+// l'offre continue d'afficher l'ancien plan. Cette fonction dit si les deux
+// coïncident, pour prévenir le conseiller dans le planner (11.10.2026).
+export async function documentAJour(sceneId: string): Promise<{ a_jour: boolean; numero: number | null }> {
+  const { data: s } = await supabaseAdmin
+    .from("planner_scenes").select("nom, terrasse, sol, items").eq("id", sceneId).maybeSingle();
+  if (!s) return { a_jour: true, numero: null };
+  const { data: v } = await supabaseAdmin
+    .from("planner_scenes_versions").select("numero, nom, terrasse, sol, items")
+    .eq("scene_id", sceneId).order("numero", { ascending: false }).limit(1).maybeSingle();
+  if (!v) return { a_jour: false, numero: null };
+  return {
+    a_jour: empreinte(s.nom, s.terrasse, s.sol, s.items) === empreinte(v.nom, v.terrasse, v.sol, v.items),
+    numero: (v.numero as number) ?? null,
+  };
+}
+
 export async function figerVersion(
   sceneId: string,
   motif: string,
-  extras: { capture?: string | null; dims?: Record<string, { l: number; p: number; h: number }>; forcerCapture?: boolean } = {},
+  extras: { capture?: string | null; dims?: Record<string, { l: number; p: number; h: number }>; forcerCapture?: boolean; pourDocuments?: boolean } = {},
 ): Promise<VersionFigee | { error: string; status: number }> {
   const { data: s, error } = await supabaseAdmin
     .from("planner_scenes")
@@ -92,7 +110,7 @@ export async function figerVersion(
 
   const { data: derniere } = await supabaseAdmin
     .from("planner_scenes_versions")
-    .select("id, scene_id, numero, token, cree_le, capture_url, pdf_url, pdf_sans_prix_url, nom, terrasse, sol, items, ambiance_url")
+    .select("id, scene_id, numero, token, cree_le, capture_url, pdf_url, pdf_sans_prix_url, nom, terrasse, sol, items, ambiance_url, motif")
     .eq("scene_id", sceneId)
     .order("numero", { ascending: false })
     .limit(1)
@@ -125,12 +143,39 @@ export async function figerVersion(
     return { ...(derniere as Omit<VersionFigee, "reutilisee">), capture_url: captureUrl, pdf_url: captureUrl !== derniere.capture_url ? null : derniere.pdf_url, pdf_sans_prix_url: captureUrl !== derniere.capture_url ? null : derniere.pdf_sans_prix_url, reutilisee: true };
   }
 
-  const numero = ((derniere?.numero as number) || 0) + 1;
-  const token = randomBytes(16).toString("hex");
   const items = ((s.items as SceneItem[]) || []).map((it) => {
     const d = extras.dims?.[it.uid];
     return d ? { ...it, dims: { l: d.l, p: d.p, h: d.h } } : it;
   });
+
+  // Le plan a changé. Quand la mise à jour vient de l'enregistrement d'un plan
+  // joint aux documents, on RÉÉCRIT la dernière version au lieu d'en empiler
+  // une nouvelle : on bricole un plan des dizaines de fois dans une vente, et
+  // le document doit porter le plan du jour, pas V1 à V36 (11.10.2026).
+  // Deux versions ne sont JAMAIS réécrites :
+  //   - celle créée par un export (fiche, PDF, capture) : elle est peut-être
+  //     déjà partie chez le client, son jeton doit continuer de montrer ce
+  //     qu'il montrait ;
+  //   - celle qui porte une image d'ambiance retenue : l'image a été générée
+  //     sur ce plan-là, les deux vont ensemble.
+  // Dans ces deux cas on crée une version de plus, et ce sont elles qui
+  // seront réécrites ensuite.
+  if (extras.pourDocuments && derniere && derniere.motif === "document" && !derniere.ambiance_url) {
+    const maj = extras.capture ? await deposerCapture(derniere.token as string, extras.capture) : (derniere.capture_url as string | null);
+    const { error: e3 } = await supabaseAdmin
+      .from("planner_scenes_versions")
+      .update({
+        nom: s.nom, terrasse: s.terrasse, sol: s.sol || "bois", items, mode: s.mode, vue: s.vue,
+        camera: s.camera || null, capture_url: maj, pdf_url: null, pdf_sans_prix_url: null,
+        cree_le: new Date().toISOString(),
+      })
+      .eq("id", derniere.id);
+    if (e3) return { error: e3.message, status: 500 };
+    return { ...(derniere as unknown as Omit<VersionFigee, "reutilisee">), capture_url: maj, pdf_url: null, pdf_sans_prix_url: null, reutilisee: false };
+  }
+
+  const numero = ((derniere?.numero as number) || 0) + 1;
+  const token = randomBytes(16).toString("hex");
   const captureUrl = extras.capture ? await deposerCapture(token, extras.capture) : null;
   const { data: v, error: e2 } = await supabaseAdmin
     .from("planner_scenes_versions")

@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { documentAJour } from "@/lib/planner-versions";
 import type { Scene } from "@/lib/planner-types";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,10 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     sur_documents: data.sur_documents === true,
     camera: data.camera || null,
   };
-  return NextResponse.json({ scene, cree_par: data.cree_par, updated_at: data.updated_at });
+  // Écart éventuel entre le plan enregistré et celui que portent les
+  // documents (dernière version figée) — seulement si le plan y est joint.
+  const document = data.sur_documents === true ? await documentAJour(id) : null;
+  return NextResponse.json({ scene, cree_par: data.cree_par, updated_at: data.updated_at, document });
 }
 
 export async function PUT(request: NextRequest, ctx: Ctx) {

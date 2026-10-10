@@ -30,9 +30,12 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
 export async function POST(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  let body: { motif?: string; capture?: string | null; dims?: Record<string, { l: number; p: number; h: number }> } = {};
+  let body: { motif?: string; capture?: string | null; dims?: Record<string, { l: number; p: number; h: number }>; pour_documents?: boolean } = {};
   try { body = await req.json(); } catch { /* corps vide */ }
-  const v = await figerVersion(id, String(body.motif || "fiche"), { capture: body.capture, dims: body.dims });
+  // pour_documents : mise à jour du plan joint à l'offre, déclenchée par
+  // l'enregistrement — elle réécrit la version en place au lieu d'en empiler
+  // une nouvelle (voir figerVersion).
+  const v = await figerVersion(id, String(body.motif || "fiche"), { capture: body.capture, dims: body.dims, pourDocuments: body.pour_documents === true });
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: v.status });
   return NextResponse.json({ numero: v.numero, token: v.token, cree_le: v.cree_le, url: urlPartage(req, v.token), reutilisee: v.reutilisee, capture_url: v.capture_url });
 }
