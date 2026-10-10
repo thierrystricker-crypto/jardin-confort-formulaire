@@ -10,6 +10,7 @@ import { manqueNumero, adresseLivraisonEffective } from "@/lib/adresse-utils";
 import { badgeStockPicker } from "@/lib/badge-stock-picker";
 import ShopifyPickerEtendu from "@/components/ShopifyPickerEtendu";
 import { cleModeService, cleValeurService, type ModeService } from "@/lib/service-affichage";
+import { lireMention, ecrireMention, texteMention, AUCUNE_MENTION, type EtatMention } from "@/lib/mention-vente";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
@@ -342,6 +343,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   const [customQty, setCustomQty]       = useState("1");
   const [customStock, setCustomStock]   = useState("");
   const [customImage, setCustomImage]   = useState("");
+  const [customMention, setCustomMention] = useState<EtatMention>(AUCUNE_MENTION);
   const [discount, setDiscount]         = useState("0");
   const [discountPercent, setDiscountPercent] = useState("0");
   const [remarks, setRemarks]           = useState("");
@@ -789,8 +791,8 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
     captureUndo();
     const id = `custom-${Date.now()}`;
     const stockParsed = customStock.trim() === "" ? null : parseInt(customStock, 10);
-    setLines((c) => [...c, { id, type: "custom", image: customImage, sku: customSku.trim(), title: customTitle.trim(), unitPrice: Number(customPrice || 0), qty: Math.max(1, parseInt(customQty || "1", 10)), stock: isNaN(stockParsed as number) ? null : stockParsed }]);
-    setCustomSku(""); setCustomTitle(""); setCustomPrice(""); setCustomQty("1"); setCustomStock(""); setCustomImage("");
+    setLines((c) => [...c, { id, type: "custom", image: customImage, sku: customSku.trim(), title: ecrireMention(customTitle.trim(), customMention), unitPrice: Number(customPrice || 0), qty: Math.max(1, parseInt(customQty || "1", 10)), stock: isNaN(stockParsed as number) ? null : stockParsed }]);
+    setCustomSku(""); setCustomTitle(""); setCustomPrice(""); setCustomQty("1"); setCustomStock(""); setCustomImage(""); setCustomMention(AUCUNE_MENTION);
     if (customImageInputRef.current) customImageInputRef.current.value = "";
     highlightAdded(id);
   }
@@ -809,6 +811,57 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
     const next = sens > 0 ? Math.floor(line.qty / u) * u + u : Math.ceil(line.qty / u) * u - u;
     const borne = Math.min(Math.max(next, u), capQtyLigne(line));
     if (borne !== line.qty) updateLine(line.id, { qty: borne });
+  }
+
+  // Mentions « Expo » / « Soldes » (10.10.2026, lib/mention-vente.ts). Ecrites a
+  // la fin du titre : visibles partout ou le titre l'est (client, impressions,
+  // WinBiz). Valable aussi sur une ligne Shopify, dont le titre reste verrouille
+  // a la main. En revision, une ligne heritee de la commande ne change pas de
+  // mention : c'est une preuve, et le resume de revision ne suit pas les titres.
+  function mentionVerrouillee(line: QuoteLine): boolean {
+    return revisionMode && inheritedQty.has(line.id);
+  }
+  function basculerMentionLigne(line: QuoteLine, cle: keyof EtatMention) {
+    if (mentionVerrouillee(line)) return;
+    const etat = lireMention(line.title);
+    captureUndo();
+    updateLine(line.id, { title: ecrireMention(line.title, { ...etat, [cle]: !etat[cle] }) });
+  }
+  function renderMentionsLigne(line: QuoteLine) {
+    const m = lireMention(line.title);
+    const verrou = mentionVerrouillee(line);
+    const titreVerrou = "Ligne d'origine de la commande : mention non modifiable en révision";
+    return (
+      <span className="jc-svc-modes jc-mention-btns screenOnly">
+        <button type="button" className={`jc-svc-mode${m.expo ? " jc-svc-mode-on" : ""}`}
+          aria-pressed={m.expo} disabled={verrou}
+          title={verrou ? titreVerrou : "Article d'exposition : ni repris ni échangé, vendu en l'état"}
+          onClick={() => basculerMentionLigne(line, "expo")}>Expo</button>
+        <button type="button" className={`jc-svc-mode${m.soldes ? " jc-svc-mode-on" : ""}`}
+          aria-pressed={m.soldes} disabled={verrou}
+          title={verrou ? titreVerrou : "Article soldé : ni repris ni échangé"}
+          onClick={() => basculerMentionLigne(line, "soldes")}>Soldes</button>
+      </span>
+    );
+  }
+  // Cases du formulaire « Article à la volée » (appliquees a l'ajout, puis remises a zero).
+  function renderMentionsCustom() {
+    const apercu = texteMention(customMention);
+    return (
+      <div className="jc-mention-custom">
+        <label className="jc-filter-stock-label">
+          <input type="checkbox" checked={customMention.expo}
+            onChange={(e) => setCustomMention((m) => ({ ...m, expo: e.target.checked }))} />
+          <span>Article d'expo</span>
+        </label>
+        <label className="jc-filter-stock-label">
+          <input type="checkbox" checked={customMention.soldes}
+            onChange={(e) => setCustomMention((m) => ({ ...m, soldes: e.target.checked }))} />
+          <span>Soldes</span>
+        </label>
+        {apercu && <span className="jc-mention-apercu">Ajouté au titre : « {apercu} »</span>}
+      </div>
+    );
   }
 
   // Services « Offert » / « Inclus » (07.10.2026, lib/service-affichage.ts).
@@ -2526,6 +2579,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                   <button className="jc-btn jc-btn-primary jc-btn-wide" onClick={addCustomLine}>+ Ajouter</button>
                 </div>
               </div>
+              {renderMentionsCustom()}
               {customImage && (
                 <div className="jc-custom-preview">
                   <img src={customImage} alt="Aperçu" />
@@ -2801,6 +2855,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                             {line.orderUnit && line.orderUnit > 1 ? (
                               <div className="jc-line-orderunit">Cet article se vend par multiple de {line.orderUnit} pièces dans la même couleur</div>
                             ) : null}
+                            {renderMentionsLigne(line)}
                           </td>
                           <td>
                             <div className="jc-price-cell">
@@ -3293,6 +3348,9 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                   <div className="jc-field">
                     <label>Stock</label>
                     <input className="no-spin" type="number" min="0" value={customStock} onChange={(e) => setCustomStock(e.target.value)} placeholder="—" />
+                  </div>
+                  <div style={{ gridColumn: "1/-1" }}>
+                    {renderMentionsCustom()}
                   </div>
                   <div className="jc-field jc-align-end" style={{ gridColumn: "1/-1" }}>
                     <button className="jc-btn jc-btn-primary jc-btn-wide" onClick={addCustomLine}>+ Ajouter</button>
@@ -4203,6 +4261,11 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
         }
         .jc-svc-mode:hover { color: var(--text); border-color: var(--accent); }
         .jc-svc-mode-on { background: #2C7E3F; border-color: #2C7E3F; color: #fff; }
+        .jc-svc-mode:disabled { opacity: 0.45; cursor: not-allowed; }
+        /* Mentions Expo / Soldes (10.10.2026) */
+        .jc-mention-btns { margin-top: 4px; }
+        .jc-mention-custom { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+        .jc-mention-apercu { font-size: 12px; color: var(--text-muted); font-style: italic; }
         .jc-service-custom-row { border-style: dashed !important; cursor: default; align-items: start; }
         .jc-service-custom-main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
         .jc-service-custom-check { width: 15px !important; height: 15px; flex-shrink: 0; margin-top: 7px !important; cursor: pointer; }
