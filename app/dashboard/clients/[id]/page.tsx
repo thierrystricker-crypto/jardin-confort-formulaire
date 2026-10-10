@@ -68,6 +68,19 @@ type Facture = {
   created_at: string
 }
 
+// Brouillon en cours (10.10.2026) — non transformé en offre, non archivé.
+type Brouillon = {
+  id: number
+  slug: string
+  numero_affiche: string | null
+  reference: string | null
+  date_document: string | null
+  updated_at: string | null
+  commercial: string | null
+  total_ttc: number | null
+  nb_articles: number | null
+}
+
 type CommandeShopify = {
   id: number
   shopify_order_id: string
@@ -410,6 +423,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [client, setClient] = useState<Client | null>(null)
   const [offres, setOffres] = useState<Offre[]>([])
   const [commandesShopify, setCommandesShopify] = useState<CommandeShopify[]>([])
+  const [brouillons, setBrouillons] = useState<Brouillon[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -437,6 +451,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         setForm(json.client)
         setOffres(json.offres || [])
         setCommandesShopify(json.commandesShopify || [])
+        setBrouillons(json.brouillons || [])
         try {
           const fRes = await fetch(`/api/clients/${id}/factures`)
           if (fRes.ok) {
@@ -999,6 +1014,53 @@ function copyAddress(type: "facturation" | "livraison") {
             ...commandesShopify.filter(c => !c.cancelled_at && c.fulfillment_status !== "FULFILLED" && !c.test).slice(0, 5)
               .map(c => ({ boutique: "jardin-confort.ch" as const, numero: c.shopify_order_name })),
           ]} />
+
+          {/* BROUILLONS EN COURS (10.10.2026) — affichés seulement s'il y en a */}
+          {brouillons.length > 0 && (
+            <section className="rounded-2xl border border-amber-500/25 bg-[#2a2d31] p-6">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-xl font-semibold">
+                  📝 Brouillons en cours <span className="ml-1 text-base font-normal text-zinc-400">({brouillons.length})</span>
+                </h2>
+                <span className="text-xs text-zinc-500">Pas encore transformés en offre</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse text-sm">
+                  <thead className="bg-black/10 text-left text-zinc-400">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">N°</th>
+                      <th className="px-4 py-3 font-medium">Référence</th>
+                      <th className="px-4 py-3 font-medium">Modifié le</th>
+                      <th className="px-4 py-3 font-medium">Conseiller</th>
+                      <th className="px-4 py-3 font-medium text-right">Articles</th>
+                      <th className="px-4 py-3 font-medium text-right">Montant</th>
+                      <th className="px-4 py-3 font-medium text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {brouillons.map((b, idx) => (
+                      <tr key={b.id}
+                        className={`border-t border-white/5 text-zinc-200 transition hover:bg-white/5 cursor-pointer ${idx % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.04]"}`}
+                        onClick={() => window.open(`/drafts/${b.slug}/editer`, "_blank", "noopener")}>
+                        <td className="px-4 py-3 font-semibold text-amber-300">{b.numero_affiche || "DRA"}</td>
+                        <td className="px-4 py-3 text-zinc-400">{b.reference || "—"}</td>
+                        <td className="px-4 py-3 text-zinc-400">{fmtDate(b.updated_at || b.date_document)}</td>
+                        <td className="px-4 py-3 text-zinc-400">{b.commercial || "—"}</td>
+                        <td className="px-4 py-3 text-right text-zinc-400">{b.nb_articles ?? "—"}</td>
+                        <td className="px-4 py-3 text-right font-medium text-zinc-100">{fmtMoney(b.total_ttc)}</td>
+                        <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                          <a href={`/drafts/${b.slug}/editer`} target="_blank" rel="noopener noreferrer"
+                            className="rounded-lg border border-white/10 bg-[#34383d] px-3 py-1.5 text-xs text-zinc-100 hover:bg-[#40454b]">
+                            Ouvrir
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* HISTORIQUE OFFRES */}
           <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">

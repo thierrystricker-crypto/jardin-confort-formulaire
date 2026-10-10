@@ -323,8 +323,11 @@ function useLiensVersV2(racine: React.RefObject<HTMLDivElement | null>) {
     const el = racine.current;
     if (!el) return;
 
-    const ancre = (t: EventTarget | null) =>
-      (t instanceof Element ? t.closest("a[href]") : null) as HTMLAnchorElement | null;
+    // `data-v1` : lien qui DOIT sortir vers la v1 (bouton « Version actuelle »).
+    const ancre = (t: EventTarget | null) => {
+      const a = (t instanceof Element ? t.closest("a[href]") : null) as HTMLAnchorElement | null;
+      return a && !a.hasAttribute("data-v1") ? a : null;
+    };
 
     const cible = (a: HTMLAnchorElement): string | null => {
       try {
@@ -382,6 +385,8 @@ function useLiensVersV2(racine: React.RefObject<HTMLDivElement | null>) {
     const surNavigation = (ev: Event) => {
       const e = ev as NavEvent;
       if (!e.cancelable || e.hashChange || e.destination?.sameDocument) return;
+      // Sortie volontaire vers la v1 (bouton « Version actuelle » : cookie jc_ui=v1).
+      if (/(?:^|;\s*)jc_ui=v1(?:;|$)/.test(document.cookie)) return;
       if (e.navigationType !== "push" && e.navigationType !== "replace") return;
       try {
         const u = new URL(e.destination.url);
@@ -424,6 +429,13 @@ export default function V2Shell({ children }: { children: React.ReactNode }) {
   const { nonLues, alerteMake, remises } = useCompteurs();
 
   useLiensVersV2(racine);
+
+  // Mémorise « je suis en v2 » (10.10.2026) : proxy.ts redirige alors les
+  // pages /dashboard/… ouvertes d'ailleurs (formulaire d'offre, mails, Jardi)
+  // vers la v2. Le bouton « Version actuelle » repasse le cookie à v1.
+  useEffect(() => {
+    document.cookie = "jc_ui=v2; path=/; max-age=31536000; samesite=lax";
+  }, []);
 
   useEffect(() => {
     try {
@@ -526,7 +538,14 @@ export default function V2Shell({ children }: { children: React.ReactNode }) {
               <span className="v2-ic">{theme === "dark" ? "☀️" : "🌙"}</span>
               <span className="v2-lbl">{theme === "dark" ? "Mode clair" : "Mode sombre"}</span>
             </button>
-            <a href={versV1(pathname)} title="Revenir à la version actuelle du dashboard">
+            <a
+              href={versV1(pathname)}
+              data-v1
+              onClick={() => {
+                document.cookie = "jc_ui=v1; path=/; max-age=31536000; samesite=lax";
+              }}
+              title="Revenir à la version actuelle du dashboard"
+            >
               <span className="v2-ic">↩</span>
               <span className="v2-lbl">Version actuelle</span>
             </a>

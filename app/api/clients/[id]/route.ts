@@ -1,5 +1,5 @@
 // app/api/clients/[id]/route.ts
-// GET  — détail client + historique offres + commandes Shopify
+// GET  — détail client + historique offres + commandes Shopify + brouillons en cours (10.10.2026)
 // PATCH — modifier client
 
 import { NextRequest, NextResponse } from "next/server"
@@ -71,10 +71,39 @@ export async function GET(
       .eq("client_id", id)
       .order("created_at_shopify", { ascending: false })
 
+    // Brouillons en cours (10.10.2026) : non transformés, non archivés.
+    // Rattachés par e-mail OU par numéro client ; sans e-mail, par nom + NPA
+    // (même règle que les offres ci-dessus). Deux requêtes simples plutôt
+    // qu'un .or() : un e-mail contenant une virgule casserait la syntaxe.
+    const CHAMPS_BROUILLON =
+      "id, slug, numero_affiche, reference, date_document, updated_at, commercial, total_ttc, nb_articles"
+    const requetes = []
+    const base = () =>
+      supabaseAdmin
+        .from("drafts")
+        .select(CHAMPS_BROUILLON)
+        .is("transformed_at", null)
+        .not("archived", "is", true)
+    if (client.email) requetes.push(base().ilike("client_email", client.email))
+    else if (client.nom) requetes.push(base().ilike("client_nom", client.nom).eq("client_npa", client.npa || ""))
+    if (client.numero_client) requetes.push(base().eq("client_numero_client", client.numero_client))
+    const vus = new Set<number>()
+    const brouillons: Array<{ id: number; updated_at: string | null }> = []
+    for (const { data } of await Promise.all(requetes)) {
+      for (const b of (data || []) as Array<{ id: number; updated_at: string | null }>) {
+        if (!vus.has(b.id)) {
+          vus.add(b.id)
+          brouillons.push(b)
+        }
+      }
+    }
+    brouillons.sort((x, y) => (y.updated_at || "").localeCompare(x.updated_at || ""))
+
     return NextResponse.json({
       client,
       offres,
-      commandesShopify: commandesShopify || []
+      commandesShopify: commandesShopify || [],
+      brouillons,
     })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

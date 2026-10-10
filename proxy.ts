@@ -19,8 +19,32 @@
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { versV2 } from "./app/v2/_lib/routes";
 
 const COOKIE_SESSION = "jc_acces";
+
+// ── Dashboard 2.0 (10.10.2026) : rester dans la version choisie ──
+// La v2 pose le cookie `jc_ui=v2` à chaque visite ; le bouton « Version
+// actuelle » le repasse à `v1`. Avec `v2`, toute page /dashboard/… demandée
+// (bouton « Dashboard » du formulaire d'offre, liens des mails Make, de Jardi,
+// favoris…) est redirigée vers son équivalent /v2/… — même table de
+// correspondance que la coquille v2 (app/v2/_lib/routes.ts, qui garde en v1
+// la page de révision). Sans cookie : rien ne change, la v1 reste la v1.
+// Pages uniquement (GET) ; les API ne sont jamais concernées.
+const COOKIE_UI = "jc_ui";
+
+function redirectionV2(req: NextRequest): NextResponse | null {
+  if (req.method !== "GET") return null;
+  if (req.cookies.get(COOKIE_UI)?.value !== "v2") return null;
+  const { pathname } = req.nextUrl;
+  if (pathname !== "/dashboard" && !pathname.startsWith("/dashboard/")) return null;
+  const params = new URLSearchParams(req.nextUrl.search);
+  params.delete("_rsc"); // paramètre technique des navigations Next
+  const suite = params.toString();
+  const cible = versV2(pathname + (suite ? "?" + suite : ""));
+  if (!cible) return null;
+  return NextResponse.redirect(new URL(cible, req.url));
+}
 
 // Routes accessibles SANS code : pages consultées par les clients + les seules
 // API dont ces pages ont besoin (vérifié route par route, méthode par méthode).
@@ -117,7 +141,7 @@ export function proxy(req: NextRequest) {
   const secret = process.env.DASHBOARD_SESSION_SECRET;
 
   if (secret && token && token === secret) {
-    return NextResponse.next();
+    return redirectionV2(req) ?? NextResponse.next();
   }
 
   // ── Appels internes serveur→serveur (fix du 07.08.2026) ──
