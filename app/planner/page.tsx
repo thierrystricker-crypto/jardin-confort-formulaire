@@ -714,6 +714,9 @@ export default function PlannerPage() {
       const j = await r.json();
       if (j.error) throw new Error(j.error);
       setDocEtat({ a_jour: true, numero: j.numero as number });
+      // La galerie affiche « version courante (Vn) » et le badge de chaque
+      // image : à recharger, la version vient de changer.
+      if (ambiance) void chargerAmbiances(idScene);
       if (!j.reutilisee) {
         setMessage(`Scène enregistrée · plan des documents mis à jour (V${j.numero})`);
         setTimeout(() => setMessage(""), 3000);
@@ -745,6 +748,7 @@ export default function PlannerPage() {
       const j = await r.json();
       if (j.error) throw new Error(j.error);
       setDocEtat({ a_jour: true, numero: j.numero as number });
+      if (ambiance && id) void chargerAmbiances(id);
       setMessage(j.reutilisee ? `Plan inchangé : version V${j.numero} réutilisée` : `Version V${j.numero} figée pour ce document`);
       setTimeout(() => setMessage(""), 3000);
       return { url: j.url as string, numero: j.numero as number, token: j.token as string };

@@ -110,7 +110,7 @@ export async function figerVersion(
 
   const { data: derniere } = await supabaseAdmin
     .from("planner_scenes_versions")
-    .select("id, scene_id, numero, token, cree_le, capture_url, pdf_url, pdf_sans_prix_url, nom, terrasse, sol, items, ambiance_url, motif")
+    .select("id, scene_id, numero, token, cree_le, capture_url, pdf_url, pdf_sans_prix_url, nom, terrasse, sol, items, ambiance_url, ambiance_prompt, ambiance_cree_le, motif")
     .eq("scene_id", sceneId)
     .order("numero", { ascending: false })
     .limit(1)
@@ -183,6 +183,15 @@ export async function figerVersion(
       scene_id: sceneId, numero, token, motif: motif.slice(0, 20),
       nom: s.nom, terrasse: s.terrasse, sol: s.sol || "bois", items, mode: s.mode, vue: s.vue,
       cree_par: s.cree_par, capture_url: captureUrl, camera: s.camera || null,
+      // L'image d'ambiance retenue SUIT la nouvelle version. Sans ça, bouger
+      // un meuble faisait sortir le PDF suivant sans image : elle restait
+      // accrochée à la version précédente alors que le document, lui, passait
+      // à la suivante (11.10.2026). Elle a été payée et choisie, elle reste
+      // tant que le conseiller ne la décroche pas — la vignette porte déjà un
+      // badge ambre quand elle vient d'un état antérieur du plan.
+      ambiance_url: (derniere?.ambiance_url as string | null) || null,
+      ambiance_prompt: (derniere as { ambiance_prompt?: string | null } | null)?.ambiance_prompt || null,
+      ambiance_cree_le: (derniere as { ambiance_cree_le?: string | null } | null)?.ambiance_cree_le || null,
     })
     .select("id, scene_id, numero, token, cree_le, capture_url, pdf_url, pdf_sans_prix_url")
     .single();
