@@ -27,6 +27,7 @@ import {
   disposerEnDegrade,
   texteCouverture,
   urlCdn,
+  clarte,
   COTE_MIN_ETIREE,
 } from "@/lib/moodboard";
 
@@ -37,6 +38,9 @@ const HAUTEUR = 215;
 const PART_GAUCHE = 0.36;
 const PART_DROITE = 0.6;
 const RATIO_PALETTE = (LARGEUR * PART_DROITE) / HAUTEUR;
+// Pastille très claire (L* au-dessus) : fin cercle gris, comme sur le webshop,
+// pour qu'un blanc ne se perde pas sur le fond blanc.
+const CLARTE_CERCLE_GRIS = 85;
 // Au-delà, les pastilles passent sur deux colonnes, en plus petit.
 const SEUIL_DENSE = 12;
 
@@ -82,6 +86,16 @@ export default function MoodboardPlanche({
   const texte = texteCouverture(couverture);
   const actif = interactif ? survol : null;
 
+  // Phrase sur les gros plans : seulement en rendu mixte et si au moins une
+  // matière en a un ; « lorsque l'image le permet » si certaines n'en ont pas.
+  const nbGrosPlans = rendu === "mixte" ? matieres.filter((m) => !estPetite(m)).length : 0;
+  const texteZoom =
+    nbGrosPlans === 0
+      ? null
+      : `Dans la palette, chaque matière est présentée en entier, puis en détail agrandi ×${ZOOM_DETAIL}${
+          nbGrosPlans < matieres.length ? " lorsque l'image le permet" : ""
+        }.`;
+
   const entrer = (cle: string) => () => { if (interactif) setSurvol(cle); };
   const sortir = () => { if (interactif) setSurvol(null); };
 
@@ -103,7 +117,7 @@ export default function MoodboardPlanche({
                     onMouseLeave={sortir}
                   >
                     <img
-                      className="mbp-rond"
+                      className={`mbp-rond${(clarte(m.hex) ?? 0) > CLARTE_CERCLE_GRIS ? " mbp-rond-clair" : ""}`}
                       src={urlCdn(m.url_maitre || m.url_vignette, 240) || m.url_vignette}
                       alt={m.nom}
                       style={{ backgroundColor: m.hex || "#eee" }}
@@ -127,7 +141,7 @@ export default function MoodboardPlanche({
             const source = m.url_maitre || m.url_vignette;
             // Rendu naturel : toujours en échantillons répétés à taille fixe.
             // Rendu étiré : image agrandie, sauf si elle est trop petite (motif).
-            const petite = typeof m.cote === "number" && m.cote > 0 && m.cote < COTE_MIN_ETIREE;
+            const petite = estPetite(m);
             const repetee = rendu === "naturel" || (rendu === "etire" && petite);
             const tuile = rendu === "naturel" ? TAILLE_ECHANTILLON : `${m.cote}px`;
             return (
@@ -160,9 +174,10 @@ export default function MoodboardPlanche({
         </div>
       </div>
 
-      {(texte || mention) && (
+      {(texte || texteZoom || mention) && (
         <div className="mbp-pied">
           {texte ? <div>{texte}</div> : null}
+          {texteZoom ? <div>{texteZoom}</div> : null}
           {mention ? (
             <div>Teintes indicatives : le rendu varie selon l&apos;écran et l&apos;impression. Échantillons disponibles dans notre exposition.</div>
           ) : null}
@@ -170,6 +185,11 @@ export default function MoodboardPlanche({
       )}
     </div>
   );
+}
+
+// Image maître trop petite pour être agrandie sans flou (taille connue via SQL 032).
+function estPetite(m: MatiereMoodboard): boolean {
+  return typeof m.cote === "number" && m.cote > 0 && m.cote < COTE_MIN_ETIREE;
 }
 
 // Rendu mixte : un carré « matière entière » + le reste en gros plan.
@@ -222,6 +242,9 @@ const CSS = `
 .mbp-code, .mbp-marque { color: #888; font-size: 10.5px; }
 .mbp-bloc { position: absolute; overflow: hidden; transition: opacity .15s; }
 .mbp-bloc img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mbp-bloc.on { z-index: 2; }
+.mbp-bloc.on::after { content: ""; position: absolute; inset: 0; border: 2px solid #000; pointer-events: none; z-index: 3; }
+.mbp-rond-clair { box-shadow: 0 0 0 1px #d4d4d4; }
 .mbp-carte { position: absolute; inset: 0; display: flex; }
 .mbp-carte-h { flex-direction: row; }
 .mbp-carte-v { flex-direction: column; }
@@ -251,5 +274,5 @@ const CSS = `
   .mbp:not(.mbp-compact) .mbp-gauche, .mbp:not(.mbp-compact) .mbp-droite { width: 100% !important; }
   .mbp:not(.mbp-compact) .mbp-droite { aspect-ratio: ${(LARGEUR * PART_DROITE).toFixed(0)} / ${HAUTEUR}; max-height: 70vh; margin-bottom: 14px; }
 }
-@media print { .mbp-item, .mbp-bloc { opacity: 1 !important; } .mbp-rond, .mbp-texte { transform: none !important; } }
+@media print { .mbp-item, .mbp-bloc { opacity: 1 !important; } .mbp-rond, .mbp-texte { transform: none !important; } .mbp-bloc.on::after { display: none; } }
 `;
