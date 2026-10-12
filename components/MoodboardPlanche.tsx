@@ -153,9 +153,10 @@ export default function MoodboardPlanche({
                 style={{
                   left: `${b.x}%`,
                   top: `${b.y}%`,
-                  // +0.15 % : évite les filets blancs d'arrondi entre deux blocs
-                  width: `${b.w + 0.15}%`,
-                  height: `${b.h + 0.15}%`,
+                  // +0.15 % : évite les filets blancs d'arrondi entre deux blocs —
+                  // sauf sur les bords du panneau, où le débord rognerait le contour.
+                  width: `${b.x + b.w < 99.9 ? b.w + 0.15 : 100 - b.x}%`,
+                  height: `${b.y + b.h < 99.9 ? b.h + 0.15 : 100 - b.y}%`,
                   backgroundColor: m.hex || "#ddd",
                   ...(repetee
                     ? {
@@ -179,7 +180,7 @@ export default function MoodboardPlanche({
           {texte ? <div>{texte}</div> : null}
           {texteZoom ? <div>{texteZoom}</div> : null}
           {mention ? (
-            <div>Teintes indicatives : le rendu varie selon l&apos;écran et l&apos;impression. Échantillons disponibles dans notre exposition.</div>
+            <div>Teintes et matières présentées à titre indicatif, non contractuelles : le rendu varie selon l&apos;écran, l&apos;impression et les lots de fabrication. Échantillons disponibles dans notre exposition.</div>
           ) : null}
         </div>
       )}
