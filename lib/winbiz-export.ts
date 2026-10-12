@@ -368,16 +368,14 @@ export function buildWinbizCsv(
   const notreRef = champSain(`${cmd.numeroCommande || ""} du ${date}`).texte;
   const votreRef = champSain(d.reference || "").texte;
 
-  // Remarques + notes internes de la commande → ligne TEXTE en FIN de document
+  // Remarques de la commande → ligne TEXTE en FIN de document
   // (le champ 19 « Notes » s'affichait en pied de page, invisible — retour de
   // Thierry du 30.08 : « la preuve, je ne l'avais pas vu »).
-  const notesInternes = typeof (d as Record<string, unknown>).notesInternes === "string"
-    ? ((d as Record<string, unknown>).notesInternes as string) : "";
-  const notesParts = [
-    (d.remarks || "").trim() ? `Remarques: ${d.remarks.trim()}` : "",
-    notesInternes.trim() ? `Interne: ${notesInternes.trim()}` : "",
-  ].filter(Boolean);
-  let notesDoc = champSain(notesParts.join(" | ")).texte;
+  // Les notes INTERNES ne partent JAMAIS dans le fichier : elles sont
+  // confidentielles et finiraient telles quelles sur la facture WinBiz
+  // (retour du 11.10.2026). Seul d.remarks — déjà visible du client sur la
+  // commande — est émis ; test verrouillé côté scripts/test-winbiz-export.
+  let notesDoc = (d.remarks || "").trim() ? champSain(`Remarques: ${d.remarks.trim()}`).texte : "";
   if (notesDoc.length > 250) {
     notesDoc = notesDoc.slice(0, 247) + "...";
     warnings.push("Notes de la commande tronquées à 250 caractères (limite d'une description de ligne WinBiz).");
