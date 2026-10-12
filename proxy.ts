@@ -123,6 +123,7 @@ function estRoutePublique(pathname: string, method: string): boolean {
     if (sousChemin === "/qr") return true;
     if (sousChemin === "/wallee-facture" && method === "GET") return true;
     if (sousChemin === "/signature" && method === "GET") return true;
+    if (sousChemin === "/matieres" && method === "GET") return true;
     return false;
   }
 
