@@ -206,11 +206,16 @@ export function disposerEnDegrade(matieres: MatiereMoodboard[], sens: SensMoodbo
 
 // ─── Images ─────────────────────────────────────────────────────────────────
 // Le CDN Shopify sert une version à la largeur demandée (?width=) : les fichiers
-// stockés ne sont pas modifiés, seul l'affichage est allégé (PDF plus léger).
+// stockés ne sont pas modifiés, seul l'affichage est allégé.
+// 🔴 format=pjpg est INDISPENSABLE pour le PDF : sans lui, le CDN envoie du
+// WebP au navigateur ; le PDF ne sait pas l'intégrer, Chrome le décompresse
+// en image brute — 5,4 Mo au lieu de 650 Ko pour une seule image (mesuré le
+// 13.10.2026 : planche de 7 finitions à 12,7 Mo). En JPEG, l'image passe telle
+// quelle et une même URL n'est intégrée qu'une fois.
 export function urlCdn(url: string | null | undefined, largeur: number): string | null {
   if (!url) return null;
   if (!/^https:\/\/cdn\.shopify\.com\//.test(url)) return url;
-  return `${url}${url.includes("?") ? "&" : "?"}width=${largeur}`;
+  return `${url}${url.includes("?") ? "&" : "?"}width=${largeur}&format=pjpg`;
 }
 
 // En dessous de cette taille, l'image maître est répétée en motif dans la

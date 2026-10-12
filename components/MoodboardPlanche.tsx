@@ -222,7 +222,7 @@ const ECHELLE_SURVOL = 2.4;
 function Pastille({ m, survolee, carreMm }: { m: MatiereMoodboard; survolee: boolean; carreMm: number | null }) {
   const source = m.url_maitre || m.url_vignette;
   const entiere = urlCdn(source, 600) || source;
-  const detail = urlCdn(source, 1600) || source;
+  const detail = urlCdn(source, 1200) || source;
   const zoom = !estPetite(m);
   const tailleRepos = carreMm ? `${carreMm}mm ${carreMm}mm` : "cover";
   const tailleZoom = carreMm
@@ -253,7 +253,7 @@ function Pastille({ m, survolee, carreMm }: { m: MatiereMoodboard; survolee: boo
 function CarteEchantillon({ source, w, h, petite }: { source: string; w: number; h: number; petite: boolean }) {
   const { horizontal, coteMm, partCarre } = geometrieCarte(w, h);
   const entiere = urlCdn(source, 600) || source;
-  const detail = urlCdn(source, 1600) || source;
+  const detail = urlCdn(source, 1200) || source;
   return (
     <div className={`mbp-carte ${horizontal ? "mbp-carte-h" : "mbp-carte-v"}`}>
       <div className="mbp-entiere" style={horizontal ? { width: `${partCarre}%` } : { height: `${partCarre}%` }}>
