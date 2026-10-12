@@ -7,6 +7,8 @@
 import React, { useEffect, useState } from "react";
 import { infoService, texteMontantService } from "@/lib/service-affichage";
 import { estProlongee, formatJourCH } from "@/lib/validite-offre";
+import MoodboardPlanche from "@/components/MoodboardPlanche";
+import { lireReglagesMoodboard, type ReglagesMoodboard, type ResultatMoodboard } from "@/lib/moodboard";
 import { useSearchParams } from "next/navigation";
 import {
   PrintData, QuoteLine, AmbianceImage,
@@ -50,16 +52,21 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
   // image d'ambiance retenue, en dernière page. Jamais de prix : ceux du
   // planner viennent du webshop, pas de l'offre.
   const [plans3d, setPlans3d] = useState<{ id: string; nom: string; numero: number; token: string; capture: string; ambiance: string | null }[]>([]);
+  // Moodboard des matières (12.10.2026) : planche en dernière page si
+  // data.moodboard.actif. null = pas de page.
+  const [moodboard, setMoodboard] = useState<{ reglages: ReglagesMoodboard; resultat: ResultatMoodboard } | null>(null);
 
   useEffect(() => {
     async function load() {
       const { slug } = await params;
+      let reglagesMb = lireReglagesMoodboard(null);
       try {
         const res = await fetch(`/api/offres/${slug}?snapshot=false`);
         if (res.ok) {
           const json = await res.json();
           const offreData = json.offre?.data;
           if (offreData) {
+            reglagesMb = lireReglagesMoodboard(offreData.moodboard);
             setNumeroAffiche(json.offre?.numero_affiche || offreData.offerNumber || slug);
             setOffreSlug(slug);
             
@@ -152,6 +159,29 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         }
       } catch (e) {
         console.error("Erreur chargement plans 3D:", e);
+      }
+
+      // ─── Moodboard des matières (12.10.2026) ───
+      // Comme la signature et les plans 3D : chargé AVANT setReady, sinon
+      // pdf.co capture la page avant l'arrivée de la planche. Non bloquant.
+      // ?moodboard=poids | degrade | degrade-inverse force l'affichage (test et
+      // aperçu), sans rien écrire dans l'offre.
+      try {
+        const force = searchParams.get("moodboard");
+        if (force === "poids") reglagesMb = { ...reglagesMb, actif: true, mode: "poids" };
+        if (force === "degrade") reglagesMb = { ...reglagesMb, actif: true, mode: "degrade", sens: "clair-fonce" };
+        if (force === "degrade-inverse") reglagesMb = { ...reglagesMb, actif: true, mode: "degrade", sens: "fonce-clair" };
+        if (reglagesMb.actif) {
+          const mRes = await fetch(`/api/offres/${slug}/matieres`);
+          if (mRes.ok) {
+            const mJson = await mRes.json();
+            if (Array.isArray(mJson.matieres) && mJson.matieres.length > 0) {
+              setMoodboard({ reglages: reglagesMb, resultat: { matieres: mJson.matieres, couverture: { ...mJson.couverture, nonRelies: [] } } });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Erreur chargement moodboard:", e);
       }
 
       setReady(true);
@@ -303,6 +333,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         .doc-plan3d { page-break-before: always; break-before: page; padding-top: 4mm; }
         .doc-plan3d-img { width: 100%; max-height: 105mm; object-fit: contain; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; }
         .doc-plan3d-bloc { page-break-inside: avoid; break-inside: avoid; margin-bottom: 7mm; }
+        .doc-moodboard { page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; padding-top: 4mm; }
       `}</style>
 
       <button className="print-btn" onClick={() => window.print()}>🖨 Imprimer</button>
@@ -847,6 +878,38 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
             </div>
           </div>
         ))}
+
+        {/* MOODBOARD DES MATIÈRES — dernière page, si coché dans l'offre */}
+        {moodboard && (
+          <div className="doc-moodboard">
+            <div style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 16,
+              marginBottom: "5mm",
+              borderBottom: `2px solid ${THEME}`,
+              paddingBottom: "4mm",
+            }}>
+              <img style={{maxWidth:130, maxHeight:50, objectFit:"contain"}}
+                src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
+                alt="Jardin-Confort" />
+              <div>
+                <div style={{fontSize:18, fontWeight:700, color:THEME}}>
+                  Vos couleurs et matières — {numeroAffiche || data.offerNumber}
+                </div>
+                <div style={{fontSize:11, color:"#aaa", fontStyle:"italic", marginTop:2}}>
+                  {data.nom} {data.prenom}
+                </div>
+              </div>
+            </div>
+            <MoodboardPlanche
+              matieres={moodboard.resultat.matieres}
+              couverture={moodboard.resultat.couverture}
+              mode={moodboard.reglages.mode}
+              sens={moodboard.reglages.sens}
+            />
+          </div>
+        )}
 
       </div>
     </>
