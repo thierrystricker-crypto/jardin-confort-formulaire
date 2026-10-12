@@ -11,6 +11,8 @@ import { badgeStockPicker } from "@/lib/badge-stock-picker";
 import ShopifyPickerEtendu from "@/components/ShopifyPickerEtendu";
 import { cleModeService, cleValeurService, type ModeService } from "@/lib/service-affichage";
 import { lireMention, ecrireMention, texteMention, AUCUNE_MENTION, type EtatMention } from "@/lib/mention-vente";
+import MoodboardReglages from "@/components/MoodboardReglages";
+import { lireReglagesMoodboard, REGLAGES_MOODBOARD_DEFAUT, type ReglagesMoodboard } from "@/lib/moodboard";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
@@ -120,6 +122,7 @@ type DraftSnapshot = {
   leadTime: string;
   validiteDuree: string;
   accesLivraison: string;
+  moodboard?: ReglagesMoodboard; // planche couleurs en fin d'offre (12.10.2026)
   manualRounding: string; // stocké pour compatibilité
   enabledServices: Record<string, boolean>;
   servicePrices: Record<string, string>;
@@ -352,6 +355,8 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   const [leadTime, setLeadTime]         = useState("25-30 jours");
   const [validiteDuree, setValiditeDuree] = useState("30 jours");
   const [accesLivraison, setAccesLivraison] = useState("");
+  // Planche couleurs et matières (12.10.2026) — décochée par défaut.
+  const [moodboard, setMoodboard] = useState<ReglagesMoodboard>(REGLAGES_MOODBOARD_DEFAUT);
   // arrondi : toujours stocké comme string, toujours <= 0
   const [roundingStr, setRoundingStr]   = useState("");
   // Autocomplétion adresse — Google Places
@@ -989,7 +994,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   }
 
   function makeSnapshot(): DraftSnapshot {
-    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, complement_nom: complementNom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livr_complement_nom: livrComplementNom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, validiteDuree, accesLivraison, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
+    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, complement_nom: complementNom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livr_complement_nom: livrComplementNom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, validiteDuree, accesLivraison, moodboard: { actif: moodboard.actif, mode: moodboard.mode, sens: moodboard.sens }, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -1412,6 +1417,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
         if (data.leadTime) setLeadTime(data.leadTime);
         if (data.validiteDuree) setValiditeDuree(data.validiteDuree);
         if (data.accesLivraison !== undefined) setAccesLivraison(data.accesLivraison || "");
+        if (data.moodboard !== undefined) setMoodboard(lireReglagesMoodboard(data.moodboard));
         if (data.manualRounding !== undefined) setRoundingStr(data.manualRounding || "");
 
         // Le brouillon vient juste d'être chargé : il est par définition "à jour"
@@ -1523,6 +1529,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
           if (data.leadTime) setLeadTime(data.leadTime);
           if (data.validiteDuree) setValiditeDuree(data.validiteDuree);
           if (data.accesLivraison !== undefined) setAccesLivraison(data.accesLivraison || "");
+          if (data.moodboard !== undefined) setMoodboard(lireReglagesMoodboard(data.moodboard));
           if (data.manualRounding !== undefined) setRoundingStr(data.manualRounding || "");
 
           if (o.updated_at) setLastSavedAt(new Date(o.updated_at));
@@ -1562,7 +1569,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
     livrDiff, livrSociete, livrNom, livrPrenom, livrComplementNom,
     livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille,
     lines, discount, discountPercent, remarks, notesInternes, ambianceImages,
-    leadTime, validiteDuree, accesLivraison, roundingStr,
+    leadTime, validiteDuree, accesLivraison, moodboard, roundingStr,
     enabledServices, servicePrices,
   ]);
 
@@ -3448,6 +3455,9 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
             ))}
           </div>
         </section>
+
+        {/* ── PLANCHE COULEURS ET MATIÈRES (12.10.2026) — écran seulement ── */}
+        <MoodboardReglages lines={lines} reglages={moodboard} onChange={setMoodboard} />
 
         {/* ── SIGNATURE print only ── */}
         <section className="jc-card printOnly jc-sign-block">
