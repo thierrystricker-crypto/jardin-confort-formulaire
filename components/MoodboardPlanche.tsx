@@ -116,12 +116,7 @@ export default function MoodboardPlanche({
                     onMouseEnter={entrer(m.cle)}
                     onMouseLeave={sortir}
                   >
-                    <img
-                      className={`mbp-rond${(clarte(m.hex) ?? 0) > CLARTE_CERCLE_GRIS ? " mbp-rond-clair" : ""}`}
-                      src={m.url_vignette}
-                      alt={m.nom}
-                      style={{ backgroundColor: m.hex || "#eee" }}
-                    />
+                    <Pastille m={m} survolee={actif === m.cle} />
                     <div className="mbp-texte">
                       <span className="mbp-nom">{m.nom}</span>
                       {m.code ? <span className="mbp-code"> {m.code}</span> : null}
@@ -193,6 +188,34 @@ function estPetite(m: MatiereMoodboard): boolean {
   return typeof m.cote === "number" && m.cote > 0 && m.cote < COTE_MIN_ETIREE;
 }
 
+// Pastille = reflet exact de son bloc de palette (rendu mixte) :
+//   • au repos  : la même image que le carré « matière entière », en rond ;
+//   • au survol : le gros plan ×ZOOM_DETAIL, comme la 2e partie du bloc.
+// Image trop petite : pas de gros plan dans la palette → pas de zoom ici non plus.
+// Les deux images sont chargées d'avance (2 calques) : bascule sans attente.
+function Pastille({ m, survolee }: { m: MatiereMoodboard; survolee: boolean }) {
+  const source = m.url_maitre || m.url_vignette;
+  const entiere = urlCdn(source, 600) || source;
+  const detail = urlCdn(source, 1600) || source;
+  const zoom = !estPetite(m);
+  return (
+    <div
+      role="img"
+      aria-label={m.nom}
+      className={`mbp-rond${(clarte(m.hex) ?? 0) > CLARTE_CERCLE_GRIS ? " mbp-rond-clair" : ""}`}
+      style={{ backgroundColor: m.hex || "#eee" }}
+    >
+      <span className="mbp-rond-calque" style={{ backgroundImage: `url("${entiere}")`, backgroundSize: "cover" }} />
+      {zoom ? (
+        <span
+          className="mbp-rond-calque mbp-rond-zoom"
+          style={{ backgroundImage: `url("${detail}")`, backgroundSize: `${ZOOM_DETAIL * 100}%`, opacity: survolee ? 1 : 0 }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 // Rendu mixte : un carré « matière entière » + le reste en gros plan.
 // w, h en % du panneau de palette ; on repasse en mm pour tracer un vrai carré.
 // Image trop petite (petite = true) : pas de gros plan flou, la matière
@@ -246,6 +269,9 @@ const CSS = `
 .mbp-bloc.on { z-index: 2; }
 .mbp-bloc.on::after { content: ""; position: absolute; inset: 0; border: 2px solid #000; pointer-events: none; z-index: 3; }
 .mbp-rond-clair { box-shadow: 0 0 0 1px #d4d4d4; }
+.mbp-rond { overflow: hidden; }
+.mbp-rond-calque { position: absolute; inset: 0; border-radius: 50%; background-position: center; background-repeat: no-repeat; }
+.mbp-rond-zoom { transition: opacity .2s; }
 .mbp-carte { position: absolute; inset: 0; display: flex; }
 .mbp-carte-h { flex-direction: row; }
 .mbp-carte-v { flex-direction: column; }
@@ -275,5 +301,5 @@ const CSS = `
   .mbp:not(.mbp-compact) .mbp-gauche, .mbp:not(.mbp-compact) .mbp-droite { width: 100% !important; }
   .mbp:not(.mbp-compact) .mbp-droite { aspect-ratio: ${(LARGEUR * PART_DROITE).toFixed(0)} / ${HAUTEUR}; max-height: 70vh; margin-bottom: 14px; }
 }
-@media print { .mbp-item, .mbp-bloc { opacity: 1 !important; } .mbp-rond, .mbp-texte { transform: none !important; } .mbp-bloc.on::after { display: none; } }
+@media print { .mbp-item, .mbp-bloc { opacity: 1 !important; } .mbp-rond, .mbp-texte { transform: none !important; } .mbp-bloc.on::after { display: none; } .mbp-rond-zoom { opacity: 0 !important; } }
 `;
