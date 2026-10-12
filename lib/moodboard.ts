@@ -216,3 +216,10 @@ export function urlCdn(url: string | null | undefined, largeur: number): string 
 // En dessous de cette taille, l'image maître est répétée en motif dans la
 // palette au lieu d'être étirée (un 154 px étiré sur 11 cm serait flou).
 export const COTE_MIN_ETIREE = 500;
+
+// La VIGNETTE est le recadrage du centre de l'image maître, au tiers, à
+// l'échelle réelle (comme les pastilles du webshop) — et non l'image entière
+// réduite. C'est donc elle qui donne le « vrai » rendu de la matière.
+// Gros plan ×2 : la vignette doit faire au moins 300 px (maître ≥ 900 px),
+// sinon l'agrandissement serait flou.
+export const COTE_MIN_GROS_PLAN = 900;
