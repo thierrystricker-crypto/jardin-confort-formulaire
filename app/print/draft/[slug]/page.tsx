@@ -21,6 +21,8 @@
 
 import React, { useEffect, useState } from "react";
 import { infoService, texteMontantService } from "@/lib/service-affichage";
+import MoodboardPlanche from "@/components/MoodboardPlanche";
+import { lireReglagesMoodboard, type ReglagesMoodboard, type ResultatMoodboard } from "@/lib/moodboard";
 import {
   PrintData, QuoteLine, AmbianceImage,
   serviceOptions, formatMoney, formatDate,
@@ -68,6 +70,10 @@ export default function PrintDraftSlug({ params }: { params: Promise<{ slug: str
   const [numeroAffiche, setNumeroAffiche] = useState("");
   const [draftSlug, setDraftSlug] = useState("");
   const [notFound, setNotFound] = useState(false);
+  // Planche couleurs (12.10.2026) : même rendu que la dernière page de l'offre,
+  // si cochée dans le brouillon. Calcul via la route INTERNE d'aperçu (le
+  // brouillon n'est pas dans la table offres). null = pas de page.
+  const [moodboard, setMoodboard] = useState<{ reglages: ReglagesMoodboard; resultat: ResultatMoodboard } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -92,6 +98,26 @@ export default function PrintDraftSlug({ params }: { params: Promise<{ slug: str
               customerNumber: draft?.client_numero_client || "",
               ambianceImages: draftData.ambianceImages || [],
             });
+
+            // Planche couleurs : chargée AVANT setReady, non bloquante.
+            const reglagesMb = lireReglagesMoodboard(draftData.moodboard);
+            if (reglagesMb.actif) {
+              try {
+                const mRes = await fetch("/api/moodboard/apercu", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ lines: draftData.lines || [] }),
+                });
+                if (mRes.ok) {
+                  const mJson = (await mRes.json()) as ResultatMoodboard;
+                  if (Array.isArray(mJson.matieres) && mJson.matieres.length > 0) {
+                    setMoodboard({ reglages: reglagesMb, resultat: mJson });
+                  }
+                }
+              } catch (e) {
+                console.error("Erreur chargement moodboard:", e);
+              }
+            }
           }
         }
       } catch (e) {
@@ -326,6 +352,7 @@ export default function PrintDraftSlug({ params }: { params: Promise<{ slug: str
         .doc-ambiance-item { flex: 0 0 calc(50% - 7px); page-break-inside: avoid; break-inside: avoid; text-align: center; }
         .doc-ambiance-item img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; }
         .doc-ambiance-caption { font-size: 10px; color: #777; font-style: italic; margin-top: 5px; text-align: center; }
+        .doc-moodboard { page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; padding-top: 4mm; }
       `}</style>
 
       {/* ═══ BANDEAU ÉCRAN-ONLY ═══ */}
@@ -671,6 +698,39 @@ export default function PrintDraftSlug({ params }: { params: Promise<{ slug: str
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* PLANCHE COULEURS ET MATIÈRES — dernière page, si cochée dans le brouillon */}
+        {moodboard && (
+          <div className="doc-moodboard">
+            <div style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 16,
+              marginBottom: "5mm",
+              borderBottom: `2px solid ${THEME}`,
+              paddingBottom: "4mm",
+            }}>
+              <img style={{maxWidth:130, maxHeight:50, objectFit:"contain"}}
+                src="https://cdn.shopify.com/s/files/1/0360/3251/2135/files/logo_JARDIN_CONFORT_shopify.jpg?v=1614107698"
+                alt="Jardin-Confort" />
+              <div>
+                <div style={{fontSize:18, fontWeight:700, color:THEME}}>
+                  Vos couleurs et matières — {numeroAffiche}
+                </div>
+                <div style={{fontSize:11, color:"#aaa", fontStyle:"italic", marginTop:2}}>
+                  {data.nom} {data.prenom}
+                </div>
+              </div>
+            </div>
+            <MoodboardPlanche
+              matieres={moodboard.resultat.matieres}
+              couverture={moodboard.resultat.couverture}
+              mode={moodboard.reglages.mode}
+              sens={moodboard.reglages.sens}
+              interactif
+            />
           </div>
         )}
 
