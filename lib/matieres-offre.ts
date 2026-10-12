@@ -19,6 +19,9 @@
 
 import { supabaseAdmin } from "@/lib/supabase";
 import { isShopifyLine } from "@/lib/jc-print-types";
+import type { MatiereMoodboard, ResultatMoodboard } from "@/lib/moodboard";
+
+export type { MatiereMoodboard, CouvertureMoodboard, ResultatMoodboard } from "@/lib/moodboard";
 
 const SHOP = process.env.SHOPIFY_STORE_DOMAIN;
 const ADMIN_CLIENT_ID = process.env.SHOPIFY_ADMIN_CLIENT_ID;
@@ -26,23 +29,10 @@ const ADMIN_CLIENT_SECRET = process.env.SHOPIFY_ADMIN_CLIENT_SECRET;
 const API_VERSION = "2026-04";
 const TIMEOUT_MS = 8000;
 
-export type MatiereMoodboard = {
-  cle: string;
-  nom: string;
-  code: string | null;
-  marque: string;        // vendor Shopify, tel quel (« Manutti », « Fermob »)
-  famille: string;       // tissu, bois, peinture, ceramique, tressage…
-  hex: string | null;
-  motif: boolean;        // rayures / imprimés : la palette montre la vignette, pas le hex
-  url_vignette: string;  // CDN Shopify de préférence (stable pour le PDF)
-  url_maitre: string | null;
-  lignes: string[];      // id des lignes de l'offre qui portent cette finition
-  poids: number;         // montant CHF des lignes concernées → taille du bloc
-};
-
 type LigneOffre = {
   id?: string;
   type?: string;
+  title?: string;
   sku?: string;
   qty?: number;
   unitPrice?: number;
@@ -126,22 +116,32 @@ async function lireVariantes(ids: string[]): Promise<Map<string, VarianteShopify
 }
 
 // ─── Point d'entrée ──────────────────────────────────────────────────────────
-export async function matieresPourLignes(lignes: LigneOffre[]): Promise<MatiereMoodboard[]> {
-  const shopify = (lignes ?? []).filter(
-    (l) => isShopifyLine(l) && typeof l.shopifyVariantId === "string" && l.shopifyVariantId.startsWith("gid://")
+export async function matieresPourLignes(lignes: LigneOffre[]): Promise<ResultatMoodboard> {
+  // Tous les articles Shopify de l'offre comptent dans la couverture, y compris
+  // les anciennes lignes sans ID de variante (elles ne peuvent pas être reliées).
+  const articles = (lignes ?? [])
+    .filter((l) => isShopifyLine(l))
+    .map((l, i) => ({ ...l, _id: l.id || `ligne-${i}` }));
+
+  const vide = (): ResultatMoodboard => ({
+    matieres: [],
+    couverture: { articles: articles.length, representes: 0, nonRelies: articles.map((l) => l.title || l.sku || "") },
+  });
+  if (articles.length === 0) return vide();
+
+  const avecVariante = articles.filter(
+    (l) => typeof l.shopifyVariantId === "string" && l.shopifyVariantId.startsWith("gid://")
   );
-  if (shopify.length === 0) return [];
+  const variantes = await lireVariantes(Array.from(new Set(avecVariante.map((l) => l.shopifyVariantId as string))));
+  if (variantes.size === 0) return vide();
 
-  const variantes = await lireVariantes(Array.from(new Set(shopify.map((l) => l.shopifyVariantId as string))));
-  if (variantes.size === 0) return [];
-
-  const pLignes = shopify.flatMap((l, i) => {
+  const pLignes = avecVariante.flatMap((l) => {
     const v = variantes.get(l.shopifyVariantId as string);
     if (!v || !v.product) return [];
     const qty = Number(l.qty) || 1;
     const montant = qty * ((Number(l.unitPrice) || 0) - (Number(l.lineDiscountPerUnit) || 0));
     return [{
-      ligne_id: l.id || `ligne-${i}`,
+      ligne_id: l._id,
       vendor: v.product.vendor,
       handle: v.product.handle,
       // Article offert (prix 0) : il compte quand même, au minimum.
@@ -149,12 +149,22 @@ export async function matieresPourLignes(lignes: LigneOffre[]): Promise<MatiereM
       options: v.selectedOptions,
     }];
   });
-  if (pLignes.length === 0) return [];
+  if (pLignes.length === 0) return vide();
 
   const { data, error } = await supabaseAdmin.rpc("matieres_pour_offre", { p_lignes: pLignes });
   if (error || !Array.isArray(data)) {
     console.error("matieres_pour_offre:", error?.message);
-    return [];
+    return vide();
   }
-  return (data as MatiereMoodboard[]).map((m) => ({ ...m, poids: Number(m.poids) || 0 }));
+  const matieres = (data as MatiereMoodboard[]).map((m) => ({ ...m, poids: Number(m.poids) || 0 }));
+
+  const couvertes = new Set(matieres.flatMap((m) => m.lignes ?? []));
+  return {
+    matieres,
+    couverture: {
+      articles: articles.length,
+      representes: articles.filter((l) => couvertes.has(l._id)).length,
+      nonRelies: articles.filter((l) => !couvertes.has(l._id)).map((l) => l.title || l.sku || ""),
+    },
+  };
 }
