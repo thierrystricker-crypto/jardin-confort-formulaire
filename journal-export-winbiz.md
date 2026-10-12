@@ -405,3 +405,18 @@ Livré (branche `feat/page-comptabilite`) :
 Vérifié : tsc strict 0 erreur sur les fichiers du chantier, 51 + 19 tests verts. Smoke test preview
 à faire : recherche, téléchargement d'un export ≥ migration 012, ré-export depuis la page (dossier
 TEST), export antérieur → « fichier sur le Drive ».
+
+## Session 3 — 11.10.2026 : les notes INTERNES ne partent plus dans le fichier
+
+Signalement de Thierry : les notes internes de la commande se retrouvaient sur la facture WinBiz.
+C'était bien le comportement codé le 30.08 (ligne texte 220 « Remarques: … | Interne: … ») — un
+défaut de conception : les notes internes sont confidentielles et n'ont rien à faire sur un
+document comptable, contrairement aux remarques (déjà visibles du client sur la commande).
+
+Correctif (lib/winbiz-export.ts + test) :
+- la ligne 220 n'émet plus QUE « Remarques: {d.remarks} » ; la note interne ne quitte jamais l'app ;
+- test verrouillé en sens inverse : ni « Interne: » ni le contenu de la note interne ne doivent
+  apparaître NULLE PART dans le fichier généré (même esprit que le verrou adresse de livraison).
+
+51 tests verts, tsc strict 0 erreur. À noter pour la comptable : les fichiers déjà déposés avant ce
+correctif contiennent encore les notes internes — un ré-export (export N+1) produit un fichier propre.

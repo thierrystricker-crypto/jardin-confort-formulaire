@@ -440,7 +440,7 @@ ok("vendeur inconnu → champ 134 vide + warning (jamais un code inventé)", () 
 });
 
 console.log("── Test 10 ter : notes en ligne texte de FIN de document (demande du 30.08) ──");
-ok("remarques + notes internes → dernière ligne texte n=220, champ 19 laissé vide", () => {
+ok("remarques → dernière ligne texte n=220 ; notes INTERNES jamais émises ; champ 19 vide", () => {
   const data = printData({
     remarks: "Livraison souhaitée avant Pâques",
     lines: [art("shopify-1", "Table", "333", 1, 500)],
@@ -454,7 +454,10 @@ ok("remarques + notes internes → dernière ligne texte n=220, champ 19 laissé
   assert.equal(f[47], "220");  // après l'arrondi (210)
   assert.equal(f[48], "2");    // texte
   assert(f[I_DESC].includes("Remarques: Livraison souhaitée avant Pâques"));
-  assert(f[I_DESC].includes("Interne: acompte de 200 payé cash au magasin"));
+  // Confidentialité (retour du 11.10.2026) : la note interne ne doit apparaître
+  // NULLE PART dans le fichier — ni « Interne: », ni son contenu.
+  assert(!r.contentUtf8.includes("Interne:"), "« Interne: » ne doit jamais être émis");
+  assert(!r.contentUtf8.includes("acompte de 200"), "le contenu de la note interne ne doit jamais être émis");
   for (const l of ls) assert.equal(champs(l)[18], "", "champ 19 doit rester vide (pied de page invisible)");
 });
 ok("sans notes, pas de ligne 220 ; notes trop longues → tronquées à 250 + warning", () => {
