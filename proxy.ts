@@ -65,6 +65,10 @@ function estRoutePublique(pathname: string, method: string): boolean {
   // Fiche imprimable d'une version figée (jeton aléatoire, lecture seule) :
   // publique comme /print/offre/, pour l'envoyer au client ou la rendre par pdf.co.
   if (pathname.startsWith("/print/planner/")) return true;
+  // Planche couleurs et matières d'un document (13.10.2026) : page publique en
+  // lecture seule, sans prix ni nom de client. Ses données viennent de
+  // /api/offres/[slug]/matieres, déjà publique (GET).
+  if (pathname.startsWith("/planche/")) return true;
 
   // API de connexion au verrou
   if (pathname === "/api/acces") return true;

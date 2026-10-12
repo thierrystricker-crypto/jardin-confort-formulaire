@@ -19,6 +19,7 @@ import FilsMailsCard from "@/components/FilsMailsCard";
 import ExportWinbizBlock from "@/components/ExportWinbizBlock";
 import RetourDashboard from "@/components/RetourDashboard";
 import Faisabilite3DCard from "@/components/Faisabilite3DCard";
+import MoodboardCard from "@/components/MoodboardCard";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confort.ch"
 
@@ -1554,6 +1555,9 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
 
             {/* Faisabilité 3D (planner) — lecture seule, ne touche pas à l'offre (21.09.2026) */}
             <Faisabilite3DCard type="offre" slug={slug} />
+
+            {/* Planche couleurs et matières — lecture seule (13.10.2026) */}
+            <MoodboardCard slug={slug} estCommande={isCommandeReelle} />
 
             {isCommandeReelle && <StockMovementsBlock slug={slug} />}
 

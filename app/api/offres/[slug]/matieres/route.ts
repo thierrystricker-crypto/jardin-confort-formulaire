@@ -16,14 +16,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { matieresPourLignes } from "@/lib/matieres-offre";
-import type { ResultatMoodboard } from "@/lib/moodboard";
+import { lireReglagesMoodboard, type ResultatMoodboard } from "@/lib/moodboard";
 
 const SANS_CACHE = { headers: { "Cache-Control": "no-store" } };
 
-function publique(r: ResultatMoodboard, source: string) {
+// numero et reglages (actif/mode/sens) servent à la page /planche/[slug] et à
+// la carte du dashboard. Le numéro figure déjà dans le slug : rien de nouveau
+// n'est exposé.
+function publique(r: ResultatMoodboard, source: string, numero: string | null, reglagesBruts: unknown) {
+  const { actif, mode, sens } = lireReglagesMoodboard(reglagesBruts);
   return {
     matieres: r.matieres,
     couverture: { articles: r.couverture.articles, representes: r.couverture.representes },
+    numero,
+    reglages: { actif, mode, sens },
     source,
   };
 }
@@ -37,7 +43,7 @@ export async function GET(
 
     const { data: offre, error } = await supabase
       .from("offres")
-      .select("data")
+      .select("data, numero_affiche")
       .eq("slug", slug)
       .single();
 
@@ -52,11 +58,11 @@ export async function GET(
 
     const figee = data.moodboard?.palette;
     if (figee && Array.isArray(figee.matieres) && figee.couverture) {
-      return NextResponse.json(publique(figee, "figee"), SANS_CACHE);
+      return NextResponse.json(publique(figee, "figee", offre.numero_affiche ?? null, data.moodboard), SANS_CACHE);
     }
 
     const r = await matieresPourLignes((data.lines ?? []) as Parameters<typeof matieresPourLignes>[0]);
-    return NextResponse.json(publique(r, "direct"), SANS_CACHE);
+    return NextResponse.json(publique(r, "direct", offre.numero_affiche ?? null, data.moodboard), SANS_CACHE);
   } catch (e) {
     console.error("GET /api/offres/[slug]/matieres:", e);
     // Le moodboard ne doit jamais faire échouer un document : liste vide.
