@@ -98,23 +98,31 @@ export default function MoodboardReglages({ lines, reglages, onChange, lectureSe
         </button>
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, marginBottom: 10 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, cursor: lectureSeule ? "default" : "pointer" }}>
-          <input
-            type="checkbox"
-            checked={reglages.actif}
-            disabled={lectureSeule}
-            onChange={(e) => {
-              maj({ actif: e.target.checked });
-              if (e.target.checked) setOuvert(true);
-            }}
-          />
-          Ajouter la planche en fin d&apos;offre
-        </label>
+      {/* Case sur sa propre ligne, avec le style des cases du formulaire
+          (jc-check-label : le CSS global met tous les <input> à width 100 %). */}
+      <label className="jc-check-label" style={{ marginBottom: 10, cursor: lectureSeule ? "default" : "pointer" }}>
+        <input
+          type="checkbox"
+          checked={reglages.actif}
+          disabled={lectureSeule}
+          onChange={(e) => {
+            maj({ actif: e.target.checked });
+            if (e.target.checked) setOuvert(true);
+          }}
+        />
+        <span>
+          <strong>Ajouter la planche couleurs en dernière page de l&apos;offre</strong>
+          <span style={{ color: "#888", marginLeft: 8 }}>
+            {reglages.actif ? "— elle figurera sur l'offre et son PDF" : "— non cochée : l'offre se termine sans planche"}
+          </span>
+        </span>
+      </label>
 
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, marginBottom: 10, fontSize: 13 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
           Rendu
           <select
+            style={{ width: "auto" }}
             value={reglages.mode}
             disabled={lectureSeule}
             onChange={(e) => maj({ mode: e.target.value === "degrade" ? "degrade" : "poids" })}
@@ -122,12 +130,13 @@ export default function MoodboardReglages({ lines, reglages, onChange, lectureSe
             <option value="poids">Par valeur</option>
             <option value="degrade">Dégradé</option>
           </select>
-        </label>
+        </span>
 
         {reglages.mode === "degrade" && (
-          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
             Sens
             <select
+              style={{ width: "auto" }}
               value={reglages.sens}
               disabled={lectureSeule}
               onChange={(e) => maj({ sens: e.target.value === "fonce-clair" ? "fonce-clair" : "clair-fonce" })}
@@ -135,7 +144,7 @@ export default function MoodboardReglages({ lines, reglages, onChange, lectureSe
               <option value="clair-fonce">Clair → foncé</option>
               <option value="fonce-clair">Foncé → clair</option>
             </select>
-          </label>
+          </span>
         )}
       </div>
 
