@@ -10,9 +10,10 @@ export type MatiereMoodboard = {
   marque: string;        // vendor Shopify, tel quel (« Manutti », « Fermob »)
   famille: string;       // tissu, bois, peinture, ceramique, tressage…
   hex: string | null;
-  motif: boolean;        // rayures / imprimés : la palette montre la vignette, pas le hex
+  motif: boolean;        // rayures / imprimés (info de la base, non utilisée par la palette)
   url_vignette: string;  // CDN Shopify de préférence (stable pour le PDF)
   url_maitre: string | null;
+  cote?: number | null;  // taille en px de l'image maître (SQL 032) ; absente = inconnue
   lignes: string[];      // id des lignes de l'offre qui portent cette finition
   poids: number;         // montant CHF des lignes concernées → taille du bloc
 };
@@ -118,12 +119,25 @@ export type BlocPalette = { matiere: MatiereMoodboard; x: number; y: number; w: 
 // Part minimale d'un bloc : une petite finition reste visible.
 const PART_MIN_POIDS = 0.03;
 const PART_MIN_BANDE = 0.06;
+// Part maximale : la finition dominante ne mange pas toute la palette.
+const PART_MAX = 0.35;
 
+// Surfaces calculées sur la RACINE CARRÉE de la valeur : l'ordre des tailles
+// est conservé, mais l'écart est adouci (un article à 14 000 CHF ne fait plus
+// 40 % de la planche face à des finitions à 1 000 CHF). Puis plancher et
+// plafond, renormalisés jusqu'à stabilité.
 function parts(matieres: MatiereMoodboard[], min: number): number[] {
-  const total = matieres.reduce((s, m) => s + Math.max(m.poids, 0), 0) || 1;
-  const brut = matieres.map((m) => Math.max(Math.max(m.poids, 0) / total, min));
-  const somme = brut.reduce((s, v) => s + v, 0);
-  return brut.map((v) => v / somme);
+  let p = matieres.map((m) => Math.sqrt(Math.max(m.poids, 0)) || 1);
+  const somme0 = p.reduce((s, v) => s + v, 0) || 1;
+  p = p.map((v) => v / somme0);
+  if (matieres.length * min >= 1) return matieres.map(() => 1 / matieres.length);
+  const max = Math.max(PART_MAX, 1 / matieres.length);
+  for (let i = 0; i < 10; i++) {
+    p = p.map((v) => Math.min(Math.max(v, min), max));
+    const somme = p.reduce((s, v) => s + v, 0);
+    p = p.map((v) => v / somme);
+  }
+  return p;
 }
 
 // Treemap « squarified » (Bruls et al.) : blocs aussi carrés que possible.
@@ -189,3 +203,16 @@ export function disposerEnDegrade(matieres: MatiereMoodboard[], sens: SensMoodbo
     return b;
   });
 }
+
+// ─── Images ─────────────────────────────────────────────────────────────────
+// Le CDN Shopify sert une version à la largeur demandée (?width=) : les fichiers
+// stockés ne sont pas modifiés, seul l'affichage est allégé (PDF plus léger).
+export function urlCdn(url: string | null | undefined, largeur: number): string | null {
+  if (!url) return null;
+  if (!/^https:\/\/cdn\.shopify\.com\//.test(url)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}width=${largeur}`;
+}
+
+// En dessous de cette taille, l'image maître est répétée en motif dans la
+// palette au lieu d'être étirée (un 154 px étiré sur 11 cm serait flou).
+export const COTE_MIN_ETIREE = 500;

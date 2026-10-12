@@ -907,6 +907,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
               couverture={moodboard.resultat.couverture}
               mode={moodboard.reglages.mode}
               sens={moodboard.reglages.sens}
+              interactif
             />
           </div>
         )}

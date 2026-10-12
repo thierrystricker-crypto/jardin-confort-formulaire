@@ -8,9 +8,11 @@
 //   • aperçu dans le formulaire          → interactif = true, compact = true
 //
 // Gauche : pastilles rondes classées par famille (nom, code, marque).
-// Droite : palette de blocs jointifs, SANS texte — par valeur (mosaïque) ou en
-// dégradé (bandes triées par clarté). Les positions sont en %, calculées sur
-// un format fixe : le rendu est le même partout, sans mesure d'écran.
+// Droite : palette de blocs jointifs, SANS texte, remplis avec la VRAIE image
+// de la matière (pas la couleur moyenne, qui aplatit bois, galvanisé, tissus).
+// Par valeur (mosaïque) ou en dégradé (bandes triées par clarté du hex).
+// Les positions sont en %, calculées sur un format fixe : rendu identique
+// partout, sans mesure d'écran.
 //
 // Rond = CSS (border-radius + object-fit) : les vignettes sont carrées, on ne
 // les recadre ni ne les compresse.
@@ -24,6 +26,8 @@ import {
   disposerParPoids,
   disposerEnDegrade,
   texteCouverture,
+  urlCdn,
+  COTE_MIN_ETIREE,
 } from "@/lib/moodboard";
 
 // Format du corps de planche : 180 × 215 (mm sur A4, marges déduites).
@@ -44,11 +48,25 @@ type Props = {
   interactif?: boolean;
   compact?: boolean;
   mention?: boolean; // « Teintes indicatives… » (document client)
+  // "mixte"   : carte d'échantillon — un carré avec la matière entière (échelle
+  //             naturelle), le reste du bloc en gros plan. Défaut.
+  // "naturel" : chaque image à la taille d'un échantillon (TAILLE_ECHANTILLON),
+  //             répétée pour remplir le bloc — même grain pour toutes les matières.
+  // "etire"   : image agrandie pour couvrir tout le bloc (grain zoomé).
+  rendu?: "mixte" | "naturel" | "etire";
 };
+
+// Taille d'affichage d'un échantillon en rendu naturel (sur l'A4 imprimé).
+const TAILLE_ECHANTILLON = "45mm";
+// Panneau de palette en mm (sert au rendu mixte pour tracer des carrés vrais).
+const PALETTE_L_MM = LARGEUR * PART_DROITE;
+const PALETTE_H_MM = HAUTEUR;
+// Gros plan du rendu mixte : agrandissement de l'image dans la zone de détail.
+const ZOOM_DETAIL = 2;
 
 export default function MoodboardPlanche({
   matieres, couverture, mode, sens,
-  interactif = false, compact = false, mention = true,
+  interactif = false, compact = false, mention = true, rendu = "mixte",
 }: Props) {
   const [survol, setSurvol] = useState<string | null>(null);
 
@@ -86,7 +104,7 @@ export default function MoodboardPlanche({
                   >
                     <img
                       className="mbp-rond"
-                      src={m.url_vignette}
+                      src={urlCdn(m.url_maitre || m.url_vignette, 240) || m.url_vignette}
                       alt={m.nom}
                       style={{ backgroundColor: m.hex || "#eee" }}
                     />
@@ -105,7 +123,13 @@ export default function MoodboardPlanche({
 
         <div className="mbp-droite" style={{ width: `${PART_DROITE * 100}%` }}>
           {blocs.map((b) => {
-            const imageDansBloc = b.matiere.motif || !b.matiere.hex;
+            const m = b.matiere;
+            const source = m.url_maitre || m.url_vignette;
+            // Rendu naturel : toujours en échantillons répétés à taille fixe.
+            // Rendu étiré : image agrandie, sauf si elle est trop petite (motif).
+            const petite = typeof m.cote === "number" && m.cote > 0 && m.cote < COTE_MIN_ETIREE;
+            const repetee = rendu === "naturel" || (rendu === "etire" && petite);
+            const tuile = rendu === "naturel" ? TAILLE_ECHANTILLON : `${m.cote}px`;
             return (
               <div
                 key={b.matiere.cle}
@@ -118,10 +142,18 @@ export default function MoodboardPlanche({
                   // +0.15 % : évite les filets blancs d'arrondi entre deux blocs
                   width: `${b.w + 0.15}%`,
                   height: `${b.h + 0.15}%`,
-                  backgroundColor: b.matiere.hex || "#ddd",
+                  backgroundColor: m.hex || "#ddd",
+                  ...(repetee
+                    ? {
+                        backgroundImage: `url("${urlCdn(source, 600) || source}")`,
+                        backgroundRepeat: "repeat",
+                        backgroundSize: `${tuile} ${tuile}`,
+                      }
+                    : {}),
                 }}
               >
-                {imageDansBloc ? <img src={b.matiere.url_vignette} alt="" /> : null}
+                {rendu === "etire" && !repetee ? <img src={urlCdn(source, 1200) || source} alt="" /> : null}
+                {rendu === "mixte" ? <CarteEchantillon source={source} w={b.w} h={b.h} petite={petite} /> : null}
               </div>
             );
           })}
@@ -134,6 +166,42 @@ export default function MoodboardPlanche({
           {mention ? (
             <div>Teintes indicatives : le rendu varie selon l&apos;écran et l&apos;impression. Échantillons disponibles dans notre exposition.</div>
           ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Rendu mixte : un carré « matière entière » + le reste en gros plan.
+// w, h en % du panneau de palette ; on repasse en mm pour tracer un vrai carré.
+// Image trop petite (petite = true) : pas de gros plan flou, la matière
+// entière est répétée à la même échelle dans le reste du bloc.
+function CarteEchantillon({ source, w, h, petite }: { source: string; w: number; h: number; petite: boolean }) {
+  const lMm = (w / 100) * PALETTE_L_MM;
+  const hMm = (h / 100) * PALETTE_H_MM;
+  const horizontal = lMm >= hMm;
+  // Côté du carré : la petite dimension, sans dépasser la moitié de la grande.
+  const coteMm = horizontal ? Math.min(hMm, lMm / 2) : Math.min(lMm, hMm / 2);
+  const partCarre = horizontal ? (coteMm / lMm) * 100 : (coteMm / hMm) * 100;
+  const entiere = urlCdn(source, 600) || source;
+  const detail = urlCdn(source, 1600) || source;
+  return (
+    <div className={`mbp-carte ${horizontal ? "mbp-carte-h" : "mbp-carte-v"}`}>
+      <div className="mbp-entiere" style={horizontal ? { width: `${partCarre}%` } : { height: `${partCarre}%` }}>
+        <img src={entiere} alt="" />
+      </div>
+      {petite ? (
+        <div
+          className="mbp-detail"
+          style={{
+            backgroundImage: `url("${entiere}")`,
+            backgroundRepeat: "repeat",
+            backgroundSize: `${coteMm}mm ${coteMm}mm`,
+          }}
+        />
+      ) : (
+        <div className="mbp-detail">
+          <img src={detail} alt="" style={{ transform: `scale(${ZOOM_DETAIL})` }} />
         </div>
       )}
     </div>
@@ -154,6 +222,14 @@ const CSS = `
 .mbp-code, .mbp-marque { color: #888; font-size: 10.5px; }
 .mbp-bloc { position: absolute; overflow: hidden; transition: opacity .15s; }
 .mbp-bloc img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mbp-carte { position: absolute; inset: 0; display: flex; }
+.mbp-carte-h { flex-direction: row; }
+.mbp-carte-v { flex-direction: column; }
+.mbp-entiere { flex: 0 0 auto; overflow: hidden; }
+.mbp-carte-h .mbp-entiere { height: 100%; }
+.mbp-carte-v .mbp-entiere { width: 100%; }
+.mbp-detail { flex: 1 1 auto; overflow: hidden; position: relative; }
+.mbp-detail img { position: absolute; inset: 0; transform-origin: center; }
 .mbp-hl .mbp-item { opacity: .35; }
 .mbp-hl .mbp-item.on { opacity: 1; }
 .mbp-hl .mbp-bloc { opacity: .25; }
