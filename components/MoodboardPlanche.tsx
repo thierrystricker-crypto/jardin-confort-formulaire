@@ -80,6 +80,12 @@ export default function MoodboardPlanche({
     [matieres, mode, sens]
   );
 
+  // Taille réelle (mm) du carré « matière entière » de chaque bloc → pastilles.
+  const carres = useMemo(
+    () => new Map(blocs.map((b) => [b.matiere.cle, geometrieCarte(b.w, b.h).coteMm])),
+    [blocs]
+  );
+
   if (matieres.length === 0) return null;
 
   const dense = matieres.length > SEUIL_DENSE;
@@ -116,7 +122,7 @@ export default function MoodboardPlanche({
                     onMouseEnter={entrer(m.cle)}
                     onMouseLeave={sortir}
                   >
-                    <Pastille m={m} survolee={actif === m.cle} />
+                    <Pastille m={m} survolee={actif === m.cle} carreMm={rendu === "mixte" ? carres.get(m.cle) ?? null : null} />
                     <div className="mbp-texte">
                       <span className="mbp-nom">{m.nom}</span>
                       {m.code ? <span className="mbp-code"> {m.code}</span> : null}
@@ -188,16 +194,40 @@ function estPetite(m: MatiereMoodboard): boolean {
   return typeof m.cote === "number" && m.cote > 0 && m.cote < COTE_MIN_ETIREE;
 }
 
+// Géométrie de la carte d'échantillon d'un bloc (rendu mixte), en mm réels.
+// Partagée par le bloc ET par sa pastille, pour qu'ils aient la même échelle.
+function geometrieCarte(w: number, h: number) {
+  const lMm = (w / 100) * PALETTE_L_MM;
+  const hMm = (h / 100) * PALETTE_H_MM;
+  const horizontal = lMm >= hMm;
+  // Côté du carré : la petite dimension, sans dépasser la moitié de la grande.
+  const coteMm = horizontal ? Math.min(hMm, lMm / 2) : Math.min(lMm, hMm / 2);
+  const partCarre = horizontal ? (coteMm / lMm) * 100 : (coteMm / hMm) * 100;
+  return { horizontal, coteMm, partCarre };
+}
+
+// Grossissement de la pastille au survol (doit rester égal au scale() du CSS).
+const ECHELLE_SURVOL = 2.4;
+
 // Pastille = reflet exact de son bloc de palette (rendu mixte) :
 //   • au repos  : la même image que le carré « matière entière », en rond ;
 //   • au survol : le gros plan ×ZOOM_DETAIL, comme la 2e partie du bloc.
 // Image trop petite : pas de gros plan dans la palette → pas de zoom ici non plus.
 // Les deux images sont chargées d'avance (2 calques) : bascule sans attente.
-function Pastille({ m, survolee }: { m: MatiereMoodboard; survolee: boolean }) {
+// La pastille n'est PAS le carré réduit (une toile fine y deviendrait une
+// bouillie grise) : c'est une FENÊTRE sur le carré, à la même échelle — l'image
+// est dimensionnée à la taille réelle du carré (carreMm) et centrée, la
+// pastille n'en montre que le centre. Idem pour le gros plan au survol, en
+// compensant le grossissement de la pastille.
+function Pastille({ m, survolee, carreMm }: { m: MatiereMoodboard; survolee: boolean; carreMm: number | null }) {
   const source = m.url_maitre || m.url_vignette;
   const entiere = urlCdn(source, 600) || source;
   const detail = urlCdn(source, 1600) || source;
   const zoom = !estPetite(m);
+  const tailleRepos = carreMm ? `${carreMm}mm ${carreMm}mm` : "cover";
+  const tailleZoom = carreMm
+    ? `${(carreMm * ZOOM_DETAIL) / ECHELLE_SURVOL}mm ${(carreMm * ZOOM_DETAIL) / ECHELLE_SURVOL}mm`
+    : `${ZOOM_DETAIL * 100}%`;
   return (
     <div
       role="img"
@@ -205,11 +235,11 @@ function Pastille({ m, survolee }: { m: MatiereMoodboard; survolee: boolean }) {
       className={`mbp-rond${(clarte(m.hex) ?? 0) > CLARTE_CERCLE_GRIS ? " mbp-rond-clair" : ""}`}
       style={{ backgroundColor: m.hex || "#eee" }}
     >
-      <span className="mbp-rond-calque" style={{ backgroundImage: `url("${entiere}")`, backgroundSize: "cover" }} />
+      <span className="mbp-rond-calque" style={{ backgroundImage: `url("${entiere}")`, backgroundSize: tailleRepos }} />
       {zoom ? (
         <span
           className="mbp-rond-calque mbp-rond-zoom"
-          style={{ backgroundImage: `url("${detail}")`, backgroundSize: `${ZOOM_DETAIL * 100}%`, opacity: survolee ? 1 : 0 }}
+          style={{ backgroundImage: `url("${detail}")`, backgroundSize: tailleZoom, opacity: survolee ? 1 : 0 }}
         />
       ) : null}
     </div>
@@ -221,12 +251,7 @@ function Pastille({ m, survolee }: { m: MatiereMoodboard; survolee: boolean }) {
 // Image trop petite (petite = true) : pas de gros plan flou, la matière
 // entière est répétée à la même échelle dans le reste du bloc.
 function CarteEchantillon({ source, w, h, petite }: { source: string; w: number; h: number; petite: boolean }) {
-  const lMm = (w / 100) * PALETTE_L_MM;
-  const hMm = (h / 100) * PALETTE_H_MM;
-  const horizontal = lMm >= hMm;
-  // Côté du carré : la petite dimension, sans dépasser la moitié de la grande.
-  const coteMm = horizontal ? Math.min(hMm, lMm / 2) : Math.min(lMm, hMm / 2);
-  const partCarre = horizontal ? (coteMm / lMm) * 100 : (coteMm / hMm) * 100;
+  const { horizontal, coteMm, partCarre } = geometrieCarte(w, h);
   const entiere = urlCdn(source, 600) || source;
   const detail = urlCdn(source, 1600) || source;
   return (
@@ -284,7 +309,7 @@ const CSS = `
 .mbp-hl .mbp-item.on { opacity: 1; }
 .mbp-hl .mbp-bloc { opacity: .25; }
 .mbp-hl .mbp-bloc.on { opacity: 1; }
-.mbp-item.on .mbp-rond { transform: scale(2.4); z-index: 5; }
+.mbp-item.on .mbp-rond { transform: scale(${ECHELLE_SURVOL}); z-index: 5; }
 .mbp-item.on .mbp-texte { transform: translateX(54px); }
 .mbp-pied { margin-top: 4mm; text-align: center; font-size: 10px; color: #888; line-height: 1.6; }
 .mbp-dense .mbp-famille-liste { display: grid; grid-template-columns: 1fr 1fr; column-gap: 6px; }
