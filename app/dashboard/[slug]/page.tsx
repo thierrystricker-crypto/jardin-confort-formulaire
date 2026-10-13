@@ -1556,8 +1556,14 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
             {/* Faisabilité 3D (planner) — lecture seule, ne touche pas à l'offre (21.09.2026) */}
             <Faisabilite3DCard type="offre" slug={slug} />
 
-            {/* Planche couleurs et matières — lecture seule (13.10.2026) */}
-            <MoodboardCard slug={slug} estCommande={isCommandeReelle} />
+            {/* Planche couleurs et matières (13.10.2026) — réglage après coup tracé
+                en correction ; lecture seule sur une offre signée */}
+            <MoodboardCard
+              slug={slug}
+              estCommande={isCommandeReelle}
+              offreSignee={offre.type_document === "Offre" && ["Convertie", "Acceptée"].includes(offre.statut)}
+              commandeIssue={commandeIssue}
+            />
 
             {isCommandeReelle && <StockMovementsBlock slug={slug} />}
 

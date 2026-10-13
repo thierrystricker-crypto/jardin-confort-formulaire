@@ -10,6 +10,7 @@
 //     pour creer une version (avant : « Aucun changement detecte »).
 
 import { isShopifyLine } from "@/lib/jc-print-types";
+import { AFFICHAGES_MOODBOARD, lireReglagesMoodboard } from "@/lib/moodboard";
 
 // Forme minimale d'une ligne (on ne dépend que de ce dont on a besoin)
 export type RevisionLine = {
@@ -199,6 +200,20 @@ export const CLES_HORS_FORMULAIRE = new Set([
   "copiedFromOffreNumero",
 ]);
 
+// Réglage de la planche couleurs (13.10.2026). Le formulaire envoie toujours
+// un data.moodboard complet ; un document plus ancien n'en a pas, ou n'a que
+// { actif, mode, sens }. Comparés tels quels, ils produisaient un FAUX
+// changement à chaque révision (« (vide) → {...} »), donc une version de plus
+// sans que rien n'ait bougé. On compare la forme NORMALISÉE, en clair.
+function normPlanche(v: unknown): string {
+  const r = lireReglagesMoodboard(v);
+  const lib = AFFICHAGES_MOODBOARD.find((a) => a.valeur === r.affichage)?.libelle ?? r.affichage;
+  if (r.affichage === "aucune") return lib;
+  return r.mode === "degrade"
+    ? `${lib} · dégradé ${r.sens === "fonce-clair" ? "foncé → clair" : "clair → foncé"}`
+    : `${lib} · par valeur`;
+}
+
 // Normalise une valeur de champ en chaîne comparable (objets/tableaux → JSON stable).
 function normEntete(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -370,8 +385,9 @@ export function computeRevisionDiff(
     const keys = new Set(Object.keys(afterData));
     for (const k of keys) {
       if (ENTETE_IGNORE.has(k)) continue;
-      const av = normEntete(beforeData[k]);
-      const ap = normEntete(afterData[k]);
+      const norm = k === "moodboard" ? normPlanche : normEntete;
+      const av = norm(beforeData[k]);
+      const ap = norm(afterData[k]);
       if (av !== ap) {
         diff.enteteChanges.push({ champ: k, avant: av, apres: ap });
       }

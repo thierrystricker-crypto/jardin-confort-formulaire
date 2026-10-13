@@ -109,3 +109,60 @@ Une banque de **60 images (49 sujets)** est prête : objets naturels générés 
 - Emplacement : `Téléchargements\deco-inspiration\shopify-600\`, avec `index-etiquettes.csv`. Les originaux sont dans le dossier parent.
 
 C'est l'objet du chantier suivant.
+
+---
+
+## 8. Chantier « réglages après coup et décor » (13.10.2026)
+
+Branche `feat/planche-reglages-decor`. Convention P0-19 : documents cités par numéro.
+
+### 8.1 Décisions de cadrage (validées par Thierry)
+
+- **La planche reste calculée en direct, rien n'est figé.** `data.moodboard.palette` n'est toujours pas écrite. Une commande révisée (article ajouté ou retiré) voit sa planche suivre ses lignes. Le PDF initial archivé (`commandes/<slug>_initial.pdf`) reste la preuve, intact.
+- **Seul le RÉGLAGE d'affichage est enregistré** : `data.moodboard.affichage = "aucune" | "planche" | "planche-decor"`, avec `actif` recopié à côté (`actif = affichage !== "aucune"`) pour les documents et le code antérieurs. Sans `affichage`, `actif: true` se lit « planche ».
+- **Réglage après coup depuis le dashboard** (carte Planche couleurs) :
+  - offre non signée et commande : choix à trois positions + rendu, enregistré comme **correction tracée** (auteur, motif) ;
+  - **offre signée : lecture seule**, renvoi vers la commande née de la signature (c'est son PDF que voit le client).
+- **Rien n'est régénéré au réglage** : le PDF est recréé à chaque ouverture depuis le dashboard, il reprend donc le réglage du moment.
+
+### 8.2 Base
+
+- **SQL 033** : `matieres_pour_offre` renvoie aussi `teinte_filtre` (DROP + CREATE, mêmes revoke/grant). Exécutée et vérifiée le 13.10.2026. Ordre de `teinte_filtre` : principale en premier (non alphabétique : 417 tableaux sur 1 137 à plusieurs teintes le sont) ; 17 matières ont `multicolore-motif` en tête, l'app la saute.
+- **SQL 034** : RPC `regler_planche(p_slug, p_affichage, p_mode, p_sens, p_corrected_by, p_reason)`, une transaction : `jsonb_set` + fusion dans `data.moodboard` (jamais `data` en bloc) et insertion dans `corrections`. Refuse une offre signée. Aucun changement → rien n'est écrit. `service_role` seul. Exécutée et vérifiée le 13.10.2026.
+- `offres` porte **quatre** triggers, pas trois : `offres_sync_suivi_livraison` (sur `statut_livraison` seulement) s'ajoute aux trois connus.
+
+### 8.3 Partie A — fichiers
+
+| Fichier | Changement |
+|---|---|
+| `lib/moodboard.ts` | `AffichageMoodboard`, `AFFICHAGES_MOODBOARD`, `estAffichageMoodboard`, `reglagesAEcrire` ; `COTE_MIN_GROS_PLAN` supprimée (P3-90) |
+| `app/api/offres/[slug]/planche/route.ts` | Nouvelle route interne → RPC `regler_planche` (409 si offre signée) |
+| `components/MoodboardCard.tsx` | Choix à trois positions, rendu, nom + motif, lecture seule sur offre signée |
+| `components/MoodboardReglages.tsx` | Trois boutons radio à la place de la case |
+| `DraftFormulaire.tsx` | Snapshot `moodboard: reglagesAEcrire(moodboard)` |
+| `app/dashboard/[slug]/page.tsx` | Props `offreSignee` et `commandeIssue` de la carte |
+| `CorrectionsHistoryBlock.tsx` | Libellés en clair pour `moodboard.*` |
+| `api/offres/[slug]/matieres/route.ts` | Renvoie `affichage` ; palette figée lue pour une Commande seulement |
+| `lib/revision-diff.ts` | 🔴 Correctif d'un défaut latent de la PR #63 (voir 8.5) |
+
+### 8.4 Partie B — le décor d'inspiration
+
+- **Placement retenu : coin bas gauche, sous les pastilles** (variante A sur quatre maquettées). La zone prend la place libre de la colonne de gauche ; une requête de conteneur (`@container (aspect-ratio > 2)`) la masque quand elle est trop basse. Masquée aussi sur la page planche en mobile.
+- **Banque** : `lib/moodboard-decor.ts`, 60 entrées générées depuis `index-etiquettes.csv` et les URL lues par l'API Admin (files, `jc-deco-`). Donnée distincte de la table `matieres`.
+- **Couleur de l'offre** : poids CHF réparti entre les teintes (2 parts la principale, 1 les autres, `multicolore-motif` ignorée) ; dominante ; seconde = teinte suivante d'une autre ambiance ≥ 15 % ; accent = teinte colorée ≥ 10 %.
+- **Choix** : un minéral + un végétal de l'ambiance dominante, puis une image de la seconde, sinon de l'accent, sinon de la teinte suivante d'une autre ambiance (même sous 15 %) — d'une autre nature si l'ambiance le permet, la même sinon (les verts n'ont que végétal + un minéral).
+- **Exclusions par famille de la planche** (pas de rapprochement par nom) : bois → aucun objet en bois ; corde → corde grise, jute ; tissu / toile → lin ; céramique → tesson ; pierre → béton, molasse, travertin, ardoise.
+- **Graine du tirage : les clés des finitions, triées — pas le slug.** Écart assumé au cadrage : avec le slug, le brouillon, l'offre et la commande (trois slugs) montraient trois décors différents. Mêmes finitions → même décor, à chaque étape.
+- **Images en PNG, 220 px, par `urlDecor()`** — jamais `urlCdn()` (JPEG, pas de transparence). Mesuré au rendu Chromium (2 planches) : +1,26 Mo à 300 px avec ombre, +0,74 Mo à 300 px sans ombre, **+0,93 Mo à 220 px avec ombre** (retenu, ~450 Ko par planche). L'ombre portée (`filter: drop-shadow`) fait intégrer l'image en matrice.
+- **Premiers résultats** (avant le retrait des châtaignes, voir plus bas) : CMD-80669 → terre, châtaignes, bois flotté ; DEV-2026-903 → terre, châtaignes, lin.
+- **Limite de la banque** : les « bois et bruns » n'ont qu'un minéral (la terre) → toute dominante bois reçoit la terre. À compléter côté banque (un ou deux minéraux bruns).
+- **Châtaignes retirées de la banque** (BO-05 a et b, choix de Thierry) : 58 objets tirables. Les fichiers restent dans Shopify. Pour que les bruns gardent un végétal, le minéral et le végétal se cherchent désormais dans l'ambiance dominante **ou** parmi les objets qui portent la teinte dominante (allium séché, bourgeon), et le tirage préfère les objets dont la teinte dominante est la **principale** (une brique « rouge, brun » passait avant la terre « brun »). Résultats : CMD-80669 → terre, allium séché, bois flotté ; DEV-2026-903 → terre, corde de jute, pampa.
+- **Le choix ne regarde pas les pixels** : il lit les étiquettes posées à la main dans `index-etiquettes.csv` (ambiance, nature, teintes). Une étiquette fausse donne un objet mal assorti sans que rien ne le signale.
+- Test sans écriture : `/print/offre/<slug>?moodboard=poids&decor=1`.
+- **Disque de fond sous les objets** (demande de Thierry, 13.10.2026) : la couleur MOYENNE de la planche, calculée en CIELAB (une moyenne en RVB donne un gris sale), pondérée par la racine carrée du poids CHF comme la palette, puis éclaircie de 35 % vers le blanc (`ECLAIRCIR_FOND`). Essayée puis écartée : la teinte la plus claire, trop dépendante d'une seule finition (DEV-2026-903 tirait vers le rose du teck). Résultats : CMD-80669 → #cfccc5, DEV-2026-903 → #bfb6b0. Cercle CSS, sans image : poids négligeable.
+
+### 8.5 Trouvailles
+
+- 🔴 **Défaut latent de la PR #63 dans le diff de révision** : le formulaire envoie toujours `data.moodboard` ; sur une commande sans planche enregistrée, le diff y voyait un changement à chaque révision, donc une version fantôme. Aucune révision depuis le merge (vérifié) : aucun dégât. Corrigé : comparaison de la forme normalisée (`normPlanche`).
+- **Conversion de fins de ligne** : trois fichiers d'origine finissent sans retour à la ligne ; une conversion `sed 's/$/\r/'` y ajoutait un CR isolé (le piège du doc 04). Détecté avant écriture ; conversion par remplacement `\n` → `\r\n` uniquement. `app/print/offre/[slug]/page.tsx` garde son `}\r` final d'origine.
+- **Incident de test** : le smoke test de la partie A a été fait par erreur sur une vraie commande, CMD-80669, au lieu de CMD-80666. Effet client nul (réglage revenu à « sans planche », PDF identique) ; deux lignes de correction « test » restent dans son historique interne.

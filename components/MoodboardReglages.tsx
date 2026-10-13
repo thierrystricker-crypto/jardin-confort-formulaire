@@ -3,7 +3,9 @@
 // Bloc « Planche couleurs et matières » du formulaire de brouillon
 // (chantier moodboard, 12.10.2026).
 //
-// • Case « Ajouter la planche en fin d'offre » — DÉCOCHÉE par défaut.
+// • Choix à trois positions (13.10.2026) : sans planche (défaut), planche
+//   seule, planche + décor d'inspiration. Remplace la case à cocher d'origine ;
+//   `actif` est recopié à côté de `affichage` (lib/moodboard.ts).
 // • Choix du rendu : par valeur, ou dégradé (clair → foncé / foncé → clair).
 // • Aperçu miniature, pour que le commercial décide de cocher ou non selon le
 //   rendu (« si c'est joli, il la met »).
@@ -16,7 +18,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import MoodboardPlanche from "@/components/MoodboardPlanche";
-import type { ReglagesMoodboard, ResultatMoodboard } from "@/lib/moodboard";
+import { AFFICHAGES_MOODBOARD, type ReglagesMoodboard, type ResultatMoodboard } from "@/lib/moodboard";
 
 type LigneMin = {
   id?: string;
@@ -41,7 +43,7 @@ type Props = {
 const DELAI_APERCU_MS = 1500;
 
 export default function MoodboardReglages({ lines, reglages, onChange, lectureSeule = false }: Props) {
-  const [ouvert, setOuvert] = useState(reglages.actif);
+  const [ouvert, setOuvert] = useState(reglages.affichage !== "aucune");
   const [resultat, setResultat] = useState<ResultatMoodboard | null>(null);
   const [chargement, setChargement] = useState(false);
   const requete = useRef(0);
@@ -98,25 +100,36 @@ export default function MoodboardReglages({ lines, reglages, onChange, lectureSe
         </button>
       </div>
 
-      {/* Case sur sa propre ligne, avec le style des cases du formulaire
-          (jc-check-label : le CSS global met tous les <input> à width 100 %). */}
-      <label className="jc-check-label" style={{ marginBottom: 10, cursor: lectureSeule ? "default" : "pointer" }}>
-        <input
-          type="checkbox"
-          checked={reglages.actif}
-          disabled={lectureSeule}
-          onChange={(e) => {
-            maj({ actif: e.target.checked });
-            if (e.target.checked) setOuvert(true);
-          }}
-        />
-        <span>
-          <strong>Ajouter la planche couleurs en dernière page de l&apos;offre</strong>
-          <span style={{ color: "#888", marginLeft: 8 }}>
-            {reglages.actif ? "— elle figurera sur l'offre et son PDF" : "— non cochée : l'offre se termine sans planche"}
-          </span>
-        </span>
-      </label>
+      {/* Choix à trois positions, une option par ligne, avec le style des cases
+          du formulaire (jc-check-label : le CSS global met tous les <input>
+          à width 100 %). */}
+      <div style={{ marginBottom: 10 }}>
+        {AFFICHAGES_MOODBOARD.map((a) => (
+          <label key={a.valeur} className="jc-check-label" style={{ marginBottom: 4, cursor: lectureSeule ? "default" : "pointer" }}>
+            <input
+              type="radio"
+              name="moodboard-affichage"
+              value={a.valeur}
+              checked={reglages.affichage === a.valeur}
+              disabled={lectureSeule}
+              onChange={() => {
+                maj({ affichage: a.valeur, actif: a.valeur !== "aucune" });
+                if (a.valeur !== "aucune") setOuvert(true);
+              }}
+            />
+            <span>
+              <strong>{a.libelle}</strong>
+              <span style={{ color: "#888", marginLeft: 8 }}>
+                {a.valeur === "aucune"
+                  ? "— l'offre se termine sans planche"
+                  : a.valeur === "planche"
+                    ? "— dernière page de l'offre et de son PDF"
+                    : "— la planche, avec quelques objets naturels assortis aux couleurs"}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, marginBottom: 10, fontSize: 13 }}>
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -174,6 +187,7 @@ export default function MoodboardReglages({ lines, reglages, onChange, lectureSe
                 couverture={resultat.couverture}
                 mode={reglages.mode}
                 sens={reglages.sens}
+                decor={reglages.affichage === "planche-decor"}
                 interactif
                 compact
                 mention={false}

@@ -14,6 +14,7 @@ export type MatiereMoodboard = {
   url_vignette: string;  // CDN Shopify de préférence (stable pour le PDF)
   url_maitre: string | null;
   cote?: number | null;  // taille en px de l'image maître (SQL 032) ; absente = inconnue
+  teinte_filtre?: string[] | null; // teintes, principale en premier (SQL 033) — décor d'inspiration
   lignes: string[];      // id des lignes de l'offre qui portent cette finition
   poids: number;         // montant CHF des lignes concernées → taille du bloc
 };
@@ -41,15 +42,27 @@ export function texteCouverture(c: { articles: number; representes: number }): s
 }
 
 // ─── Réglages stockés dans l'offre : data.moodboard ─────────────────────────
-// actif   : la planche est ajoutée en fin d'offre (décochée par défaut)
-// mode    : "poids"   → mosaïque, taille des blocs = valeur CHF des articles
-//           "degrade" → bandes horizontales triées par clarté
-// sens    : pour le dégradé, du clair au foncé ou l'inverse
-// palette : réservé aux COMMANDES (figée à la conversion / à la révision)
+// affichage : "aucune"        → pas de planche (défaut)
+//             "planche"       → planche seule en dernière page
+//             "planche-decor" → planche + décor d'inspiration (13.10.2026)
+// actif     : DÉRIVÉ de affichage (actif = affichage !== "aucune"). Toujours
+//             écrit à côté de affichage, pour que les documents et le code
+//             antérieurs au 13.10.2026 restent lisibles. Un document sans
+//             « affichage » se lit par actif : true → "planche", sinon "aucune".
+// mode      : "poids"   → mosaïque, taille des blocs = valeur CHF des articles
+//             "degrade" → bandes horizontales triées par clarté
+// sens      : pour le dégradé, du clair au foncé ou l'inverse
+// palette   : lue par la route /matieres pour une COMMANDE, jamais écrite
+//             (décision du 13.10.2026 : la planche reste calculée en direct)
+//
+// Réglage après coup depuis le dashboard : RPC regler_planche (SQL 034), qui
+// fusionne ces clés dans data.moodboard et trace une correction.
+export type AffichageMoodboard = "aucune" | "planche" | "planche-decor";
 export type ModeMoodboard = "poids" | "degrade";
 export type SensMoodboard = "clair-fonce" | "fonce-clair";
 
 export type ReglagesMoodboard = {
+  affichage: AffichageMoodboard;
   actif: boolean;
   mode: ModeMoodboard;
   sens: SensMoodboard;
@@ -57,19 +70,40 @@ export type ReglagesMoodboard = {
 };
 
 export const REGLAGES_MOODBOARD_DEFAUT: ReglagesMoodboard = {
+  affichage: "aucune",
   actif: false,
   mode: "poids",
   sens: "clair-fonce",
 };
 
+export const AFFICHAGES_MOODBOARD: { valeur: AffichageMoodboard; libelle: string }[] = [
+  { valeur: "aucune", libelle: "Sans planche" },
+  { valeur: "planche", libelle: "Planche seule" },
+  { valeur: "planche-decor", libelle: "Planche + décor d'inspiration" },
+];
+
+export function estAffichageMoodboard(v: unknown): v is AffichageMoodboard {
+  return v === "aucune" || v === "planche" || v === "planche-decor";
+}
+
 export function lireReglagesMoodboard(v: unknown): ReglagesMoodboard {
   const r = (v && typeof v === "object" ? v : {}) as Partial<ReglagesMoodboard>;
+  const affichage: AffichageMoodboard = estAffichageMoodboard(r.affichage)
+    ? r.affichage
+    : r.actif === true ? "planche" : "aucune";
   return {
-    actif: r.actif === true,
+    affichage,
+    actif: affichage !== "aucune",
     mode: r.mode === "degrade" ? "degrade" : "poids",
     sens: r.sens === "fonce-clair" ? "fonce-clair" : "clair-fonce",
     ...(r.palette ? { palette: r.palette } : {}),
   };
+}
+
+// Réglages à ÉCRIRE (formulaire du brouillon) : actif toujours recalculé
+// depuis affichage, palette jamais recopiée.
+export function reglagesAEcrire(r: ReglagesMoodboard): Omit<ReglagesMoodboard, "palette"> {
+  return { affichage: r.affichage, actif: r.affichage !== "aucune", mode: r.mode, sens: r.sens };
 }
 
 // ─── Familles : ordre et libellés de la colonne de gauche ───────────────────
@@ -225,6 +259,4 @@ export const COTE_MIN_ETIREE = 500;
 // La VIGNETTE est le recadrage du centre de l'image maître, au tiers, à
 // l'échelle réelle (comme les pastilles du webshop) — et non l'image entière
 // réduite. C'est donc elle qui donne le « vrai » rendu de la matière.
-// Gros plan ×2 : la vignette doit faire au moins 300 px (maître ≥ 900 px),
-// sinon l'agrandissement serait flou.
-export const COTE_MIN_GROS_PLAN = 900;
+// (COTE_MIN_GROS_PLAN = 900, jamais utilisée, supprimée le 13.10.2026 — P3-90.)
