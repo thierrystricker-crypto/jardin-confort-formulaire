@@ -168,3 +168,18 @@ Branche `feat/planche-reglages-decor`, **PR #64 mergée le 13.10.2026, `main` = 
 - 🔴 **Défaut latent de la PR #63 dans le diff de révision** : le formulaire envoie toujours `data.moodboard` ; sur une commande sans planche enregistrée, le diff y voyait un changement à chaque révision, donc une version fantôme. Aucune révision depuis le merge (vérifié) : aucun dégât. Corrigé : comparaison de la forme normalisée (`normPlanche`).
 - **Conversion de fins de ligne** : trois fichiers d'origine finissent sans retour à la ligne ; une conversion `sed 's/$/\r/'` y ajoutait un CR isolé (le piège du doc 04). Détecté avant écriture ; conversion par remplacement `\n` → `\r\n` uniquement. `app/print/offre/[slug]/page.tsx` garde son `}\r` final d'origine.
 - **Incident de test** : le smoke test de la partie A a été fait par erreur sur une vraie commande, CMD-80669, au lieu de CMD-80666. Effet client nul (réglage revenu à « sans planche », PDF identique) ; deux lignes de correction « test » restent dans son historique interne.
+
+### 8.6 Correctifs du soir (PR #65 et #66, 13.10.2026)
+
+Retour de Thierry sur CMD-80986 (une seule finition, peinture Fermob Vert cèdre). **Ce n'était pas un problème de base** : la photo fait 815 px, le hex est celui de la charte Fermob.
+
+- **PR #65 — `fix/planche-hauteur-pastille`** :
+  - **Hauteur de la planche selon le nombre de finitions** : 1 → 30 % de la hauteur, 2 → 45 %, 3 → 60 %, 4 → 80 %, 5 et plus → pleine page (`PART_HAUTEUR_PAR_NOMBRE`). Une seule couleur remplissait toute la page : un aplat vert foncé de 11 × 21 cm, une cartouche d'encre vidée si le client imprime sans regarder.
+  - **Pastille = matière entière (×1) au repos, ×2 au survol.** Remplace la « fenêtre à l'échelle du carré » de D60 : avec un carré de 107 mm (une seule finition), la pastille de 10 mm n'en montrait qu'un dixième, un zoom ×10 qui passait pour une erreur. La pastille grossit toujours au survol (×2,4) ; le contenu passe au détail ×2 sauf si l'image est trop petite.
+  - **Pas de gros plan ×2 sur les peintures** (`FAMILLES_SANS_GROS_PLAN = {peinture}`) : il grossissait le grain et les défauts de la photo. Le bloc montre la matière entière répétée ; le zoom au survol de la pastille est gardé (demande de Thierry). Plastique et verre : candidats, non activés.
+  - **Décor : 3e objet ton sur ton** quand la planche n'a qu'une couleur (sinon 2 objets seulement).
+  - **Disque : 15 % d'éclaircissement sur la clarté seule, saturation gardée.** À 35 % avec désaturation, le vert cèdre #2A5644 donnait #718e80, un vert-de-gris qui ne ressemblait plus à l'article ; maintenant #426f5c.
+- **PR #66 — `feat/planche-defaut-decor`** :
+  - **Nouveau brouillon par défaut : planche + décor, dégradé foncé → clair** (choix de Thierry ; renverse D58 « décochée par défaut »). Les offres et commandes existantes ne changent pas : sans `data.moodboard`, un document se lit « sans planche ». Un brouillon existant sans réglage prend le défaut à sa prochaine ouverture.
+  - 🔴 **Garde-fou : la révision lit TOUJOURS la planche de la commande, même absente.** Sans lui, le nouveau défaut se serait appliqué à une ancienne commande ouverte en révision, et la révision aurait ajouté la planche en douce, avec une version de plus.
+- **Écart de couleur dans la base, à transmettre au chat « Import articles Shopify »** : Vert cèdre Fermob 02, `hex` (fabricant, charte 2026-2027) #2A5644 contre `hex_mesure` #01311D, `hex_ecart` 16,4 ; moyenne réelle de la photo #083420. La palette montre la photo, le disque et le tri du dégradé utilisent `hex` : le disque paraît plus clair que la peinture. Rien changé dans l'app (lecture seule de la base matières). Lister les autres finitions à gros écart.
