@@ -69,11 +69,15 @@ export type ReglagesMoodboard = {
   palette?: ResultatMoodboard;
 };
 
+// Réglages d'un NOUVEAU brouillon (choix de Thierry, 13.10.2026) : planche +
+// décor, en dégradé du foncé au clair. Ne touche pas aux documents existants :
+// un document sans data.moodboard se lit toujours « sans planche »
+// (lireReglagesMoodboard), et son rendu ne change pas.
 export const REGLAGES_MOODBOARD_DEFAUT: ReglagesMoodboard = {
-  affichage: "aucune",
-  actif: false,
-  mode: "poids",
-  sens: "clair-fonce",
+  affichage: "planche-decor",
+  actif: true,
+  mode: "degrade",
+  sens: "fonce-clair",
 };
 
 export const AFFICHAGES_MOODBOARD: { valeur: AffichageMoodboard; libelle: string }[] = [
