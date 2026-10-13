@@ -111,7 +111,7 @@ export default function MoodboardPlanche({
 
   // Phrase sur les gros plans : seulement en rendu mixte et si au moins une
   // matière en a un ; « lorsque l'image le permet » si certaines n'en ont pas.
-  const nbGrosPlans = rendu === "mixte" ? matieres.filter((m) => !estPetite(m)).length : 0;
+  const nbGrosPlans = rendu === "mixte" ? matieres.filter((m) => !sansGrosPlan(m)).length : 0;
   const texteZoom =
     nbGrosPlans === 0
       ? null
@@ -192,7 +192,7 @@ export default function MoodboardPlanche({
                 }}
               >
                 {rendu === "etire" && !repetee ? <img src={urlCdn(source, 1200) || source} alt="" /> : null}
-                {rendu === "mixte" ? <CarteEchantillon source={source} w={b.w} h={b.h} hMm={hauteurMm} petite={petite} /> : null}
+                {rendu === "mixte" ? <CarteEchantillon source={source} w={b.w} h={b.h} hMm={hauteurMm} petite={sansGrosPlan(m)} /> : null}
               </div>
             );
           })}
@@ -210,6 +210,17 @@ export default function MoodboardPlanche({
       )}
     </div>
   );
+}
+
+// Familles sans gros plan ×2 (retour de Thierry, 13.10.2026) : sur une
+// PEINTURE, le gros plan n'apporte rien — il grossit le grain et les défauts de
+// la photo au lieu de montrer la couleur. Le bloc montre alors la matière
+// entière répétée à la même échelle (comme une image trop petite). La pastille,
+// elle, garde son zoom au survol.
+const FAMILLES_SANS_GROS_PLAN = new Set(["peinture"]);
+
+function sansGrosPlan(m: MatiereMoodboard): boolean {
+  return estPetite(m) || FAMILLES_SANS_GROS_PLAN.has((m.famille || "").toLowerCase());
 }
 
 // Image maître trop petite pour être agrandie sans flou (taille connue via SQL 032).
@@ -340,6 +351,8 @@ function Pastille({ m, survolee }: { m: MatiereMoodboard; survolee: boolean }) {
   const source = m.url_maitre || m.url_vignette;
   const entiere = urlCdn(source, 600) || source;
   const detail = urlCdn(source, 1200) || source;
+  // Le zoom au survol est gardé pour les peintures (demande de Thierry) : seule
+  // une image trop petite, qui serait floue, n'en a pas.
   const zoom = !estPetite(m);
   const tailleRepos = "cover";
   const tailleZoom = `${ZOOM_DETAIL * 100}%`;
