@@ -1529,7 +1529,11 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
           if (data.leadTime) setLeadTime(data.leadTime);
           if (data.validiteDuree) setValiditeDuree(data.validiteDuree);
           if (data.accesLivraison !== undefined) setAccesLivraison(data.accesLivraison || "");
-          if (data.moodboard !== undefined) setMoodboard(lireReglagesMoodboard(data.moodboard));
+          // Révision : TOUJOURS lire la planche de la commande, même absente.
+          // Sinon le réglage par défaut d'un nouveau brouillon (planche + décor)
+          // s'appliquerait à une commande qui n'en a pas, et la révision
+          // l'ajouterait en douce — avec une version de plus à la clé.
+          setMoodboard(lireReglagesMoodboard(data.moodboard));
           if (data.manualRounding !== undefined) setRoundingStr(data.manualRounding || "");
 
           if (o.updated_at) setLastSavedAt(new Date(o.updated_at));
