@@ -44,7 +44,15 @@ const LARGEUR = 180;
 const HAUTEUR = 215;
 const PART_GAUCHE = 0.36;
 const PART_DROITE = 0.6;
-const RATIO_PALETTE = (LARGEUR * PART_DROITE) / HAUTEUR;
+// Hauteur de la planche selon le nombre de finitions (13.10.2026, retour de
+// Thierry sur CMD-80986) : une seule couleur ne remplit plus toute la page — un
+// aplat de peinture vert foncé de 11 × 21 cm vide une cartouche d'encre si le
+// client imprime sans regarder. 1 finition → 30 % de la hauteur (le quart haut
+// de la page, à peu près), 2 → 45 %, 3 → 60 %, 4 → 80 %, 5 et plus → pleine page.
+const PART_HAUTEUR_PAR_NOMBRE = [1, 0.3, 0.45, 0.6, 0.8];
+function hauteurPlancheMm(n: number): number {
+  return HAUTEUR * (n < PART_HAUTEUR_PAR_NOMBRE.length ? PART_HAUTEUR_PAR_NOMBRE[n] : 1);
+}
 // Pastille très claire (L* au-dessus) : fin cercle gris, comme sur le webshop,
 // pour qu'un blanc ne se perde pas sur le fond blanc.
 const CLARTE_CERCLE_GRIS = 85;
@@ -70,9 +78,9 @@ type Props = {
 
 // Taille d'affichage d'un échantillon en rendu naturel (sur l'A4 imprimé).
 const TAILLE_ECHANTILLON = "45mm";
-// Panneau de palette en mm (sert au rendu mixte pour tracer des carrés vrais).
+// Largeur du panneau de palette en mm (sert au rendu mixte pour tracer des
+// carrés vrais) ; sa hauteur dépend du nombre de finitions (hauteurPlancheMm).
 const PALETTE_L_MM = LARGEUR * PART_DROITE;
-const PALETTE_H_MM = HAUTEUR;
 // Gros plan du rendu mixte : agrandissement de l'image dans la zone de détail.
 const ZOOM_DETAIL = 2;
 
@@ -84,15 +92,13 @@ export default function MoodboardPlanche({
 
   const familles = useMemo(() => grouperParFamille(matieres), [matieres]);
   const blocs = useMemo(
-    () => (mode === "degrade" ? disposerEnDegrade(matieres, sens) : disposerParPoids(matieres, RATIO_PALETTE)),
+    () => (mode === "degrade"
+      ? disposerEnDegrade(matieres, sens)
+      : disposerParPoids(matieres, PALETTE_L_MM / hauteurPlancheMm(matieres.length))),
     [matieres, mode, sens]
   );
+  const hauteurMm = hauteurPlancheMm(matieres.length);
 
-  // Taille réelle (mm) du carré « matière entière » de chaque bloc → pastilles.
-  const carres = useMemo(
-    () => new Map(blocs.map((b) => [b.matiere.cle, geometrieCarte(b.w, b.h).coteMm])),
-    [blocs]
-  );
 
   const objetsDecor = useMemo(() => (decor ? choisirDecor(matieres) : []), [decor, matieres]);
   const fondDecor = useMemo(() => (decor ? couleurFondDecor(matieres) : null), [decor, matieres]);
@@ -120,7 +126,10 @@ export default function MoodboardPlanche({
     <div className={`mbp${dense ? " mbp-dense" : ""}${compact ? " mbp-compact" : ""}${actif ? " mbp-hl" : ""}`}>
       <style>{CSS}</style>
 
-      <div className="mbp-corps" style={{ aspectRatio: `${LARGEUR} / ${HAUTEUR}` }}>
+      <div
+        className="mbp-corps"
+        style={{ aspectRatio: `${LARGEUR} / ${hauteurMm}`, ["--mbp-ratio-droite" as string]: `${PALETTE_L_MM} / ${hauteurMm}` }}
+      >
         <div className="mbp-gauche" style={{ width: `${PART_GAUCHE * 100}%` }}>
           <div className="mbp-familles">
           {familles.map((g) => (
@@ -134,7 +143,7 @@ export default function MoodboardPlanche({
                     onMouseEnter={entrer(m.cle)}
                     onMouseLeave={sortir}
                   >
-                    <Pastille m={m} survolee={actif === m.cle} carreMm={rendu === "mixte" ? carres.get(m.cle) ?? null : null} />
+                    <Pastille m={m} survolee={actif === m.cle} />
                     <div className="mbp-texte">
                       <span className="mbp-nom">{m.nom}</span>
                       {m.code ? <span className="mbp-code"> {m.code}</span> : null}
@@ -183,7 +192,7 @@ export default function MoodboardPlanche({
                 }}
               >
                 {rendu === "etire" && !repetee ? <img src={urlCdn(source, 1200) || source} alt="" /> : null}
-                {rendu === "mixte" ? <CarteEchantillon source={source} w={b.w} h={b.h} petite={petite} /> : null}
+                {rendu === "mixte" ? <CarteEchantillon source={source} w={b.w} h={b.h} hMm={hauteurMm} petite={petite} /> : null}
               </div>
             );
           })}
@@ -210,9 +219,9 @@ function estPetite(m: MatiereMoodboard): boolean {
 
 // Géométrie de la carte d'échantillon d'un bloc (rendu mixte), en mm réels.
 // Partagée par le bloc ET par sa pastille, pour qu'ils aient la même échelle.
-function geometrieCarte(w: number, h: number) {
+function geometrieCarte(w: number, h: number, hauteurPaletteMm: number) {
   const lMm = (w / 100) * PALETTE_L_MM;
-  const hMm = (h / 100) * PALETTE_H_MM;
+  const hMm = (h / 100) * hauteurPaletteMm;
   const horizontal = lMm >= hMm;
   // Côté du carré : la petite dimension, sans dépasser la moitié de la grande.
   const coteMm = horizontal ? Math.min(hMm, lMm / 2) : Math.min(lMm, hMm / 2);
@@ -315,25 +324,22 @@ function DecorInspiration({ objets, fond }: { objets: ReturnType<typeof choisirD
 // Grossissement de la pastille au survol (doit rester égal au scale() du CSS).
 const ECHELLE_SURVOL = 2.4;
 
-// Pastille = reflet exact de son bloc de palette (rendu mixte) :
-//   • au repos  : la même image que le carré « matière entière », en rond ;
-//   • au survol : le gros plan ×ZOOM_DETAIL, comme la 2e partie du bloc.
+// Pastille (règle de Thierry, 13.10.2026 — remplace la « fenêtre à l'échelle
+// du carré » de D60) :
+//   • au repos  : la matière ENTIÈRE, ×1, comme le carré de gauche du bloc ;
+//   • au survol : le gros plan ×ZOOM_DETAIL, comme la partie droite du bloc.
+// L'ancienne fenêtre montrait le centre d'une image dimensionnée au carré :
+// avec un grand carré (une seule finition : 107 mm), la pastille de 10 mm
+// n'en montrait qu'un dixième — un zoom ×10 qui passait pour une erreur.
 // Image trop petite : pas de gros plan dans la palette → pas de zoom ici non plus.
 // Les deux images sont chargées d'avance (2 calques) : bascule sans attente.
-// La pastille n'est PAS le carré réduit (une toile fine y deviendrait une
-// bouillie grise) : c'est une FENÊTRE sur le carré, à la même échelle — l'image
-// est dimensionnée à la taille réelle du carré (carreMm) et centrée, la
-// pastille n'en montre que le centre. Idem pour le gros plan au survol, en
-// compensant le grossissement de la pastille.
-function Pastille({ m, survolee, carreMm }: { m: MatiereMoodboard; survolee: boolean; carreMm: number | null }) {
+function Pastille({ m, survolee }: { m: MatiereMoodboard; survolee: boolean }) {
   const source = m.url_maitre || m.url_vignette;
   const entiere = urlCdn(source, 600) || source;
   const detail = urlCdn(source, 1200) || source;
   const zoom = !estPetite(m);
-  const tailleRepos = carreMm ? `${carreMm}mm ${carreMm}mm` : "cover";
-  const tailleZoom = carreMm
-    ? `${(carreMm * ZOOM_DETAIL) / ECHELLE_SURVOL}mm ${(carreMm * ZOOM_DETAIL) / ECHELLE_SURVOL}mm`
-    : `${ZOOM_DETAIL * 100}%`;
+  const tailleRepos = "cover";
+  const tailleZoom = `${ZOOM_DETAIL * 100}%`;
   return (
     <div
       role="img"
@@ -356,8 +362,8 @@ function Pastille({ m, survolee, carreMm }: { m: MatiereMoodboard; survolee: boo
 // w, h en % du panneau de palette ; on repasse en mm pour tracer un vrai carré.
 // Image trop petite (petite = true) : pas de gros plan flou, la matière
 // entière est répétée à la même échelle dans le reste du bloc.
-function CarteEchantillon({ source, w, h, petite }: { source: string; w: number; h: number; petite: boolean }) {
-  const { horizontal, coteMm, partCarre } = geometrieCarte(w, h);
+function CarteEchantillon({ source, w, h, hMm, petite }: { source: string; w: number; h: number; hMm: number; petite: boolean }) {
+  const { horizontal, coteMm, partCarre } = geometrieCarte(w, h, hMm);
   const entiere = urlCdn(source, 600) || source;
   const detail = urlCdn(source, 1200) || source;
   return (
@@ -438,7 +444,7 @@ const CSS = `
   .mbp:not(.mbp-compact) .mbp-decor-zone { display: none; }
   .mbp:not(.mbp-compact) .mbp-corps { flex-direction: column-reverse; aspect-ratio: auto !important; }
   .mbp:not(.mbp-compact) .mbp-gauche, .mbp:not(.mbp-compact) .mbp-droite { width: 100% !important; }
-  .mbp:not(.mbp-compact) .mbp-droite { aspect-ratio: ${(LARGEUR * PART_DROITE).toFixed(0)} / ${HAUTEUR}; max-height: 70vh; margin-bottom: 14px; }
+  .mbp:not(.mbp-compact) .mbp-droite { aspect-ratio: var(--mbp-ratio-droite, ${(LARGEUR * PART_DROITE).toFixed(0)} / ${HAUTEUR}); max-height: 70vh; margin-bottom: 14px; }
 }
 @media print { .mbp-item, .mbp-bloc { opacity: 1 !important; } .mbp-rond, .mbp-texte { transform: none !important; } .mbp-bloc.on::after { display: none; } .mbp-rond-zoom { opacity: 0 !important; } }
 `;
