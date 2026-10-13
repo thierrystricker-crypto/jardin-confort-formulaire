@@ -729,6 +729,7 @@ export default function PrintDraftSlug({ params }: { params: Promise<{ slug: str
               couverture={moodboard.resultat.couverture}
               mode={moodboard.reglages.mode}
               sens={moodboard.reglages.sens}
+              decor={moodboard.reglages.affichage === "planche-decor"}
               interactif
             />
           </div>

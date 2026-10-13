@@ -12,7 +12,7 @@
 
 import React, { useEffect, useState } from "react";
 import MoodboardPlanche from "@/components/MoodboardPlanche";
-import type { MatiereMoodboard, ModeMoodboard, SensMoodboard } from "@/lib/moodboard";
+import { lireReglagesMoodboard, type MatiereMoodboard, type ModeMoodboard, type SensMoodboard } from "@/lib/moodboard";
 
 const THEME = "#2b8ad1";
 
@@ -20,7 +20,7 @@ type Reponse = {
   matieres: MatiereMoodboard[];
   couverture: { articles: number; representes: number };
   numero?: string | null;
-  reglages?: { actif: boolean; mode: ModeMoodboard; sens: SensMoodboard };
+  reglages?: { affichage?: string; actif: boolean; mode: ModeMoodboard; sens: SensMoodboard };
   error?: string;
 };
 
@@ -73,6 +73,7 @@ export default function PlanchePublique({ params }: { params: Promise<{ slug: st
             couverture={rep.couverture}
             mode={rep.reglages?.mode ?? "poids"}
             sens={rep.reglages?.sens ?? "clair-fonce"}
+            decor={lireReglagesMoodboard(rep.reglages).affichage === "planche-decor"}
             interactif
           />
         )}

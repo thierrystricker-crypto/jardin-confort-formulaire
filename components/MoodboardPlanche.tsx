@@ -16,6 +16,12 @@
 //
 // Rond = CSS (border-radius + object-fit) : les vignettes sont carrées, on ne
 // les recadre ni ne les compresse.
+//
+// Décor d'inspiration (13.10.2026, prop `decor`) : 2 ou 3 objets naturels en
+// bas de la colonne de gauche, sous les pastilles, choisis par
+// lib/moodboard-decor.ts. La zone prend la place LIBRE de la colonne ; une
+// requête de conteneur la masque quand elle est trop basse (beaucoup de
+// finitions) — sans mesure d'écran, donc identique dans le PDF et à l'écran.
 
 import React, { useMemo, useState } from "react";
 import {
@@ -30,6 +36,7 @@ import {
   clarte,
   COTE_MIN_ETIREE,
 } from "@/lib/moodboard";
+import { choisirDecor, urlDecor } from "@/lib/moodboard-decor";
 
 // Format du corps de planche : 180 × 215 (mm sur A4, marges déduites).
 // Colonne gauche 36 %, espace 4 %, palette 60 % → ratio du panneau de droite.
@@ -58,6 +65,7 @@ type Props = {
   //             répétée pour remplir le bloc — même grain pour toutes les matières.
   // "etire"   : image agrandie pour couvrir tout le bloc (grain zoomé).
   rendu?: "mixte" | "naturel" | "etire";
+  decor?: boolean; // décor d'inspiration en bas à gauche (affichage "planche-decor")
 };
 
 // Taille d'affichage d'un échantillon en rendu naturel (sur l'A4 imprimé).
@@ -70,7 +78,7 @@ const ZOOM_DETAIL = 2;
 
 export default function MoodboardPlanche({
   matieres, couverture, mode, sens,
-  interactif = false, compact = false, mention = true, rendu = "mixte",
+  interactif = false, compact = false, mention = true, rendu = "mixte", decor = false,
 }: Props) {
   const [survol, setSurvol] = useState<string | null>(null);
 
@@ -85,6 +93,9 @@ export default function MoodboardPlanche({
     () => new Map(blocs.map((b) => [b.matiere.cle, geometrieCarte(b.w, b.h).coteMm])),
     [blocs]
   );
+
+  const objetsDecor = useMemo(() => (decor ? choisirDecor(matieres) : []), [decor, matieres]);
+  const fondDecor = useMemo(() => (decor ? couleurFondDecor(matieres) : null), [decor, matieres]);
 
   if (matieres.length === 0) return null;
 
@@ -111,6 +122,7 @@ export default function MoodboardPlanche({
 
       <div className="mbp-corps" style={{ aspectRatio: `${LARGEUR} / ${HAUTEUR}` }}>
         <div className="mbp-gauche" style={{ width: `${PART_GAUCHE * 100}%` }}>
+          <div className="mbp-familles">
           {familles.map((g) => (
             <div key={g.famille} className="mbp-famille">
               <div className="mbp-famille-titre">{g.libelle}</div>
@@ -134,6 +146,8 @@ export default function MoodboardPlanche({
               </div>
             </div>
           ))}
+          </div>
+          {objetsDecor.length > 0 ? <DecorInspiration objets={objetsDecor} fond={fondDecor} /> : null}
         </div>
 
         <div className="mbp-droite" style={{ width: `${PART_DROITE * 100}%` }}>
@@ -204,6 +218,98 @@ function geometrieCarte(w: number, h: number) {
   const coteMm = horizontal ? Math.min(hMm, lMm / 2) : Math.min(lMm, hMm / 2);
   const partCarre = horizontal ? (coteMm / lMm) * 100 : (coteMm / hMm) * 100;
   return { horizontal, coteMm, partCarre };
+}
+
+// Décor d'inspiration : grappe de 2 ou 3 objets en léger chevauchement, posée
+// en bas à gauche de la zone libre. Positions en % d'une boîte au ratio fixe,
+// elle-même dimensionnée sur la zone (unités de conteneur) : rendu identique
+// quelle que soit l'échelle.
+const POSES_DECOR = [
+  { left: 0, top: 8, width: 60, rot: -6 },   // 1er objet (minéral), au fond
+  { left: 47, top: 0, width: 50, rot: 8 },   // 3e objet, derrière à droite
+  { left: 24, top: 40, width: 52, rot: -2 }, // 2e objet (végétal), devant
+];
+
+// 220 px : ~210 dpi à la taille imprimée, et ~450 Ko de plus par planche dans
+// le PDF, ombre comprise (mesuré le 13.10.2026 : 630 Ko à 300 px — l'ombre
+// portée fait intégrer l'image en matrice).
+// Disque de fond sous le décor : la couleur MOYENNE de la planche, pour que le
+// décor s'accorde à l'ensemble. Moyenne calculée en CIELAB (l'espace où une
+// moyenne « se voit » juste ; en RVB, un bleu et un orange donnent un gris
+// sale), pondérée comme la palette : racine carrée du poids CHF. Puis éclaircie
+// vers le papier, pour rester un fond et ne pas concurrencer les objets.
+// Aucune finition avec un hex valide → pas de disque.
+const ECLAIRCIR_FOND = 0.35; // part de blanc mélangée (0 = moyenne brute)
+
+function versLab(hex: string): [number, number, number] | null {
+  if (!/^#?[0-9a-f]{6}$/i.test(hex.trim())) return null;
+  const n = parseInt(hex.trim().replace("#", ""), 16);
+  const [r, g, b] = [n >> 16, (n >> 8) & 255, n & 255].map((v) => {
+    const c = v / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  const x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;
+  const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
+  const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+}
+
+function depuisLab([L, A, B]: [number, number, number]): string {
+  const fy = (L + 16) / 116, fx = fy + A / 500, fz = fy - B / 200;
+  const inv = (t: number) => (t ** 3 > 0.008856 ? t ** 3 : (t - 16 / 116) / 7.787);
+  const x = inv(fx) * 0.95047, y = inv(fy), z = inv(fz) * 1.08883;
+  const lin = [
+    3.2406 * x - 1.5372 * y - 0.4986 * z,
+    -0.9689 * x + 1.8758 * y + 0.0415 * z,
+    0.0557 * x - 0.204 * y + 1.057 * z,
+  ];
+  return "#" + lin.map((c) => {
+    const v = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+    return Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, "0");
+  }).join("");
+}
+
+function couleurFondDecor(matieres: MatiereMoodboard[]): string | null {
+  let somme = 0;
+  const acc: [number, number, number] = [0, 0, 0];
+  for (const m of matieres) {
+    const lab = m.hex ? versLab(m.hex) : null;
+    if (!lab) continue;
+    const w = Math.sqrt(Math.max(m.poids, 0)) || 1;
+    acc[0] += lab[0] * w; acc[1] += lab[1] * w; acc[2] += lab[2] * w;
+    somme += w;
+  }
+  if (somme === 0) return null;
+  const moyenne: [number, number, number] = [acc[0] / somme, acc[1] / somme, acc[2] / somme];
+  // Éclaircir vers le blanc (L* 100, a* b* 0)
+  const k = ECLAIRCIR_FOND;
+  return depuisLab([moyenne[0] + (100 - moyenne[0]) * k, moyenne[1] * (1 - k), moyenne[2] * (1 - k)]);
+}
+
+function DecorInspiration({ objets, fond }: { objets: ReturnType<typeof choisirDecor>; fond: string | null }) {
+  // Ordre de dessin : le 1er au fond, le 3e ensuite, le 2e devant.
+  const ordre = objets.length === 3 ? [0, 2, 1] : [0, 1];
+  return (
+    <div className="mbp-decor-zone" aria-hidden="true">
+      <div className="mbp-decor">
+        {fond ? <span className="mbp-decor-fond" style={{ backgroundColor: fond }} /> : null}
+        {ordre.map((i, rang) => {
+          const o = objets[i];
+          const pose = objets.length === 3 ? POSES_DECOR[rang] : rang === 0 ? POSES_DECOR[0] : POSES_DECOR[2];
+          return (
+            <img
+              key={o.fichier}
+              src={urlDecor(o, 220)}
+              alt=""
+              style={{ left: `${pose.left}%`, top: `${pose.top}%`, width: `${pose.width}%`, transform: `rotate(${pose.rot}deg)` }}
+            />
+          );
+        })}
+        <span className="mbp-decor-mention">Inspiration</span>
+      </div>
+    </div>
+  );
 }
 
 // Grossissement de la pastille au survol (doit rester égal au scale() du CSS).
@@ -280,7 +386,14 @@ function CarteEchantillon({ source, w, h, petite }: { source: string; w: number;
 const CSS = `
 .mbp { width: 100%; color: #333; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 .mbp-corps { display: flex; justify-content: space-between; width: 100%; }
-.mbp-gauche { overflow: hidden; }
+.mbp-gauche { overflow: hidden; display: flex; flex-direction: column; }
+.mbp-familles { flex: 0 0 auto; }
+.mbp-decor-zone { flex: 1 1 0; min-height: 0; position: relative; container-type: size; }
+.mbp-decor { position: absolute; left: 0; bottom: 0; width: min(100%, 125cqh); aspect-ratio: 5 / 4; }
+.mbp-decor img { position: absolute; display: block; height: auto; filter: drop-shadow(0 1.2mm 1.4mm rgba(0,0,0,.28)); }
+.mbp-decor-fond { position: absolute; left: 10%; top: 1%; width: 70%; aspect-ratio: 1; border-radius: 50%; }
+.mbp-decor-mention { position: absolute; left: 2%; bottom: -1%; font-size: 8px; letter-spacing: .18em; text-transform: uppercase; color: #a3a3a3; }
+@container (aspect-ratio > 2) { .mbp-decor { display: none; } }
 .mbp-droite { position: relative; overflow: hidden; }
 .mbp-famille { margin-bottom: 9px; break-inside: avoid; }
 .mbp-famille-titre { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: #999; border-bottom: 1px solid #e6e6e6; padding-bottom: 2px; margin-bottom: 6px; }
@@ -322,6 +435,7 @@ const CSS = `
 .mbp-compact .mbp-famille-titre { font-size: 9px; }
 .mbp-compact .mbp-item.on .mbp-texte { transform: translateX(38px); }
 @media screen and (max-width: 600px) {
+  .mbp:not(.mbp-compact) .mbp-decor-zone { display: none; }
   .mbp:not(.mbp-compact) .mbp-corps { flex-direction: column-reverse; aspect-ratio: auto !important; }
   .mbp:not(.mbp-compact) .mbp-gauche, .mbp:not(.mbp-compact) .mbp-droite { width: 100% !important; }
   .mbp:not(.mbp-compact) .mbp-droite { aspect-ratio: ${(LARGEUR * PART_DROITE).toFixed(0)} / ${HAUTEUR}; max-height: 70vh; margin-bottom: 14px; }

@@ -14,6 +14,7 @@ export type MatiereMoodboard = {
   url_vignette: string;  // CDN Shopify de préférence (stable pour le PDF)
   url_maitre: string | null;
   cote?: number | null;  // taille en px de l'image maître (SQL 032) ; absente = inconnue
+  teinte_filtre?: string[] | null; // teintes, principale en premier (SQL 033) — décor d'inspiration
   lignes: string[];      // id des lignes de l'offre qui portent cette finition
   poids: number;         // montant CHF des lignes concernées → taille du bloc
 };

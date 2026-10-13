@@ -168,9 +168,11 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
       // aperçu), sans rien écrire dans l'offre.
       try {
         const force = searchParams.get("moodboard");
-        if (force === "poids") reglagesMb = { ...reglagesMb, actif: true, mode: "poids" };
-        if (force === "degrade") reglagesMb = { ...reglagesMb, actif: true, mode: "degrade", sens: "clair-fonce" };
-        if (force === "degrade-inverse") reglagesMb = { ...reglagesMb, actif: true, mode: "degrade", sens: "fonce-clair" };
+        if (force === "poids") reglagesMb = { ...reglagesMb, affichage: "planche", actif: true, mode: "poids" };
+        if (force === "degrade") reglagesMb = { ...reglagesMb, affichage: "planche", actif: true, mode: "degrade", sens: "clair-fonce" };
+        if (force === "degrade-inverse") reglagesMb = { ...reglagesMb, affichage: "planche", actif: true, mode: "degrade", sens: "fonce-clair" };
+        // ?decor=1 ajoute le décor d'inspiration au test (sans rien écrire).
+        if (searchParams.get("decor") === "1" && reglagesMb.actif) reglagesMb = { ...reglagesMb, affichage: "planche-decor" };
         if (reglagesMb.actif) {
           const mRes = await fetch(`/api/offres/${slug}/matieres`);
           if (mRes.ok) {
@@ -907,6 +909,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
               couverture={moodboard.resultat.couverture}
               mode={moodboard.reglages.mode}
               sens={moodboard.reglages.sens}
+              decor={moodboard.reglages.affichage === "planche-decor"}
               interactif
             />
           </div>

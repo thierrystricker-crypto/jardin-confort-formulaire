@@ -269,6 +269,7 @@ export default function MoodboardCard({ slug, estCommande = false, offreSignee =
             couverture={rep.couverture}
             mode={mode}
             sens={sens}
+            decor={affichage === "planche-decor"}
             interactif
             compact
             mention={false}

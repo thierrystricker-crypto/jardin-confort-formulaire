@@ -187,6 +187,7 @@ export default function MoodboardReglages({ lines, reglages, onChange, lectureSe
                 couverture={resultat.couverture}
                 mode={reglages.mode}
                 sens={reglages.sens}
+                decor={reglages.affichage === "planche-decor"}
                 interactif
                 compact
                 mention={false}
