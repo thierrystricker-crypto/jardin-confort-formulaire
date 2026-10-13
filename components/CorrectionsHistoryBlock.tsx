@@ -60,15 +60,31 @@ const FIELD_LABELS: Record<string, string> = {
   remarks: "Remarques",
   notesInternes: "Notes internes",
   validiteJusquau: "Offre valable jusqu'au (prolongation)",
+  // Planche couleurs, réglage après coup (RPC regler_planche, 13.10.2026)
+  "moodboard.affichage": "Planche couleurs",
+  "moodboard.mode": "Rendu de la planche",
+  "moodboard.sens": "Sens du dégradé",
+};
+
+// Valeurs codées de la planche, affichées en clair.
+const VALUE_LABELS: Record<string, string> = {
+  aucune: "Sans planche",
+  planche: "Planche seule",
+  "planche-decor": "Planche + décor d'inspiration",
+  poids: "Par valeur",
+  degrade: "Dégradé",
+  "clair-fonce": "Clair → foncé",
+  "fonce-clair": "Foncé → clair",
 };
 
 function fieldLabel(key: string): string {
   return FIELD_LABELS[key] || key;
 }
 
-function formatValue(v: unknown): string {
+function formatValue(v: unknown, key?: string): string {
   if (typeof v === "boolean") return v ? "Oui" : "Non";
   if (v === null || v === undefined || v === "") return "(vide)";
+  if (key?.startsWith("moodboard.") && typeof v === "string" && VALUE_LABELS[v]) return VALUE_LABELS[v];
   return String(v);
 }
 
@@ -176,11 +192,11 @@ export default function CorrectionsHistoryBlock({ entityType, entitySlug }: Prop
                             {fieldLabel(key)} :
                           </span>{" "}
                           <span className="text-zinc-500 line-through">
-                            {formatValue(change.old)}
+                            {formatValue(change.old, key)}
                           </span>
                           <span className="mx-2 text-amber-400">→</span>
                           <span className="text-zinc-200">
-                            {formatValue(change.new)}
+                            {formatValue(change.new, key)}
                           </span>
                         </div>
                       ))}

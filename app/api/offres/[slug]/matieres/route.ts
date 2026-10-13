@@ -9,9 +9,11 @@
 // articles non reliés reste INTERNE (aperçu du formulaire, route protégée).
 //
 // Offre : palette calculée en direct (comme le stock).
-// Commande : si une palette a été figée dans data.moodboard.palette (étape
-// suivante du chantier : figée à la conversion, recalculée à chaque révision),
-// on la renvoie telle quelle ; sinon calcul en direct.
+// Commande : si une palette a été figée dans data.moodboard.palette, on la
+// renvoie telle quelle ; sinon calcul en direct. Décision du 13.10.2026 : rien
+// n'écrit de palette, la planche reste calculée en direct — la lecture est
+// gardée, mais RÉSERVÉE AUX COMMANDES : une palette recopiée par erreur dans
+// une offre (copie en brouillon) ne doit jamais figer une offre vivante.
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabase } from "@/lib/supabase";
@@ -24,12 +26,12 @@ const SANS_CACHE = { headers: { "Cache-Control": "no-store" } };
 // la carte du dashboard. Le numéro figure déjà dans le slug : rien de nouveau
 // n'est exposé.
 function publique(r: ResultatMoodboard, source: string, numero: string | null, reglagesBruts: unknown) {
-  const { actif, mode, sens } = lireReglagesMoodboard(reglagesBruts);
+  const { affichage, actif, mode, sens } = lireReglagesMoodboard(reglagesBruts);
   return {
     matieres: r.matieres,
     couverture: { articles: r.couverture.articles, representes: r.couverture.representes },
     numero,
-    reglages: { actif, mode, sens },
+    reglages: { affichage, actif, mode, sens },
     source,
   };
 }
@@ -43,7 +45,7 @@ export async function GET(
 
     const { data: offre, error } = await supabase
       .from("offres")
-      .select("data, numero_affiche")
+      .select("data, numero_affiche, type_document")
       .eq("slug", slug)
       .single();
 
@@ -57,7 +59,7 @@ export async function GET(
     };
 
     const figee = data.moodboard?.palette;
-    if (figee && Array.isArray(figee.matieres) && figee.couverture) {
+    if (offre.type_document === "Commande" && figee && Array.isArray(figee.matieres) && figee.couverture) {
       return NextResponse.json(publique(figee, "figee", offre.numero_affiche ?? null, data.moodboard), SANS_CACHE);
     }
 

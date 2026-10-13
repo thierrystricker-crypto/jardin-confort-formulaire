@@ -12,7 +12,7 @@ import ShopifyPickerEtendu from "@/components/ShopifyPickerEtendu";
 import { cleModeService, cleValeurService, type ModeService } from "@/lib/service-affichage";
 import { lireMention, ecrireMention, texteMention, AUCUNE_MENTION, type EtatMention } from "@/lib/mention-vente";
 import MoodboardReglages from "@/components/MoodboardReglages";
-import { lireReglagesMoodboard, REGLAGES_MOODBOARD_DEFAUT, type ReglagesMoodboard } from "@/lib/moodboard";
+import { lireReglagesMoodboard, reglagesAEcrire, REGLAGES_MOODBOARD_DEFAUT, type ReglagesMoodboard } from "@/lib/moodboard";
 
 type FormType = "Offre" | "Commande";
 type ClientType = "Privé (prix TTC)" | "Pro (prix HT)";
@@ -994,7 +994,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   }
 
   function makeSnapshot(): DraftSnapshot {
-    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, complement_nom: complementNom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livr_complement_nom: livrComplementNom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, validiteDuree, accesLivraison, moodboard: { actif: moodboard.actif, mode: moodboard.mode, sens: moodboard.sens }, manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
+    return { formType, clientType, paymentMode, deliveryMode, offerStatus, date, commercial, offerNumber, reference, societe, nom, prenom, complement_nom: complementNom, rue, rue2, numero, npa, ville, telephone1, telephone2, email, livrDiff, livrSociete, livrNom, livrPrenom, livr_complement_nom: livrComplementNom, livrTel, livrRue, livrRue2, livrNumero, livrNpa, livrVille, lines: cloneLines(lines), discount, discountPercent, remarks, notesInternes, leadTime, validiteDuree, accesLivraison, moodboard: reglagesAEcrire(moodboard), manualRounding: roundingStr, enabledServices: { ...enabledServices }, servicePrices: { ...servicePrices } };
   }
 
   // ────────────────────────────────────────────────────────────────────
