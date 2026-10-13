@@ -245,10 +245,11 @@ const POSES_DECOR = [
 // Disque de fond sous le décor : la couleur MOYENNE de la planche, pour que le
 // décor s'accorde à l'ensemble. Moyenne calculée en CIELAB (l'espace où une
 // moyenne « se voit » juste ; en RVB, un bleu et un orange donnent un gris
-// sale), pondérée comme la palette : racine carrée du poids CHF. Puis éclaircie
-// vers le papier, pour rester un fond et ne pas concurrencer les objets.
+// sale), pondérée comme la palette : racine carrée du poids CHF. Puis à peine
+// éclaircie (15 % sur la clarté, saturation gardée), pour rester dans le ton
+// des articles.
 // Aucune finition avec un hex valide → pas de disque.
-const ECLAIRCIR_FOND = 0.35; // part de blanc mélangée (0 = moyenne brute)
+const ECLAIRCIR_FOND = 0.15; // part de blanc mélangée sur la clarté (0 = moyenne brute)
 
 function versLab(hex: string): [number, number, number] | null {
   if (!/^#?[0-9a-f]{6}$/i.test(hex.trim())) return null;
@@ -291,9 +292,11 @@ function couleurFondDecor(matieres: MatiereMoodboard[]): string | null {
   }
   if (somme === 0) return null;
   const moyenne: [number, number, number] = [acc[0] / somme, acc[1] / somme, acc[2] / somme];
-  // Éclaircir vers le blanc (L* 100, a* b* 0)
+  // Éclaircir la CLARTÉ seulement, sans toucher à la saturation (a*, b*) :
+  // à 35 % avec désaturation, le vert cèdre #2A5644 de CMD-80986 donnait un
+  // vert-de-gris clair (#718e80) qui ne ressemblait plus à l'article.
   const k = ECLAIRCIR_FOND;
-  return depuisLab([moyenne[0] + (100 - moyenne[0]) * k, moyenne[1] * (1 - k), moyenne[2] * (1 - k)]);
+  return depuisLab([moyenne[0] + (100 - moyenne[0]) * k, moyenne[1], moyenne[2]]);
 }
 
 function DecorInspiration({ objets, fond }: { objets: ReturnType<typeof choisirDecor>; fond: string | null }) {
