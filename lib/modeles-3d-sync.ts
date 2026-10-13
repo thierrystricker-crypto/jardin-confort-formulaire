@@ -549,6 +549,20 @@ export async function importerDepuisUrl(url: string): Promise<StatsImport> {
       if (r.fichier_partage_n > 1) a.push(`fichier partagé par ${r.fichier_partage_n} produits`);
       if (r.tag_no3dfile) a.push("tag no3dfile obsolète");
       if (r.options_changed_at && r.model_attached_at && r.options_changed_at > r.model_attached_at) a.push("options modifiées depuis le rattachement du modèle");
+      // COUVERTURE PARTIELLE (13.10.2026). Quand les modèles sont posés par
+      // variante mais pas sur toutes, les variantes non couvertes retombent sur
+      // le défaut de la fiche. Si ce défaut est un vrai modèle de fiche, c'est
+      // le comportement voulu ; mais quand il a été fabriqué à partir du
+      // fichier de la PREMIÈRE variante (anomalie « modèles par variante sans
+      // défaut fiche »), le viewer montre le modèle d'une AUTRE variante sans
+      // rien signaler — mauvaise couleur, voire mauvaise taille.
+      // « options modifiées depuis le rattachement » ne suffit pas : elle ne se
+      // déclenche que si les options ont bougé APRÈS coup, donc jamais pour une
+      // fiche livrée partiellement couverte dès le départ.
+      if (r.variantes_3d_n > 0 && r.variant_count > r.variantes_3d_n) {
+        const manquantes = r.variant_count - r.variantes_3d_n;
+        a.push(`${manquantes} variante${manquantes > 1 ? "s" : ""} sur ${r.variant_count} sans modèle 3D`);
+      }
       if (!r.collection) a.push("sans collection");
     }
     r.anomalies = a;
