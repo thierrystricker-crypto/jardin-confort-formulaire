@@ -21,6 +21,8 @@
 // shopify-600\index-etiquettes.csv et les URL du CDN lues par l'API Admin
 // (files, filtre jc-deco-). 60 images, 49 sujets. Pour régénérer : même CSV,
 // même requête, et recopier l'URL avec son ?v= (il change à chaque dépôt).
+// RETIRÉ de la banque (choix de Thierry, 13.10.2026) : BO-05 châtaignes (a et
+// b). Les fichiers restent dans Shopify mais ne sont plus jamais tirés.
 
 import type { MatiereMoodboard } from "@/lib/moodboard";
 
@@ -69,8 +71,6 @@ export const BANQUE_DECOR: ObjetDecor[] = [
   { fichier: "jc-deco-bo-02-a.png", code: "BO-02", variante: "a", ambiance: "BO", nature: "bois", teintes: ["brun"], sujet: "écorce de chêne", url: "https://cdn.shopify.com/s/files/1/0360/3251/2135/files/jc-deco-bo-02-a.png?v=1791894768", l: 600, h: 506 },
   { fichier: "jc-deco-bo-03-a.png", code: "BO-03", variante: "a", ambiance: "BO", nature: "bois", teintes: ["brun"], sujet: "cep de vigne", url: "https://cdn.shopify.com/s/files/1/0360/3251/2135/files/jc-deco-bo-03-a.png?v=1791894768", l: 600, h: 591 },
   { fichier: "jc-deco-bo-04-a.png", code: "BO-04", variante: "a", ambiance: "BO", nature: "textile", teintes: ["bois-naturel", "beige-sable"], sujet: "corde de jute", url: "https://cdn.shopify.com/s/files/1/0360/3251/2135/files/jc-deco-bo-04-a.png?v=1791894769", l: 596, h: 600 },
-  { fichier: "jc-deco-bo-05-a.png", code: "BO-05", variante: "a", ambiance: "BO", nature: "vegetal", teintes: ["brun"], sujet: "châtaignes", url: "https://cdn.shopify.com/s/files/1/0360/3251/2135/files/jc-deco-bo-05-a.png?v=1791894769", l: 600, h: 571 },
-  { fichier: "jc-deco-bo-05-b.png", code: "BO-05", variante: "b", ambiance: "BO", nature: "vegetal", teintes: ["brun"], sujet: "châtaignes", url: "https://cdn.shopify.com/s/files/1/0360/3251/2135/files/jc-deco-bo-05-b.png?v=1791894770", l: 600, h: 571 },
   { fichier: "jc-deco-bo-06-a.png", code: "BO-06", variante: "a", ambiance: "BO", nature: "bois", teintes: ["brun", "bois-naturel"], sujet: "liège", url: "https://cdn.shopify.com/s/files/1/0360/3251/2135/files/jc-deco-bo-06-a.png?v=1791894769", l: 600, h: 558 },
   { fichier: "jc-deco-bo-07-a.png", code: "BO-07", variante: "a", ambiance: "BO", nature: "mineral", teintes: ["brun"], sujet: "terre", url: "https://cdn.shopify.com/s/files/1/0360/3251/2135/files/jc-deco-bo-07-a.png?v=1791894769", l: 600, h: 590 },
   { fichier: "jc-deco-te-01-a.png", code: "TE-01", variante: "a", ambiance: "TE", nature: "mineral", teintes: ["orange"], sujet: "tessons terre cuite", url: "https://cdn.shopify.com/s/files/1/0360/3251/2135/files/jc-deco-te-01-a.png?v=1791894768", l: 582, h: 600 },
@@ -177,19 +177,24 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-// Parmi les candidats, ceux qui portent la teinte visée passent d'abord ; puis
-// tirage déterministe par la graine (et un sel par place, pour que les trois
-// places ne tirent pas toutes le même rang).
+// Parmi les candidats : d'abord ceux dont la teinte visée est la PRINCIPALE
+// (une brique « rouge, brun » ne doit pas passer avant une terre « brun »),
+// puis ceux qui la portent, puis les autres. Tirage déterministe par la graine
+// (et un sel par place, pour que les trois places ne tirent pas le même rang).
 function tirer(candidats: ObjetDecor[], teinte: string | null, graine: string, sel: string): ObjetDecor | null {
   if (candidats.length === 0) return null;
-  const exacts = teinte ? candidats.filter((o) => o.teintes.includes(teinte)) : [];
-  const pool = (exacts.length > 0 ? exacts : candidats).slice().sort((a, b) => a.fichier.localeCompare(b.fichier));
+  const principaux = teinte ? candidats.filter((o) => o.teintes[0] === teinte) : [];
+  const porteurs = teinte ? candidats.filter((o) => o.teintes.includes(teinte)) : [];
+  const choix = principaux.length > 0 ? principaux : porteurs.length > 0 ? porteurs : candidats;
+  const pool = choix.slice().sort((a, b) => a.fichier.localeCompare(b.fichier));
   return pool[hash(`${graine}|${sel}`) % pool.length];
 }
 
 // Choix du décor : 0, 2 ou 3 objets.
-//   1. un MINÉRAL de l'ambiance dominante ;
-//   2. un VÉGÉTAL de l'ambiance dominante ;
+//   1. un MINÉRAL de l'ambiance dominante, ou portant la teinte dominante ;
+//   2. un VÉGÉTAL de l'ambiance dominante, ou portant la teinte dominante
+//      (les bruns n'ont aucun végétal dans leur ambiance : l'allium séché et
+//      le bourgeon, classés ailleurs, portent du brun) ;
 //   3. une image de la seconde, sinon de l'accent, sinon de la teinte suivante
 //      d'une autre ambiance (même sous 15 %), d'une nature différente des deux
 //      premières quand l'ambiance le permet.
@@ -217,12 +222,13 @@ export function choisirDecor(matieres: MatiereMoodboard[]): ObjetDecor[] {
   const choisis: ObjetDecor[] = [];
   const libre = (o: ObjetDecor) => !choisis.some((x) => x.code === o.code);
 
-  const deDom = dispo.filter((o) => o.ambiance === ambDom);
-  const p1 = tirer(deDom.filter((o) => o.nature === "mineral"), c.dominante, graine, "1")
-    ?? tirer(deDom.filter((o) => o.nature !== "vegetal"), c.dominante, graine, "1");
+  const dom = c.dominante;
+  const deDom = dispo.filter((o) => o.ambiance === ambDom || o.teintes.includes(dom));
+  const p1 = tirer(deDom.filter((o) => o.nature === "mineral"), dom, graine, "1")
+    ?? tirer(deDom.filter((o) => o.nature !== "vegetal"), dom, graine, "1");
   if (p1) choisis.push(p1);
-  const p2 = tirer(deDom.filter((o) => o.nature === "vegetal" && libre(o)), c.dominante, graine, "2")
-    ?? tirer(deDom.filter((o) => libre(o) && o.nature !== p1?.nature), c.dominante, graine, "2");
+  const p2 = tirer(deDom.filter((o) => o.nature === "vegetal" && libre(o)), dom, graine, "2")
+    ?? tirer(deDom.filter((o) => libre(o) && o.nature !== p1?.nature), dom, graine, "2");
   if (p2) choisis.push(p2);
   if (choisis.length < 2) return [];
 
