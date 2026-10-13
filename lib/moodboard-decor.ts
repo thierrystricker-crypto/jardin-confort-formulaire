@@ -232,10 +232,12 @@ export function choisirDecor(matieres: MatiereMoodboard[]): ObjetDecor[] {
   if (p2) choisis.push(p2);
   if (choisis.length < 2) return [];
 
+  // Sans autre teinte (planche d'une seule couleur), le 3e objet reprend la
+  // dominante : trois objets valent mieux que deux, même ton sur ton.
   const troisieme = c.seconde ?? c.accent
-    ?? c.scores.find((x) => AMBIANCE_DE_TEINTE[x.teinte] !== ambDom)?.teinte ?? null;
+    ?? c.scores.find((x) => AMBIANCE_DE_TEINTE[x.teinte] !== ambDom)?.teinte ?? dom;
   if (troisieme) {
-    const amb = AMBIANCE_DE_TEINTE[troisieme];
+    const amb = troisieme === dom ? ambDom : AMBIANCE_DE_TEINTE[troisieme];
     const natures = new Set(choisis.map((o) => o.nature));
     // D'une autre nature que les deux premiers si l'ambiance en a une ; sinon
     // (ex. les verts : que du végétal et un minéral), la même nature plutôt

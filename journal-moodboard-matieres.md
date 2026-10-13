@@ -114,7 +114,9 @@ C'est l'objet du chantier suivant.
 
 ## 8. Chantier « réglages après coup et décor » (13.10.2026)
 
-Branche `feat/planche-reglages-decor`. Convention P0-19 : documents cités par numéro.
+Branche `feat/planche-reglages-decor`, **PR #64 mergée le 13.10.2026, `main` = `31bb443`** (17 fichiers, +1 102 / −67). Convention P0-19 : documents cités par numéro.
+
+⬜ **Reste à faire en production** : transformer un brouillon de TEST réglé sur « Planche + décor », puis vérifier le PDF enregistré (le décor n'existe dans un PDF enregistré qu'après le merge, pdf.co lisant la prod) et mesurer son poids.
 
 ### 8.1 Décisions de cadrage (validées par Thierry)
 
