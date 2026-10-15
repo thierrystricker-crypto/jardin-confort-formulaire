@@ -103,6 +103,40 @@ function constructeurVocal(): (new () => ReconnaissanceVocale) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+// Chrome ANDROID, en mode continuous, renvoie des résultats CUMULATIFS :
+// ["je voudrais", "je voudrais deux tables", "je voudrais deux tables Fermob"].
+// Les concaténer répète chaque phrase 3-4 fois (incident du 16.10.2026 : prise
+// de commande dictée sur mobile, transcription illisible). Sur ordinateur, les
+// résultats sont disjoints : concaténation simple, comme avant.
+// Android : un résultat qui prolonge le précédent le REMPLACE, un résultat déjà
+// contenu dans le précédent est ignoré.
+function fusionnerDictee(resultats: ArrayLike<ResultatVocal>, cumulatif: boolean): string {
+  let texte = "";
+  if (!cumulatif) {
+    for (let j = 0; j < resultats.length; j++) texte += resultats[j][0].transcript;
+    return texte;
+  }
+  const comparable = (s: string) =>
+    s.toLowerCase().replace(/[.,;:!?'"«»-]+/g, " ").replace(/\s+/g, " ").trim();
+  const morceaux: string[] = [];
+  for (let j = 0; j < resultats.length; j++) {
+    const t = resultats[j][0].transcript.trim();
+    if (!t) continue;
+    const n = morceaux.length;
+    if (n > 0) {
+      const a = comparable(morceaux[n - 1]);
+      const b = comparable(t);
+      if (b.startsWith(a)) {
+        morceaux[n - 1] = t;
+        continue;
+      }
+      if (a.startsWith(b)) continue;
+    }
+    morceaux.push(t);
+  }
+  return morceaux.join(" ");
+}
+
 // ── Rendu markdown minimal ───────────────────────────────────────────────────
 // Liens [texte](url), URLs nues, **gras**, `code`. Les retours à la ligne sont
 // préservés par white-space: pre-wrap. Aucun lien n'est fabriqué ni modifié :
@@ -660,15 +694,10 @@ export default function PageChatClaude() {
     rec.continuous = true;
     rec.interimResults = true;
     baseSaisieRef.current = saisie.trim() ? saisie.trimEnd() + " " : "";
+    // Android : résultats cumulatifs → fusion (voir fusionnerDictee).
+    const cumulatif = /Android/i.test(navigator.userAgent);
     rec.onresult = (e) => {
-      let definitif = "";
-      let provisoire = "";
-      for (let j = 0; j < e.results.length; j++) {
-        const r = e.results[j];
-        if (r.isFinal) definitif += r[0].transcript;
-        else provisoire += r[0].transcript;
-      }
-      setSaisie(baseSaisieRef.current + definitif + provisoire);
+      setSaisie(baseSaisieRef.current + fusionnerDictee(e.results, cumulatif));
     };
     rec.onend = () => setDicteeActive(false);
     rec.onerror = () => setDicteeActive(false);
