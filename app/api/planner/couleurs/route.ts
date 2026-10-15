@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { lirePalette3d } from "@/lib/modeles-3d-lookup";
-import { axesCouleurs, codeCouleur, couleursDisponibles, fichierZones, peintureZones, type VarianteZones, type ZonesConfig } from "@/lib/modeles-3d-zones";
+import { axesCouleurs, codePourAxe, couleursDisponibles, fichierZones, peintureZones, type VarianteZones, type ZonesConfig } from "@/lib/modeles-3d-zones";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +39,9 @@ export async function GET(req: NextRequest) {
     const codes: Record<string, string> = {};
     for (const a of axes) {
       const brut = Object.entries(v.options || {}).find(([k]) => k.trim().toLowerCase() === a.option.trim().toLowerCase());
-      const c = codeCouleur(brut?.[1]);
+      // Le mode de l'axe décide du code : dernier mot du libellé, ou libellé
+      // entier quand il ne porte pas de code (Houe Avon). (16.10.2026)
+      const c = codePourAxe(a, brut?.[1]);
       if (c) codes[a.option] = c;
     }
     return {

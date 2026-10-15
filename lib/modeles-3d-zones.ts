@@ -10,7 +10,9 @@
 // (synchro, faisabilité) comme côté navigateur (planner, three.js).
 
 export type ZoneConfig = {
-  option: string;                 // nom exact de l'option Shopify (espace final compris)
+  option?: string;                // nom exact de l'option Shopify (espace final compris)
+                                  // ABSENT chez Emu et Houe : l'axe est alors déduit
+                                  // des variantes (voir axesCouleurs, 16.10.2026)
   palette: string;                // sous-palette : structure | toile | rivage | parisienne…
   materiaux: string[];            // noms des matières visées dans le fichier
   teinte?: boolean;               // garder la texture d'origine et la teinter
@@ -64,9 +66,22 @@ export function codeCouleur(valeur: string | null | undefined): string {
   return (mots[mots.length - 1] || "").toUpperCase();
 }
 
+/** Code de repli quand le libellé ne porte pas de code : la valeur entière,
+ *  normalisée. Houe Avon vend « Structure Black - Coussins Alpine » : le
+ *  dernier mot (« Alpine ») est partagé par deux structures, il ne peut pas
+ *  servir de clé. (16.10.2026) */
+export function codeValeur(valeur: string | null | undefined): string {
+  return String(valeur || "").trim().toUpperCase().replace(/\s+/g, " ");
+}
+
+/** Code d'une variante pour un axe donné, selon le mode de l'axe. */
+export function codePourAxe(axe: { cle?: "code" | "valeur" } | null | undefined, valeur: string | null | undefined): string {
+  return axe?.cle === "valeur" ? codeValeur(valeur) : codeCouleur(valeur);
+}
+
 /** Valeur d'une option, en tolérant les espaces (« Couleur » vs « Couleur  »). */
-function valeurOption(options: Record<string, string> | null | undefined, nom: string): string | null {
-  if (!options) return null;
+function valeurOption(options: Record<string, string> | null | undefined, nom: string | null | undefined): string | null {
+  if (!options || !nom) return null;
   if (options[nom] != null) return options[nom];
   const cible = nom.trim().toLowerCase();
   for (const [k, v] of Object.entries(options)) if (k.trim().toLowerCase() === cible) return v;
@@ -159,7 +174,7 @@ export function couleursDisponibles(zones: ZonesConfig | null | undefined, palet
  * planner avant le 07.10.2026.
  */
 export type ValeurCouleur = { code: string; nom: string; apercu: string | null };
-export type AxeCouleur = { option: string; zone: string; valeurs: ValeurCouleur[] };
+export type AxeCouleur = { option: string; zone: string; valeurs: ValeurCouleur[]; cle?: "code" | "valeur" };
 
 export function axesCouleurs(
   zones: ZonesConfig | null | undefined,
@@ -184,6 +199,76 @@ export function axesCouleurs(
     const cle = zones.formes.option.trim().toLowerCase();
     if (!axes.has(cle)) axes.set(cle, { zone: "forme", sousPalette: {} });
   }
+  // Une option renommée côté Shopify laisse `option` pointer dans le vide :
+  // l'axe sortait alors sans aucune valeur et le menu redevenait un « Couleur… »
+  // muet, sans le moindre signal. On écarte ces axes morts pour que la
+  // déduction ci-dessous reprenne la main. Le contrôle quotidien, lui, signale
+  // la fiche à réparer — ce filet évite la panne, il ne la cache pas.
+  // (16.10.2026, pendant les audits de normalisation des noms de variantes)
+  if (axes.size && (variantes?.length || 0) > 0) {
+    const presentes = new Set<string>();
+    for (const v of variantes) for (const k of Object.keys(v.options || {})) presentes.add(k.trim().toLowerCase());
+    // L'axe du jeu de formes ne vit pas sur les options de variante : on le garde.
+    const cleFormes = zones.formes?.option?.trim().toLowerCase();
+    for (const cle of [...axes.keys()]) if (cle !== cleFormes && !presentes.has(cle)) axes.delete(cle);
+  }
+
+  // ── Fiches dont les zones ne portent pas d'option (Emu, Houe) ───────────
+  // `option` n'a été rempli que sur les fiches Fermob : 280 sur 296, contre 0
+  // sur 250 chez Emu et 0 sur 45 chez Houe. Sans lui, aucun axe n'était
+  // construit et le planner n'offrait qu'un menu « Couleur… » vide, alors que
+  // le modèle était bien repeint (la peinture, elle, lit zones_variantes).
+  // La liaison option → zone est déductible des variantes. (16.10.2026)
+  let cleAxe: "code" | "valeur" = "code";
+  if (!axes.size && (variantes?.length || 0) > 1) {
+    const utiles = ordre.filter((k) => zs[k]?.materiaux?.length);
+    const noms = new Set<string>();
+    for (const v of variantes) for (const k of Object.keys(v.options || {})) noms.add(k);
+
+    // a) L'option dont le code tombe sur le code de zone. Majorité nette et
+    //    non unanimité : chez Houe Click deux variantes sur dix ont un code de
+    //    zone qui ne suit pas son libellé (« Beige 60 » → « beige »).
+    let gagnant: { nom: string; score: number; zone: string } | null = null;
+    for (const nomZone of utiles) {
+      for (const nom of noms) {
+        let comparables = 0;
+        let accords = 0;
+        for (const v of variantes) {
+          const attendu = v.zones?.[nomZone];
+          if (!attendu) continue;
+          comparables++;
+          if (codeCouleur(valeurOption(v.options, nom)) === String(attendu).toUpperCase()) accords++;
+        }
+        const score = comparables ? accords / comparables : 0;
+        if (score > 0.5 && (!gagnant || score > gagnant.score)) gagnant = { nom, score, zone: nomZone };
+      }
+    }
+
+    if (gagnant) {
+      axes.set(gagnant.nom.trim().toLowerCase(), {
+        zone: gagnant.zone,
+        sousPalette: palette?.[marque]?.[zs[gagnant.zone]?.palette || ""] || {},
+      });
+    } else {
+      // b) Aucune option ne porte le code : une seule option pilote plusieurs
+      //    zones à la fois (Houe Avon). L'axe se fait alors sur le libellé, et
+      //    chaque valeur désigne une ligne du catalogue — ce qui est de toute
+      //    façon la seule chose vendable.
+      let large: { nom: string; n: number } | null = null;
+      for (const nom of noms) {
+        const vus = new Set(variantes.map((v) => codeValeur(valeurOption(v.options, nom))).filter(Boolean));
+        vus.delete("DEFAULT TITLE");
+        if (vus.size > 1 && (!large || vus.size > large.n)) large = { nom, n: vus.size };
+      }
+      // Pas de zone peinte (les coussins et galettes Fermob) : pas de menu —
+      // un axe qui ne repeint rien n'a rien à faire dans la barre d'outils.
+      if (large && utiles.length) {
+        cleAxe = "valeur";
+        axes.set(large.nom.trim().toLowerCase(), { zone: utiles[0], sousPalette: {} });
+      }
+    }
+  }
+
   if (!axes.size) return [];
 
   // Nom d'option tel qu'il apparaît sur les variantes (espaces compris)
@@ -201,7 +286,7 @@ export function axesCouleurs(
     const valeurs: ValeurCouleur[] = [];
     for (const v of variantes || []) {
       const valeur = valeurOption(v.options, nomReel.get(cle) || cle);
-      const code = codeCouleur(valeur);
+      const code = cleAxe === "valeur" ? codeValeur(valeur) : codeCouleur(valeur);
       if (!code || vus.has(code)) continue;
       vus.add(code);
       valeurs.push({
@@ -212,7 +297,7 @@ export function axesCouleurs(
     }
     if (valeurs.length) {
       valeurs.sort((x, y) => x.nom.localeCompare(y.nom, "fr"));
-      out.push({ option: nomReel.get(cle) || cle, zone: info.zone, valeurs });
+      out.push({ option: nomReel.get(cle) || cle, zone: info.zone, valeurs, cle: cleAxe });
     }
   }
   return out;
