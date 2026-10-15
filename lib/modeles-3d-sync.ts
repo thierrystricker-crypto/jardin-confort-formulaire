@@ -559,7 +559,25 @@ export async function importerDepuisUrl(url: string): Promise<StatsImport> {
       // « options modifiées depuis le rattachement » ne suffit pas : elle ne se
       // déclenche que si les options ont bougé APRÈS coup, donc jamais pour une
       // fiche livrée partiellement couverte dès le départ.
-      if (r.variantes_3d_n > 0 && r.variant_count > r.variantes_3d_n) {
+      //
+      // Deux couvertures partielles sont NORMALES et ne doivent rien déclencher
+      // (16.10.2026 — la première version signalait 43 fiches dont une
+      // vingtaine allaient très bien) :
+      //  • fiche à zones : le modèle unique est repeint variante par variante,
+      //    aucun fichier par variante n'est attendu. Chez Houe Click, seules
+      //    les deux Multicolor en ont un, parce qu'un multicolore ne se peint
+      //    pas d'une teinte unie ;
+      //  • un seul fichier distinct rattaché : modèle unique dont certaines
+      //    options ne sont pas modélisées. Le tissu des parasols Glatz, des
+      //    poufs Tono et de tout ce qui porte des coussins reste une teinte
+      //    neutre — c'est un choix, pas un oubli.
+      // Un seul fichier sur une fiche à DEUX ou TROIS variantes est l'autre
+      // visage du problème : là, c'est bien une variante oubliée (les sept
+      // Paros, dont la Black Pepper 317 est restée nue trois jours). On garde
+      // donc ce cas, que le critère ci-dessus laisserait passer.
+      const fichiers3d = new Set((r.variantes_3d || []).map((v) => v.url)).size;
+      const couvertureSuspecte = fichiers3d > 1 || (r.variantes_3d_n === 1 && r.variant_count <= 5);
+      if (!r.zones && couvertureSuspecte && r.variant_count > r.variantes_3d_n) {
         const manquantes = r.variant_count - r.variantes_3d_n;
         a.push(`${manquantes} variante${manquantes > 1 ? "s" : ""} sur ${r.variant_count} sans modèle 3D`);
       }
