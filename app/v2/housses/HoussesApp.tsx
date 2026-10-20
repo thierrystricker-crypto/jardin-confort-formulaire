@@ -22,6 +22,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
+type Theme = "light" | "dark";
+
+// Thème de la coquille v2 : attribut data-theme de .v2-root (bouton clair/sombre).
+function themeV2(el: Element | null): Theme {
+  const r = el?.closest("[data-theme]");
+  return r?.getAttribute("data-theme") === "dark" ? "dark" : "light";
+}
+
 type Payload = {
   data: unknown[];
   glatz: unknown[];
@@ -55,8 +63,25 @@ function origine(url: string): string {
   }
 }
 
+// Mode sombre de l'app (uniquement dans le formulaire : le site reste clair).
+// Les dessins (visualiseur, mini-schémas, démo) gardent un fond clair : le meuble
+// beige et la housse anthracite y restent lisibles.
+const CSS_SOMBRE = `
+html[data-theme="dark"],html[data-theme="dark"] body{background:#1c1f24;color:#e6e6e6;color-scheme:dark}
+html[data-theme="dark"] .tmh{--tmh-accent:#6aa7e8;--tmh-border:#3a4049;--tmh-soft:#272c33;--tmh-text:#e6e6e6;--tmh-muted:#a3a8b0;--tmh-ok:#7fd18b;--tmh-okbg:#1f3a26;--tmh-warn:#f0b35a;--tmh-warnbg:#3d3015;--tmh-bad:#f28b82;--tmh-badbg:#432220}
+html[data-theme="dark"] .tmh-fams button,html[data-theme="dark"] .tmh-chips button,html[data-theme="dark"] .tmh-flip,html[data-theme="dark"] .tmh-card,html[data-theme="dark"] .tmh-open,html[data-theme="dark"] .tmh-ex button,html[data-theme="dark"] .tmh-steps span{background:#22262c}
+html[data-theme="dark"] .tmh-fields input{background:#22262c;color:#e6e6e6}
+html[data-theme="dark"] .tmh-open:hover{background:var(--tmh-accent);color:#10141a}
+html[data-theme="dark"] .tmh-ref{color:#a3a8b0}
+html[data-theme="dark"] .tmh-viewer,html[data-theme="dark"] .tmh-card svg,html[data-theme="dark"] .tmh-demo svg,html[data-theme="dark"] .tmh-kc{background:#f5f3ef;border-radius:8px}
+html[data-theme="dark"] .tmh-viewer .tmh-muted,html[data-theme="dark"] .tmh-legend{color:#2b2b2b}
+html[data-theme="dark"] .tmh-views button{background:#fff;color:#2b2b2b}
+html[data-theme="dark"] .tmh-views button.is-on{color:#2f6fb3;border-color:#2f6fb3}
+html[data-theme="dark"] .tmh-card-img{background:#fff}
+`;
+
 // Document complet de l'iframe (srcdoc).
-function documentIframe(p: Payload): string {
+function documentIframe(p: Payload, theme: Theme): string {
   const sources = Array.from(
     new Set([origine(p.js), origine(p.css), origine(p.base), "https://cdn.shopify.com"].filter(Boolean)),
   ).join(" ");
@@ -72,7 +97,7 @@ function documentIframe(p: Payload): string {
   ].join("; ");
   const donnees = jsonPourScript({ data: p.data, glatz: p.glatz, sunc: p.sunc, base: p.base });
   return `<!doctype html>
-<html lang="fr"><head>
+<html lang="fr" data-theme="${theme}"><head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${attr(csp)}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -81,6 +106,7 @@ function documentIframe(p: Payload): string {
   html,body{margin:0;background:#fff}
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#2b2b2b}
   #app{padding:16px 20px 24px}
+${CSS_SOMBRE}
 </style>
 </head><body>
 <div id="app" class="tmh tmh--alone"></div>
@@ -98,6 +124,11 @@ function documentIframe(p: Payload): string {
       parent.postMessage({ type: "tmh-pick", sku: String(h.sku).slice(0, 64) }, "*");
       return "✓ " + h.sku + " copié";
     } }
+  });
+  // thème clair / sombre envoyé par la page (seule source acceptée : la page parente)
+  window.addEventListener("message", function (e) {
+    if (e.source !== parent || !e.data || e.data.type !== "tmh-theme") return;
+    document.documentElement.setAttribute("data-theme", e.data.theme === "dark" ? "dark" : "light");
   });
   var dernier = 0;
   function hauteur() {
@@ -122,6 +153,9 @@ async function copier(texte: string): Promise<boolean> {
 
 export default function HoussesApp() {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const boiteRef = useRef<HTMLDivElement>(null);
+  const [theme, setTheme] = useState<Theme>("light");
+  const themeRef = useRef<Theme>("light");
   const [etat, setEtat] = useState<"chargement" | "pret" | "erreur">("chargement");
   const [erreur, setErreur] = useState("");
   const [lu, setLu] = useState("");
@@ -145,7 +179,7 @@ export default function HoussesApp() {
         if (!res.ok || p.error) throw new Error(p.error || "Erreur " + res.status);
         if (!/^https:\/\//.test(p.js) || !/^https:\/\//.test(p.css)) throw new Error("Adresses du thème invalides");
         if (annule) return;
-        setDoc(documentIframe(p));
+        setDoc(documentIframe(p, themeV2(boiteRef.current)));
         setLu(p.lu);
         setEtat("pret");
       } catch (e) {
@@ -158,6 +192,22 @@ export default function HoussesApp() {
       annule = true;
     };
   }, [essai]);
+
+  // Suit le bouton clair/sombre de la v2 (sans recharger l'app)
+  useEffect(() => {
+    const racine = boiteRef.current?.closest("[data-theme]");
+    const appliquer = () => {
+      const t = themeV2(boiteRef.current);
+      themeRef.current = t;
+      setTheme(t);
+      frameRef.current?.contentWindow?.postMessage({ type: "tmh-theme", theme: t }, "*");
+    };
+    appliquer();
+    if (!racine) return;
+    const obs = new MutationObserver(appliquer);
+    obs.observe(racine, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
 
   // 2. Messages de l'iframe (seule source acceptée : notre iframe)
   useEffect(() => {
@@ -180,7 +230,7 @@ export default function HoussesApp() {
   }, []);
 
   return (
-    <div style={{ padding: "1rem 1.25rem 3rem" }}>
+    <div ref={boiteRef} style={{ padding: "1rem 1.25rem 3rem" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: ".75rem" }}>
         <div>
           <h1 style={{ fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>🛡 Trouver une housse</h1>
@@ -224,12 +274,14 @@ export default function HoussesApp() {
           // allow-popups(+escape) : « Voir l'article » ouvre la fiche jardin-confort.ch normalement.
           sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
           referrerPolicy="no-referrer"
+          onLoad={() => frameRef.current?.contentWindow?.postMessage({ type: "tmh-theme", theme: themeRef.current }, "*")}
           style={{
             display: etat === "pret" ? "block" : "none",
             width: "100%",
             height: hauteur,
             border: 0,
-            background: "#fff",
+            background: theme === "dark" ? "#1c1f24" : "#fff",
+            colorScheme: theme === "dark" ? "dark" : "light",
             borderRadius: 12,
             boxShadow: "0 1px 3px rgba(0,0,0,.08)",
           }}
