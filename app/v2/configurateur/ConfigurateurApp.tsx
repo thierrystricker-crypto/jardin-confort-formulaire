@@ -41,6 +41,32 @@ type Payload = {
 
 type ListeCreee = { id: string; nom: string; nb: number };
 
+type Theme = "light" | "dark";
+
+// Thème de la coquille v2 : attribut data-theme de .v2-root (bouton clair/sombre).
+function themeV2(el: Element | null): Theme {
+  const r = el?.closest("[data-theme]");
+  return r?.getAttribute("data-theme") === "dark" ? "dark" : "light";
+}
+
+// Mode sombre de l'app (uniquement dans le formulaire : le site reste clair).
+// Les photos produit (packshots détourés sur blanc) gardent un fond blanc arrondi,
+// les vignettes de toile gardent leurs couleurs.
+const CSS_SOMBRE = `
+html[data-theme="dark"],html[data-theme="dark"] body{background:#1c1f24;color:#e6e6e6;color-scheme:dark}
+html[data-theme="dark"] .cfgp{--c-acc:#6aa7e8;--c-border:#3a4049;--c-soft:#272c33;--c-text:#e6e6e6;--c-muted:#a3a8b0;--c-ok:#7fd18b;--c-okbg:#1f3a26;--c-warn:#f0b35a;--c-warnbg:#3d3015;--c-bad:#f28b82;--c-badbg:#432220}
+html[data-theme="dark"] .cfgp-type,html[data-theme="dark"] .cfgp-chips button,html[data-theme="dark"] .cfgp-model,html[data-theme="dark"] .cfgp-toile,html[data-theme="dark"] .cfgp-kit,html[data-theme="dark"] .cfgp-acc,html[data-theme="dark"] .cfgp-pz label,html[data-theme="dark"] .cfgp-gal-card,html[data-theme="dark"] .cfgp-side,html[data-theme="dark"] .cfgp-shape.is-on,html[data-theme="dark"] .cfgp-tpop{background:#22262c}
+html[data-theme="dark"] .cfgp-model img,html[data-theme="dark"] .cfgp-pv-img img,html[data-theme="dark"] .cfgp-picked img,html[data-theme="dark"] .cfgp-kit-head img,html[data-theme="dark"] .cfgp-acc img,html[data-theme="dark"] .cfgp-gal-img,html[data-theme="dark"] .cfgp-toile img{background:#fff;border-radius:6px}
+html[data-theme="dark"] .cfgp-sw img{background:none;border-radius:0}
+html[data-theme="dark"] .cfgp-gal-ph{background:#272c33}
+html[data-theme="dark"] .cfgp-sw--dot,html[data-theme="dark"] .cfgp-sw--pv{border-color:#22262c}
+html[data-theme="dark"] .cfgp--embed .btn--primary{color:#10141a}
+html[data-theme="dark"] .cfgp--embed .btn--secondary{background:#22262c}
+html[data-theme="dark"] .cfgp select,html[data-theme="dark"] .cfgp input,html[data-theme="dark"] .cfgp textarea{background:#22262c;color:#e6e6e6;border-color:#3a4049}
+html[data-theme="dark"] .cfgp-h span{color:#10141a}
+html[data-theme="dark"] .cfgp-gal-q{color:#10141a}
+`;
+
 // JSON sûr dans un <script> : pas de « </script> » ni de commentaire HTML possible.
 function jsonPourScript(v: unknown): string {
   return JSON.stringify(v)
@@ -64,7 +90,7 @@ function origine(url: string): string {
 }
 
 // Document complet de l'iframe (srcdoc).
-function documentIframe(p: Payload): string {
+function documentIframe(p: Payload, theme: Theme): string {
   const sources = Array.from(
     new Set([origine(p.js), origine(p.data), origine(p.css), "https://cdn.shopify.com"].filter(Boolean)),
   ).join(" ");
@@ -80,7 +106,7 @@ function documentIframe(p: Payload): string {
   ].join("; ");
   const donnees = jsonPourScript({ models: p.models, cfg: p.cfg, shop: p.shop, base: p.base });
   return `<!doctype html>
-<html lang="fr"><head>
+<html lang="fr" data-theme="${theme}"><head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${attr(csp)}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -90,6 +116,7 @@ function documentIframe(p: Payload): string {
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#2b2b2b}
   #app{padding:16px 20px 24px}
   h1,h2,h3,p{margin-top:0}
+${CSS_SOMBRE}
 </style>
 </head><body>
 <div id="app" class="cfgp"></div>
@@ -109,6 +136,11 @@ function documentIframe(p: Payload): string {
       parent.postMessage(m, "*");
     });
   }
+  // thème clair / sombre envoyé par la page (seule source acceptée : la page parente)
+  window.addEventListener("message", function (e) {
+    if (e.source !== parent || !e.data || e.data.type !== "cfgp-theme") return;
+    document.documentElement.setAttribute("data-theme", e.data.theme === "dark" ? "dark" : "light");
+  });
   window.addEventListener("message", function (e) {
     if (e.source !== parent || !e.data || e.data.type !== "cfgp-reponse") return;
     var f = attente[e.data.id]; if (!f) return;
@@ -155,6 +187,9 @@ function conteneurDefilant(el: HTMLElement | null): HTMLElement | null {
 
 export default function ConfigurateurApp() {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const boiteRef = useRef<HTMLDivElement>(null);
+  const [theme, setTheme] = useState<Theme>("light");
+  const themeRef = useRef<Theme>("light");
   const [etat, setEtat] = useState<"chargement" | "pret" | "erreur">("chargement");
   const [erreur, setErreur] = useState("");
   const [lu, setLu] = useState("");
@@ -190,7 +225,7 @@ export default function ConfigurateurApp() {
         if (!res.ok || p.error) throw new Error(p.error || "Erreur " + res.status);
         if (![p.js, p.data, p.css].every((u) => /^https:\/\//.test(u))) throw new Error("Adresses du thème invalides");
         if (annule) return;
-        setDoc(documentIframe(p));
+        setDoc(documentIframe(p, themeV2(boiteRef.current)));
         setLu(p.lu);
         setEtat("pret");
       } catch (e) {
@@ -203,6 +238,22 @@ export default function ConfigurateurApp() {
       annule = true;
     };
   }, [essai]);
+
+  // Suit le bouton clair/sombre de la v2 (sans recharger l'app ni perdre la configuration)
+  useEffect(() => {
+    const racine = boiteRef.current?.closest("[data-theme]");
+    const appliquer = () => {
+      const t = themeV2(boiteRef.current);
+      themeRef.current = t;
+      setTheme(t);
+      frameRef.current?.contentWindow?.postMessage({ type: "cfgp-theme", theme: t }, "*");
+    };
+    appliquer();
+    if (!racine) return;
+    const obs = new MutationObserver(appliquer);
+    obs.observe(racine, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
 
   // 2. Messages de l'iframe (seule source acceptée : notre iframe)
   useEffect(() => {
@@ -287,8 +338,10 @@ export default function ConfigurateurApp() {
     }
   }
 
+  const sombre = theme === "dark";
+
   return (
-    <div style={{ padding: "1rem 1.25rem 3rem" }}>
+    <div ref={boiteRef} style={{ padding: "1rem 1.25rem 3rem" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: ".75rem" }}>
         <div>
           <h1 style={{ fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>☂ Configurateur parasol Glatz</h1>
@@ -308,7 +361,7 @@ export default function ConfigurateurApp() {
       </div>
 
       {liste && (
-        <div style={{ background: "#e7f3e8", color: "#1f5c24", borderRadius: 8, padding: ".7rem 1rem", marginBottom: ".75rem", display: "flex", gap: ".6rem", alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ background: sombre ? "#1f3a26" : "#e7f3e8", color: sombre ? "#7fd18b" : "#1f5c24", borderRadius: 8, padding: ".7rem 1rem", marginBottom: ".75rem", display: "flex", gap: ".6rem", alignItems: "center", flexWrap: "wrap" }}>
           <span>
             ✓ Liste d&apos;achat créée : <b>{liste.nom}</b> ({liste.nb} article{liste.nb > 1 ? "s" : ""}).
           </span>
@@ -316,12 +369,12 @@ export default function ConfigurateurApp() {
             {brouillon === "en-cours" ? "…" : "Créer le brouillon →"}
           </button>
           <a className="v2-btn" href="/v2/listes-achat">Voir les listes d&apos;achat</a>
-          {brouillon === "erreur" && <span style={{ color: "#b3261e" }}>Brouillon impossible — réessayez depuis les listes d&apos;achat.</span>}
+          {brouillon === "erreur" && <span style={{ color: sombre ? "#f28b82" : "#b3261e" }}>Brouillon impossible — réessayez depuis les listes d&apos;achat.</span>}
           <button type="button" className="v2-btn" onClick={() => setListe(null)} aria-label="Fermer">✕</button>
         </div>
       )}
       {aCopier && (
-        <div style={{ background: "#fdf1dc", color: "#9a5b00", borderRadius: 8, padding: ".6rem 1rem", marginBottom: ".75rem" }}>
+        <div style={{ background: sombre ? "#3d3015" : "#fdf1dc", color: sombre ? "#f0b35a" : "#9a5b00", borderRadius: 8, padding: ".6rem 1rem", marginBottom: ".75rem" }}>
           Copie automatique refusée par le navigateur — sélectionnez le texte :
           <textarea readOnly value={aCopier} style={{ display: "block", width: "100%", height: 160, marginTop: ".4rem", fontFamily: "inherit" }} />
           <button type="button" className="v2-btn" onClick={() => setACopier("")}>OK</button>
@@ -329,7 +382,7 @@ export default function ConfigurateurApp() {
       )}
       {etat === "chargement" && <p style={{ opacity: 0.7 }}>Chargement du configurateur depuis Shopify…</p>}
       {etat === "erreur" && (
-        <div style={{ background: "#fbe5e3", color: "#b3261e", borderRadius: 8, padding: ".8rem 1rem" }}>
+        <div style={{ background: sombre ? "#432220" : "#fbe5e3", color: sombre ? "#f28b82" : "#b3261e", borderRadius: 8, padding: ".8rem 1rem" }}>
           {erreur}{" "}
           <button type="button" className="v2-btn" onClick={relire}>
             Réessayer
@@ -347,13 +400,14 @@ export default function ConfigurateurApp() {
           // allow-popups(+escape) : le lien de la fiche parasol s'ouvre normalement sur jardin-confort.ch.
           sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
           referrerPolicy="no-referrer"
+          onLoad={() => frameRef.current?.contentWindow?.postMessage({ type: "cfgp-theme", theme: themeRef.current }, "*")}
           style={{
             display: etat === "pret" ? "block" : "none",
             width: "100%",
             height: hauteur,
             border: 0,
-            background: "#fff",
-            colorScheme: "light",
+            background: theme === "dark" ? "#1c1f24" : "#fff",
+            colorScheme: theme === "dark" ? "dark" : "light",
             borderRadius: 12,
             boxShadow: "0 1px 3px rgba(0,0,0,.08)",
           }}
