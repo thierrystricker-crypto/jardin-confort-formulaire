@@ -18,6 +18,10 @@ const PREVIEW = (process.env.CONFIGURATEUR_PREVIEW_THEME_ID || "").replace(/\D/g
 
 // Cookies d'aperçu gardés entre deux appels (même instance serverless)
 const cookies = new Map<string, string>();
+// ⚠️ Marché suisse imposé (22.10.2026) : les fonctions Vercel tournent aux États-Unis (iad1) ; sans ce
+// cookie, Shopify rend la page pour le marché « US » (conversion de devise), le rendu dépasse ~3 s et
+// Shopify répond 500. Avec localization=CH : prix en CHF et pages servies depuis le cache suisse.
+const MARCHE: Record<string, string> = { localization: "CH", cart_currency: "CHF" };
 
 /** Lit une page publique de la boutique. Renvoie { status, text }. */
 export async function lireBoutique(cheminEtQuery: string): Promise<{ status: number; text: string }> {
@@ -31,7 +35,8 @@ export async function lireBoutique(cheminEtQuery: string): Promise<{ status: num
         "User-Agent": "JardinConfort-Formulaire/1.0 (+offres.jardin-confort.ch)",
         // ⚠️ « text/html » seul : avec « application/json », Shopify répond 500 sur les pages (testé 21.10.2026)
         Accept: "text/html",
-        ...(cookies.size ? { Cookie: [...cookies].map(([k, v]) => `${k}=${v}`).join("; ") } : {}),
+        "Accept-Language": "fr-CH,fr;q=0.9",
+        Cookie: [...new Map([...cookies, ...Object.entries(MARCHE)])].map(([k, v]) => `${k}=${v}`).join("; "),
       },
     });
     for (const c of res.headers.getSetCookie?.() ?? []) {
