@@ -29,7 +29,8 @@ export async function lireBoutique(cheminEtQuery: string): Promise<{ status: num
       cache: "no-store",
       headers: {
         "User-Agent": "JardinConfort-Formulaire/1.0 (+offres.jardin-confort.ch)",
-        Accept: "text/html,application/json",
+        // ⚠️ « text/html » seul : avec « application/json », Shopify répond 500 sur les pages (testé 21.10.2026)
+        Accept: "text/html",
         ...(cookies.size ? { Cookie: [...cookies].map(([k, v]) => `${k}=${v}`).join("; ") } : {}),
       },
     });
@@ -64,8 +65,16 @@ export function cheminAutorise(p: string): string | null {
   const cles = [...q.keys()];
 
   // 1. Fiche produit en vue « cfgparasol » (JSON des variantes)
-  const m = u.pathname.match(/^\/products\/([a-z0-9][a-z0-9-]{0,250})$/);
+  // handle tel quel, encodé en %XX (certains handles Glatz contiennent « ® » : glatz-parasol-piazza%C2%AE)
+  const m = u.pathname.match(/^\/products\/([A-Za-z0-9%-]{1,300})$/);
   if (m) {
+    let dec = "";
+    try {
+      dec = decodeURIComponent(m[1]);
+    } catch {
+      return null;
+    }
+    if (!dec || /[\/?#\s]/.test(dec)) return null;
     if (q.get("view") !== "cfgparasol") return null;
     if (cles.some((k) => k !== "view" && k !== "option_values")) return null;
     const ov = q.get("option_values");
