@@ -65,6 +65,8 @@ html[data-theme="dark"] .cfgp--embed .btn--secondary{background:#22262c}
 html[data-theme="dark"] .cfgp select,html[data-theme="dark"] .cfgp input,html[data-theme="dark"] .cfgp textarea{background:#22262c;color:#e6e6e6;border-color:#3a4049}
 html[data-theme="dark"] .cfgp-h span{color:#10141a}
 html[data-theme="dark"] .cfgp-gal-q{color:#10141a}
+html[data-theme="dark"] .cfgp-toile{background:#fff;color:#2b2b2b}
+html[data-theme="dark"] .cfgp-toile .cfgp-sw--dot{border-color:#fff}
 `;
 
 // JSON sûr dans un <script> : pas de « </script> » ni de commentaire HTML possible.
