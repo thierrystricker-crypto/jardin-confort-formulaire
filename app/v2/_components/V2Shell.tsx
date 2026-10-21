@@ -54,6 +54,7 @@ const MENU: Groupe[] = [
       { href: "/planner", label: "Planner 3D", icon: "🪑", externe: true },
       { href: "/v2/modeles-3d", label: "Index 3D", icon: "🧊" },
       { href: "/v2/housses", label: "Trouver une housse", icon: "🛡" },
+      { href: "/v2/configurateur", label: "Configurateur parasol", icon: "☂" },
       { href: "/v2/qr-libre", label: "QR paiement libre", icon: "💳" },
     ],
   },
