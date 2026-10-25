@@ -12,6 +12,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import RetourDashboard from "@/components/RetourDashboard";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 type Matiere = {
   cle: string; marque: string; famille: string; gamme: string | null; code: string; nom: string;
@@ -135,6 +137,7 @@ function csv(rows: Matiere[]): string {
 }
 
 export default function EchantillonsPage() {
+  const lienNuancier = ((usePathname() || "").startsWith("/v2") ? "/v2" : "/dashboard") + "/echantillons/nuancier";
   const [rows, setRows] = useState<Matiere[]>([]);
   const [luLe, setLuLe] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
