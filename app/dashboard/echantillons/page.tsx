@@ -96,7 +96,7 @@ function problemes(m: Matiere): string[] {
 }
 
 function vignette(m: Matiere, px: number): string | null {
-  if (m.shop_url_vignette) return `${m.shop_url_vignette}?width=${px * 2}`;
+  if (m.shop_url_vignette) return `${m.shop_url_vignette}?width=${px * 2}&v=${m.shop_version ?? ""}`;
   return m.url_vignette;
 }
 
@@ -487,7 +487,7 @@ function Ligne({ l, children }: { l: string; children: React.ReactNode }) {
 
 function Fiche({ m, onFermer }: { m: Matiere; onFermer: () => void }) {
   const pb = problemes(m);
-  const image = m.shop_url_maitre ? `${m.shop_url_maitre}?width=900` : m.url_maitre;
+  const image = m.shop_url_maitre ? `${m.shop_url_maitre}?width=900&v=${m.shop_version ?? ""}` : m.url_maitre;
   const sourceHex: Record<string, string> = { fabricant: "fourni par le fabricant", mesure: "mesuré sur l'image", manuel: "saisi à la main" };
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onFermer}>
