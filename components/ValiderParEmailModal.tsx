@@ -223,9 +223,15 @@ export default function ValiderParEmailModal({
                   {verifFils.etat === "erreur"
                     ? "⚠️ Impossible de vérifier les échanges mail"
                     : verifFils.etat === "ok" && verifFils.nbMails > 0
-                    ? "⚠️ Aucun mail REÇU de cette adresse — seulement des mails envoyés par nous"
+                    ? `⚠️ ${verifFils.nbMails} mail${verifFils.nbMails > 1 ? "s" : ""} trouvé${verifFils.nbMails > 1 ? "s" : ""}, tous envoyés par nous — 0 reçu de cette adresse`
                     : "⚠️ Aucun échange mail avec cette adresse — douteux"}
                 </div>
+                {verifFils.etat === "ok" && verifFils.nbMails > 0 && (
+                  <div className="mt-1 text-xs text-rose-200/90">
+                    Dans la carte « Fils de discussion mail », le badge « ✓ répondu » signifie seulement que le
+                    dernier message est le nôtre : il ne prouve pas que le client a écrit.
+                  </div>
+                )}
                 <div className="mt-1 text-xs text-rose-200/90">
                   {verifFils.etat === "erreur"
                     ? `Connecteur indisponible (${verifFils.message}).`
