@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import CorrectionDrawer from "@/components/CorrectionDrawer";
 import ProlongerOffreModal from "@/components/ProlongerOffreModal";
+import ValiderParEmailModal from "@/components/ValiderParEmailModal";
 import { dateExpirationOffre, estProlongee } from "@/lib/validite-offre";
 import CorrectionsHistoryBlock from "@/components/CorrectionsHistoryBlock";
 import RevisionsHistoryBlock from "@/components/RevisionsHistoryBlock";
@@ -222,12 +223,13 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
   const [probabilite,setProbabilite]=useState<string>("neutre")
   // Signature manuscrite du client (25.08.2026). Pour une commande, elle est
   // remontée depuis l'offre parente par /api/offres/[slug]/signature.
-  const [signature,setSignature]=useState<{image:string;signataire:string;date:string;devNumero:string|null}|null>(null)
+  const [signature,setSignature]=useState<{image:string;signataire:string;date:string;devNumero:string|null;parEmail?:boolean;validePar?:string|null}|null>(null)
   const [probSaving,setProbSaving]=useState(false)
   const [livraisonSaving,setLivraisonSaving]=useState(false)
   const [converting,setConverting]=useState(false)
   const [correctionDrawerOpen, setCorrectionDrawerOpen] = useState(false)
   const [prolongerOpen, setProlongerOpen] = useState(false)
+  const [validerEmailOpen, setValiderEmailOpen] = useState(false)
 
   // Contourne le cache d'une heure du Storage Supabase : le fichier est
   // remplacé au même chemin à chaque régénération, mais l'URL nue peut servir
@@ -322,12 +324,14 @@ export default function DashboardDetailPage({ params }: { params: Promise<{ slug
           const sigRes = await fetch(`/api/offres/${s}/signature`)
           if (sigRes.ok) {
             const sigJson = await sigRes.json()
-            if (sigJson.image) {
+            if (sigJson.image || sigJson.validation_mode === "email") {
               setSignature({
-                image: sigJson.image,
+                image: sigJson.image || "",
                 signataire: sigJson.signataire || "",
                 date: sigJson.date_signature || "",
                 devNumero: sigJson.source === "offre_parente" ? (sigJson.dev_numero || null) : null,
+                parEmail: sigJson.validation_mode === "email",
+                validePar: sigJson.valide_par || null,
               })
             }
           }
@@ -1612,7 +1616,20 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                 signature, prise en magasin via le lien public. Sans tracé —
                 les conversions internes — la carte ne s'affiche pas du tout,
                 un cadre vide inquiéterait au lieu de rassurer. */}
-            {signature&&(
+            {signature?.parEmail&&(
+              <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
+                <h2 className="mb-1 text-xl font-semibold">Validation du client</h2>
+                <p className="text-sm text-emerald-300">
+                  ✉️ Validé par e-mail — accord de {signature.signataire}
+                  {signature.date?` du ${signature.date}`:""}
+                </p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Enregistré par {signature.validePar||"—"}
+                  {signature.devNumero?` — reprise de l'offre ${signature.devNumero}`:""}
+                </p>
+              </section>
+            )}
+            {signature&&!signature.parEmail&&(
               <section className="rounded-2xl border border-white/10 bg-[#2a2d31] p-6">
                 <h2 className="mb-1 text-xl font-semibold">Signature du client</h2>
                 <p className="mb-4 text-xs text-zinc-400">
@@ -1682,6 +1699,11 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                     <button type="button" onClick={convertirEnCommande} disabled={converting}
                       className="rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
                       {converting ? "Conversion…" : "✅ Convertir en commande"}
+                    </button>
+                    <button type="button" onClick={() => setValiderEmailOpen(true)} disabled={converting}
+                      className="rounded-xl border border-teal-500/30 bg-teal-500/15 px-4 py-2 text-sm text-teal-300 transition hover:bg-teal-500/20 disabled:opacity-50"
+                      title="Le client a accepté par e-mail : convertit en commande ET lui envoie le mail de confirmation avec le QR">
+                      ✉️ Convertir + mail au client
                     </button>
                     <button type="button" onClick={()=>{if(confirm("Confirmer l'abandon ?")) changeStatut("Abandonnée")}}
                       className="rounded-xl border border-rose-500/30 bg-rose-500/15 px-4 py-2 text-sm text-rose-300 transition hover:bg-rose-500/20">
@@ -2037,6 +2059,20 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
         </div>
 
       </div>
+
+      {offre && (
+        <ValiderParEmailModal
+          open={validerEmailOpen}
+          slug={slug}
+          numero={offre.numero_affiche}
+          clientEmail={offre.client_email}
+          clientNom={[offre.client_prenom, offre.client_nom].filter(Boolean).join(" ") || offre.client_societe || ""}
+          commercial={offre.commercial}
+          dateDocument={offre.date_document}
+          onClose={() => setValiderEmailOpen(false)}
+          onSuccess={(cmdSlug) => { window.location.href = `/dashboard/${cmdSlug}` }}
+        />
+      )}
 
       {offre && (
         <ProlongerOffreModal
