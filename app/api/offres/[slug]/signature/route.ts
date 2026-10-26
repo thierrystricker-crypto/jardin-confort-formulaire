@@ -80,6 +80,10 @@ export async function GET(
         signataire: (d.signataire as string) || null,
         date_signature: (d.date_signature as string) || null,
         date_validation: (d.date_validation as string) || null,
+        // Validation par e-mail (26.10.2026) : pas de tracé, une mention.
+        validation_mode: d.validation_mode === "email" ? "email" : null,
+        valide_par: (d.valide_par as string) || null,
+        date_accord_mail: (d.date_accord_mail as string) || null,
         // "document" = la signature est sur la ligne demandée (une offre) ;
         // "offre_parente" = elle a été remontée depuis le DEV d'origine.
         source: porteur.slug === slug ? "document" : "offre_parente",

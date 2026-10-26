@@ -47,7 +47,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
   const [lastCorrectionAt, setLastCorrectionAt] = useState<string | null>(null);
   // Signature manuscrite du client (25.08.2026). null = aucun tracé : le bloc
   // signature reste alors exactement celui d'avant ce chantier.
-  const [signature, setSignature] = useState<{ image: string; signataire: string; date: string } | null>(null);
+  const [signature, setSignature] = useState<{ image: string; signataire: string; date: string; parEmail?: boolean } | null>(null);
   // Plans 3D du planner cochés « Sur les documents » (SQL 029) : vue 3D et
   // image d'ambiance retenue, en dernière page. Jamais de prix : ceux du
   // planner viennent du webshop, pas de l'offre.
@@ -124,11 +124,13 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
         const sRes = await fetch(`/api/offres/${sg}/signature`);
         if (sRes.ok) {
           const sJson = await sRes.json();
-          if (sJson.image) {
+          // Validation par e-mail (26.10.2026) : pas d'image, mais une mention.
+          if (sJson.image || sJson.validation_mode === "email") {
             setSignature({
-              image: sJson.image,
+              image: sJson.image || "",
               signataire: sJson.signataire || "",
               date: sJson.date_signature || "",
+              parEmail: sJson.validation_mode === "email",
             });
           }
         }
@@ -305,6 +307,10 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
            que le trait. Si le moteur d'impression ignore la propriété, on
            retombe sur un rectangle blanc — dégradé, jamais cassé. */
         .doc-sign-name-signed { margin-bottom: 4px; }
+        .doc-sign-email {
+          display: flex; align-items: flex-end; height: 18mm; margin-bottom: 2px;
+          font-size: 15px; font-weight: 700; color: #3f7a4f; font-style: italic;
+        }
         .doc-sign-img {
           display: block; height: 18mm; max-width: 70mm;
           object-fit: contain; object-position: left bottom;
@@ -627,7 +633,16 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
                 <div className={signature ? "doc-sign-name doc-sign-name-signed" : "doc-sign-name"}>
                   Bon pour accord — {data.nom} {data.prenom}
                 </div>
-                {signature ? (
+                {signature?.parEmail ? (
+                  <>
+                    <div className="doc-sign-email">Validé par e-mail</div>
+                    <div className="doc-sign-line" />
+                    <div className="doc-sign-sub">
+                      Accord donné par e-mail par {signature.signataire}
+                      {signature.date ? ` — ${signature.date}` : ""}
+                    </div>
+                  </>
+                ) : signature ? (
                   <>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img className="doc-sign-img" src={signature.image} alt="Signature du client" />

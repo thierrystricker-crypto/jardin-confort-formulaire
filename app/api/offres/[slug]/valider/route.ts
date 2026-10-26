@@ -34,6 +34,34 @@ export async function POST(
     const body = await request.json();
     const { signataire, signature_base64, date_signature, internal } = body;
 
+    // ─── Validation par e-mail (26.10.2026) ───
+    // Le client a accepté l'offre par mail, sans passer par la signature en
+    // ligne. Un vendeur valide depuis le dashboard : AUCUN tracé de signature
+    // (on ne fabrique pas une fausse signature), le document porte la mention
+    // « Validé par e-mail », et le webhook Make PART — le client reçoit son
+    // mail de confirmation avec le QR, exactement comme après une signature.
+    //
+    // 🔒 Cette route est PUBLIQUE (proxy.ts, liste blanche) : le mode e-mail
+    // n'est donc accepté que si la requête porte le cookie vendeur. Sans ce
+    // contrôle, n'importe qui pourrait valider une offre sans la signer.
+    const parEmail = body.mode === "email";
+    const validePar = typeof body.valide_par === "string" ? body.valide_par.trim() : "";
+    const dateAccordMail = typeof body.date_accord_mail === "string" ? body.date_accord_mail : "";
+
+    if (parEmail) {
+      const secret = process.env.DASHBOARD_SESSION_SECRET;
+      const cookie = request.cookies.get("jc_acces")?.value;
+      if (!secret || !cookie || cookie !== secret) {
+        return NextResponse.json({ error: "Validation par e-mail réservée à l'équipe" }, { status: 401 });
+      }
+      if (validePar.length < 2) {
+        return NextResponse.json({ error: "Nom du commercial requis" }, { status: 400 });
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateAccordMail)) {
+        return NextResponse.json({ error: "Date de l'accord par e-mail invalide" }, { status: 400 });
+      }
+    }
+
     if (!signataire) {
       return NextResponse.json({ error: "Signataire requis" }, { status: 400 });
     }
@@ -48,6 +76,23 @@ export async function POST(
     if (readError || !offre) {
       return NextResponse.json({ error: "Offre non trouvée" }, { status: 404 });
     }
+
+    // Mode e-mail : le mail de confirmation doit pouvoir partir. Une adresse
+    // « sans-email. » est générée (D17) — on n'y écrit jamais.
+    if (parEmail) {
+      const email = String(offre.client_email || "").trim();
+      if (!email || email.startsWith("sans-email.")) {
+        return NextResponse.json({ error: "Ce client n'a pas d'adresse e-mail : utiliser « Convertir en commande »" }, { status: 400 });
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) {
+        return NextResponse.json({ error: `Adresse e-mail invalide (${email}) : la corriger avant de valider` }, { status: 400 });
+      }
+    }
+
+    // Champs propres à la validation par e-mail, recopiés sur l'offre ET la commande.
+    const champsEmail = parEmail
+      ? { validation_mode: "email", valide_par: validePar, date_accord_mail: dateAccordMail }
+      : {};
 
     // Protection anti-doublon : vérifier TOUS les statuts finaux
     if (["Acceptée", "Convertie", "Commande"].includes(offre.statut) || offre.numero_commande) {
@@ -97,8 +142,9 @@ export async function POST(
           ...(offre.data as Record<string, unknown>),
           signataire,
           date_signature,
-          signature_base64,
+          signature_base64: parEmail ? "" : signature_base64,
           date_validation: new Date().toISOString(),
+          ...champsEmail,
         },
       })
       .eq("slug", slug);
@@ -179,6 +225,7 @@ export async function POST(
         date_signature,
         date_validation: new Date().toISOString(),
         stock_frozen_at: stockFreezeOk ? new Date().toISOString() : null,
+        ...champsEmail,
       },
     };
 
@@ -195,7 +242,7 @@ export async function POST(
     // Non bloquant — si erreur, le flow continue
     // On différencie : conversion manuelle (depuis dashboard) vs validation client en ligne
     await createNotification({
-      type: internal ? "commande_convertie_manuelle" : "commande_validee",
+      type: (internal || parEmail) ? "commande_convertie_manuelle" : "commande_validee",
       offre_slug: cmdSlug,
       numero_affiche: numeroCommande,
       type_document: "Commande",
@@ -205,7 +252,9 @@ export async function POST(
       commercial: offre.commercial,
       total_ttc: offre.total_ttc,
       payment_mode: offre.payment_mode,
-      titre: internal
+      titre: parEmail
+        ? `✉️ Commande ${numeroCommande} validée par e-mail (${validePar})`
+        : internal
         ? `🔄 Commande ${numeroCommande} créée (conversion manuelle)`
         : `🎉 Commande ${numeroCommande} validée online`,
     });
@@ -249,6 +298,10 @@ export async function POST(
 
       signataire,
       date_signature,
+      // "en_ligne" = signée par le client ; "email" = accord reçu par mail,
+      // validée par l'équipe (valide_par). Champs ajoutés le 26.10.2026.
+      mode_validation: parEmail ? "email" : "en_ligne",
+      valide_par: parEmail ? validePar : "",
 
       url_offre: `${BASE_URL}/offre/${slug}`,
       url_commande: `${BASE_URL}/offre/${cmdSlug}`,
@@ -276,7 +329,8 @@ export async function POST(
     // Webhook Make : SKIP si conversion interne (depuis le dashboard)
     // Pour ne pas envoyer un email automatique au client lors d'une conversion manuelle.
     // Le client peut toujours recevoir un mail manuel via le brouillon dans le dashboard.
-    if (!internal) {
+    // Le mode e-mail envoie TOUJOURS le mail, même si un appelant ajoutait internal.
+    if (!internal || parEmail) {
       if (!MAKE_WEBHOOK || !MAKE_API_KEY) {
         // Configuration incomplete : impossible de notifier Make. Le client a
         // signe et la commande existe — seul le mail de confirmation manque.
