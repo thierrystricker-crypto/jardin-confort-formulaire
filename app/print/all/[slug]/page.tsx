@@ -485,6 +485,7 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
         .ft-stock-cmd   { color: #dc2626; font-weight: 700; font-size: 11px; }
         .ft-stock-na    { color: #999; font-style: italic; font-size: 11px; }
         .ft-stock-date  { display: block; font-size: 9px; color: #777; font-weight: 400; margin-top: 1px; }
+        .ft-stock-delai { display: block; font-size: 10px; color: ${ORANGE}; font-weight: 700; margin-top: 2px; white-space: normal; }
         .ft-price-val { font-size: 11.5px; color: ${BLACK}; }
         .ft-line-discount { font-size: 10px; color: #2a8a2a; margin-top: 1px; }
         .ft-tr-comment td { background: #eef4fb !important; padding: 8px 12px !important; font-style: italic; color: #1e3a5f !important; font-size: 12px; font-weight: 600; border-left: 3px solid ${THEME} !important; }
@@ -1060,6 +1061,13 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
                   </td>
                   <td className="ft-td-stock">
                     {stockDisplay}
+                    {(() => {
+                      // Délai fournisseur (cascade métachamp → tag, figé J0 sur les commandes) :
+                      // affiché dès que le stock ne couvre pas la quantité.
+                      const delai = (line as { delaiLivraison?: string; id?: string }).delaiLivraison;
+                      const couvert = typeof line.stock === "number" && line.stock >= (line.qty || 0);
+                      return delai && !couvert ? <span className="ft-stock-delai">📦 {delai}</span> : null;
+                    })()}
                     <span className="ft-stock-date">au {dateStockLigne(line)}</span>
                   </td>
                 </tr>
