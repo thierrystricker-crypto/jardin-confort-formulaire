@@ -16,6 +16,7 @@ import ArrivagesBlock from "@/components/ArrivagesBlock";
 import SuiviDelaisBlock from "@/components/SuiviDelaisBlock";
 import AcompteWalleeBadge from "@/components/AcompteWalleeBadge";
 import WalleeLienPaiement from "@/components/WalleeLienPaiement";
+import LienCarteSaferpay from "@/components/LienCarteSaferpay";
 import FilsMailsCard from "@/components/FilsMailsCard";
 import ExportWinbizBlock from "@/components/ExportWinbizBlock";
 import RetourDashboard from "@/components/RetourDashboard";
@@ -1426,11 +1427,24 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                     className="inline-flex items-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/80 transition hover:bg-emerald-500/15">
                     💳 QR à la volée
                   </Link>
-                  {/* Lien de paiement Wallee (04.09.2026) — usage MANUEL pour tester
-                      l'amont du badge « Acompte reçu ». Le QR ci-dessus n'est pas
-                      touché ; les flux client ne sont pas touchés. Le composant
-                      fetch lui-même (/api/wallee-transactions). */}
-                  {isCommandeReelle && <WalleeLienPaiement slug={offre.slug} />}
+                  {/* ─── Bloc PAIEMENT (02.11.2026) ───────────────────────────
+                      Un seul endroit où le vendeur voit les liens de paiement
+                      d'une commande, et leur état.
+                        • Carte / TWINT / Apple Pay / Google Pay → Saferpay (1,7 %)
+                          Lien STABLE 30 jours, envoyé au client SUR DEMANDE
+                          seulement : le QR reste le moyen par défaut.
+                        • QR-facture, PostFinance, PayPal → Wallee
+                      Les deux composants se chargent eux-mêmes. Les boutons QR
+                      ci-dessus restent à leur place : les regrouper imposerait
+                      de déplacer leurs gestionnaires dans cette page de 120 Ko,
+                      ce qui est le travail du chantier dashboard 2.0. */}
+                  {isCommandeReelle && (
+                    <div className="flex w-full flex-col gap-3 rounded-lg border border-zinc-700/60 bg-zinc-800/30 px-3 py-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Paiement</span>
+                      <LienCarteSaferpay slug={offre.slug} />
+                      <WalleeLienPaiement slug={offre.slug} />
+                    </div>
+                  )}
                   {isCommandeReelle && (
                     <>
                       {/* Fiche INITIALE : pièce d'archive, pas un document de
