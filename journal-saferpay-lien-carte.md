@@ -93,7 +93,11 @@ Deux leçons :
 
 Chaîne complète validée sur **CMD-80666** : lien créé (193.50 CHF, valable 30 jours), page Saferpay au bon libellé et au bon `OrderId`, paiement Visa de test accepté, autorisation `525574`, transaction `Yf71G1b4nCE4tASf56lObfvbnfEb`. En base : `statut = PAID`, `paid_at` à la minute, `environnement = test`. Le bouton de création disparaît une fois la tranche payée. Le bloc Wallee est bien réapparu après la 035.
 
-Le menu v2 : le bloc était d'abord **à l'intérieur** du groupe « Documents PDF » (un `<span>` n'est pas reconnu comme intitulé de groupe par `MenusFiche`). Il est devenu un 5ᵉ groupe à part entière → menu « 💳 Paiement ».
+**CMD-81017** (50 %) affiche bien ses deux tranches : acompte et solde à 22.50 CHF chacun sur 45.00.
+
+Le menu v2 : le bloc était d'abord **à l'intérieur** du groupe « Documents PDF » (un `<span>` n'est pas reconnu comme intitulé de groupe par `MenusFiche`). Il est devenu un 5ᵉ groupe à part entière → menu « 💳 Paiement ». Étant le dernier de la rangée, son panneau (`left: 0`) sortait de la fenêtre : `MenusFiche` mesure maintenant à l'ouverture et bascule le panneau à droite (`v2-menu-droite`) quand il déborde et qu'il y tient. Corrige du même coup tout menu qui déborderait après un retour à la ligne.
+
+⚠️ **Le cron ne tourne pas sur la preview** : Vercel n'exécute les tâches planifiées que sur les déploiements de production, et la production n'a aucune variable `SAFERPAY_*` (toutes scopées Preview). En preview, seul le **↻** rafraîchit un statut. Le cron ne sera donc réellement éprouvé qu'une fois la production configurée — et comme il filtre sur `environnement`, il ne touchera jamais les lignes de test.
 
 ### 🔴 Ce que le test d'adresse a révélé
 

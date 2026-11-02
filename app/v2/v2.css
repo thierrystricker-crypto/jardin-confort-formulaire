@@ -1082,6 +1082,8 @@ button.v2-chip:hover { background: var(--v2-surface-2); }
   background: var(--v2-surface); border: 1px solid var(--v2-bord); border-radius: 12px; box-shadow: var(--v2-ombre-pop);
 }
 .v2-fiche .v2-groupe.v2-ouvert > div:nth-child(2) { display: flex; }
+/* Menu qui déborderait de la fenêtre : aligné sur le bord droit de son bouton (MenusFiche décide à l'ouverture) */
+.v2-fiche .v2-groupe.v2-menu-droite > div:nth-child(2) { left: auto; right: 0; }
 .v2-fiche .v2-groupe > div:nth-child(2) > * { width: 100%; justify-content: flex-start; text-align: left; white-space: normal; }
 /* Bloc dossier : le n°, le logo et le montant sont déjà dans l'en-tête v2 ;
    restent les badges (jours, probabilité, acompte, livraison) et « Marquer livrée ». */

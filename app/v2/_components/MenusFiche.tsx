@@ -69,7 +69,7 @@ function appliquer() {
 
 function fermerTout(sauf?: Element | null) {
   document.querySelectorAll(".v2-fiche .v2-groupe.v2-ouvert").forEach((g) => {
-    if (g !== sauf) g.classList.remove("v2-ouvert");
+    if (g !== sauf) g.classList.remove("v2-ouvert", "v2-menu-droite");
   });
 }
 
@@ -86,13 +86,39 @@ export default function MenusFiche() {
     const mo = new MutationObserver(planifier);
     mo.observe(document.body, { childList: true, subtree: true });
 
+    // Le panneau s'ouvre en left:0 et s'étend vers la droite : le dernier
+    // menu de la rangée (« Paiement ») sortait de la fenêtre, amputé de sa
+    // moitié droite. On mesure à l'ouverture plutôt que de coder en dur un
+    // ordre « dernier » : la rangée passe à la ligne selon la largeur, et le
+    // menu qui déborde n'est pas toujours le même. On ne bascule à droite que
+    // si le panneau y tient — sinon on le laisse où il est, tronqué à droite
+    // plutôt qu'inatteignable à gauche.
+    const MARGE = 12;
+    const positionner = (g: HTMLElement) => {
+      const panneau = g.children[1] as HTMLElement | undefined;
+      if (!panneau) return;
+      g.classList.remove("v2-menu-droite");
+      if (!g.classList.contains("v2-ouvert")) return;
+      const p = panneau.getBoundingClientRect();
+      if (p.right <= window.innerWidth - MARGE) return;
+      const bouton = g.getBoundingClientRect();
+      if (bouton.right - p.width >= MARGE) g.classList.add("v2-menu-droite");
+    };
+
     const basculer = (entete: Element) => {
       const g = entete.parentElement;
       if (!g) return;
       const ouvrir = !g.classList.contains("v2-ouvert");
       fermerTout(g);
       g.classList.toggle("v2-ouvert", ouvrir);
+      positionner(g);
     };
+
+    // Redimensionnement : le menu ouvert peut passer d'un côté à l'autre.
+    const repositionner = () => {
+      document.querySelectorAll<HTMLElement>(".v2-fiche .v2-groupe.v2-ouvert").forEach(positionner);
+    };
+    window.addEventListener("resize", repositionner);
     const clic = (e: MouseEvent) => {
       const t = e.target as Element | null;
       const entete = t?.closest?.(".v2-fiche .v2-groupe > div:first-child");
@@ -123,6 +149,7 @@ export default function MenusFiche() {
       mo.disconnect();
       document.removeEventListener("click", clic);
       document.removeEventListener("keydown", touche);
+      window.removeEventListener("resize", repositionner);
     };
   }, []);
 
