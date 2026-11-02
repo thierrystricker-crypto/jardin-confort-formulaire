@@ -89,6 +89,25 @@ Deux leçons :
 5. **Adresses** : créer un lien sur une commande dont l'adresse n'a pas de numéro de rue, puis sur une sans rue du tout. La première doit passer, la seconde être refusée proprement par notre garde-fou.
 6. Vérifier que le bloc Wallee **réapparaît** une fois la 035 exécutée.
 
+## Résultats du smoke test (02.11.2026, preview, sandbox)
+
+Chaîne complète validée sur **CMD-80666** : lien créé (193.50 CHF, valable 30 jours), page Saferpay au bon libellé et au bon `OrderId`, paiement Visa de test accepté, autorisation `525574`, transaction `Yf71G1b4nCE4tASf56lObfvbnfEb`. En base : `statut = PAID`, `paid_at` à la minute, `environnement = test`. Le bouton de création disparaît une fois la tranche payée. Le bloc Wallee est bien réapparu après la 035.
+
+Le menu v2 : le bloc était d'abord **à l'intérieur** du groupe « Documents PDF » (un `<span>` n'est pas reconnu comme intitulé de groupe par `MenusFiche`). Il est devenu un 5ᵉ groupe à part entière → menu « 💳 Paiement ».
+
+### 🔴 Ce que le test d'adresse a révélé
+
+Le protocole supposait une colonne `client_numero`. **Le numéro vient en réalité de `data.numero`** ; la colonne existe mais n'est pas la source. Conséquences :
+
+- Le cas « rue sans numéro » n'est pas un cas limite : sur 484 commandes, 265 ont le numéro écrit **dans** `client_rue` (« Chemin de la cornelle 46 »). Il passe sans rien faire.
+- **Le trou corrigé** : `client_rue` vide + `data.numero` rempli donnait une rue réduite au seul numéro. **CMD-80883** (« 31 ») n'était refusée que sur NPA et localité, et **CMD-80878** (« 36 », Gstaad, NPA et ville remplis) **serait passée entièrement**, créant un lien avec une adresse de facturation inutilisable. Le garde-fou exige désormais **au moins une lettre** dans la rue.
+- Refus propres confirmés avant tout appel à Saferpay : CMD-80883 et CMD-80933 (NPA seul manquant → message précis).
+- Cas positif : **CMD-81017** (adresse complète, numéro en champ séparé, 50 %) — lien d'acompte créé à 22.50 CHF sur 45.00.
+
+### Hors périmètre, à verser au backlog
+
+**7 commandes portent le numéro en double** parce que `client_rue` le contient déjà *et* que `data.numero` est rempli — CMD-81010 donne « Petite Corniche 11 11 ». La logique d'adresse étant reprise à l'identique du QR sanctuarisé, ces adresses sont **déjà fausses sur les QR-factures envoyées**. Rien n'a été touché ici.
+
 ## Reste à faire / bilan de passation
 
 - **Webhook Saferpay** : activer « Notifiez votre serveur une fois le paiement effectué » dans le backoffice, capturer une vraie notification, puis écrire la route. Le cron deviendra le filet.

@@ -260,8 +260,15 @@ export async function POST(req: NextRequest) {
     // BillingAddress obligatoire côté Saferpay : on vérifie avant l'appel pour
     // rendre un message compréhensible par le vendeur.
     const deb = debiteurDocument(offre);
+    // 02.11.2026 — un NUMÉRO SEUL n'est pas une rue. Le numéro vient de
+    // `data.numero`, pas de la colonne `client_numero` : deux commandes
+    // (CMD-80878, CMD-80883) ont `client_rue` vide et `data.numero` rempli,
+    // ce qui donnait une rue « 36 » / « 31 » que le simple test de présence
+    // laissait passer — adresse de facturation inutilisable, et refusable par
+    // l'acquéreur après coup. On exige donc au moins une lettre.
+    const rueNommee = /\p{L}/u.test(deb.street);
     const manquants = [
-      !deb.street && "rue",
+      !rueNommee && "rue",
       !deb.postcode && "NPA",
       !deb.city && "localité",
       !deb.societe && !deb.nom && "nom ou société",
