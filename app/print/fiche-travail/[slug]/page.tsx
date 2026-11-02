@@ -773,6 +773,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
         .stock-cmd   { color: #dc2626; font-weight: 700; font-size: 11px; }
         .stock-na    { color: #999; font-style: italic; font-size: 11px; }
         .stock-date  { display: block; font-size: 9px; color: #777; font-weight: 400; margin-top: 1px; }
+        .stock-delai { display: block; font-size: 10px; color: ${ORANGE}; font-weight: 700; margin-top: 2px; white-space: normal; }
 
         /* ── Prix ── */
         .price-val { font-size: 11.5px; color: ${BLACK}; }
@@ -1428,6 +1429,13 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
 
                   <td className="td-stock">
                     {stockDisplay}
+                    {(() => {
+                      // Délai fournisseur (cascade métachamp → tag, figé J0 sur les commandes) :
+                      // affiché dès que le stock ne couvre pas la quantité.
+                      const delai = (line as { delaiLivraison?: string; id?: string }).delaiLivraison;
+                      const couvert = typeof line.stock === "number" && line.stock >= (line.qty || 0);
+                      return delai && !couvert ? <span className="stock-delai">📦 {delai}</span> : null;
+                    })()}
                     <span className="stock-date">au {dateStockLigne(line)}</span>
                   </td>
                 </tr>
