@@ -21,6 +21,9 @@ const ORDRE: [RegExp, string][] = [
   [/^Pages web/, "2"],
   [/^Navigation/, "3"],
   [/^Outils internes/, "4"],
+  // 02.11.2026 — menu « Paiement » (liens carte Saferpay + Wallee), groupe 5
+  // de la fiche v1. Ajouté ici seulement : le groupe v1 fait le reste.
+  [/^Paiement/, "5"],
 ];
 
 function appliquer() {

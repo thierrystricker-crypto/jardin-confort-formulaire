@@ -54,7 +54,7 @@ Compte de test Saferpay (client **287701**, terminaux 17781240 eCommerce et **17
 - **`components/LienCarteSaferpay.tsx`** — bouton de création par tranche, statut, lien à copier, badge `TEST` quand l'environnement est le sandbox. **Affiche ses erreurs au lieu de disparaître.**
 - **`components/AcompteWalleeBadge.tsx`** — lit `/api/acomptes`, affiche le moyen (« carte », « virement QR », « PostFinance / PayPal »).
 - **`app/api/cron/saferpay-statuts/route.ts` + `vercel.json`** — relecture des offres `OPEN` toutes les 30 minutes, `Authorization: Bearer $CRON_SECRET`, 50 lignes par passage, filtré sur l'environnement courant.
-- **`app/dashboard/[slug]/page.tsx`** — bloc « Paiement » unique regroupant carte et Wallee, à l'emplacement de l'ancien bloc Wallee. Les boutons QR restent où ils sont : déplacer leurs gestionnaires dans une page de 120 Ko est le travail du chantier dashboard 2.0.
+- **`app/dashboard/[slug]/page.tsx`** — **groupe « Paiement » à part entière** (5ᵉ groupe de la fiche, même forme que les quatre autres : intitulé puis boutons), regroupant carte et Wallee. `app/v2/_components/MenusFiche.tsx` + `app/v2/v2.css` : il devient le menu déroulant « 💳 Paiement » de la v2. Placé d'abord *dans* le groupe Documents PDF le 02.11, il s'y retrouvait caché — corrigé le même jour. Les boutons QR restent où ils sont : déplacer leurs gestionnaires dans une page de 120 Ko est le travail du chantier dashboard 2.0.
 - **`app/api/wallee-transactions/route.ts` + `components/WalleeLienPaiement.tsx`** — mode `twint` renommé `postfinance`, id TWINT `242531` retiré, variable d'env `WALLEE_METHODES_POSTFINANCE`.
 - **`docs/sql/016-transactions-wallee-mode-tranche.sql` supprimé.**
 
@@ -77,7 +77,8 @@ Deux leçons :
 3. Variables Vercel, **valeurs sandbox sur la preview** :
    `SAFERPAY_BASE_URL=https://test.saferpay.com/api`, `SAFERPAY_CUSTOMER_ID=287701`, `SAFERPAY_TERMINAL_ID=17781241`, `SAFERPAY_API_USER`, `SAFERPAY_API_PASSWORD`.
    En production : `https://www.saferpay.com/api`, `382850`, `17788204`, et un utilisateur JSON API créé dans le backoffice de prod.
-4. ⚠️ **Permissions IP : laisser vide** dans le backoffice. Vercel n'a pas d'IP fixe ; une seule adresse saisie couperait l'API.
+4. 🔴 **Les variables Vercel sont figées AU BUILD.** Les cinq `SAFERPAY_*` ont été créées le 02.11 à 23h08–23h10 UTC, alors que le preview `pjqfm25qi` avait été construit à 22h57 : il affichait donc « Saferpay non configuré sur cet environnement », et un redéploiement de **production** n'y change rien puisqu'elles sont scopées **Preview**. Il faut redéployer la **branche**. Même piège à prévoir en production : créer les variables, *puis* déployer.
+5. ⚠️ **Permissions IP : laisser vide** dans le backoffice. Vercel n'a pas d'IP fixe ; une seule adresse saisie couperait l'API.
 
 ## Protocole de test (preview, cobaye CMD-80666 UNIQUEMENT)
 

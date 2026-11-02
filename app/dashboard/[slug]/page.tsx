@@ -1427,24 +1427,6 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                     className="inline-flex items-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300/80 transition hover:bg-emerald-500/15">
                     💳 QR à la volée
                   </Link>
-                  {/* ─── Bloc PAIEMENT (02.11.2026) ───────────────────────────
-                      Un seul endroit où le vendeur voit les liens de paiement
-                      d'une commande, et leur état.
-                        • Carte / TWINT / Apple Pay / Google Pay → Saferpay (1,7 %)
-                          Lien STABLE 30 jours, envoyé au client SUR DEMANDE
-                          seulement : le QR reste le moyen par défaut.
-                        • QR-facture, PostFinance, PayPal → Wallee
-                      Les deux composants se chargent eux-mêmes. Les boutons QR
-                      ci-dessus restent à leur place : les regrouper imposerait
-                      de déplacer leurs gestionnaires dans cette page de 120 Ko,
-                      ce qui est le travail du chantier dashboard 2.0. */}
-                  {isCommandeReelle && (
-                    <div className="flex w-full flex-col gap-3 rounded-lg border border-zinc-700/60 bg-zinc-800/30 px-3 py-2">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Paiement</span>
-                      <LienCarteSaferpay slug={offre.slug} />
-                      <WalleeLienPaiement slug={offre.slug} />
-                    </div>
-                  )}
                   {isCommandeReelle && (
                     <>
                       {/* Fiche INITIALE : pièce d'archive, pas un document de
@@ -1480,6 +1462,31 @@ const isCommande = offre.type_document === "Commande" || ["Acceptée", "Converti
                   )}
                 </div>
               </div>
+
+              {/* ─── Groupe 5 — PAIEMENT (02.11.2026) ───────────────────────
+                  Un seul endroit où le vendeur voit les liens de paiement
+                  d'une commande, et leur état.
+                    • Carte / TWINT / Apple Pay / Google Pay → Saferpay (1,7 %)
+                      Lien STABLE 30 jours, envoyé au client SUR DEMANDE
+                      seulement : le QR reste le moyen par défaut.
+                    • QR-facture, PostFinance, PayPal → Wallee
+                  Groupe à part entière, de la même forme que les quatre autres
+                  (intitulé en premier enfant, boutons en second) : MenusFiche
+                  le reconnaît et en fait le menu « 💳 Paiement » de la v2.
+                  Les boutons QR restent dans Documents PDF : les regrouper
+                  imposerait de déplacer leurs gestionnaires dans cette page de
+                  120 Ko, ce qui est le travail du chantier dashboard 2.0. */}
+              {isCommandeReelle && (
+                <div>
+                  <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                    Paiement <span className="ml-1 text-[10px] font-normal normal-case text-zinc-500">liens à envoyer au client</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <LienCarteSaferpay slug={offre.slug} />
+                    <WalleeLienPaiement slug={offre.slug} />
+                  </div>
+                </div>
+              )}
 
             </div>
             {/* ═══ FIN COLONNE DROITE ═══ */}

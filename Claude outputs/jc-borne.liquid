@@ -1,0 +1,19 @@
+{%- comment -%}
+  jc-borne — bouton « Transmettre à un conseiller » (bornes du magasin uniquement)
+  Inclus dans snippets/cart-drawer.liquid et sections/main-cart.liquid.
+  Invisible partout, sauf sur un poste marqué borne (html.jc-borne, posé par jc-borne.js
+  après une visite unique de https://jardin-confort.ch/?borne=on).
+{%- endcomment -%}
+<style>
+  .jc-borne-zone{display:none}
+  html.jc-borne .jc-borne-zone{display:block}
+  .jc-borne-overlay{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px}
+  .jc-borne-carte{background:#fff;color:#222;border-radius:12px;padding:40px 32px;max-width:520px;width:100%;text-align:center}
+  .jc-borne-code{font-size:96px;font-weight:700;letter-spacing:.12em;line-height:1;margin:24px 0}
+</style>
+<div class="jc-borne-zone mt-4">
+  <button type="button" class="btn btn--secondary w-full js-jc-borne-btn">
+    🧑‍💼 Transmettre ma sélection à un conseiller
+  </button>
+</div>
+<script src="{{ 'jc-borne.js' | asset_url }}" defer="defer"></script>

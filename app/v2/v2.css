@@ -1057,6 +1057,7 @@ button.v2-chip:hover { background: var(--v2-surface-2); }
 .v2-fiche .v2-groupe[data-v2-ordre="2"] { order: 2; }
 .v2-fiche .v2-groupe[data-v2-ordre="3"] { order: 3; }
 .v2-fiche .v2-groupe[data-v2-ordre="4"] { order: 4; }
+.v2-fiche .v2-groupe[data-v2-ordre="5"] { order: 5; }
 .v2-fiche .v2-groupe:has(> div:nth-child(2):empty) { display: none; }
 /* L'intitulé du groupe devient le bouton du menu */
 .v2-fiche .v2-groupe > div:first-child {
@@ -1071,6 +1072,7 @@ button.v2-chip:hover { background: var(--v2-surface-2); }
 .v2-fiche .v2-groupe[data-v2-ordre="2"] > div:first-child::before { content: "🌐"; }
 .v2-fiche .v2-groupe[data-v2-ordre="3"] > div:first-child::before { content: "✉️"; }
 .v2-fiche .v2-groupe[data-v2-ordre="4"] > div:first-child::before { content: "🧰"; }
+.v2-fiche .v2-groupe[data-v2-ordre="5"] > div:first-child::before { content: "💳"; }
 .v2-fiche .v2-groupe.v2-ouvert > div:first-child { border-color: var(--v2-accent); color: var(--v2-accent); background: var(--v2-accent-doux); }
 /* Le panneau */
 .v2-fiche .v2-groupe > div:nth-child(2) {
