@@ -34,9 +34,18 @@
 //   SAFERPAY_TERMINAL_ID   17781241 (test, SPG) | 17788204 (prod, SPG)
 //   SAFERPAY_API_USER      API_…
 //   SAFERPAY_API_PASSWORD  …
+//   SAFERPAY_API_VERSION   facultatif — défaut 1.55 ; à baisser si le compte
+//                          refuse la version (voir API_VERSION plus bas)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const API_VERSION = "1.55";
+// Version de la spec Saferpay annoncée dans l'en-tête `Saferpay-ApiVersion`.
+// 1.55 est la version courante de la spec et le compte de TEST l'accepte, mais
+// un compte de production fraîchement ouvert peut être provisionné sur une
+// version antérieure et répondre alors
+//   VALIDATION_FAILED — Unsupported 'Saferpay-ApiVersion' in HTTP Header.
+// (03.11.2026, compte 382850.) D'où la variable d'environnement : on fait
+// redescendre la version sans retoucher au code, par environnement.
+const API_VERSION = (process.env.SAFERPAY_API_VERSION || "1.55").trim();
 
 export type StatutSaferpay = "OPEN" | "PAID" | "EXPIRED" | "DISABLED";
 
