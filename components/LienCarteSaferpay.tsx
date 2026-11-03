@@ -62,7 +62,12 @@ export default function LienCarteSaferpay({ slug }: { slug: string }) {
   const [message, setMessage] = useState<string>("");
   const [copie, setCopie] = useState<string>("");
 
-  const charger = useCallback(async (): Promise<Etat|null> => {
+  // 03.11.2026 — après une relecture, le badge d'encaissement en haut de fiche
+  // restait périmé : il se charge à son montage et ignorait ce composant. Le ↻
+  // mettait donc à jour le bloc carte et la base, mais pas la ligne que le
+  // vendeur regarde en premier. Un événement de fenêtre suffit à les relier,
+  // sans remonter d'état dans une page de 120 Ko.
+  const charger = useCallback(async (notifier = false): Promise<Etat|null> => {
     if (!slug) return null;
     try {
       const r = await fetch(`/api/saferpay-transactions?slug=${encodeURIComponent(slug)}`);
@@ -70,6 +75,7 @@ export default function LienCarteSaferpay({ slug }: { slug: string }) {
       if (!r.ok) throw new Error(j.error || `Erreur ${r.status}`);
       setEtat(j);
       setMessage("");
+      if (notifier) window.dispatchEvent(new CustomEvent("jc:encaissements-maj"));
       return j as Etat;
     } catch (e) {
       // On AFFICHE l'erreur au lieu de disparaître : une fonction en panne qui
@@ -91,7 +97,7 @@ export default function LienCarteSaferpay({ slug }: { slug: string }) {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || `Erreur ${r.status}`);
-      await charger();
+      await charger(true);
     } catch (e) {
       setMessage(String((e as Error).message || e));
     } finally { setBusy(false); }
@@ -139,7 +145,7 @@ export default function LienCarteSaferpay({ slug }: { slug: string }) {
             </button>
           );
         })}
-        <button onClick={() => charger()} disabled={busy} className="text-xs text-zinc-500 hover:text-zinc-300" title="Relire le statut chez Saferpay">↻</button>
+        <button onClick={() => charger(true)} disabled={busy} className="text-xs text-zinc-500 hover:text-zinc-300" title="Relire le statut chez Saferpay">↻</button>
       </div>
 
       {Array.from(courantes.values())

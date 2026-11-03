@@ -2,7 +2,7 @@
 
 Chantier ouvert le **02.11.2026**. Fait suite au chantier « Lien de paiement Wallee » (04.09.2026) et au chantier « Wallee v2 » qui n'a jamais été déployé — voir `journal-wallee-lien-paiement.md`.
 
-Branche `feat/saferpay-lien-carte`. **État : code écrit, migration 035 à exécuter, smoke test sur CMD-80666 à faire.**
+Branche `feat/saferpay-lien-carte`. **État au 03.11.2026 : migration 035 exécutée, smoke test complet et concluant, prêt à merger. Reste la mise en production (réglages backoffice + variables), et le webhook.**
 
 ## Pourquoi Saferpay, et pourquoi maintenant
 
@@ -54,6 +54,7 @@ Compte de test Saferpay (client **287701**, terminaux 17781240 eCommerce et **17
 - **`components/LienCarteSaferpay.tsx`** — bouton de création par tranche, statut, lien à copier, badge `TEST` quand l'environnement est le sandbox. **Affiche ses erreurs au lieu de disparaître.**
 - **`components/AcompteWalleeBadge.tsx`** — lit `/api/acomptes`, affiche le moyen (« carte », « virement QR », « PostFinance / PayPal »).
 - **`app/api/cron/saferpay-statuts/route.ts` + `vercel.json`** — relecture des offres `OPEN` toutes les 30 minutes, `Authorization: Bearer $CRON_SECRET`, 50 lignes par passage, filtré sur l'environnement courant.
+- **`components/AcompteWalleeBadge.tsx` + `LienCarteSaferpay.tsx`** — le ↻ et la création d'un lien émettent `jc:encaissements-maj` ; le badge l'écoute et se recharge. Sans ça il gardait l'état du chargement de la page et un paiement tout juste constaté n'apparaissait qu'après un F5.
 - **`app/dashboard/[slug]/page.tsx`** — **groupe « Paiement » à part entière** (5ᵉ groupe de la fiche, même forme que les quatre autres : intitulé puis boutons), regroupant carte et Wallee. `app/v2/_components/MenusFiche.tsx` + `app/v2/v2.css` : il devient le menu déroulant « 💳 Paiement » de la v2. Placé d'abord *dans* le groupe Documents PDF le 02.11, il s'y retrouvait caché — corrigé le même jour. Les boutons QR restent où ils sont : déplacer leurs gestionnaires dans une page de 120 Ko est le travail du chantier dashboard 2.0.
 - **`app/api/wallee-transactions/route.ts` + `components/WalleeLienPaiement.tsx`** — mode `twint` renommé `postfinance`, id TWINT `242531` retiré, variable d'env `WALLEE_METHODES_POSTFINANCE`.
 - **`docs/sql/016-transactions-wallee-mode-tranche.sql` supprimé.**
@@ -93,7 +94,9 @@ Deux leçons :
 
 Chaîne complète validée sur **CMD-80666** : lien créé (193.50 CHF, valable 30 jours), page Saferpay au bon libellé et au bon `OrderId`, paiement Visa de test accepté, autorisation `525574`, transaction `Yf71G1b4nCE4tASf56lObfvbnfEb`. En base : `statut = PAID`, `paid_at` à la minute, `environnement = test`. Le bouton de création disparaît une fois la tranche payée. Le bloc Wallee est bien réapparu après la 035.
 
-**CMD-81017** (50 %) affiche bien ses deux tranches : acompte et solde à 22.50 CHF chacun sur 45.00.
+**CMD-81017** (50 %, société Bäckerei-Conditorei Fleischli) affiche bien ses deux tranches, 22.50 CHF chacune sur 45.00. Le **solde a été payé** le 03.11 — autorisation 491465, transaction `SCSh5Wb33p2btASj0xOdb8dlO5Wb` — ce qui valide d'un coup la tranche solde et un paiement **société** de bout en bout (`Company` transmis dans l'adresse de facturation).
+
+Situation utile observée au passage : solde payé, acompte toujours ouvert. Le badge affiche « ✅ Solde reçu le 03.11 — 22.50 CHF · carte » et ne laisse jamais entendre que le reste n'est pas payé — la règle tient.
 
 Le menu v2 : le bloc était d'abord **à l'intérieur** du groupe « Documents PDF » (un `<span>` n'est pas reconnu comme intitulé de groupe par `MenusFiche`). Il est devenu un 5ᵉ groupe à part entière → menu « 💳 Paiement ». Étant le dernier de la rangée, son panneau (`left: 0`) sortait de la fenêtre : `MenusFiche` mesure maintenant à l'ouverture et bascule le panneau à droite (`v2-menu-droite`) quand il déborde et qu'il y tient. Corrige du même coup tout menu qui déborderait après un retour à la ligne.
 
@@ -151,6 +154,8 @@ Puis, hors Secure PayGate : créer un **utilisateur JSON API de production**, la
 - **Mention de l'acompte sur les pages print dynamiques** (fiche de travail, bulletin de livraison, fiche bleue), une fois la saisie manuelle en place. Jamais sur le PDF de confirmation client, figé à la validation.
 - **Montant à la volée** pour le lien carte, jumeau de `/dashboard/qr-libre`.
 - **`WalleeLienPaiement` doit afficher ses erreurs** au lieu de rendre `null`.
+- **Notification dans le dashboard à chaque paiement** : la table `notifications` convient telle quelle (type libre, `offre_slug`, `commercial`, `total_ttc`…), un type `paiement_recu` s'y range sans migration. Le point de conception : un helper unique appelé par les trois constats de paiement (↻, cron, webhook), n'écrivant que sur la transition `OPEN → PAID`, sinon le vendeur reçoit deux ou trois fois la même notification. Deux questions ouvertes : Wallee inclus ou non, et `commercial` renseigné ou non.
+- **Webhook Saferpay — la forme est désormais connue** (relevé dans le backoffice le 03.11) : la case « Notifiez votre serveur une fois le paiement effectué » prend une URL contenant `{{{PAYMENTPAGETOKEN}}}`, puis `PaymentPage/Assert` donne la transaction, rattachée par `Transaction.OrderId`. Attention, `Assert` est une méthode de la **Payment API** (bloc `RequestHeader` dans le corps), pas de la Management API. Pointer sur l'alias **stable de branche** et non sur une URL de déploiement, qui change à chaque build. Ne cocher la case qu'une fois la route écrite.
 - **Conservation 24 mois** des courriels sortants contenant un lien de paiement, les CGV et l'offre — exigence contractuelle Worldline (point 6 des conditions spéciales cartes). À organiser.
 - **Vérifier la facturation TWINT chez Wallee** : TWINT étant passé chez Saferpay, un éventuel fixe mensuel côté Wallee n'a plus lieu d'être.
 - **Nom affiché sur la page de paiement** : « Jardin Confort SA » sans trait d'union sur le compte de test. Vérifier l'orthographe en production.

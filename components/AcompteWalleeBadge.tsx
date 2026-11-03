@@ -14,7 +14,7 @@
 // Le nom du fichier reste `AcompteWalleeBadge` pour ne pas disperser le diff ;
 // il sera renommé au chantier dashboard 2.0.
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 type Encaissement = {
   id: string;
@@ -47,15 +47,28 @@ function libelle(tranche: string | null) {
 export default function AcompteWalleeBadge({ numero }: { numero: string }) {
   const [encaissements, setEncaissements] = useState<Encaissement[] | null>(null);
 
-  useEffect(() => {
+  const charger = useCallback(async () => {
     if (!numero) return;
-    let actif = true;
-    fetch(`/api/acomptes?numero=${encodeURIComponent(numero)}`)
-      .then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error || `Erreur ${r.status}`); return j; })
-      .then(j => { if (actif) setEncaissements(j.encaissements || []); })
-      .catch(() => { if (actif) setEncaissements([]); });
-    return () => { actif = false; };
+    try {
+      const r = await fetch(`/api/acomptes?numero=${encodeURIComponent(numero)}`);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `Erreur ${r.status}`);
+      setEncaissements(j.encaissements || []);
+    } catch {
+      setEncaissements([]);
+    }
   }, [numero]);
+
+  useEffect(() => { charger(); }, [charger]);
+
+  // 03.11.2026 — le ↻ du bloc Paiement relit les statuts chez le prestataire ;
+  // sans cette écoute, le badge gardait l'état du chargement de la page et un
+  // paiement tout juste constaté n'apparaissait qu'après un F5.
+  useEffect(() => {
+    const maj = () => { charger(); };
+    window.addEventListener("jc:encaissements-maj", maj);
+    return () => window.removeEventListener("jc:encaissements-maj", maj);
+  }, [charger]);
 
   // Rien de connu (ou pas encore chargé) : aucun badge — l'absence ne doit pas
   // ressembler à une information.
