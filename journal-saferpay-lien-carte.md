@@ -112,6 +112,25 @@ Le protocole supposait une colonne `client_numero`. **Le numéro vient en réali
 
 **7 commandes portent le numéro en double** parce que `client_rue` le contient déjà *et* que `data.numero` est rempli — CMD-81010 donne « Petite Corniche 11 11 ». La logique d'adresse étant reprise à l'identique du QR sanctuarisé, ces adresses sont **déjà fausses sur les QR-factures envoyées**. Rien n'a été touché ici.
 
+## Mise en production — les réglages du backoffice, un par un
+
+Ces réglages ne sont **pas** dans le code et ne se déploient pas : ils vivent dans le backoffice Saferpay, et ceux de test ne suivent pas en production. Tant qu'ils manquent, l'API répond `ACTION_NOT_SUPPORTED — There are no default settings for Secure PayGate yet`.
+
+Dans **Secure PayGate → paramètres** :
+
+1. **Adresse e-mail pour les notifications de paiement** — où Saferpay prévient qu'un lien a été payé.
+2. **Type d'autorisation par défaut** → *Autorisation normale (définitive) avec capture automatique*. C'est un acompte : l'argent doit être encaissé tout de suite, pas réservé.
+3. **Condition par défaut (3-D Secure)** → ⚠️ *Uniquement avec transfert de responsabilité*. Le contrat Worldline (conditions spéciales cartes) impose le transfert de responsabilité ; laisser « Aucune condition » accepterait des paiements dont la fraude resterait à notre charge.
+4. **Messages au porteur, ou site propre** — on garde les messages préenregistrés de Saferpay. Pointer vers nos pages demanderait une URL de confirmation avec le jeton `{{{PAYMENTPAGETOKEN}}}` : inutile ici, le vendeur suit l'état sur la fiche.
+5. **Adresse e-mail d'expéditeur** — c'est le préfixe avant `@link2saferpay.com`. Le formulaire le rend obligatoire dès qu'on touche au bloc e-mails.
+6. **Adresse BCC** — facultative ; une copie des envois.
+7. **Adresse de réponse (reply-to)** — obligatoire avec l'expéditeur. Mettre une boîte réellement relevée : c'est là que le client répondra.
+8. **Conditions générales (CGV)** — au moins un jeu de documents, par langue. Exigence du formulaire *et* du contrat.
+
+Puis, hors Secure PayGate : créer un **utilisateur JSON API de production**, laisser ses **permissions IP vides**, saisir les cinq variables `SAFERPAY_*` en scope Production, et **déployer après** — jamais avant.
+
+Note pour le webhook à venir : d'après la documentation, l'« URL de notification » de la *Payment Page Configuration* **n'a aucun effet sur Secure PayGate**, même si des messages serveur-à-serveur sont bien émis à chaque paiement. Il faudra donc capturer une vraie notification pour savoir ce qu'elle contient et d'où elle part, au lieu de supposer.
+
 ## Reste à faire / bilan de passation
 
 - **Webhook Saferpay** : activer « Notifiez votre serveur une fois le paiement effectué » dans le backoffice, capturer une vraie notification, puis écrire la route. Le cron deviendra le filet.

@@ -114,6 +114,16 @@ function debiteurDocument(offre: OffreDoc) {
   };
 }
 
+// Qui paie, en une ligne : la société prime, sinon prénom + nom.
+function nomAffiche(deb: { societe: string; prenom: string; nom: string }): string {
+  return deb.societe || [deb.prenom, deb.nom].filter(Boolean).join(" ") || "";
+}
+
+function tronquer(texte: string, max: number): string {
+  const t = texte.replace(/\s*·\s*$/, "").trim();
+  return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
+}
+
 async function lireCommande(slug: string): Promise<OffreDoc | null> {
   const { data, error } = await supabaseAdmin
     .from("offres")
@@ -288,7 +298,12 @@ export async function POST(req: NextRequest) {
       montantChf: montant,
       devise: "CHF",
       orderId: numero,
-      description: `${libelle} — ${numero}`,
+      // 03.11.2026 — le client doit se reconnaître d'un coup d'œil : la société
+      // si elle existe, sinon prénom + nom. Visible sur la page de paiement ET
+      // dans le backoffice Saferpay, où un numéro seul ne dit rien. Tronqué :
+      // la description n'est pas un champ libre sans fin, et une raison sociale
+      // longue ne doit pas repousser le numéro de commande hors de l'écran.
+      description: tronquer(`${libelle} — ${numero} · ${nomAffiche(deb)}`, 160),
       langue: "fr",
       adresse: {
         FirstName: deb.prenom || undefined,
