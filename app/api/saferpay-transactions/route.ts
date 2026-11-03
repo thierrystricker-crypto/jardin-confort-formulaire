@@ -119,6 +119,19 @@ function nomAffiche(deb: { societe: string; prenom: string; nom: string }): stri
   return deb.societe || [deb.prenom, deb.nom].filter(Boolean).join(" ") || "";
 }
 
+// Le libellé du document est écrit pour nos documents, pas pour une pastille
+// de page de paiement : « Acompte de 50% à la commande » dit deux fois où l'on
+// est. On garde le sens, on jette le contexte.
+function libelleCourt(libelle: string): string {
+  const t = (libelle || "").trim();
+  if (!t) return "Paiement";
+  return t
+    .replace(/\s+à la (commande|livraison|signature)\b/gi, "")
+    .replace(/\bAcompte de\s+/i, "Acompte ")
+    .replace(/\s{2,}/g, " ")
+    .trim() || t;
+}
+
 function tronquer(texte: string, max: number): string {
   const t = texte.replace(/\s*·\s*$/, "").trim();
   return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
@@ -298,12 +311,13 @@ export async function POST(req: NextRequest) {
       montantChf: montant,
       devise: "CHF",
       orderId: numero,
-      // 03.11.2026 — le client doit se reconnaître d'un coup d'œil : la société
-      // si elle existe, sinon prénom + nom. Visible sur la page de paiement ET
-      // dans le backoffice Saferpay, où un numéro seul ne dit rien. Tronqué :
-      // la description n'est pas un champ libre sans fin, et une raison sociale
-      // longue ne doit pas repousser le numéro de commande hors de l'écran.
-      description: tronquer(`${libelle} — ${numero} · ${nomAffiche(deb)}`, 160),
+      // 03.11.2026, revu le même jour sur la page réelle — Saferpay ROGNE la
+      // description à l'affichage. L'ordre compte donc plus que la longueur :
+      // on met devant ce que le client doit reconnaître (son numéro de
+      // commande, son nom), et le mode de paiement en dernier, puisque c'est
+      // lui qui sera coupé s'il faut couper. Le libellé est en plus raccourci :
+      // « Paiement d'avance à la commande » devient « Paiement d'avance ».
+      description: tronquer(`${numero} · ${nomAffiche(deb)} — ${libelleCourt(libelle)}`, 120),
       langue: "fr",
       adresse: {
         FirstName: deb.prenom || undefined,
