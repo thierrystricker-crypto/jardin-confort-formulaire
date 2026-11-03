@@ -1,0 +1,31 @@
+# Fins de ligne — ajouté le 03.11.2026
+#
+# Git a traité docs/CGV-Jardin-Confort-SA-FR.pdf comme du TEXTE à son premier
+# commit (« LF will be replaced by CRLF », 232 insertions comptées sur un PDF).
+# Avec core.autocrlf, cela réécrit des octets au checkout et corrompt le
+# fichier — sans aucune erreur, le PDF devient simplement illisible.
+# On déclare donc explicitement ce qui est binaire.
+
+* text=auto
+
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.svgz  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.eot   binary
+*.xlsx  binary
+*.xls   binary
+*.docx  binary
+*.pptx  binary
+*.zip   binary
+*.gz    binary
+*.glb   binary
+*.gltf  binary
