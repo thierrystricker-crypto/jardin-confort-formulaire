@@ -112,24 +112,37 @@ Le protocole supposait une colonne `client_numero`. **Le numéro vient en réali
 
 **7 commandes portent le numéro en double** parce que `client_rue` le contient déjà *et* que `data.numero` est rempli — CMD-81010 donne « Petite Corniche 11 11 ». La logique d'adresse étant reprise à l'identique du QR sanctuarisé, ces adresses sont **déjà fausses sur les QR-factures envoyées**. Rien n'a été touché ici.
 
-## Mise en production — les réglages du backoffice, un par un
+## Mise en production — les réglages du backoffice
 
 Ces réglages ne sont **pas** dans le code et ne se déploient pas : ils vivent dans le backoffice Saferpay, et ceux de test ne suivent pas en production. Tant qu'ils manquent, l'API répond `ACTION_NOT_SUPPORTED — There are no default settings for Secure PayGate yet`.
 
-Dans **Secure PayGate → paramètres** :
+Relevé sur le compte de **test** le 03.11.2026. Seuls les e-mails et la condition 3-D Secure y ont été saisis à la main ; le reste est au défaut.
 
-1. **Adresse e-mail pour les notifications de paiement** — où Saferpay prévient qu'un lien a été payé.
-2. **Type d'autorisation par défaut** → *Autorisation normale (définitive) avec capture automatique*. C'est un acompte : l'argent doit être encaissé tout de suite, pas réservé.
-3. **Condition par défaut (3-D Secure)** → ⚠️ *Uniquement avec transfert de responsabilité*. Le contrat Worldline (conditions spéciales cartes) impose le transfert de responsabilité ; laisser « Aucune condition » accepterait des paiements dont la fraude resterait à notre charge.
-4. **Messages au porteur, ou site propre** — on garde les messages préenregistrés de Saferpay. Pointer vers nos pages demanderait une URL de confirmation avec le jeton `{{{PAYMENTPAGETOKEN}}}` : inutile ici, le vendeur suit l'état sur la fiche.
-5. **Adresse e-mail d'expéditeur** — c'est le préfixe avant `@link2saferpay.com`. Le formulaire le rend obligatoire dès qu'on touche au bloc e-mails.
-6. **Adresse BCC** — facultative ; une copie des envois.
-7. **Adresse de réponse (reply-to)** — obligatoire avec l'expéditeur. Mettre une boîte réellement relevée : c'est là que le client répondra.
-8. **Conditions générales (CGV)** — au moins un jeu de documents, par langue. Exigence du formulaire *et* du contrat.
+| Réglage | Valeur en test | En production |
+|---|---|---|
+| Adresses de notification de paiement | `direction@jardinconfort.ch` | à ressaisir |
+| Type d'autorisation standard | *Enregistrement automatique des transactions* | garder — un acompte s'encaisse, ne se réserve pas |
+| Condition standard (3DSV2) | *Uniquement avec transfert de responsabilité et authentification 3-D Secure* — **choisi par Thierry, ce n'est pas le défaut** | 🔴 **à refaire** : le défaut est « aucune condition », et un paiement sans transfert de responsabilité ne se distingue en rien d'un autre jusqu'au litige |
+| Demander le nom du titulaire | décoché | garder |
+| Redirection vers propre page | décoché | garder — le vendeur suit l'état sur la fiche |
+| Notifiez votre serveur une fois le paiement effectué | décoché | **c'est ici que se branchera le webhook** |
+| Expéditeur | `jardin-confort@link2saferpay.com` | à ressaisir |
+| Reply-to / BCC | `contact@jardinconfort.ch` | à ressaisir |
+| Conditions générales (PDF par langue) | aucune | à téléverser |
+
+Donc : rien à « décider » en production, tout à **recopier** — et deux lignes qui ne se recopieront pas toutes seules, la condition 3-D Secure et les CG. Le formulaire exige l'expéditeur et le reply-to dès qu'on touche au bloc e-mails.
+
+### ❓ Question ouverte à poser à Saferpay avant le premier lien réel
+
+La *Condition standard* est présentée comme s'appliquant **« pour les liens créés dans le Backoffice »**. Nos liens viennent de l'**API**, et le corps de `spg-offers` ne contient **aucun champ de condition 3-D Secure** (seulement `Options.PreAuth`, que nous ne passons pas — d'où la capture automatique). Deux lectures possibles : soit le réglage couvre aussi les liens API, soit ceux-ci retombent sur la configuration du terminal.
+
+C'est la seule inconnue qui engage de l'argent : sans transfert de responsabilité, la fraude reste à notre charge. **À faire confirmer par le support Saferpay**, pas à supposer.
+
+### Rappel contractuel affiché par Saferpay lui-même
+
+Le backoffice rappelle dans l'encadré du bloc e-mails que **les courriels sortants contenant le lien de paiement, les CG jointes et l'offre doivent être conservés au moins 24 mois** (point 6 des « Conditions spéciales pour l'acceptation des cartes de crédit dans les transactions sans présentation de la carte »). Comme nos liens partent par les canaux du vendeur et non par l'envoi Saferpay, cette conservation est **à notre charge** : à organiser.
 
 Puis, hors Secure PayGate : créer un **utilisateur JSON API de production**, laisser ses **permissions IP vides**, saisir les cinq variables `SAFERPAY_*` en scope Production, et **déployer après** — jamais avant.
-
-Note pour le webhook à venir : d'après la documentation, l'« URL de notification » de la *Payment Page Configuration* **n'a aucun effet sur Secure PayGate**, même si des messages serveur-à-serveur sont bien émis à chaque paiement. Il faudra donc capturer une vraie notification pour savoir ce qu'elle contient et d'où elle part, au lieu de supposer.
 
 ## Reste à faire / bilan de passation
 
