@@ -8,13 +8,15 @@
 // v2 (05.09.2026, chantier « Wallee v2 ») : une commande porte désormais
 // PLUSIEURS transactions en parallèle, qualifiées par
 //   - mode    : 'qr'    = virement bancaire avec QR-facture (méthode 243711)
-//               'twint' = TWINT / PostFinance Pay / e-finance / Carte PostFinance /
-//                         PayPal — liste EXPLICITE d'ids, jamais 255090 « Facture »
+//               'postfinance' = PostFinance Pay / e-finance / Carte PostFinance /
+//                         PayPal — liste EXPLICITE d'ids, jamais 255090 « Facture ».
+//                         TWINT a quitté cette liste le 02.11.2026 : il passe
+//                         désormais par Saferpay (meilleur taux).
 //   - tranche : 'acompte' (50 % ou 100 % selon le mode de paiement du document)
 //               'solde'   (total − acompte ; n'existe que si le document est en
 //                          « Acompte de 50 % » ; créé à la demande par le vendeur)
 // Règle : UNE SEULE transaction vivante par (commande, mode, tranche). Les liens
-// QR et TWINT d'une même tranche coexistent : le client choisit, le QR reste
+// QR et PostFinance d'une même tranche coexistent : le client choisit, le QR reste
 // actif (arbitrage Thierry 04.09). Aucune décomptabilisation automatique : une
 // QR-facture non payée qui traîne est « une facture papier dans un tiroir ».
 //
@@ -77,16 +79,16 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://offres.jardin-confor
 // Relevées dans le portail Wallee le 05.09.2026 (Paramètres → Paiement →
 // Options de paiement ; l'id est dans l'URL de chaque configuration).
 //   243711  Virement bancaire (avec QR-facture)      → mode 'qr'
-//   242531  TWINT                                    → mode 'twint'
-//   243712  PayPal                                   → mode 'twint'
-//   243713  Carte PostFinance                        → mode 'twint'
-//   243714  PostFinance e-finance                    → mode 'twint'
-//   243715  PostFinance Pay                          → mode 'twint'
+//   242531  TWINT                                    → PLUS UTILISÉ ICI (Saferpay)
+//   243712  PayPal                                   → mode 'postfinance'
+//   243713  Carte PostFinance                        → mode 'postfinance'
+//   243714  PostFinance e-finance                    → mode 'postfinance'
+//   243715  PostFinance Pay                          → mode 'postfinance'
 //   255090  Facture (QR-Facture PostFinance)         → JAMAIS (voir en-tête)
 //   242532  Carte de crédit/débit                    → contrat non actif, exclu
 const METHODE_FACTURE_INTERDITE = 255090;
 const METHODE_VIREMENT_QR = enNombre(process.env.WALLEE_METHODE_VIREMENT_QR) ?? 243711;
-const METHODES_TWINT = listeIds(process.env.WALLEE_METHODES_TWINT, [242531, 243712, 243713, 243714, 243715]);
+const METHODES_POSTFINANCE = listeIds(process.env.WALLEE_METHODES_POSTFINANCE, [243712, 243713, 243714, 243715]);
 
 // Taux de TVA suisse (taux normal, 8.1 % depuis 2024) : le total_ttc des documents
 // est TTC, la facture Wallee doit le dire. Surchargeable par variable Vercel.
@@ -99,9 +101,9 @@ const ETATS_TERMINAUX = new Set(["FAILED", "VOIDED", "DECLINE", "FULFILL"]);
 // Une QR-facture existe chez Wallee dès que le client a validé le virement QR.
 const ETATS_FACTURE = new Set(["AUTHORIZED", "COMPLETED", "FULFILL"]);
 
-type ModeTx = "qr" | "twint";
+type ModeTx = "qr" | "postfinance";
 type TrancheTx = "acompte" | "solde";
-const MODES: ModeTx[] = ["qr", "twint"];
+const MODES: ModeTx[] = ["qr", "postfinance"];
 const TRANCHES: TrancheTx[] = ["acompte", "solde"];
 
 type OffreDoc = Record<string, unknown>;
@@ -142,7 +144,7 @@ function listeIds(csv: string | undefined, defaut: number[]): number[] {
 }
 
 function methodesPourMode(mode: ModeTx): number[] {
-  return mode === "twint" ? METHODES_TWINT : [METHODE_VIREMENT_QR];
+  return mode === "postfinance" ? METHODES_POSTFINANCE : [METHODE_VIREMENT_QR];
 }
 
 function serviceWallee(): { service: TransactionsService; spaceId: number } | null {
@@ -368,7 +370,7 @@ export async function POST(req: NextRequest) {
     if (!slug) return NextResponse.json({ error: "slug requis" }, { status: 400 });
     const mode = lireMode(body.mode);
     const tranche = lireTranche(body.tranche);
-    if (!mode) return NextResponse.json({ error: "mode invalide (qr | twint)" }, { status: 400 });
+    if (!mode) return NextResponse.json({ error: "mode invalide (qr | postfinance)" }, { status: 400 });
     if (!tranche) return NextResponse.json({ error: "tranche invalide (acompte | solde)" }, { status: 400 });
 
     const w = serviceWallee();

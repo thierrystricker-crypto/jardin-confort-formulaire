@@ -9,8 +9,9 @@
 // v2 : une commande porte plusieurs liens EN PARALLÈLE, un par (mode, tranche) :
 //   - 💠 QR acompte          (mode 'qr',    tranche 'acompte')
 //   - 💠 QR solde            (mode 'qr',    tranche 'solde')  — si « Acompte de 50 % »
-//   - 📱 TWINT / PostFinance / PayPal  (mode 'twint', tranche 'acompte' ou 'solde')
-// Le client choisit ; un lien QR reste actif même si un lien TWINT existe.
+//   - 📱 PostFinance / PayPal  (mode 'postfinance', tranche 'acompte' ou 'solde')
+// Le client choisit ; un lien QR reste actif même si un autre lien existe.
+// TWINT a quitté Wallee le 02.11.2026 : il passe par Saferpay (meilleur taux).
 //
 // Même pattern que AcompteWalleeBadge : le composant fetch lui-même, la page
 // ne porte qu'une ligne de JSX. Source : GET/POST /api/wallee-transactions.
@@ -20,7 +21,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 
-type Mode = "qr" | "twint";
+type Mode = "qr" | "postfinance";
 type Tranche = "acompte" | "solde";
 type Tx = {
   id: string; wallee_transaction_id: number; merchant_reference: string
@@ -64,7 +65,7 @@ function libelleEtat(state: string, mode: Mode): { texte: string; classe: string
     default:           return { texte: state, classe: "bg-zinc-500/15 text-zinc-300" };
   }
 }
-function nomMode(mode: Mode) { return mode === "qr" ? "QR-facture" : "TWINT / PostFinance / PayPal"; }
+function nomMode(mode: Mode) { return mode === "qr" ? "QR-facture" : "PostFinance / PayPal"; }
 function nomTranche(tranche: Tranche) { return tranche === "solde" ? "Solde" : "Acompte"; }
 function icone(mode: Mode) { return mode === "qr" ? "💠" : "📱"; }
 
@@ -178,7 +179,7 @@ export default function WalleeLienPaiement({ slug }: { slug: string }) {
     if (!courantes.has(cle)) courantes.set(cle, t);
   }
   const tranches: Tranche[] = etat.solde_applicable ? ["acompte", "solde"] : ["acompte"];
-  const modes: Mode[] = ["qr", "twint"];
+  const modes: Mode[] = ["qr", "postfinance"];
   const montantTranche = (tranche: Tranche) => tranche === "solde" ? (etat.montant_solde ?? 0) : etat.montant_acompte;
 
   // Aucune transaction : uniquement les boutons de création, sur une ligne.
@@ -192,13 +193,13 @@ export default function WalleeLienPaiement({ slug }: { slug: string }) {
           const courante = courantes.get(`${mode}:${tranche}`);
           // Bouton de création : s'il n'y a pas de transaction vivante pour ce (mode, tranche).
           if (courante && !ETATS_ECHEC.has(courante.state)) return null;
-          const libelle = `${icone(mode)} ${courante ? "Régénérer" : "Créer"} ${mode === "qr" ? "QR" : "TWINT / PostFinance / PayPal"} ${tranche === "solde" ? "solde" : "acompte"}`;
+          const libelle = `${icone(mode)} ${courante ? "Régénérer" : "Créer"} ${mode === "qr" ? "QR" : "PostFinance / PayPal"} ${tranche === "solde" ? "solde" : "acompte"}`;
           return (
             <button key={`${mode}:${tranche}`} onClick={() => creer(mode, tranche)} disabled={busy}
               className={aucune && mode === "qr" && tranche === "acompte" ? BTN : BTN_LIGHT}
               title={mode === "qr"
                 ? `Crée chez Wallee une transaction « virement bancaire avec QR-facture » de ${fmtMontant(montantTranche(tranche))} (${nomTranche(tranche).toLowerCase()}), mails Wallee coupés, et ouvre la page de paiement`
-                : `Crée chez Wallee une transaction de ${fmtMontant(montantTranche(tranche))} (${nomTranche(tranche).toLowerCase()}) limitée à TWINT, PostFinance Pay / e-finance / Carte PostFinance et PayPal — jamais « Facture » — et ouvre la page de paiement`}>
+                : `Crée chez Wallee une transaction de ${fmtMontant(montantTranche(tranche))} (${nomTranche(tranche).toLowerCase()}) limitée à PostFinance Pay / e-finance / Carte PostFinance et PayPal — jamais « Facture » — et ouvre la page de paiement`}>
               {busy ? "⏳ Wallee…" : libelle}
             </button>
           );
