@@ -202,6 +202,27 @@ Puis, hors Secure PayGate : créer un **utilisateur JSON API de production**, la
 
 - **Webhook Saferpay** : activer « Notifiez votre serveur une fois le paiement effectué » dans le backoffice, capturer une vraie notification, puis écrire la route. Le cron deviendra le filet.
 - **Saisie manuelle d'un encaissement** (espèces, TWINT comptoir, virement QR) : c'est ce qui rendra le badge exhaustif et fiable. À faire avant d'afficher quoi que ce soit sur les documents.
+
+### Chantier « Paiements » — demandé le 11.11.2026
+
+Trois fonctions demandées, qui partagent un même socle :
+
+1. **Notification dans le dashboard** à chaque encaissement (type `paiement_recu` dans la table `notifications` existante ; voir plus haut pour le patron du helper unique et les deux questions ouvertes : Wallee inclus ou non, `commercial` renseigné ou non).
+2. **Une page « Paiements »** listant acomptes et paiements, toutes sources confondues — extension globale de ce que `/api/acomptes` fait aujourd'hui par document.
+3. **Une quittance maison imprimable**.
+
+**Le besoin de quittance concerne les paiements À DISTANCE, pas le comptoir** (précisé par Thierry le 11.11.2026 — une première analyse disait l'inverse et était fausse). L'encaissement au magasin produit déjà un **ticket de caisse** : ce client a sa preuve. Ceux qui n'ont rien portant notre en-tête sont ceux qui règlent par **lien carte Saferpay** ou **QR Wallee** — ils ne reçoivent qu'une confirmation du prestataire ou un avis bancaire.
+
+Conséquence : **la quittance ne dépend pas de la saisie manuelle.** Ses données sont déjà en base, dans `transactions_saferpay` et `acomptes_wallee`. Elle peut être construite immédiatement.
+
+⚠️ Et il y a un risque à faire l'inverse : émettre une quittance maison pour un encaissement saisi manuellement **doublerait le ticket de caisse** — deux documents, deux numérotations, pour un seul paiement. Si la saisie manuelle arrive, soit elle ne donne pas droit à quittance, soit elle référence le numéro du ticket.
+
+La **saisie manuelle** garde sa valeur, mais pour la liste et le badge : un acompte réglé cash reste invisible dans l'app, et le vendeur qui ouvre la fiche ne voit rien. Problème d'information interne, pas de preuve client.
+
+Deux décisions à prendre avant d'écrire la quittance :
+
+- **Une quittance émise est une preuve** : numérotée, figée, modifiable seulement par correction tracée — même régime que les offres signées et les commandes.
+- **TVA** : un acompte sur une commande TTC contient de la TVA. Décider si et comment elle figure sur la quittance, avec le comptable.
 - **Mention de l'acompte sur les pages print dynamiques** (fiche de travail, bulletin de livraison, fiche bleue), une fois la saisie manuelle en place. Jamais sur le PDF de confirmation client, figé à la validation.
 - **Montant à la volée** pour le lien carte, jumeau de `/dashboard/qr-libre`.
 - **`WalleeLienPaiement` doit afficher ses erreurs** au lieu de rendre `null`.
