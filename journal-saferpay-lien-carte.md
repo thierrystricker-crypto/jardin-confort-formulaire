@@ -14,7 +14,58 @@ Branche `feat/saferpay-lien-carte`. **État au 03.11.2026 : migration 035 exécu
 
 Le test du 07.09.2026 avait tout : paiement de 1.00 CHF crédité sur le compte PostFinance, référence QRR `00 48617 00063 22212 31724 70751` conforme au camt.054, aucun rejet. Et pourtant la transaction Wallee `587970306` est restée « Terminé », facture « Ouvert ».
 
-**Cause racine trouvée le 02.11** : le flux de réconciliation PostFinance ne part pas chez Wallee, il revient dans l'e-banking de Jardin-Confort — le compte QR sert aux factures QR de Shopify. Wallee ne voit donc jamais le paiement, ne passe jamais en `FULFILL`, et le badge ne s'allume jamais. La page *Réconciliation → Enregistrements* de Wallee ne contient qu'**une seule ligne, du 24.06.2025** : le canal a fonctionné au début, puis a été rebasculé. Pour que Wallee réconcilie un jour, il faudra une nouvelle demande à PostFinance, probablement avec un QR-IBAN dédié.
+**Cause racine établie le 03.11.2026, pièces à l'appui.** PostFinance a envoyé une *Confirmation de mutation — Compte virtuel pour facture QR* datée du **26.06.2025** pour le compte virtuel `CH60 3000 0001 1000 1575 7`, dont la feuille de données indique :
+
+> **Canal de livraison : E-finance** — valable dès le 27.06.2025
+
+L'adhésion signée le 06.06.2025 désignait pourtant wallee AG en Managed File Transfer, User-ID `xp1s100029`. Trois semaines plus tard, la livraison des camt.054 a donc été **rebasculée vers l'e-finance de Jardin-Confort**, pour alimenter l'app Shopify qui émet une quarantaine de factures QR par an. Et la seule ligne de réconciliation jamais reçue par Wallee date du **24.06.2025**, trois jours avant la bascule. Le formulaire est explicite : « un seul canal de livraison possible ».
+
+Wallee ne voit donc aucun paiement, ne passe jamais en `FULFILL`, et le badge ne s'allume jamais. Le test du 07.09.2026 l'illustre parfaitement : tout ce qui dépendait de nous a fonctionné — la référence QRR est arrivée intacte chez PostFinance — mais le fichier n'est jamais parti chez Wallee.
+
+**Correctif engagé le 03.11.2026** : demande d'un **second** compte virtuel QR sur le même compte postal `CH12 0900 0000 1000 1575 7`, livré en MFTPF à `xp1s100029`, le premier gardant sa livraison e-finance pour Shopify. Formulaire `01601` pré-rempli par Wallee (pages 2 et 3 seulement ; les pages 4 à 6 sont le formulaire OPAE, hors sujet), posté à PostFinance AG, Scan Center, 3002 Bern, avec une remarque explicite en rubrique 7 pour qu'on ne mute pas le compte existant. Contact PostFinance : Chantal Murith-Roduit, Customer Team CC, +41 58 448 14 24, partenaire 1001494898.
+
+À réception de la feuille de données, saisir le nouveau QR-IBAN dans le processeur Wallee **#282572**, champ « Numéro de compte bancaire virtuel QR », derrière « Modifier ». **C'est la seule chose à changer** : ni le space #48617, ni les connecteurs, ni les références QRR (dont le préfixe vient du space), ni le code de l'app — le QR-IBAN n'y figure nulle part.
+
+### ✅ Canal rétabli le 11.11.2026 — vérifié de bout en bout
+
+PostFinance a ouvert le second compte virtuel le **05.11.2026** : QR-IBAN **`CH15 3000 0002 1000 1575 7`** (le `0002` distingue du `0001` d'origine), compte de crédit inchangé `CH12 0900 0000 1000 1575 7`, **canal de livraison MFTPF**, camt.054 quotidien, numéro de livraison `1151459767`. Contact : Valérie Bergmann-Castella. Le premier compte virtuel garde sa livraison e-finance pour les factures QR Shopify — les deux coexistent, comme demandé.
+
+Le QR-IBAN a été saisi dans le processeur **#282572**. Test sur **CMD-81027** (1.10 CHF) :
+
+1. QR-facture émise le 10.11 à 12:12 — bulletin portant bien `CH15 3000 0002 1000 1575 7`, référence `00 48617 00005 33729 71681 50131`. **Vérifier l'IBAN sur le PDF avant de payer est le contrôle le moins cher** : il prouve que la modification du processeur a pris effet.
+2. Virement exécuté le 11.11.
+3. **11.11 à 00:18 : réconciliation Wallee `#9054314`, « Paiement par facture QR », Résolu.** Première ligne depuis le 24.06.2025.
+4. Webhook → Make → app : ligne `acomptes_wallee` écrite à 23:18:20 UTC sur l'état `FULFILL`, et le badge s'affiche : « ✅ Acompte reçu le 10.11 — 1.10 CHF · virement QR ».
+
+**Délai à connaître** : la livraison camt.054 est *quotidienne*. La réconciliation QR arrivera toujours le lendemain ouvrable, là où Saferpay confirme en quelques secondes. Ce n'est pas un défaut, c'est la nature du virement bancaire — mais ça interdit de conclure à une panne avant deux jours ouvrables.
+
+### 🔴 Deux points relevés par ce test
+
+**`paid_at` est faux : il recopie `completedOn`.** La charge utile le montre sans ambiguïté — `acomptes_wallee.paid_at` = `2026-11-10T11:12:17.183Z` = `raw.transaction.completedOn`. C'est l'instant où Wallee a bouclé la transaction **à sa création**, soit 12:12:17 heure locale : cinq minutes *avant* que le virement ne soit saisi dans l'e-banking (12:17). Ce n'est donc ni la date du paiement, ni celle de l'encaissement.
+
+Que le jour tombe juste sur ce test est une coïncidence — la facture a été payée le jour même. Dès qu'un client paiera trois semaines après réception, le badge affichera la date d'émission, fausse de trois semaines.
+
+Trois sources, par ordre de justesse :
+
+1. **La date de valeur** de l'enregistrement de réconciliation (`#9054314` affiche « Date de valeur 10/11/2026 ») — la vraie date du paiement, celle qui compte comptablement. **Cible idéale**, mais absente de la charge utile du webhook : il faut la lire chez Wallee.
+2. **`raw.webhook.timestamp`** (`2026-11-10T23:18:17Z`) — l'instant où Wallee a enregistré l'encaissement. Décalé d'un jour ouvrable, jamais de trois semaines. Compromis simple, disponible sans appel supplémentaire.
+3. **`completedOn`** — l'actuel, faux dès que le délai de paiement dépasse la journée.
+
+À corriger là où la ligne `acomptes_wallee` est écrite.
+
+**Les e-mails Wallee partent au client.** Le connecteur `#352449` a « Envoyer des courriels à l'acheteur » activé : e-mail d'autorisation, de facture, de **livraison** et de refus, dans les modèles de Wallee. Le test a aussi produit une « Recommandation de livraison » et un bordereau d'expédition au moment du paiement de l'acompte. Tant que le cobaye est Jardin-Confort, c'est sans conséquence ; **avec génération automatique, ce sont ~460 clients par an qui recevraient des messages non écrits par nous**, dont un bulletin de livraison des semaines avant la livraison réelle. À passer en revue avant le chantier de génération automatique.
+
+### Chantier suivant : QR-facture Wallee à la place du QR actuel
+
+Décision de Thierry : la QR-facture Wallee doit se fabriquer **automatiquement à chaque conversion d'offre en commande**, et le client reçoit un mail avec le lien de sa commande et celui du QR de paiement. Le vendeur n'a alors plus de bouton à presser, et la route publique `app/api/offres/[slug]/wallee-facture` (écrite le 05.09.2026, déjà en production) sert le PDF au client.
+
+Questions ouvertes avant d'écrire une ligne :
+
+- **Où déclencher la création ?** Le point naturel est la validation de l'offre, mais `valider/route.ts` est sanctuarisé (P0-3, P0-4) et D26 interdit la logique dans Make. Pistes : création paresseuse au premier chargement de la page client, ou au moment de générer le QR.
+- **Quelles commandes ?** Sur 2026 : 257 « Paiement d'avance », 203 « Acompte de 50 % », 26 « Paiement à 30 jours ». Ne créer que l'**acompte** à la conversion (le solde est dû à la livraison, parfois des mois plus tard) ramène le volume de ~690 à ~460 par an.
+- **Coût** : Wallee facture à la **génération**, pas au paiement — les compteurs s'appellent « Number of Authorized Transactions ». Une QR-facture jamais payée coûte autant qu'une autre. À 0.20, ~92 CHF/an : le coût n'est pas l'argument, le bruit dans la réconciliation l'est.
+- **Les e-mails au client**, ci-dessus.
+
 
 **Conséquence** : Saferpay devient le premier canal qui confirme réellement un encaissement. Le QR client reste le pdf4me actuel, pointé manuellement.
 
