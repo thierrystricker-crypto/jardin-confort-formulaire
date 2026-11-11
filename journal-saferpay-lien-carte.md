@@ -55,6 +55,35 @@ Trois sources, par ordre de justesse :
 
 **Les e-mails Wallee partent au client.** Le connecteur `#352449` a « Envoyer des courriels à l'acheteur » activé : e-mail d'autorisation, de facture, de **livraison** et de refus, dans les modèles de Wallee. Le test a aussi produit une « Recommandation de livraison » et un bordereau d'expédition au moment du paiement de l'acompte. Tant que le cobaye est Jardin-Confort, c'est sans conséquence ; **avec génération automatique, ce sont ~460 clients par an qui recevraient des messages non écrits par nous**, dont un bulletin de livraison des semaines avant la livraison réelle. À passer en revue avant le chantier de génération automatique.
 
+### 🔑 Chantier « page de paiement » — idée du 11.11.2026, qui débloque le reste
+
+**Deux pages publiques** (slug = secret, même exposition que `/qr`), qui **orientent** le client ; la transaction est créée **au clic**, chez le bon prestataire :
+
+| URL | Contenu | Usage |
+|---|---|---|
+| `/payer/[slug]` | **QR seul** | part dans le mail de confirmation, par défaut, pour toutes les commandes — aucune commission |
+| `/payer/[slug]/carte` | carte, TWINT, Apple/Google Pay (Saferpay), PayPal, PostFinance (Wallee), **+ QR en fin de liste** | envoyée par le vendeur **sur demande** |
+
+C'est la règle du 02.11 — « le client reçoit le QR par défaut, la carte seulement s'il la réclame » — exprimée en deux liens au lieu de deux documents. Le vendeur n'a plus qu'un choix binaire au lieu d'aller chercher le bon bouton. Le QR en fin de la seconde page évite qu'un client qui change d'avis doive réécrire.
+
+⚠️ Les deux URL sont devinables l'une depuis l'autre : un client peut passer de la page QR à la page carte en tapant `/carte`. Ce n'est pas un problème — c'est sa commande et il paie quand même — mais **la page QR est un défaut, pas une protection**. Un vrai verrou demanderait un jeton, pour un gain douteux.
+
+Le gain n'est pas d'abord côté client, il est **opérationnel** : le vendeur n'a plus à demander « vous voulez payer comment ? » puis choisir le bon bouton. Un seul lien, le même pour toutes les commandes.
+
+**Et c'est ce qui débloque le chantier « QR automatique à la conversion ».** Le point dur était : créer une transaction au moment de la validation, alors que `valider/route.ts` est sanctuarisé (P0-3, P0-4). Avec cette page, **il n'y a plus rien à créer à la conversion** — le lien est déterministe et existe avant toute transaction. Le mail de confirmation porte le lien de la commande et `/payer/[slug]` ; la transaction naît au clic.
+
+Conséquences : plus de QR émises jamais payées, volume Wallee réduit à ce qui est réellement choisi, et la question du point de déclenchement disparaît.
+
+**La décision qui reste est commerciale, pas technique : l'ordre des boutons.** Sur 2026, hors « paiement à 30 jours » : 466 commandes, **673 930 CHF d'acomptes** (261 paiements d'avance à 1 224 CHF de moyenne, 205 acomptes de 50 % à 1 729 CHF).
+
+- Tout en carte à 1,7 % → **~11 400 CHF de commissions par an**
+- Tout en virement QR → **< 100 CHF** (0.20 par facture chez Wallee)
+- **Chaque 10 % qui bascule du QR vers la carte ≈ 1 150 CHF/an**
+
+Mettre le QR en fin de liste maximise donc mécaniquement la part carte. L'argument inverse est réel : un lien carte est payé dans la minute, une QR-facture en dix jours ou jamais, avec des relances à la clé. Piste intermédiaire envisagée : **ordonner selon le montant** — carte en tête sous quelques centaines de francs, QR en tête au-delà de deux mille, où 34 CHF de commission pèsent.
+
+Principe technique à retenir : **créer la transaction au clic, jamais d'avance** — sinon on paie trois transactions par commande pour une seule payée.
+
 ### Chantier suivant : QR-facture Wallee à la place du QR actuel
 
 Décision de Thierry : la QR-facture Wallee doit se fabriquer **automatiquement à chaque conversion d'offre en commande**, et le client reçoit un mail avec le lien de sa commande et celui du QR de paiement. Le vendeur n'a alors plus de bouton à presser, et la route publique `app/api/offres/[slug]/wallee-facture` (écrite le 05.09.2026, déjà en production) sert le PDF au client.
