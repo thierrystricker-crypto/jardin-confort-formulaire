@@ -108,6 +108,19 @@ Compte de test Saferpay (client **287701**, terminaux 17781240 eCommerce et **17
 - **`components/AcompteWalleeBadge.tsx` + `LienCarteSaferpay.tsx`** — le ↻ et la création d'un lien émettent `jc:encaissements-maj` ; le badge l'écoute et se recharge. Sans ça il gardait l'état du chargement de la page et un paiement tout juste constaté n'apparaissait qu'après un F5.
 - **`app/dashboard/[slug]/page.tsx`** — **groupe « Paiement » à part entière** (5ᵉ groupe de la fiche, même forme que les quatre autres : intitulé puis boutons), regroupant carte et Wallee. `app/v2/_components/MenusFiche.tsx` + `app/v2/v2.css` : il devient le menu déroulant « 💳 Paiement » de la v2. Placé d'abord *dans* le groupe Documents PDF le 02.11, il s'y retrouvait caché — corrigé le même jour. Les boutons QR restent où ils sont : déplacer leurs gestionnaires dans une page de 120 Ko est le travail du chantier dashboard 2.0.
 - **`app/api/wallee-transactions/route.ts` + `components/WalleeLienPaiement.tsx`** — mode `twint` renommé `postfinance`, id TWINT `242531` retiré, variable d'env `WALLEE_METHODES_POSTFINANCE`.
+
+  **Correspondance des ids, relevée dans Wallee le 11.11.2026** (space #48617 → Paramètres → Modes de paiement) :
+
+  | id | Mode de paiement |
+  |---|---|
+  | 243711 | Facture *(la QR-facture)* |
+  | 243712 | **PayPal** |
+  | 243713 | **Carte PostFinance** |
+  | 243714 | **PostFinance e-finance** |
+  | 243715 | **PostFinance Pay** |
+  | 242531 | TWINT — retiré, passé chez Saferpay |
+
+  `WALLEE_METHODES_POSTFINANCE` vaut donc `243712,243713,243714,243715` : le libellé « PostFinance / PayPal » est exact, **PayPal est bien offert** sur ces liens. Vérifié, pas supposé — la liste était jusqu'ici une suite de numéros nus qu'on n'osait plus toucher.
 - **`docs/sql/016-transactions-wallee-mode-tranche.sql` supprimé.**
 
 ## 🔴 La panne silencieuse du bloc Wallee (découverte le 02.11)
