@@ -57,6 +57,7 @@ const MENU: Groupe[] = [
       { href: "/v2/housses", label: "Trouver une housse", icon: "🛡" },
       { href: "/v2/configurateur", label: "Configurateur parasol", icon: "☂" },
       { href: "/v2/toiles", label: "Toiles Glatz", icon: "🎨" },
+      { href: "/v2/emu", label: "Accords couleurs EMU", icon: "🪑" },
       { href: "/v2/qr-libre", label: "QR paiement libre", icon: "💳" },
     ],
   },

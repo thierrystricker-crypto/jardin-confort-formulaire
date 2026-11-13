@@ -13,7 +13,8 @@
 //     contrôlés (format, longueur, bornes) → lignes « custom » du brouillon, à vérifier.
 // Aucun prix Shopify stocké (règle des listes d'achat).
 //
-// Body : { ref, recap?, cree_par?, lignes: [{ vid, q } | { sku, t, q, p }] }
+// Body : { ref, recap?, cree_par?, source?, lignes: [{ vid, q } | { sku, t, q, p }] }
+// 13.11.2026 : source "emu" = accords couleurs EMU (page /v2/emu) → nom « 🪑 Accords EMU · … ».
 // Réponse : { id, nom, nb }
 //
 // Interne : non listée dans proxy.ts → protégée par le code d'équipe.
@@ -28,6 +29,7 @@ import { normaliserMembre } from "@/lib/jardi-equipe";
 export const dynamic = "force-dynamic";
 
 const PREFIXE_NOM = "☂ Configurateur";
+const PREFIXE_EMU = "🪑 Accords EMU";
 const MAX_LIGNES = 60;
 
 type NodeVariant = {
@@ -130,8 +132,9 @@ export async function POST(request: NextRequest) {
     const propres = normaliserLignes(lignes);
     if (propres.length === 0) return NextResponse.json({ error: "Articles introuvables" }, { status: 400 });
 
-    const ref = texte(body.ref, 80) || "Parasol Glatz";
-    const nom = `${PREFIXE_NOM} · ${ref} · ${heureZurich()}`.slice(0, 120);
+    const emu = body.source === "emu";
+    const ref = texte(body.ref, 80) || (emu ? "Ensemble EMU" : "Parasol Glatz");
+    const nom = `${emu ? PREFIXE_EMU : PREFIXE_NOM} · ${ref} · ${heureZurich()}`.slice(0, 120);
     // Récapitulatif texte de l'app (sauts de ligne gardés) → notes de la liste
     const recap = typeof body.recap === "string" ? body.recap.replace(/[\u0000-\u0009\u000b-\u001f]/g, " ").slice(0, 1800) : "";
     const { data: liste, error } = await supabaseAdmin
