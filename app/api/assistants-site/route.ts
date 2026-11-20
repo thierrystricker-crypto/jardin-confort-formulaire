@@ -3,7 +3,7 @@
 //
 // Page « Assistants du site » (/v2/assistants-site) : consultation des journaux
 // anonymes des deux assistants de la vitrine jardin-confort.ch, stockés dans le
-// Supabase WEBSHOP (lib/supabase-webshop.ts) :
+// Supabase WEBSHOP (client dédié, clé WEBSHOP_JOURNAUX_SECRET_KEY) :
 //   • jardi-chat-public → table jardi_chat_public_echanges (1 ligne par question,
 //     + lignes « événement » sans question : panier_ajoute / _refuse / _retire)
 //   • jardi-filtre      → table jardi_filtre_recherches (1 ligne par recherche)
@@ -14,7 +14,22 @@
 // Renvoie : { source, depuis, lignes, tronque, stats }
 
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseWebshop, webshopConfigure } from "@/lib/supabase-webshop";
+import { createClient } from "@supabase/supabase-js";
+
+// Client DÉDIÉ à cette page (20.11.2026) : les deux tables de journal ont la
+// RLS active sans règle d'accès → seule une clé SECRÈTE les lit. On ne touche
+// pas à WEBSHOP_SUPABASE_SERVICE_KEY (lib/supabase-webshop.ts, Stock list…) :
+// cette page a sa propre variable, révocable seule.
+//   WEBSHOP_SUPABASE_URL          (déjà présente)
+//   WEBSHOP_JOURNAUX_SECRET_KEY   = clé sb_secret_ du projet webshop
+const URL_WEBSHOP = process.env.WEBSHOP_SUPABASE_URL || "";
+const CLE_JOURNAUX = process.env.WEBSHOP_JOURNAUX_SECRET_KEY || "";
+const webshopConfigure = Boolean(URL_WEBSHOP && CLE_JOURNAUX);
+const supabaseWebshop = createClient(
+  URL_WEBSHOP || "https://webshop-non-configure.invalid",
+  CLE_JOURNAUX || "non-configure",
+  { auth: { persistSession: false, autoRefreshToken: false } },
+);
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +51,14 @@ export async function GET(request: NextRequest) {
   try {
     if (!webshopConfigure) {
       return NextResponse.json(
-        { error: "Supabase webshop non configuré (WEBSHOP_SUPABASE_URL / WEBSHOP_SUPABASE_SERVICE_KEY)" },
+        { error: "Clé des journaux non configurée (WEBSHOP_SUPABASE_URL / WEBSHOP_JOURNAUX_SECRET_KEY)" },
+        { status: 500 },
+      );
+    }
+
+    if (CLE_JOURNAUX.startsWith("sb_publishable_")) {
+      return NextResponse.json(
+        { error: "WEBSHOP_JOURNAUX_SECRET_KEY est une clé publique (sb_publishable_) : il faut une clé secrète sb_secret_, sinon les journaux paraissent vides." },
         { status: 500 },
       );
     }
