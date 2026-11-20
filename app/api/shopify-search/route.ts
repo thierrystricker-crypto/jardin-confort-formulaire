@@ -462,12 +462,18 @@ async function chargerToutesVariantesAdmin(productId: string): Promise<VarianteS
 // Remplace, pour les produits tronqués, la liste de variantes par la liste
 // complète. En cas d'échec Admin, le produit garde ses 100 variantes : on ne
 // casse jamais la recherche, on revient simplement au comportement d'avant.
-async function completerVariantesTronquees(products: ShopifyProduct[]): Promise<ShopifyProduct[]> {
-  if (!ADMIN_CLIENT_ID || !ADMIN_CLIENT_SECRET) return products;
+// Rend aussi les ids des variantes ajoutées SANS image propre : leur image est
+// chargée après le filtre par mots (completerImagesVariantes), pour ne pas
+// demander 460 médias par produit.
+async function completerVariantesTronquees(
+  products: ShopifyProduct[]
+): Promise<{ products: ShopifyProduct[]; idsSansImage: Set<string> }> {
+  const idsSansImage = new Set<string>();
+  if (!ADMIN_CLIENT_ID || !ADMIN_CLIENT_SECRET) return { products, idsSansImage };
   const tronques = products
     .filter((p) => p.variants?.pageInfo?.hasNextPage && p.id)
     .slice(0, MAX_PRODUITS_COMPLETES);
-  if (!tronques.length) return products;
+  if (!tronques.length) return { products, idsSansImage };
 
   const completes = new Map<string, VarianteStorefront[]>();
   await Promise.all(
@@ -481,7 +487,7 @@ async function completerVariantesTronquees(products: ShopifyProduct[]): Promise<
     })
   );
 
-  return products.map((p) => {
+  const resultat = products.map((p) => {
     const variantes = completes.get(p.handle);
     if (!variantes) return p;
     // On garde l'image propre aux 100 premières variantes quand le Storefront l'a donnée.
@@ -490,10 +496,72 @@ async function completerVariantesTronquees(products: ShopifyProduct[]): Promise<
       ...p,
       variants: {
         ...p.variants,
-        nodes: variantes.map((v) => ({ ...v, image: imageParId.get(v.id) ?? null })),
+        nodes: variantes.map((v) => {
+          const image = imageParId.get(v.id) ?? null;
+          if (!image) idsSansImage.add(v.id);
+          return { ...v, image };
+        }),
       },
     };
   });
+  return { products: resultat, idsSansImage };
+}
+
+type AdminMediaVariantes = {
+  data?: {
+    nodes?: Array<{
+      id?: string;
+      media?: { nodes?: Array<{ preview?: { image?: { url: string } | null } | null }> };
+    } | null>;
+  };
+  errors?: unknown;
+};
+
+// Image propre des variantes complétées par l'Admin et RETENUES par le filtre :
+// sans elle, la tuile montrait l'image principale du produit (ex. plateau
+// jaune pour une Rigi Vert Sapin 66). ProductVariant.image est dépréciée côté
+// Admin : on lit le premier média de la variante. Lots de 100. Jamais
+// bloquant : en cas d'échec, on garde l'image du produit.
+async function completerImagesVariantes(items: ResultItem[], idsSansImage: Set<string>): Promise<ResultItem[]> {
+  const ids = items.map((i) => i.id).filter((id) => idsSansImage.has(id));
+  if (!ids.length) return items;
+  try {
+    const adminToken = await getAdminAccessToken();
+    const graphqlQuery = `
+      query PickerImagesVariantes($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          ... on ProductVariant {
+            id
+            media(first: 1) { nodes { preview { image { url } } } }
+          }
+        }
+      }
+    `;
+    const lots: string[][] = [];
+    for (let i = 0; i < ids.length; i += 100) lots.push(ids.slice(i, i + 100));
+    const reponses = await Promise.all(
+      lots.map(async (lot) => {
+        const response = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': adminToken },
+          body: JSON.stringify({ query: graphqlQuery, variables: { ids: lot } }),
+          cache: 'no-store',
+        });
+        const json = (await response.json()) as AdminMediaVariantes;
+        if (!response.ok || json.errors) throw new Error('Erreur Shopify Admin médias');
+        return json.data?.nodes ?? [];
+      })
+    );
+    const urlParId = new Map<string, string>();
+    for (const node of reponses.flat()) {
+      const url = node?.media?.nodes?.[0]?.preview?.image?.url;
+      if (node?.id && url) urlParId.set(node.id, url);
+    }
+    return items.map((i) => (urlParId.has(i.id) ? { ...i, variantImage: urlParId.get(i.id) as string } : i));
+  } catch (e) {
+    console.warn('shopify-search : images de variantes indisponibles —', e);
+    return items;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -516,8 +584,8 @@ export async function GET(request: NextRequest) {
       } catch { /* ignore */ }
     }
 
-    const products = await completerVariantesTronquees(Array.from(allProductsMap.values()));
-    const storefrontItems = buildStorefrontItems(products, words);
+    const { products, idsSansImage } = await completerVariantesTronquees(Array.from(allProductsMap.values()));
+    const storefrontItems = await completerImagesVariantes(buildStorefrontItems(products, words), idsSansImage);
 
     if (!ADMIN_CLIENT_ID || !ADMIN_CLIENT_SECRET)
       return NextResponse.json({ items: storefrontItems });
