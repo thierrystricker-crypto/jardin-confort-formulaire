@@ -7,6 +7,7 @@ const ADMIN_CLIENT_ID = process.env.SHOPIFY_ADMIN_CLIENT_ID;
 const ADMIN_CLIENT_SECRET = process.env.SHOPIFY_ADMIN_CLIENT_SECRET;
 
 type ShopifyProduct = {
+  id: string; // gid://shopify/Product/N — identique côté Admin
   title: string;
   handle: string;
   vendor?: string | null; // marque (filtre de la vue etendue du picker)
@@ -19,6 +20,9 @@ type ShopifyProduct = {
     }>;
   };
   variants?: {
+    // true = le produit a plus de variantes que les 100 chargées (ex. Schaffner
+    // Rigi / Säntis : 460). Complété par completerVariantesTronquees().
+    pageInfo?: { hasNextPage: boolean };
     nodes?: Array<{
       id: string;
       title: string;
@@ -140,6 +144,7 @@ async function runStorefrontSearch(query: string): Promise<ShopifyProduct[]> {
       search(first: 20, types: PRODUCT, query: $query) {
         nodes {
           ... on Product {
+            id
             title
             handle
             vendor
@@ -152,6 +157,7 @@ async function runStorefrontSearch(query: string): Promise<ShopifyProduct[]> {
               }
             }
             variants(first: 100) {
+              pageInfo { hasNextPage }
               nodes {
                 id
                 title
@@ -243,16 +249,26 @@ async function getAdminAvailableByVariantId(variantIds: string[]) {
     }
   `;
 
-  const response = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': adminToken },
-    body: JSON.stringify({ query: graphqlQuery, variables: { ids: variantIds } }),
-    cache: 'no-store',
-  });
-  const json = (await response.json()) as AdminInventoryByIdResponse;
-  if (!response.ok || json.errors) throw new Error('Erreur Shopify Admin Inventory');
+  // nodes(ids) plafonne à 250 ids : au-delà, Shopify refuse TOUT l'appel et le
+  // catch du GET renvoyait les lignes sans stock ni inventoryPolicy (garde-fou
+  // DENY muet). Lots de 250, en parallèle (20.11.2026).
+  const lots: string[][] = [];
+  for (let i = 0; i < variantIds.length; i += 250) lots.push(variantIds.slice(i, i + 250));
+  const reponses = await Promise.all(
+    lots.map(async (ids) => {
+      const response = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': adminToken },
+        body: JSON.stringify({ query: graphqlQuery, variables: { ids } }),
+        cache: 'no-store',
+      });
+      const json = (await response.json()) as AdminInventoryByIdResponse;
+      if (!response.ok || json.errors) throw new Error('Erreur Shopify Admin Inventory');
+      return json.data?.nodes ?? [];
+    })
+  );
   const map = new Map<string, { qty: number; inventoryPolicy: "DENY" | "CONTINUE"; delaiMetachamp: string | null }>();
-  for (const node of json.data?.nodes ?? []) {
+  for (const node of reponses.flat()) {
     if (!node?.id) continue;
     // Somme du stock "available" sur tous les emplacements (robuste multi-locations).
     const qty = (node.inventoryItem?.inventoryLevels?.nodes ?? []).reduce((sum, lvl) => {
@@ -368,6 +384,186 @@ function buildStorefrontItems(products: ShopifyProduct[], words: string[]): Resu
   });
 }
 
+// ── Produits à plus de 100 variantes (20.11.2026) ──
+// La requête Storefront ne charge que variants(first: 100) par produit, et le
+// filtre par mots ne s'applique qu'à ces 100-là. Les tables Schaffner Rigi /
+// Säntis en ont 460 (plateau × piètement) : toute couleur de plateau en fin de
+// liste (ex. Rigi 240x90 Vert Sapin 66 / Galvanisé 02, 14115.6602) était
+// INTROUVABLE, sans aucun message. Le Storefront plafonne à 250 : on complète
+// donc par l'Admin, produit par produit, TOUTES les variantes, puis le même
+// filtre par mots que d'habitude s'applique. On ne complète que des produits
+// déjà rendus par le Storefront : le périmètre (fiches publiées) ne change pas.
+// Pas de recherche texte Admin ici : son index est flou (« galvanise » sans
+// accent ne trouve rien) et son ordre de résultats n'est pas maîtrisé.
+const MAX_PRODUITS_COMPLETES = 10;
+const MAX_PAGES_PAR_PRODUIT = 8; // 8 × 250 = 2 000 variantes (Shopify en autorise 2 048)
+
+type AdminVariantesPage = {
+  data?: {
+    product?: {
+      variants?: {
+        pageInfo?: { hasNextPage: boolean; endCursor: string | null };
+        nodes?: Array<{
+          id: string;
+          title: string;
+          sku: string | null;
+          price: string;
+          compareAtPrice: string | null;
+        }>;
+      };
+    } | null;
+  };
+  errors?: unknown;
+};
+
+type VarianteStorefront = NonNullable<NonNullable<ShopifyProduct['variants']>['nodes']>[number];
+
+async function chargerToutesVariantesAdmin(productId: string): Promise<VarianteStorefront[]> {
+  const adminToken = await getAdminAccessToken();
+  const graphqlQuery = `
+    query PickerToutesVariantes($id: ID!, $after: String) {
+      product(id: $id) {
+        variants(first: 250, after: $after) {
+          pageInfo { hasNextPage endCursor }
+          nodes { id title sku price compareAtPrice }
+        }
+      }
+    }
+  `;
+  const toutes: VarianteStorefront[] = [];
+  let after: string | null = null; // null, jamais "" : Shopify rejette un curseur vide
+  for (let page = 0; page < MAX_PAGES_PAR_PRODUIT; page++) {
+    const response = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': adminToken },
+      body: JSON.stringify({ query: graphqlQuery, variables: { id: productId, after } }),
+      cache: 'no-store',
+    });
+    const json = (await response.json()) as AdminVariantesPage;
+    if (!response.ok || json.errors) throw new Error('Erreur Shopify Admin variantes');
+    const conn = json.data?.product?.variants;
+    for (const v of conn?.nodes ?? []) {
+      toutes.push({
+        id: v.id,
+        title: v.title,
+        sku: v.sku,
+        quantityAvailable: null, // le stock vient ensuite de getAdminAvailableByVariantId
+        image: null,             // repli sur la première image du produit
+        price: { amount: v.price, currencyCode: 'CHF' },
+        compareAtPrice: v.compareAtPrice ? { amount: v.compareAtPrice, currencyCode: 'CHF' } : null,
+      });
+    }
+    if (!conn?.pageInfo?.hasNextPage || !conn.pageInfo.endCursor) break;
+    after = conn.pageInfo.endCursor;
+  }
+  return toutes;
+}
+
+// Remplace, pour les produits tronqués, la liste de variantes par la liste
+// complète. En cas d'échec Admin, le produit garde ses 100 variantes : on ne
+// casse jamais la recherche, on revient simplement au comportement d'avant.
+// Rend aussi les ids des variantes ajoutées SANS image propre : leur image est
+// chargée après le filtre par mots (completerImagesVariantes), pour ne pas
+// demander 460 médias par produit.
+async function completerVariantesTronquees(
+  products: ShopifyProduct[]
+): Promise<{ products: ShopifyProduct[]; idsSansImage: Set<string> }> {
+  const idsSansImage = new Set<string>();
+  if (!ADMIN_CLIENT_ID || !ADMIN_CLIENT_SECRET) return { products, idsSansImage };
+  const tronques = products
+    .filter((p) => p.variants?.pageInfo?.hasNextPage && p.id)
+    .slice(0, MAX_PRODUITS_COMPLETES);
+  if (!tronques.length) return { products, idsSansImage };
+
+  const completes = new Map<string, VarianteStorefront[]>();
+  await Promise.all(
+    tronques.map(async (p) => {
+      try {
+        const variantes = await chargerToutesVariantesAdmin(p.id);
+        if (variantes.length) completes.set(p.handle, variantes);
+      } catch (e) {
+        console.warn(`shopify-search : variantes complètes indisponibles pour ${p.handle} —`, e);
+      }
+    })
+  );
+
+  const resultat = products.map((p) => {
+    const variantes = completes.get(p.handle);
+    if (!variantes) return p;
+    // On garde l'image propre aux 100 premières variantes quand le Storefront l'a donnée.
+    const imageParId = new Map((p.variants?.nodes ?? []).map((v) => [v.id, v.image ?? null]));
+    return {
+      ...p,
+      variants: {
+        ...p.variants,
+        nodes: variantes.map((v) => {
+          const image = imageParId.get(v.id) ?? null;
+          if (!image) idsSansImage.add(v.id);
+          return { ...v, image };
+        }),
+      },
+    };
+  });
+  return { products: resultat, idsSansImage };
+}
+
+type AdminMediaVariantes = {
+  data?: {
+    nodes?: Array<{
+      id?: string;
+      media?: { nodes?: Array<{ preview?: { image?: { url: string } | null } | null }> };
+    } | null>;
+  };
+  errors?: unknown;
+};
+
+// Image propre des variantes complétées par l'Admin et RETENUES par le filtre :
+// sans elle, la tuile montrait l'image principale du produit (ex. plateau
+// jaune pour une Rigi Vert Sapin 66). ProductVariant.image est dépréciée côté
+// Admin : on lit le premier média de la variante. Lots de 100. Jamais
+// bloquant : en cas d'échec, on garde l'image du produit.
+async function completerImagesVariantes(items: ResultItem[], idsSansImage: Set<string>): Promise<ResultItem[]> {
+  const ids = items.map((i) => i.id).filter((id) => idsSansImage.has(id));
+  if (!ids.length) return items;
+  try {
+    const adminToken = await getAdminAccessToken();
+    const graphqlQuery = `
+      query PickerImagesVariantes($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          ... on ProductVariant {
+            id
+            media(first: 1) { nodes { preview { image { url } } } }
+          }
+        }
+      }
+    `;
+    const lots: string[][] = [];
+    for (let i = 0; i < ids.length; i += 100) lots.push(ids.slice(i, i + 100));
+    const reponses = await Promise.all(
+      lots.map(async (lot) => {
+        const response = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': adminToken },
+          body: JSON.stringify({ query: graphqlQuery, variables: { ids: lot } }),
+          cache: 'no-store',
+        });
+        const json = (await response.json()) as AdminMediaVariantes;
+        if (!response.ok || json.errors) throw new Error('Erreur Shopify Admin médias');
+        return json.data?.nodes ?? [];
+      })
+    );
+    const urlParId = new Map<string, string>();
+    for (const node of reponses.flat()) {
+      const url = node?.media?.nodes?.[0]?.preview?.image?.url;
+      if (node?.id && url) urlParId.set(node.id, url);
+    }
+    return items.map((i) => (urlParId.has(i.id) ? { ...i, variantImage: urlParId.get(i.id) as string } : i));
+  } catch (e) {
+    console.warn('shopify-search : images de variantes indisponibles —', e);
+    return items;
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     if (!SHOP || !STOREFRONT_TOKEN)
@@ -388,8 +584,8 @@ export async function GET(request: NextRequest) {
       } catch { /* ignore */ }
     }
 
-    const products = Array.from(allProductsMap.values());
-    const storefrontItems = buildStorefrontItems(products, words);
+    const { products, idsSansImage } = await completerVariantesTronquees(Array.from(allProductsMap.values()));
+    const storefrontItems = await completerImagesVariantes(buildStorefrontItems(products, words), idsSansImage);
 
     if (!ADMIN_CLIENT_ID || !ADMIN_CLIENT_SECRET)
       return NextResponse.json({ items: storefrontItems });
@@ -400,7 +596,18 @@ export async function GET(request: NextRequest) {
         getAdminAvailableByVariantId(variantIds),
         // Badge « 3D » du picker (21.09.2026) : index Supabase modeles_3d, par gid
         // de variante. Jamais bloquant : sans index, pas de badge.
-        resoudreLignes3d(variantIds.map((id) => ({ id, shopifyVariantId: id }))).catch(() => new Map()),
+        // Par lots de 100 : resoudreLignes3d passe les gid dans l'URL (.overlaps),
+        // des milliers d'ids la rendraient trop longue et plus aucun badge ne s'afficherait.
+        (async () => {
+          const fusion = new Map<string, { has_3d?: boolean }>();
+          const lots: string[][] = [];
+          for (let i = 0; i < variantIds.length; i += 100) lots.push(variantIds.slice(i, i + 100));
+          const cartes = await Promise.all(
+            lots.map((ids) => resoudreLignes3d(ids.map((id) => ({ id, shopifyVariantId: id }))).catch(() => new Map()))
+          );
+          for (const carte of cartes) for (const [k, v] of carte) fusion.set(k, v);
+          return fusion;
+        })(),
       ]);
       const items = storefrontItems.map((item) => {
         const adminData = adminAvailableMap.get(item.id);
