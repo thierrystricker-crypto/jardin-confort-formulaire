@@ -1,3 +1,4 @@
+import { totalServicesPerso } from "./service-affichage";
 // ═══════════════════════════════════════════════════════
 //  Jardin-Confort — Types & constantes partagés
 //  Utilisés par le formulaire ET les templates print
@@ -177,7 +178,7 @@ export function computeTotals(data: PrintData) {
   const serviceTotal = serviceOptions.reduce((s, srv) => {
     if (!data.enabledServices[srv.code]) return s;
     return s + Number(data.servicePrices[srv.code] || 0);
-  }, 0) + (data.enabledServices["custom"] ? Number(data.servicePrices["custom"] || 0) : 0);
+  }, 0) + totalServicesPerso(data.enabledServices, data.servicePrices);
 
   const totalAfterDiscount  = subTotal - discountValue;
   const totalPlusServices   = totalAfterDiscount + serviceTotal;
@@ -234,4 +235,4 @@ export function isShopifyLine(line: {
   if (line.type === "comment" || line.type === "media") return false;
   if (!line.sku || line.sku.trim().length === 0) return false;
   return line.shopifyLocked === true || (typeof line.id === "string" && line.id.startsWith("shopify-"));
-}
+}

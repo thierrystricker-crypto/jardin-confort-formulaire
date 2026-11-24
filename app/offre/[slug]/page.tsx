@@ -3,7 +3,7 @@
 // Page UNIQUE : détails offre + signature + validation
 // Layout : colonne gauche sticky (résumé + boutons) | colonne droite (infos → articles → totaux → signature)
 
-import { infoService, texteMontantService } from "@/lib/service-affichage";
+import { infoService, texteMontantService, estCodeServicePerso, cleLibelleServicePerso } from "@/lib/service-affichage";
 import { dateExpirationOffre } from "@/lib/validite-offre";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -550,7 +550,8 @@ useEffect(() => {
     .map(([code]) => ({
       code,
       // Le service personnalise porte son libelle dans servicePrices (avant le 07.10.2026 la page affichait « custom »).
-      label: code === "custom" ? (d.servicePrices?.["custom_label"] || "Service personnalisé") : (serviceLabels[code] || code),
+      // 24.11.2026 : plusieurs lignes personnalisees (custom, custom_2…), libelle dans servicePrices.
+      label: estCodeServicePerso(code) ? ((d.servicePrices?.[cleLibelleServicePerso(code)] || "").trim() || "Service personnalisé") : (serviceLabels[code] || code),
       amount: Number(d.servicePrices?.[code] || 0),
       ...infoService(d.servicePrices, code),
     }));
@@ -1287,4 +1288,4 @@ useEffect(() => {
       </footer>
     </>
   );
-}
+}

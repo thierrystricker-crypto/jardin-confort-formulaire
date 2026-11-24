@@ -20,7 +20,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState, useRef } from "react";
-import { infoService, texteMontantService } from "@/lib/service-affichage";
+import { infoService, texteMontantService, servicesPersoActifs } from "@/lib/service-affichage";
 import { estProlongee, formatJourCH } from "@/lib/validite-offre";
 import {
   PrintData, QuoteLine, AmbianceImage,
@@ -234,18 +234,14 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
     ...serviceOptions
       .filter((s) => data.enabledServices[s.code])
       .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code] || 0), ...infoService(data.servicePrices, s.code) })),
-    ...(data.enabledServices["custom"]
-      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices["custom"] || 0), ...infoService(data.servicePrices, "custom") }]
-      : []),
+    ...servicesPersoActifs(data.enabledServices, data.servicePrices),
   ];
 
   const activeServicesNoPrice = [
     ...serviceOptions
       .filter((s) => data.enabledServices[s.code])
       .map((s) => ({ label: s.label })),
-    ...(data.enabledServices["custom"]
-      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé" }]
-      : []),
+    ...servicesPersoActifs(data.enabledServices, data.servicePrices).map((s) => ({ label: s.label })),
   ];
 
   const validationUrl = `https://offres.jardin-confort.ch/offre/${offreSlug || numeroAffiche.toLowerCase().replace(/\s+/g, "-")}`;
@@ -2228,4 +2224,4 @@ export default function PrintAllPage({ params }: { params: Promise<{ slug: strin
       </div>
     </>
   );
-}
+}

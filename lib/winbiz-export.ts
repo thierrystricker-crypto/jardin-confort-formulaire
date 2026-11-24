@@ -29,7 +29,7 @@
 // le total recalculé, il n'y a PAS de fichier.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { infoService, montantCourt } from "@/lib/service-affichage";
+import { infoService, montantCourt, servicesPersoActifs } from "@/lib/service-affichage";
 import { computeTotals, serviceOptions, type PrintData, type QuoteLine } from "./jc-print-types";
 
 // ── Gabarits de référence (fichier 54063 du 18.04.2026, VALIDÉ à l'import) ──
@@ -552,7 +552,9 @@ export function buildWinbizCsv(
   let numService = 202;
   const services: Array<{ code: string; label: string }> = [
     ...serviceOptions.map((s) => ({ code: s.code, label: s.label })),
-    { code: "custom", label: (d.servicePrices as Record<string, string>)["custom_label"] || "Prestation" },
+    // Lignes personnalisees multiples (24.11.2026) : custom, custom_2… dans l'ordre de saisie.
+    ...servicesPersoActifs(d.enabledServices, d.servicePrices as Record<string, string>, "Prestation")
+      .map((s) => ({ code: s.code, label: s.label })),
   ];
   for (const s of services) {
     if (!d.enabledServices[s.code]) continue;
@@ -565,6 +567,9 @@ export function buildWinbizCsv(
       : `${s.label}: Offert`;
     pousserArticle(numService, libelle, 1, prixSvcCts);
     numService++;
+    // 210 = Arrondi, 215 = recap des rabais : au-dela de 8 services on saute a 211
+    // (6 fixes + 5 personnalises au plus => 213 au maximum).
+    if (numService === 210) numService = 211;
   }
 
   // 5f. Arrondi (n = 210) — ligne dédiée, montant signé, jamais fondu dans un rabais

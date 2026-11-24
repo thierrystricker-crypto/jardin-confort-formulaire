@@ -13,6 +13,7 @@ import {
   serviceOptions, formatMoney, formatDate, generateCustomerNumber,
   computeTotals, STORAGE_KEY,
 } from "@/lib/jc-print-types";
+import { servicesPersoActifs } from "@/lib/service-affichage";
 
 // ── Couleurs brand Jardin-Confort ──
 const THEME  = "#2b8ad1";
@@ -70,9 +71,9 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
     ...serviceOptions
       .filter((s) => data.enabledServices[s.code])
       .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code]) })),
-    ...(data.enabledServices["custom"] && Number(data.servicePrices["custom"] || 0) > 0
-      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices["custom"]) }]
-      : []),
+    ...servicesPersoActifs(data.enabledServices, data.servicePrices)
+      .filter((s) => s.amount > 0)
+      .map((s) => ({ label: s.label, amount: s.amount })),
   ];
 
   return (
@@ -729,4 +730,4 @@ const isPreview = !data.offerNumber || data.offerNumber.trim() === ""
       </div>{/* end doc-wrap */}
     </>
   );
-}
+}

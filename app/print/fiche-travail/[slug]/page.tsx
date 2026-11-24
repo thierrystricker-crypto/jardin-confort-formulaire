@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState, useRef } from "react";
-import { infoService, texteMontantService } from "@/lib/service-affichage";
+import { infoService, texteMontantService, servicesPersoActifs, totalServicesPerso } from "@/lib/service-affichage";
 
 const THEME  = "#2b8ad1";
 const BLACK  = "#000000";
@@ -121,7 +121,7 @@ function computeTotals(d: PrintData) {
     if (!enabled[srv.code]) return s;
     return s + Number(prices[srv.code] || 0);
   }, 0);
-  const customService = enabled["custom"] ? Number(prices["custom"] || 0) : 0;
+  const customService = totalServicesPerso(enabled, prices);
   const serviceTotal = fixedServices + customService;
 
   const totalAfterDiscount = subTotal - discountValue;
@@ -351,9 +351,7 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
     ...serviceOptions
       .filter((s) => data.enabledServices?.[s.code])
       .map((s) => ({ label: s.label, amount: Number(data.servicePrices?.[s.code] || 0), ...infoService(data.servicePrices, s.code) })),
-    ...(data.enabledServices?.["custom"]
-      ? [{ label: data.servicePrices?.["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices?.["custom"] || 0), ...infoService(data.servicePrices, "custom") }]
-      : []),
+    ...servicesPersoActifs(data.enabledServices, data.servicePrices),
   ];
 
   // Libellé contextuel pour le numéro de document
@@ -1701,4 +1699,4 @@ export default function PrintFicheTravail({ params }: { params: Promise<{ slug: 
       </div>
     </>
   );
-}
+}

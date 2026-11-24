@@ -9,7 +9,11 @@ import { isStockCritical } from "@/lib/jc-print-types";
 import { manqueNumero, adresseLivraisonEffective } from "@/lib/adresse-utils";
 import { badgeStockPicker } from "@/lib/badge-stock-picker";
 import ShopifyPickerEtendu from "@/components/ShopifyPickerEtendu";
-import { cleModeService, cleValeurService, type ModeService } from "@/lib/service-affichage";
+import {
+  cleModeService, cleValeurService, type ModeService,
+  codesServicesPerso, prochainCodeServicePerso, cleLibelleServicePerso, clesServicePerso,
+  totalServicesPerso, MAX_SERVICES_PERSO,
+} from "@/lib/service-affichage";
 import { lireMention, ecrireMention, texteMention, AUCUNE_MENTION, type EtatMention } from "@/lib/mention-vente";
 import MoodboardReglages from "@/components/MoodboardReglages";
 import { lireReglagesMoodboard, reglagesAEcrire, REGLAGES_MOODBOARD_DEFAUT, type ReglagesMoodboard } from "@/lib/moodboard";
@@ -384,7 +388,6 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   // jamais enregistre dans le document : la 3D peut arriver apres l'offre).
   const [cache3d, setCache3d]               = useState<Record<string, boolean>>({});
   // Champ prix du service personnalise : focus apres l'avertissement « sans prix ».
-  const servicePersoPrixRef = useRef<HTMLInputElement>(null);
   // Garde-fou stock : ids des lignes critiques (non-réassortables + qté > stock)
   // que le commercial a explicitement confirmées. Vidé si la ligne sort de l'état critique.
   const [confirmedCritical, setConfirmedCritical] = useState<Record<string, boolean>>({});
@@ -723,7 +726,7 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
       if (!enabledServices[srv.code]) return s;
       return s + Number(servicePrices[srv.code] || 0);
     }, 0);
-    const custom = enabledServices["custom"] ? Number(servicePrices["custom"] || 0) : 0;
+    const custom = totalServicesPerso(enabledServices, servicePrices);
     return fixed + custom;
   }, [enabledServices, servicePrices]);
 
@@ -1022,22 +1025,48 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
   // Service personnalise coche, avec un libelle, mais sans montant : oubli
   // frequent (retour metier du 07.10.2026). Un montant est attendu, 0 compris :
   // seul le champ VIDE declenche l'avertissement. Jamais en auto-save.
-  const servicePersoSansPrix =
-    !!enabledServices["custom"] &&
-    (servicePrices["custom_label"] || "").trim() !== "" &&
-    !servicePrices[cleModeService("custom")] &&
-    (servicePrices["custom"] ?? "").toString().trim() === "";
+  // 24.11.2026 : verifie CHAQUE ligne personnalisee (custom, custom_2…).
+  const codesPerso = codesServicesPerso(enabledServices, servicePrices);
+  function servicePersoSansPrix(code: string): boolean {
+    return !!enabledServices[code] &&
+      (servicePrices[cleLibelleServicePerso(code)] || "").trim() !== "" &&
+      !servicePrices[cleModeService(code)] &&
+      (servicePrices[code] ?? "").toString().trim() === "";
+  }
+  const codesPersoSansPrix = codesPerso.filter(servicePersoSansPrix);
 
   function confirmerServicePerso(): boolean {
-    if (!servicePersoSansPrix) return true;
+    if (codesPersoSansPrix.length === 0) return true;
+    const libelles = codesPersoSansPrix
+      .map((code) => `« ${(servicePrices[cleLibelleServicePerso(code)] || "").trim()} »`)
+      .join(", ");
     const ok = window.confirm(
       `⚠ Service personnalisé sans prix.\n\n` +
-      `« ${(servicePrices["custom_label"] || "").trim()} » est coché mais aucun montant n'a été saisi.\n` +
+      `${libelles} ${codesPersoSansPrix.length > 1 ? "sont cochés" : "est coché"} mais aucun montant n'a été saisi.\n` +
       `Saisissez un montant (0 accepté pour un service offert).\n\n` +
       `Enregistrer quand même ?`
     );
-    if (!ok) window.setTimeout(() => servicePersoPrixRef.current?.focus(), 0);
+    if (!ok) {
+      const premier = codesPersoSansPrix[0];
+      window.setTimeout(() => (document.getElementById(`srv-perso-prix-${premier}`) as HTMLInputElement | null)?.focus(), 0);
+    }
     return ok;
+  }
+
+  // Ajout / suppression d'une ligne personnalisee (« + »). La 1re ligne (custom)
+  // ne se supprime pas : elle se vide. Plafond : MAX_SERVICES_PERSO lignes.
+  const prochainCodePerso = prochainCodeServicePerso(enabledServices, servicePrices);
+  function ajouterServicePerso() {
+    const code = prochainCodePerso;
+    if (!code) return;
+    setEnabledServices((c) => ({ ...c, [code]: false }));
+    setServicePrices((c) => ({ ...c, [cleLibelleServicePerso(code)]: "" }));
+    window.setTimeout(() => (document.getElementById(`srv-perso-label-${code}`) as HTMLTextAreaElement | null)?.focus(), 0);
+  }
+  function supprimerServicePerso(code: string) {
+    if (code === "custom") return;
+    setEnabledServices((c) => { const n = { ...c }; delete n[code]; return n; });
+    setServicePrices((c) => { const n = { ...c }; for (const k of clesServicePerso(code)) delete n[k]; return n; });
   }
 
   async function saveDraft(opts: { silent?: boolean } = {}): Promise<boolean> {
@@ -3086,55 +3115,78 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
                   </div>
                 </div>
               ))}
-              {/* Service vierge à la volée */}
-              <div className="jc-service-row jc-service-custom-row">
+              {/* Services vierges à la volée — plusieurs lignes depuis le 24.11.2026 */}
+              {codesPerso.map((code) => {
+                const cleLib = cleLibelleServicePerso(code);
+                const sansPrix = servicePersoSansPrix(code);
+                return (
+              <div className="jc-service-row jc-service-custom-row" key={code}>
                 <div className="jc-service-custom-main">
                   <input
                     type="checkbox"
                     className="jc-service-custom-check"
-                    checked={enabledServices["custom"] || false}
-                    onChange={(e) => setEnabledServices((c) => ({ ...c, custom: e.target.checked }))}
+                    checked={enabledServices[code] || false}
+                    onChange={(e) => setEnabledServices((c) => ({ ...c, [code]: e.target.checked }))}
                   />
                   {/* Textarea (et non input) : la regle .jc-check-label input imposait
                       15 px de haut au champ, d'ou une zone cliquable minuscule. Le
                       texte passe a la ligne et la case est agrandissable. */}
                   <textarea
+                    id={`srv-perso-label-${code}`}
                     className="jc-service-custom-label"
                     placeholder="Service personnalisé… (cliquer pour saisir)"
                     rows={1}
-                    value={servicePrices["custom_label"] || ""}
+                    value={servicePrices[cleLib] || ""}
                     ref={(el) => { if (el && el.scrollHeight > el.clientHeight) el.style.height = el.scrollHeight + "px"; }}
                     onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); /* libelle sur une seule ligne (documents, export) : le retour a la ligne n'est que visuel */ }}
                     onChange={(e) => {
                       const v = e.target.value;
                       // Ecrire un libelle coche le service : sinon le prix reste grise.
-                      if (v.trim() && !(servicePrices["custom_label"] || "").trim() && !enabledServices["custom"]) {
-                        setEnabledServices((c) => ({ ...c, custom: true }));
+                      if (v.trim() && !(servicePrices[cleLib] || "").trim() && !enabledServices[code]) {
+                        setEnabledServices((c) => ({ ...c, [code]: true }));
                       }
-                      setServicePrices((c) => ({ ...c, custom_label: v }));
+                      setServicePrices((c) => ({ ...c, [cleLib]: v }));
                       e.target.style.height = "auto";
                       e.target.style.height = e.target.scrollHeight + "px";
                     }}
                   />
                 </div>
                 <div className="jc-service-price-wrap">
-                  {renderModeService("custom")}
-                  <span className="jc-muted-sm">{modeServiceForm("custom") === "offert" ? "valeur" : "CHF"}</span>
+                  {renderModeService(code)}
+                  <span className="jc-muted-sm">{modeServiceForm(code) === "offert" ? "valeur" : "CHF"}</span>
                   <input
-                    ref={servicePersoPrixRef}
-                    className={`jc-service-price no-spin${servicePersoSansPrix ? " jc-error" : ""}`}
-                    type="number" step="1" placeholder={modeServiceForm("custom") === "inclus" ? "—" : "0"}
-                    value={prixServiceAffiche("custom")}
-                    disabled={!enabledServices["custom"] || modeServiceForm("custom") === "inclus"}
-                    onChange={(e) => ecrirePrixService("custom", e.target.value)}
+                    id={`srv-perso-prix-${code}`}
+                    className={`jc-service-price no-spin${sansPrix ? " jc-error" : ""}`}
+                    type="number" step="1" placeholder={modeServiceForm(code) === "inclus" ? "—" : "0"}
+                    value={prixServiceAffiche(code)}
+                    disabled={!enabledServices[code] || modeServiceForm(code) === "inclus"}
+                    onChange={(e) => ecrirePrixService(code, e.target.value)}
                     onFocus={(e) => e.currentTarget.select()}
-                    title={servicePersoSansPrix ? "Prix manquant — saisir un montant (0 accepté)" : undefined}
+                    title={sansPrix ? "Prix manquant — saisir un montant (0 accepté)" : undefined}
                   />
+                  {code !== "custom" && (
+                    <button
+                      type="button"
+                      className="jc-service-custom-suppr"
+                      title="Supprimer cette ligne"
+                      aria-label="Supprimer cette ligne de service"
+                      onClick={() => supprimerServicePerso(code)}
+                    >×</button>
+                  )}
                 </div>
-                {servicePersoSansPrix && (
+                {sansPrix && (
                   <div className="jc-service-custom-warn">Prix manquant — saisir un montant (0 accepté pour un service offert)</div>
                 )}
               </div>
+                );
+              })}
+              <button
+                type="button"
+                className="jc-service-custom-add"
+                onClick={ajouterServicePerso}
+                disabled={!prochainCodePerso}
+                title={prochainCodePerso ? "Ajouter une ligne de service personnalisé" : `${MAX_SERVICES_PERSO} lignes personnalisées au maximum`}
+              >+ Ajouter une ligne personnalisée</button>
             </div>
           </div>
 
@@ -4300,6 +4352,19 @@ export default function DraftFormulaire({ initialSlug, revisionMode = false, com
           box-shadow: none !important;
         }
         .jc-service-custom-label:focus { border-color: var(--accent) !important; }
+        .jc-service-custom-suppr {
+          border: 1px solid var(--border-2); background: transparent; color: var(--text-dim);
+          border-radius: 999px; width: 26px; height: 26px; flex-shrink: 0;
+          font-size: 16px; line-height: 1; cursor: pointer; margin-left: 4px;
+        }
+        .jc-service-custom-suppr:hover { color: var(--danger); border-color: var(--danger); }
+        .jc-service-custom-add {
+          align-self: flex-start; border: 1px dashed var(--border-2); background: transparent;
+          color: var(--text-dim); border-radius: 10px; padding: 8px 14px;
+          font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .jc-service-custom-add:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+        .jc-service-custom-add:disabled { opacity: 0.45; cursor: not-allowed; }
         .jc-stock-zero { color: var(--danger); font-weight: 700; font-size: 12px; }
         .jc-stock-cmd { color: #f59e0b; font-weight: 700; font-size: 12px; }
         /* .td-stock impose white-space:nowrap (déclarée DEUX fois, l. ~3906 puis
