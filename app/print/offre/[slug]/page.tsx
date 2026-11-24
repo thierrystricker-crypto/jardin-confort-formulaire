@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from "react";
-import { infoService, texteMontantService } from "@/lib/service-affichage";
+import { infoService, texteMontantService, servicesPersoActifs } from "@/lib/service-affichage";
 import { estProlongee, formatJourCH } from "@/lib/validite-offre";
 import MoodboardPlanche from "@/components/MoodboardPlanche";
 import { lireReglagesMoodboard, type ReglagesMoodboard, type ResultatMoodboard } from "@/lib/moodboard";
@@ -205,9 +205,7 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
     ...serviceOptions
       .filter((s) => data.enabledServices[s.code])
       .map((s) => ({ label: s.label, amount: Number(data.servicePrices[s.code] || 0), ...infoService(data.servicePrices, s.code) })),
-    ...(data.enabledServices["custom"]
-      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé", amount: Number(data.servicePrices["custom"] || 0), ...infoService(data.servicePrices, "custom") }]
-      : []),
+    ...servicesPersoActifs(data.enabledServices, data.servicePrices),
   ];
 
   const validationUrl = `https://offres.jardin-confort.ch/offre/${offreSlug || numeroAffiche.toLowerCase().replace(/\s+/g, "-")}`;
@@ -933,4 +931,4 @@ export default function PrintOffreSlug({ params }: { params: Promise<{ slug: str
       </div>
     </>
   );
-}
+}

@@ -20,6 +20,7 @@ import {
   PrintData, QuoteLine,
   serviceOptions, formatDate,
 } from "@/lib/jc-print-types";
+import { servicesPersoActifs } from "@/lib/service-affichage";
 
 const THEME  = "#2b8ad1";
 const BLACK  = "#000000";
@@ -320,9 +321,7 @@ export default function PrintBulletinLivraisonSlug({ params }: { params: Promise
     ...serviceOptions
       .filter((s) => data.enabledServices[s.code])
       .map((s) => ({ label: s.label })),
-    ...(data.enabledServices["custom"]
-      ? [{ label: data.servicePrices["custom_label"] || "Service personnalisé" }]
-      : []),
+    ...servicesPersoActifs(data.enabledServices, data.servicePrices).map((s) => ({ label: s.label })),
   ];
 
   const editable = !viewing;

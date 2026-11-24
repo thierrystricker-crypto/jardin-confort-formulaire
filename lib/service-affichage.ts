@@ -56,3 +56,96 @@ export function texteMontantService(
   if (srv.mode === "offert" && srv.valeur) return `(${montantCourt(srv.valeur)}) Offert`;
   return "Offert";
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Services personnalises MULTIPLES (24.11.2026).
+//
+// La 1re ligne garde ses cles historiques (aucune migration, anciens documents
+// intacts) :            servicePrices["custom"]   / ["custom_label"]
+// Les lignes ajoutees par le « + » :
+//                       servicePrices["custom_2"] / ["custom_2_label"] … custom_5
+// Mode et valeur (Offert / Inclus) suivent la regle generale :
+//                       servicePrices["custom_2__mode"], ["custom_2__valeur"]
+//
+// Une ligne ajoutee EXISTE des que son code est present dans enabledServices
+// (meme a false) ou que son libelle est present dans servicePrices. La supprimer
+// = effacer ses quatre cles (voir clesServicePerso).
+//
+// Tous les documents et tous les totaux passent par servicesPersoActifs /
+// totalServicesPerso : ne jamais relire "custom" en dur.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const MAX_SERVICES_PERSO = 5;
+export const LIBELLE_SERVICE_PERSO_DEFAUT = "Service personnalisé";
+
+const RE_CODE_PERSO = /^custom(?:_(\d+))?$/;
+
+export function estCodeServicePerso(code: string): boolean {
+  return RE_CODE_PERSO.test(code);
+}
+
+function rangPerso(code: string): number {
+  const m = RE_CODE_PERSO.exec(code);
+  return m ? (m[1] ? parseInt(m[1], 10) : 1) : 0;
+}
+
+export function cleLibelleServicePerso(code: string): string {
+  return code === "custom" ? "custom_label" : `${code}_label`;
+}
+
+/** Les cles a effacer pour supprimer une ligne personnalisee. */
+export function clesServicePerso(code: string): string[] {
+  return [code, cleLibelleServicePerso(code), cleModeService(code), cleValeurService(code)];
+}
+
+/** Codes de toutes les lignes personnalisees existantes, "custom" toujours en tete. */
+export function codesServicesPerso(
+  enabled: Record<string, boolean> | null | undefined,
+  prices: Record<string, string> | null | undefined
+): string[] {
+  const codes = new Set<string>(["custom"]);
+  for (const k of Object.keys(enabled || {})) if (estCodeServicePerso(k)) codes.add(k);
+  for (const k of Object.keys(prices || {})) {
+    const m = /^(custom_\d+)_label$/.exec(k);
+    if (m) codes.add(m[1]);
+  }
+  return [...codes].sort((a, b) => rangPerso(a) - rangPerso(b));
+}
+
+/** Prochain code libre ("custom_2", "custom_3"…), null si le plafond est atteint. */
+export function prochainCodeServicePerso(
+  enabled: Record<string, boolean> | null | undefined,
+  prices: Record<string, string> | null | undefined
+): string | null {
+  const codes = codesServicesPerso(enabled, prices);
+  if (codes.length >= MAX_SERVICES_PERSO) return null;
+  const pris = new Set(codes.map(rangPerso));
+  for (let r = 2; r <= 99; r++) if (!pris.has(r)) return `custom_${r}`;
+  return null;
+}
+
+export type ServicePersoActif = { code: string; label: string; amount: number } & InfoService;
+
+/** Lignes personnalisees COCHEES, dans l'ordre de saisie, pretes pour les documents. */
+export function servicesPersoActifs(
+  enabled: Record<string, boolean> | null | undefined,
+  prices: Record<string, string> | null | undefined,
+  libelleDefaut: string = LIBELLE_SERVICE_PERSO_DEFAUT
+): ServicePersoActif[] {
+  return codesServicesPerso(enabled, prices)
+    .filter((code) => !!enabled?.[code])
+    .map((code) => ({
+      code,
+      label: (prices?.[cleLibelleServicePerso(code)] || "").trim() || libelleDefaut,
+      amount: Number(prices?.[code] || 0),
+      ...infoService(prices, code),
+    }));
+}
+
+/** Somme des lignes personnalisees cochees (meme regle que l'historique "custom"). */
+export function totalServicesPerso(
+  enabled: Record<string, boolean> | null | undefined,
+  prices: Record<string, string> | null | undefined
+): number {
+  return servicesPersoActifs(enabled, prices).reduce((s, x) => s + x.amount, 0);
+}
