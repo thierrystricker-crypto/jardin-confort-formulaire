@@ -43,6 +43,19 @@ const CONCURRENCE_CLAUDE = 4;
 const MAX_RESSOURCES = 3000; // garde-fou : au-delà, on s'arrête (journalisé)
 const LANGUES: Langue[] = ["de", "en"];
 
+/**
+ * Marques suivies de près (demande de Thierry, 28.11.2026) : leurs fiches
+ * retraduites sont TOUJOURS relues par Claude, hors plafond. Les collections
+ * n'ont pas de marque : on regarde si l'adresse (handle) contient le nom.
+ */
+export const MARQUES_PRIORITAIRES = ["fermob", "glatz", "suncomfort", "fatboy", "schaffner"];
+
+export function estPrioritaire(marque: string | null, handle: string): boolean {
+  const m = (marque || "").toLowerCase();
+  const h = handle.toLowerCase();
+  return MARQUES_PRIORITAIRES.some((p) => m.includes(p) || h.includes(p));
+}
+
 /** Préfixe des notes des lots de rattrapage (exclus du calcul de `depuis`). */
 export const PREFIXE_RATTRAPAGE = "Rattrapage";
 
@@ -303,13 +316,17 @@ export async function lancerSentinelle(opts: { depuis?: string; maxClaude?: numb
       }
     }
 
-    // 4. Relecture Claude — titres réécrits d'abord, puis le reste
-    const ordre = [...aControler].sort((a, b) => {
-      const t = (r: Ressource) => (traductions.get(r.id)!.some((c) => c.champ === "title") ? 0 : 1);
-      return t(a) - t(b);
-    });
-    const relues = ordre.slice(0, Math.max(0, maxClaude));
-    res.non_relues_claude = ordre.length - relues.length;
+    // 4. Relecture Claude — marques suivies de près : toujours, hors plafond ;
+    //    les autres : titres réécrits d'abord, dans la limite du plafond.
+    const prioritaires = aControler.filter((r) => estPrioritaire(r.marque, r.handle));
+    const autres = aControler
+      .filter((r) => !estPrioritaire(r.marque, r.handle))
+      .sort((a, b) => {
+        const t = (r: Ressource) => (traductions.get(r.id)!.some((c) => c.champ === "title") ? 0 : 1);
+        return t(a) - t(b);
+      });
+    const relues = [...prioritaires, ...autres.slice(0, Math.max(0, maxClaude))];
+    res.non_relues_claude = aControler.length - relues.length;
     await enParallele(relues, CONCURRENCE_CLAUDE, async (r) => {
       const champs = traductions.get(r.id)!;
       try {

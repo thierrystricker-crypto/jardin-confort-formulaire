@@ -111,6 +111,7 @@ export default function TraductionsPage() {
   const [langue, setLangue] = useState("");
   const [source, setSource] = useState("");
   const [regle, setRegle] = useState("");
+  const [marque, setMarque] = useState("");
   const [controles, setControles] = useState<Controle[]>([]);
   const [compteurs, setCompteurs] = useState<Record<string, number>>({});
   const [runs, setRuns] = useState<Run[]>([]);
@@ -131,6 +132,7 @@ export default function TraductionsPage() {
       if (langue) p.set("langue", langue);
       if (source) p.set("source", source);
       if (regle) p.set("regle", regle);
+      if (marque) p.set("marque", marque);
       const res = await fetch(`/api/traductions?${p.toString()}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
@@ -139,7 +141,7 @@ export default function TraductionsPage() {
       setRuns(json.runs || []);
       setSelection(new Set());
     } catch (e) { setError(msg(e)); } finally { setLoading(false); }
-  }, [onglet, langue, source, regle]);
+  }, [onglet, langue, source, regle, marque]);
   useEffect(() => { charger(); }, [charger]);
 
   const reglesPresentes = useMemo(
@@ -362,6 +364,14 @@ export default function TraductionsPage() {
               <option value="">DE + EN</option>
               <option value="de">DE</option>
               <option value="en">EN</option>
+            </select>
+            <select value={marque} onChange={(e) => setMarque(e.target.value)} className={classeSelect}>
+              <option value="">Toutes les marques</option>
+              <option value="Fermob">Fermob</option>
+              <option value="Glatz">Glatz</option>
+              <option value="Suncomfort">Suncomfort</option>
+              <option value="Fatboy">Fatboy</option>
+              <option value="Schaffner">Schaffner</option>
             </select>
             <select value={source} onChange={(e) => setSource(e.target.value)} className={classeSelect}>
               <option value="">Règles + Claude</option>

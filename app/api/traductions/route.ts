@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
   const langue = p.get("langue");
   const source = p.get("source");
   const regle = p.get("regle");
+  const marque = p.get("marque");
 
   try {
     let q = supabaseAdmin
@@ -31,6 +32,8 @@ export async function GET(request: NextRequest) {
     if (langue === "de" || langue === "en") q = q.eq("langue", langue);
     if (source === "regle" || source === "claude") q = q.eq("source", source);
     if (regle) q = q.eq("regle", regle);
+    // Marque : vendor des produits, ou nom dans l'adresse des collections
+    if (marque) q = q.or(`marque.ilike.%${marque.replace(/[^a-zA-Z0-9 -]/g, "")}%,handle.ilike.%${marque.replace(/[^a-zA-Z0-9-]/g, "").toLowerCase()}%`);
     const { data: controles, error } = await q;
     if (error) throw new Error(error.message);
 
