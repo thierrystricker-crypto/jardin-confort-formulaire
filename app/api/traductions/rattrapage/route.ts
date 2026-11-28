@@ -46,6 +46,10 @@ export async function POST(request: NextRequest) {
     const parRegle: Record<string, number> = {};
     const exemples: Array<{ handle: string; langue: string; champ: string; regles: string[] }> = [];
     const erreurs: string[] = [];
+    // Fiches sans plus rien à corriger sur les règles sûres après ce lot
+    // (déjà propres, ou corrigées avec succès) : leurs anomalies « auto »
+    // encore ouvertes sont résolues.
+    const fichesPropres: string[] = [];
 
     for (const c of contenus) {
       const r = parId.get(c.resourceId);
@@ -63,18 +67,29 @@ export async function POST(request: NextRequest) {
           if (exemples.length < 8) exemples.push({ handle: r.handle, langue, champ, regles });
         }
       }
-      if (!items.length) continue;
+      if (!items.length) { fichesPropres.push(c.resourceId); continue; }
       ressourcesACorriger++;
       champs += items.length;
       if (!ecrire) continue;
       try {
         await ecrireTraductions(c.resourceId, items);
         ecrits += items.length;
+        fichesPropres.push(c.resourceId);
       } catch (e) {
         if (erreurs.length < 10) erreurs.push(`${r.handle} : ${messageErreur(e).slice(0, 200)}`);
         // Droit manquant : inutile de continuer le lot
         if (messageErreur(e).includes("write_translations")) break;
       }
+    }
+
+    if (ecrire && fichesPropres.length) {
+      const { error: errMaj } = await supabaseAdmin
+        .from("seo_traductions_controles")
+        .update({ statut: "corrige", traite_at: new Date().toISOString() })
+        .in("ressource_id", fichesPropres)
+        .eq("statut", "nouveau")
+        .eq("auto_corrigeable", true);
+      if (errMaj && erreurs.length < 10) erreurs.push(`Mise à jour des anomalies : ${errMaj.message}`);
     }
 
     if (ecrire) {
