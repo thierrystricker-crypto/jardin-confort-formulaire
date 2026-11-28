@@ -46,14 +46,29 @@ export async function GET(request: NextRequest) {
       compteurs[s] = count ?? 0;
     }
 
+    // Passages de contrôle (nuit ou manuels) — les lots de rattrapage à part
     const { data: runs, error: errRuns } = await supabaseAdmin
       .from("seo_traductions_runs")
       .select("id, started_at, finished_at, nb_ressources, nb_anomalies, nb_relues_claude, notes, erreur")
+      .not("notes", "like", "Rattrapage%")
       .order("started_at", { ascending: false })
       .limit(10);
     if (errRuns) throw new Error(errRuns.message);
 
-    return NextResponse.json({ controles: controles ?? [], compteurs, runs: runs ?? [] });
+    // Dernier lot de rattrapage par type (pour dire si c'est déjà fait)
+    const rattrapages: Record<string, { at: string; notes: string | null } | null> = {};
+    for (const [cle, motif] of [["produit", "Rattrapage règles sûres (produits)%"], ["collection", "Rattrapage règles sûres (collections)%"]] as const) {
+      const { data: d } = await supabaseAdmin
+        .from("seo_traductions_runs")
+        .select("finished_at, notes")
+        .like("notes", motif)
+        .order("finished_at", { ascending: false })
+        .limit(1);
+      const l = (d as Array<{ finished_at: string; notes: string | null }> | null)?.[0];
+      rattrapages[cle] = l ? { at: l.finished_at, notes: l.notes } : null;
+    }
+
+    return NextResponse.json({ controles: controles ?? [], compteurs, runs: runs ?? [], rattrapages });
   } catch (err) {
     console.error("[api/traductions] GET:", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
