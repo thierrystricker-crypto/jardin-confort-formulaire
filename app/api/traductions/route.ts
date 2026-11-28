@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ controles: controles ?? [], compteurs, runs: runs ?? [] });
   } catch (err) {
     console.error("[api/traductions] GET:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
 
@@ -73,6 +73,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: true, modifies: Math.min(ids.length, 500) });
   } catch (err) {
     console.error("[api/traductions] PATCH:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }

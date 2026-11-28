@@ -6,7 +6,10 @@
 // retraduit et range ici les anomalies (règles fixes + relecture Claude).
 // Ici : trier, ouvrir la fiche (admin Shopify / page en ligne), marquer
 // corrigé / ignoré / faux positif (un faux positif ne revient plus), et lancer
-// un contrôle à la main. Phase 1 = rapport seul : rien n'est écrit dans Shopify.
+// un contrôle à la main, « Appliquer » une correction validée (écrite dans
+// Shopify), et lancer le rattrapage des règles sûres sur tout le catalogue.
+// La correction automatique nocturne des règles sûres dépend de la variable
+// Vercel TRADUCTIONS_AUTO_CORRECTION=1.
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import RetourDashboard from "@/components/RetourDashboard";
@@ -57,6 +60,7 @@ const LIBELLES_REGLES: Record<string, string> = {
   sthul: "Sthul",
   bodenhuelsel: "Bodenhülsel",
   keramik_en: "Keramik en anglais",
+  available_to_order: "available to order",
   pouf_sitzsack: "Pouf traduit en sac",
   mot_francais: "Mot resté en français",
   texte_francais: "Passage resté en français",
@@ -87,6 +91,17 @@ function fmtDateHeure(iso: string) {
   return new Date(iso).toLocaleString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function msg(e: unknown) {
+  return e instanceof Error ? e.message : String(e);
+}
+
+type Rattrapage = {
+  lots: number; lues: number; champs: number; ecrits: number;
+  parRegle: Record<string, number>;
+  exemples: Array<{ handle: string; langue: string; champ: string; regles: string[] }>;
+  erreurs: string[]; enCours: boolean; termine: boolean; ecrire: boolean;
+};
+
 function numeroShopify(gid: string) {
   return gid.split("/").pop() || "";
 }
@@ -105,6 +120,9 @@ export default function TraductionsPage() {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [heures, setHeures] = useState(26);
   const [lancement, setLancement] = useState("");
+  const [typeRattrapage, setTypeRattrapage] = useState<"produit" | "collection">("produit");
+  const [rattrapage, setRattrapage] = useState<Rattrapage | null>(null);
+  const stopRattrapage = React.useRef(false);
 
   const charger = useCallback(async () => {
     setLoading(true); setError("");
@@ -120,7 +138,7 @@ export default function TraductionsPage() {
       setCompteurs(json.compteurs || {});
       setRuns(json.runs || []);
       setSelection(new Set());
-    } catch (e) { setError(String(e)); } finally { setLoading(false); }
+    } catch (e) { setError(msg(e)); } finally { setLoading(false); }
   }, [onglet, langue, source, regle]);
   useEffect(() => { charger(); }, [charger]);
 
@@ -141,7 +159,7 @@ export default function TraductionsPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
       await charger();
-    } catch (e) { setError(String(e)); } finally { setBusy(false); }
+    } catch (e) { setError(msg(e)); } finally { setBusy(false); }
   }
 
   async function lancer() {
@@ -159,7 +177,61 @@ export default function TraductionsPage() {
         `${json.relues_claude} relue(s) par Claude, ${json.anomalies_nouvelles} nouvelle(s) anomalie(s).`
       );
       await charger();
-    } catch (e) { setLancement(""); setError(String(e)); } finally { setBusy(false); }
+    } catch (e) { setLancement(""); setError(msg(e)); } finally { setBusy(false); }
+  }
+
+  async function appliquer(id: string) {
+    setBusy(true); setError("");
+    try {
+      const res = await fetch("/api/traductions/appliquer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
+      await charger();
+    } catch (e) { setError(msg(e)); } finally { setBusy(false); }
+  }
+
+  async function lancerRattrapage(ecrire: boolean) {
+    if (ecrire && !confirm(`Corriger maintenant dans Shopify toutes les traductions (${typeRattrapage === "produit" ? "produits" : "collections"}) avec les règles sûres : ß → ss, Sthul, Bodenhülsel, Keramik, available to order, pouf hors Fatboy ?`)) return;
+    stopRattrapage.current = false;
+    setError("");
+    let etat: Rattrapage = { lots: 0, lues: 0, champs: 0, ecrits: 0, parRegle: {}, exemples: [], erreurs: [], enCours: true, termine: false, ecrire };
+    setRattrapage(etat);
+    let apres: string | null = null;
+    try {
+      do {
+        const res: Response = await fetch("/api/traductions/rattrapage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: typeRattrapage, apres, taille: 100, ecrire }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
+        const parRegle = { ...etat.parRegle };
+        for (const [k, v] of Object.entries(json.par_regle as Record<string, number>)) parRegle[k] = (parRegle[k] ?? 0) + v;
+        etat = {
+          ...etat,
+          lots: etat.lots + 1,
+          lues: etat.lues + json.lues,
+          champs: etat.champs + json.champs,
+          ecrits: etat.ecrits + json.ecrits,
+          parRegle,
+          exemples: [...etat.exemples, ...json.exemples].slice(0, 12),
+          erreurs: [...etat.erreurs, ...json.erreurs].slice(0, 20),
+        };
+        setRattrapage(etat);
+        apres = json.suivant;
+        if ((json.erreurs as string[]).some((x) => x.includes("write_translations"))) break;
+      } while (apres && !stopRattrapage.current);
+      setRattrapage({ ...etat, enCours: false, termine: !apres });
+      if (ecrire) await charger();
+    } catch (e) {
+      setRattrapage({ ...etat, enCours: false });
+      setError(msg(e));
+    }
   }
 
   function basculer(id: string) {
@@ -184,7 +256,8 @@ export default function TraductionsPage() {
             <h1 className="text-2xl font-semibold">🌐 Sentinelle traductions DE / EN</h1>
             <p className="mt-1 max-w-3xl text-sm text-zinc-400">
               Chaque nuit, ce que T Lab a retraduit sur jardin-confort.ch est relu (règles fixes + Claude).
-              Rapport seul pour l&apos;instant : rien n&apos;est corrigé automatiquement dans Shopify.
+              Les corrections sûres (badge « auto ») peuvent être écrites automatiquement ; les propositions de Claude
+              se valident ici, une à une, avec « Appliquer ».
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs">
@@ -227,6 +300,54 @@ export default function TraductionsPage() {
             </div>
           </details>
         )}
+
+        {/* Rattrapage des règles sûres sur le catalogue existant */}
+        <details className="mb-6 rounded-2xl border border-white/10 bg-[#2a2d31] px-4 py-3 text-sm">
+          <summary className="cursor-pointer text-zinc-300">🧹 Rattrapage du catalogue existant (règles sûres)</summary>
+          <div className="mt-3 space-y-3 text-xs">
+            <p className="text-zinc-400">
+              Le dico T Lab ne retraduit pas l&apos;existant. Ce rattrapage corrige directement dans Shopify, sans IA :
+              ß → ss, Sthul → Stuhl, Bodenhülsel → Bodenhülse, Keramik → ceramic (EN), available to order → made to order (EN),
+              Sitzsack / bean bag → Pouf / pouf (produits hors Fatboy ; jamais les collections). Commence par « Simuler » (n&apos;écrit rien).
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={typeRattrapage} onChange={(e) => setTypeRattrapage(e.target.value as "produit" | "collection")} disabled={rattrapage?.enCours} className={classeSelect}>
+                <option value="produit">Produits</option>
+                <option value="collection">Collections</option>
+              </select>
+              <button type="button" disabled={rattrapage?.enCours || busy} onClick={() => lancerRattrapage(false)} className={classeBouton}>Simuler</button>
+              <button type="button" disabled={rattrapage?.enCours || busy} onClick={() => lancerRattrapage(true)}
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/20 px-3 py-1.5 font-medium text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50">
+                Lancer la correction
+              </button>
+              {rattrapage?.enCours && (
+                <button type="button" onClick={() => { stopRattrapage.current = true; }} className="text-zinc-400 hover:text-rose-300">Arrêter après ce lot</button>
+              )}
+            </div>
+            {rattrapage && (
+              <div className="rounded-lg bg-black/20 px-3 py-2 text-zinc-300">
+                <div>
+                  {rattrapage.enCours ? "⏳ En cours… " : rattrapage.termine ? "✅ Terminé. " : "⏸ Arrêté. "}
+                  {rattrapage.ecrire ? "Correction" : "Simulation"} : {rattrapage.lots} lot(s), {rattrapage.lues} fiche(s) lue(s),
+                  {" "}{rattrapage.champs} champ(s) {rattrapage.ecrire ? `à corriger, ${rattrapage.ecrits} écrit(s)` : "seraient corrigés"}.
+                </div>
+                {Object.keys(rattrapage.parRegle).length > 0 && (
+                  <div className="mt-1 text-zinc-400">
+                    {Object.entries(rattrapage.parRegle).map(([k, v]) => `${libelleRegle(k)} : ${v}`).join(" · ")}
+                  </div>
+                )}
+                {rattrapage.exemples.length > 0 && (
+                  <div className="mt-1 text-zinc-500">
+                    Exemples : {rattrapage.exemples.slice(0, 6).map((x) => `${x.handle} (${x.langue.toUpperCase()} ${LIBELLES_CHAMPS[x.champ] ?? x.champ})`).join(", ")}
+                  </div>
+                )}
+                {rattrapage.erreurs.length > 0 && (
+                  <div className="mt-1 text-rose-300">{rattrapage.erreurs.slice(0, 5).join(" · ")}</div>
+                )}
+              </div>
+            )}
+          </div>
+        </details>
 
         {/* Onglets + filtres */}
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -304,6 +425,13 @@ export default function TraductionsPage() {
                       <a href={`https://www.jardin-confort.ch/${c.langue}/${chemin}/${c.handle}`} target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:underline">Page {c.langue.toUpperCase()} en ligne</a>
                     )}
                     <div className="ml-auto flex flex-wrap gap-2">
+                      {c.statut === "nouveau" && ((c.source === "claude" && c.correction_proposee) || c.auto_corrigeable) && (
+                        <button type="button" disabled={busy} onClick={() => appliquer(c.id)}
+                          title="Écrit la correction dans Shopify"
+                          className="rounded-lg border border-emerald-500/40 bg-emerald-500/20 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50">
+                          Appliquer
+                        </button>
+                      )}
                       {c.statut !== "nouveau" && <button type="button" disabled={busy} onClick={() => changerStatut([c.id], "nouveau")} className={classeBouton}>Rouvrir</button>}
                       {c.statut !== "corrige" && <button type="button" disabled={busy} onClick={() => changerStatut([c.id], "corrige")} className={classeBouton}>✓ Corrigé</button>}
                       {c.statut !== "ignore" && <button type="button" disabled={busy} onClick={() => changerStatut([c.id], "ignore")} className={classeBouton}>Ignorer</button>}

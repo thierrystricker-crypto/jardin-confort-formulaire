@@ -9,11 +9,13 @@
 // route refuse tout le reste ; le proxy laisse passer /api/cron/*.
 // Planification dans vercel.json.
 //
-// Phase 1 = rapport seul : n'écrit QUE dans seo_traductions_runs,
-// seo_traductions_controles et notifications. Aucune écriture Shopify.
+// Écrit dans seo_traductions_runs, seo_traductions_controles et
+// notifications. N'écrit dans Shopify (traductions DE / EN) que si
+// TRADUCTIONS_AUTO_CORRECTION=1, et uniquement les corrections sûres.
 
 import { NextRequest, NextResponse } from "next/server";
 import { lancerSentinelle } from "@/lib/traductions-sentinelle";
+import { messageErreur } from "@/lib/traductions-shopify";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -37,6 +39,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(resultat);
   } catch (err) {
     console.error("[cron/traductions-sentinelle] erreur:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: messageErreur(err) }, { status: 500 });
   }
 }

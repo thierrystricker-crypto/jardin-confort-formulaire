@@ -3,11 +3,12 @@
 // Sentinelle traductions (28.11.2026) — lancement MANUEL depuis la page
 // /dashboard/traductions (route interne, cookie de session exigé par le proxy).
 // Body : { heures?: number (1 à 720, défaut 26), maxClaude?: number (0 à 60) }
-// Même passage que la tâche planifiée nocturne. Rapport seul : aucune
-// écriture Shopify.
+// Même passage que la tâche planifiée nocturne (y compris la correction
+// automatique des règles sûres si TRADUCTIONS_AUTO_CORRECTION=1).
 
 import { NextRequest, NextResponse } from "next/server";
 import { lancerSentinelle } from "@/lib/traductions-sentinelle";
+import { messageErreur } from "@/lib/traductions-shopify";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -22,6 +23,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(resultat);
   } catch (err) {
     console.error("[api/traductions/lancer] erreur:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: messageErreur(err) }, { status: 500 });
   }
 }
