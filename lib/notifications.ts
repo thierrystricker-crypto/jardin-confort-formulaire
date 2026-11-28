@@ -3,7 +3,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase";
 
-type NotificationType = "commande_validee" | "commande_convertie_manuelle" | "commande_directe" | "offre_abandonnee" | "stock_erreur" | "shopify_sync_erreur" | "webhook_make_echec";
+type NotificationType = "commande_validee" | "commande_convertie_manuelle" | "commande_directe" | "offre_abandonnee" | "stock_erreur" | "shopify_sync_erreur" | "webhook_make_echec" | "traductions_anomalies";
 
 type CreateNotificationInput = {
   type: NotificationType;
@@ -28,6 +28,7 @@ const DEFAULT_TITRES: Record<NotificationType, string> = {
   stock_erreur: "⚠️ Erreur de sortie de stock Shopify",
   shopify_sync_erreur: "⚠️ Import des commandes Shopify en défaut",
   webhook_make_echec: "⚠️ Webhook Make en échec — mails de confirmation non envoyés",
+  traductions_anomalies: "🌐 Anomalies de traduction DE / EN sur le webshop",
 };
 
 /**
