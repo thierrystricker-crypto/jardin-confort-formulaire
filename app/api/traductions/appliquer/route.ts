@@ -6,9 +6,12 @@
 //   • proposition de Claude → remplace l'extrait par la correction, à
 //     l'identique, dans la traduction actuelle (refus si l'extrait n'y est
 //     plus tel quel : on ne devine jamais) ;
-//   • règle sûre (auto) → applique les corrections mécaniques au champ.
-// Les autres règles (mots collés, doublés…) se corrigent à la main.
-// Body : { id: string (uuid de seo_traductions_controles) }
+//   • règle sûre (auto) → applique les corrections mécaniques au champ ;
+//   • autre règle (mots collés, doublés…) → remplacement exact « extrait →
+//     correction » proposé par Claude (route /proposer) et VU par l'humain,
+//     transmis dans le corps de la requête.
+// Body : { id: string (uuid de seo_traductions_controles),
+//          extrait?: string, correction?: string }
 // Droit Shopify requis : write_translations.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -35,8 +38,10 @@ type Controle = {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json().catch(() => ({}))) as { id?: unknown };
+    const body = (await request.json().catch(() => ({}))) as { id?: unknown; extrait?: unknown; correction?: unknown };
     const id = typeof body.id === "string" ? body.id : "";
+    const extraitManuel = typeof body.extrait === "string" && body.extrait ? body.extrait : null;
+    const correctionManuelle = typeof body.correction === "string" ? body.correction : null;
     if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
 
     const { data, error } = await supabaseAdmin
@@ -55,7 +60,13 @@ export async function POST(request: NextRequest) {
     }
 
     let nouvelle: string;
-    if (c.source === "claude") {
+    if (extraitManuel !== null && correctionManuelle !== null) {
+      // Correction proposée par Claude à la demande (bouton « Proposer ») et validée
+      if (!actuelle.includes(extraitManuel)) {
+        return NextResponse.json({ error: "Le passage n'est plus dans la traduction tel quel (texte modifié entre-temps ?) : relance « Proposer »." }, { status: 422 });
+      }
+      nouvelle = actuelle.replace(extraitManuel, correctionManuelle);
+    } else if (c.source === "claude") {
       if (!c.extrait || c.correction_proposee === null) {
         return NextResponse.json({ error: "Pas de correction proposée" }, { status: 422 });
       }

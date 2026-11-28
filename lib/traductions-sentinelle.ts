@@ -160,7 +160,8 @@ RÈGLES POUR « extrait » ET « correction » (elles servent à corriger automa
 Si tout est correct : {"anomalies":[]}`;
 }
 
-async function relireAvecClaude(r: Ressource, champs: ChampTraduit[]): Promise<Anomalie[]> {
+/** Appel simple à l'API Anthropic (un message, réponse texte). */
+export async function appelerClaude(consigne: string, maxTokens = 2000): Promise<string> {
   const cle = process.env.ANTHROPIC_API_KEY;
   if (!cle) throw new Error("ANTHROPIC_API_KEY absente");
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -168,8 +169,8 @@ async function relireAvecClaude(r: Ressource, champs: ChampTraduit[]): Promise<A
     headers: { "content-type": "application/json", "x-api-key": cle, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
       model: MODELE,
-      max_tokens: 2000,
-      messages: [{ role: "user", content: consigneClaude(r, champs) }],
+      max_tokens: maxTokens,
+      messages: [{ role: "user", content: consigne }],
     }),
   });
   if (!res.ok) {
@@ -177,7 +178,11 @@ async function relireAvecClaude(r: Ressource, champs: ChampTraduit[]): Promise<A
     throw new Error(`Anthropic ${res.status} : ${detail.slice(0, 300)}`);
   }
   const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
-  const texte = (json.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("");
+  return (json.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("");
+}
+
+async function relireAvecClaude(r: Ressource, champs: ChampTraduit[]): Promise<Anomalie[]> {
+  const texte = await appelerClaude(consigneClaude(r, champs));
   const debut = texte.indexOf("{");
   const fin = texte.lastIndexOf("}");
   if (debut < 0 || fin <= debut) return [];
