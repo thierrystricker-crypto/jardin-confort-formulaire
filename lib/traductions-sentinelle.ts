@@ -385,7 +385,7 @@ export async function lancerSentinelle(opts: { depuis?: string; maxClaude?: numb
       await createNotificationUnique({
         type: "traductions_anomalies",
         titre: `🌐 ${aTraiter} anomalie(s) de traduction DE / EN à traiter`,
-        message: "Sentinelle traductions : voir /dashboard/traductions",
+        message: "Relevées par la sentinelle de cette nuit : à relire et valider sur la page Traductions DE / EN.",
       }, 20);
     }
   } catch (e) {

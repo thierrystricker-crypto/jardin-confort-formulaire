@@ -68,6 +68,7 @@ const MENU: Groupe[] = [
       { href: "/v2/assistants-site", label: "Assistants du site", icon: "🤖" },
       { href: "/v2/comptabilite", label: "Comptabilité", icon: "🧾" },
       { href: "/v2/notifications", label: "Notifications", icon: "🔔" },
+      { href: "/v2/traductions", label: "Traductions DE / EN", icon: "🌐" },
       { href: "/v2/brand-logos", label: "Logos des marques", icon: "🏷" },
     ],
   },
@@ -487,7 +488,7 @@ export default function V2Shell({ children }: { children: React.ReactNode }) {
 
   const actif = (href: string) =>
     href === "/v2"
-      ? pathname === "/v2" || /^\/v2\/(?!todo|jardi|clients|listes-achat|stock-|arrivages|delais|modeles-3d|echantillons|qr-libre|statistiques|assistants-site|comptabilite|notifications|brand-logos|winbiz-adresses)[^/]+$/.test(pathname)
+      ? pathname === "/v2" || /^\/v2\/(?!todo|jardi|clients|listes-achat|stock-|arrivages|delais|modeles-3d|echantillons|qr-libre|statistiques|assistants-site|comptabilite|notifications|traductions|brand-logos|winbiz-adresses)[^/]+$/.test(pathname)
       : pathname === href || pathname.startsWith(href + "/");
 
   return (
