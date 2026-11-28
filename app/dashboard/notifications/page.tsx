@@ -71,6 +71,8 @@ function getTypeStyle(type: string) {
       return { color: "text-amber-300", bg: "bg-amber-500/15", border: "border-amber-500/30", icon: "⚠️", label: "Erreur sortie de stock" };
     case "shopify_sync_erreur":
       return { color: "text-amber-300", bg: "bg-amber-500/15", border: "border-amber-500/30", icon: "🔻", label: "Import Shopify" };
+    case "traductions_anomalies":
+      return { color: "text-violet-300", bg: "bg-violet-500/15", border: "border-violet-500/30", icon: "🌐", label: "Traductions DE / EN" };
     default:
       return { color: "text-zinc-300", bg: "bg-white/5", border: "border-white/10", icon: "🔔", label: type };
   }
@@ -281,7 +283,11 @@ export default function NotificationsPage() {
                       </div>
 
                       <div className="text-sm text-zinc-400 space-y-1">
-                        <div>👤 <strong>{nomComplet}</strong>{n.client_societe && <span> · {n.client_societe}</span>}</div>
+                        {/* 28.11.2026 : les alertes sans client (sentinelle traductions…) montrent
+                            leur message au lieu de « 👤 — ». */}
+                        {nomComplet === "—" && !n.client_societe && n.message
+                          ? <div>{n.message}</div>
+                          : <div>👤 <strong>{nomComplet}</strong>{n.client_societe && <span> · {n.client_societe}</span>}</div>}
                         {n.commercial && <div>🧑‍💼 Commercial : {n.commercial}</div>}
                         {n.total_ttc !== null && (
                           <div>💰 Total : <strong className="text-zinc-200">{fmtMoney(n.total_ttc)}</strong>{n.payment_mode && <span className="text-zinc-500"> · {n.payment_mode}</span>}</div>
@@ -303,6 +309,12 @@ export default function NotificationsPage() {
 
                     {/* Actions */}
                     <div className="flex flex-col gap-2 flex-shrink-0">
+                      {n.type === "traductions_anomalies" && (
+                        <Link href="/dashboard/traductions"
+                          className="rounded-xl border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm text-sky-300 text-center hover:bg-sky-500/25 transition">
+                          Ouvrir →
+                        </Link>
+                      )}
                       {n.offre_slug && (
                         <Link href={`/dashboard/${n.offre_slug}`}
                           className="rounded-xl border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm text-sky-300 text-center hover:bg-sky-500/25 transition">

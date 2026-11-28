@@ -34,6 +34,8 @@ export type EntreeRegles = {
   fr: string;       // valeur française brute (HTML pour body_html)
   traduit: string;  // valeur traduite brute
   marque: string | null;
+  /** Page collection : titres et textes souvent choisis pour un mot-clé (pas de règle pouf auto). */
+  collection?: boolean;
 };
 
 /** HTML → texte simple (pour les recherches et les extraits). */
@@ -60,7 +62,66 @@ const REMPLACEMENTS_SURS: Array<{ langue: Langue; re: RegExp; par: string; regle
   { langue: "de", re: /\bSthul/g, par: "Stuhl", regle: "sthul" },
   { langue: "de", re: /Bodenhülsel/g, par: "Bodenhülse", regle: "bodenhuelsel" },
   { langue: "en", re: /\bKeramik\b/g, par: "ceramic", regle: "keramik_en" },
+  // Ancienne entrée du dico « sur commande → available to order » (corrigée le 28.11.2026)
+  { langue: "en", re: /\b[Aa]vailable to order\b/g, par: "made to order", regle: "available_to_order" },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CORRECTIONS SÛRES — appliquées à la valeur brute (HTML compris) avant
+// écriture dans Shopify. Uniquement des remplacements mécaniques sans
+// ambiguïté. Toute règle ajoutée ici sera écrite AUTOMATIQUEMENT chaque nuit
+// (si TRADUCTIONS_AUTO_CORRECTION=1) : n'y mettre que du certain.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Garde la majuscule initiale du mot remplacé. */
+function memeCasse(original: string, remplacement: string): string {
+  return /^[A-ZÄÖÜ]/.test(original)
+    ? remplacement.charAt(0).toUpperCase() + remplacement.slice(1)
+    : remplacement;
+}
+
+function poufAutorise(marque: string | null, frBrut: string): boolean {
+  const fr = texteBrut(frBrut);
+  // Fatboy = vrais poufs-sacs. Les collections n'ont pas de marque : on
+  // regarde aussi si le français parle de Fatboy (« Poufs Fatboy »…).
+  return (marque || "").toLowerCase() !== "fatboy" && !/fatboy/i.test(fr)
+    && !/\bsac\b|pouf[- ]sac|bean ?bag|lamzac|sitzsack/i.test(fr);
+}
+
+export function appliquerCorrectionsSures(
+  valeur: string,
+  langue: Langue,
+  ctx: { marque: string | null; fr: string; collection?: boolean }
+): { valeur: string; regles: string[] } {
+  let v = valeur;
+  const regles: string[] = [];
+  const remplacer = (regle: string, re: RegExp, fn: (m: string) => string) => {
+    const avant = v;
+    v = v.replace(re, fn);
+    if (v !== avant) regles.push(regle);
+  };
+
+  if (langue === "de") {
+    remplacer("eszett", /ß/g, () => "ss");
+    remplacer("sthul", /\bSthul/g, () => "Stuhl");
+    remplacer("bodenhuelsel", /Bodenhülsel/g, () => "Bodenhülse");
+    if (!ctx.collection && poufAutorise(ctx.marque, ctx.fr)) {
+      remplacer("pouf_sitzsack", /\bSitzsäcke\b/g, () => "Poufs");
+      remplacer("pouf_sitzsack", /\bSitzsacks\b/g, () => "Poufs");
+      remplacer("pouf_sitzsack", /\bSitzsack\b/g, () => "Pouf");
+    }
+  } else {
+    remplacer("keramik_en", /\bKeramik\b/g, (m) => memeCasse(m, "ceramic"));
+    // Devant un nom (« … items », « … lead time ») : « made-to-order ».
+    remplacer("available_to_order", /\b[Aa]vailable to order(?= [a-z])/g, (m) => memeCasse(m, "made-to-order"));
+    remplacer("available_to_order", /\b[Aa]vailable to order\b/g, (m) => memeCasse(m, "made to order"));
+    if (!ctx.collection && poufAutorise(ctx.marque, ctx.fr)) {
+      remplacer("pouf_sitzsack", /\b[Bb]ean ?bags\b/g, (m) => memeCasse(m, "poufs"));
+      remplacer("pouf_sitzsack", /\b[Bb]ean ?bag\b/g, (m) => memeCasse(m, "pouf"));
+    }
+  }
+  return { valeur: v, regles: Array.from(new Set(regles)) };
+}
 
 // ── Mots français courants que T Lab a recopiés tels quels ──
 // (protégés par erreur dans la liste « ne pas traduire »)
@@ -94,7 +155,7 @@ const TITRE_FRANCAIS = /\b(chaise|fauteuil|coussin|housse|tabouret|lampe|pied|to
 
 export function appliquerRegles(e: EntreeRegles): Anomalie[] {
   const out: Anomalie[] = [];
-  const { langue, champ, marque } = e;
+  const { langue, champ, marque, collection } = e;
   const brut = e.traduit || "";
   const texte = champ === "body_html" ? texteBrut(brut) : brut.trim();
   const fr = champ === "body_html" ? texteBrut(e.fr || "") : (e.fr || "").trim();
@@ -122,13 +183,17 @@ export function appliquerRegles(e: EntreeRegles): Anomalie[] {
   }
 
   // 3. Pouf traduit en sac (seuls les poufs-sacs Fatboy en sont)
-  const estFatboy = (marque || "").toLowerCase() === "fatboy";
+  const estFatboy = (marque || "").toLowerCase() === "fatboy" || /fatboy/i.test(fr);
   const frParleDeSac = /\bsac\b|pouf[- ]sac|bean ?bag|lamzac|sitzsack/i.test(fr);
   if (!estFatboy && !frParleDeSac) {
+    // Sur une collection : signalé, jamais corrigé automatiquement (choix SEO possible).
     const re = langue === "de" ? /Sitzs[äa]ck\w*/ : /\bbean ?bags?\b/i;
     const m = re.exec(texte);
+    // auto seulement pour les formes simples (Sitzsack / Sitzsäcke / bean bag),
+    // pas pour les mots composés (« Sitzsackbezug ») : ceux-là, à la main.
+    const simple = langue === "de" ? /^Sitzs(ack|äcke|acks)$/.test(m?.[0] ?? "") : true;
     if (m) ajouter("pouf_sitzsack", m.index, m[0].length,
-      langue === "de" ? `« ${m[0]} » → « Pouf »` : `« ${m[0]} » → « pouf »`, false);
+      langue === "de" ? `« ${m[0]} » → « Pouf »` : `« ${m[0]} » → « pouf »`, simple && !collection);
   }
 
   // 4. Mots français recopiés tels quels

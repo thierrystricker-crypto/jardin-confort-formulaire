@@ -2,25 +2,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Sentinelle traductions DE / EN du webshop jardin-confort.ch (28.11.2026).
 //
-// Contexte : les traductions DE / EN sont écrites par l'app Shopify T Lab, qui
-// retraduit une fiche ~2 min après chaque changement du français. Un lot de
-// décembre 2025 a laissé des centaines d'erreurs pénalisantes pour le SEO
-// (noms de modèles perdus, « Sthul », mots collés…). La sentinelle relit
-// chaque nuit ce que T Lab a réécrit et range les anomalies en base.
+// Contexte : les traductions DE / EN sont écrites par l'app Shopify T Lab
+// (moteur DeepL), qui retraduit une fiche ~2 min après chaque changement du
+// français. DeepL n'a pas d'allemand de Suisse : il écrit toujours « ß ».
+// La sentinelle relit chaque nuit ce que T Lab a réécrit et range les
+// anomalies en base.
 //
 // Déroulé d'un passage :
 //   1. produits actifs + collections modifiés depuis `depuis` (Admin GraphQL) ;
-//   2. leurs traductions DE / EN ; on ne garde que les champs que T Lab a
-//      réécrits depuis `depuis` ;
+//   2. leurs traductions DE / EN ; on ne garde que les champs réécrits depuis ;
 //   3. règles fixes (lib/traductions-regles.ts) sur tout ;
 //   4. relecture Claude FR ↔ DE / EN, plafonnée par passage ;
-//   5. anomalies nouvelles → seo_traductions_controles (dédoublonnées,
-//      les « faux positif » / « ignoré » ne reviennent pas) ; bilan →
-//      seo_traductions_runs ; notification si nouvelles anomalies.
-//
-// PHASE 1 = RAPPORT SEUL : AUCUNE écriture dans Shopify. La correction
-// automatique (via le scénario Make 8645741, qui a l'accès en écriture aux
-// traductions) viendra dans un second temps, règle par règle.
+//   5. CORRECTION AUTOMATIQUE des règles sûres (ß → ss, Sthul, Bodenhülsel,
+//      Keramik, available to order, pouf hors Fatboy) — SEULEMENT si la
+//      variable d'environnement TRADUCTIONS_AUTO_CORRECTION vaut « 1 ».
+//      Les propositions de Claude ne sont JAMAIS appliquées automatiquement :
+//      elles s'appliquent une à une depuis la page (bouton « Appliquer ») ;
+//   6. anomalies nouvelles → seo_traductions_controles (dédoublonnées ; les
+//      « faux positif » / « ignoré » ne reviennent pas) ; bilan →
+//      seo_traductions_runs ; notification si nouvelles anomalies à traiter.
 //
 // Base app uniquement (supabaseAdmin). Jamais la base webshop.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -28,68 +28,23 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotificationUnique } from "@/lib/notifications";
 import {
-  appliquerRegles, texteBrut, CHAMPS,
+  appliquerRegles, appliquerCorrectionsSures, texteBrut, CHAMPS,
   type Anomalie, type Champ, type Langue,
 } from "@/lib/traductions-regles";
-
-const SHOP = process.env.SHOPIFY_STORE_DOMAIN;
-const ADMIN_CLIENT_ID = process.env.SHOPIFY_ADMIN_CLIENT_ID;
-const ADMIN_CLIENT_SECRET = process.env.SHOPIFY_ADMIN_CLIENT_SECRET;
-const API = "2026-04";
+import {
+  gql, lireRessources, ecrireTraductions, messageErreur,
+  type TraductionAEcrire,
+} from "@/lib/traductions-shopify";
 
 const MODELE = process.env.CLAUDE_TRADUCTIONS_MODEL ?? "claude-sonnet-5-5";
 const MAX_CLAUDE_DEFAUT = Number(process.env.TRADUCTIONS_MAX_CLAUDE ?? "30");
+const AUTO_CORRECTION = process.env.TRADUCTIONS_AUTO_CORRECTION === "1";
 const CONCURRENCE_CLAUDE = 4;
 const MAX_RESSOURCES = 3000; // garde-fou : au-delà, on s'arrête (journalisé)
 const LANGUES: Langue[] = ["de", "en"];
 
-// ── Shopify Admin ──────────────────────────────────────────────────────────
-
-let jetonCache: string | null = null;
-let jetonExpire = 0;
-
-async function jetonAdmin(): Promise<string> {
-  if (jetonCache && Date.now() < jetonExpire) return jetonCache;
-  if (!SHOP || !ADMIN_CLIENT_ID || !ADMIN_CLIENT_SECRET) {
-    throw new Error("Accès Shopify Admin non configuré (SHOPIFY_STORE_DOMAIN / SHOPIFY_ADMIN_CLIENT_ID / SHOPIFY_ADMIN_CLIENT_SECRET)");
-  }
-  const res = await fetch(`https://${SHOP}/admin/oauth/access_token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: ADMIN_CLIENT_ID, client_secret: ADMIN_CLIENT_SECRET, grant_type: "client_credentials" }),
-    cache: "no-store",
-  });
-  const json = (await res.json()) as { access_token?: string; expires_in?: number };
-  if (!json.access_token) throw new Error(`Jeton Shopify Admin refusé (${res.status})`);
-  jetonCache = json.access_token;
-  jetonExpire = Date.now() + (json.expires_in || 3600) * 1000 - 60000;
-  return jetonCache;
-}
-
-async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-  for (let essai = 1; essai <= 3; essai++) {
-    const jeton = await jetonAdmin();
-    const res = await fetch(`https://${SHOP}/admin/api/${API}/graphql.json`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": jeton },
-      body: JSON.stringify({ query, variables }),
-      cache: "no-store",
-    });
-    const json = (await res.json().catch(() => ({}))) as { data?: T; errors?: unknown };
-    const erreurs = JSON.stringify(json.errors ?? "");
-    if (json.errors && erreurs.includes("THROTTLED") && essai < 3) {
-      await new Promise((r) => setTimeout(r, 2000 * essai));
-      continue;
-    }
-    if (!res.ok || json.errors || !json.data) {
-      // Ex. « Access denied for translatableResourcesByIds field. Required
-      // access: `read_translations` » → ajouter le droit à l'app Shopify.
-      throw new Error(`Shopify ${res.status} : ${(erreurs || JSON.stringify(json)).slice(0, 500)}`);
-    }
-    return json.data;
-  }
-  throw new Error("Shopify : limite de débit dépassée (3 essais)");
-}
+/** Préfixe des notes des lots de rattrapage (exclus du calcul de `depuis`). */
+export const PREFIXE_RATTRAPAGE = "Rattrapage";
 
 type Ressource = {
   id: string;                      // gid
@@ -131,44 +86,24 @@ async function listerModifiees(depuis: string): Promise<{ ressources: Ressource[
   return { ressources: out.slice(0, MAX_RESSOURCES), tronque };
 }
 
-type ChampTraduit = { langue: Langue; champ: Champ; fr: string; traduit: string; majAt: string };
+type ChampTraduit = { langue: Langue; champ: Champ; fr: string; digest: string; traduit: string; majAt: string };
 
-type NoeudTraduction = {
-  resourceId: string;
-  translatableContent: Array<{ key: string; value: string | null }>;
-  de: Array<{ key: string; value: string | null; updatedAt: string | null }>;
-  en: Array<{ key: string; value: string | null; updatedAt: string | null }>;
-};
-
-/** Champs DE / EN réécrits depuis `depuis`, avec le français correspondant. */
+/** Champs DE / EN réécrits depuis `depuis`, avec le français et son digest. */
 async function lireTraductionsRecentes(ids: string[], depuis: string): Promise<Map<string, ChampTraduit[]>> {
   const out = new Map<string, ChampTraduit[]>();
-  const q = `query($ids: [ID!]!) {
-    translatableResourcesByIds(first: 50, resourceIds: $ids) {
-      nodes {
-        resourceId
-        translatableContent { key value }
-        de: translations(locale: "de") { key value updatedAt }
-        en: translations(locale: "en") { key value updatedAt }
-      }
-    }
-  }`;
   const seuil = new Date(depuis).getTime();
-  for (let i = 0; i < ids.length; i += 50) {
-    const lot = ids.slice(i, i + 50);
-    const data = await gql<{ translatableResourcesByIds: { nodes: NoeudTraduction[] } }>(q, { ids: lot });
-    for (const n of data.translatableResourcesByIds.nodes) {
-      const fr = new Map(n.translatableContent.map((c) => [c.key, c.value ?? ""]));
-      const champs: ChampTraduit[] = [];
-      for (const langue of LANGUES) {
-        for (const t of n[langue]) {
-          if (!CHAMPS.includes(t.key as Champ) || !t.value || !t.updatedAt) continue;
-          if (new Date(t.updatedAt).getTime() <= seuil) continue;
-          champs.push({ langue, champ: t.key as Champ, fr: fr.get(t.key) ?? "", traduit: t.value, majAt: t.updatedAt });
-        }
+  for (const r of await lireRessources(ids)) {
+    const champs: ChampTraduit[] = [];
+    for (const langue of LANGUES) {
+      for (const [key, t] of r.traductions[langue]) {
+        if (!CHAMPS.includes(key as Champ) || !t.updatedAt) continue;
+        if (new Date(t.updatedAt).getTime() <= seuil) continue;
+        const fr = r.contenu.get(key);
+        if (!fr) continue;
+        champs.push({ langue, champ: key as Champ, fr: fr.value, digest: fr.digest, traduit: t.value, majAt: t.updatedAt });
       }
-      if (champs.length) out.set(n.resourceId, champs);
     }
+    if (champs.length) out.set(r.resourceId, champs);
   }
   return out;
 }
@@ -186,22 +121,30 @@ function consigneClaude(r: Ressource, champs: ChampTraduit[]): string {
     for (const c of liste) blocs.push(`${c.langue.toUpperCase()} : ${net(c.traduit)}`);
   }
 
-  return `Tu es relecteur-traducteur professionnel FR > DE / EN pour un webshop suisse de mobilier de jardin haut de gamme (jardin-confort.ch). Une app de traduction automatique avec glossaire a écrit les versions DE et EN ci-dessous. Signale UNIQUEMENT les vraies erreurs qui nuisent au sens ou au référencement :
-- contresens, terme technique faux, mot du glossaire appliqué hors contexte (ex. un pouf traduit « Sitzsack » / « bean bag » alors que ce n'est pas un pouf-sac ; toile de parasol traduite « Leinwand » au lieu de « Bespannung » ; « fibre de carbone » traduite « Anthrazit ») ;
+  const noteCollection = r.type === "collection"
+    ? `\nATTENTION, c'est une page COLLECTION : son titre, son meta titre et sa meta description ont souvent été rédigés exprès pour un mot-clé de recherche (ex. « Gartentische », « Fermob Gartenmöbel »). Ne signale PAS un synonyme ou une formulation différente du français dans ces champs : seulement une vraie faute, un nom perdu ou une phrase restée en français.`
+    : "";
+
+  return `Tu es relecteur-traducteur professionnel FR > DE / EN pour un webshop suisse de mobilier de jardin haut de gamme (jardin-confort.ch). Une app de traduction automatique (DeepL + glossaire) a écrit les versions DE et EN ci-dessous. Signale UNIQUEMENT les vraies erreurs qui nuisent au sens ou au référencement :
+- contresens, terme technique faux, mot du glossaire appliqué hors contexte (ex. un pouf traduit « Sitzsack » / « bean bag » alors que ce n'est pas un pouf-sac ; toile de parasol traduite « Leinwand » au lieu de « Bespannung » ; « allée » traduite « Einfahrt » au lieu de « Gartenweg » ; teck qui « grisonne » traduit « nachdunkelt » au lieu de « vergraut ») ;
 - nom de marque, de collection ou de modèle perdu, déplacé, doublé, collé ou traduit (les noms propres ne se traduisent jamais ; le numéro ou suffixe d'un modèle reste collé à son nom) ;
 - passage resté en français, ou en allemand dans la version anglaise ;
-- mot ou groupe de mots répété inutilement, phrase incompréhensible, faute de frappe ;
+- mot ou groupe de mots répété inutilement, mots collés, phrase incompréhensible, faute de frappe ;
 - chiffre, dimension, référence ou code coloris différent du français.
-N'en signale PAS : choix de style acceptables, ß (traité ailleurs), listes de coloris qui répètent un mot, tournures simplement perfectibles.
-Repères : allemand de Suisse (ss, jamais ß), vouvoiement (Sie). Pouf (non Fatboy) = DE « Pouf », EN « pouf ». Fauteuil repas = DE « Gartensessel » / EN « dining armchair ». Chaise repas = EN « dining chair ». Toile = « Bespannung » ou « Stoff ». Résine tressée = « Polyrattan-Geflecht » / « synthetic wicker ». Chiné = « meliert » / « melange ».
+N'en signale PAS : choix de style acceptables, ß (corrigé automatiquement ailleurs), « available to order » (corrigé ailleurs), listes de coloris qui répètent un mot, tournures simplement perfectibles.${noteCollection}
+Repères : allemand de Suisse (ss, jamais ß), vouvoiement (Sie). Pouf (non Fatboy) = DE « Pouf », EN « pouf ». Fauteuil repas = DE « Gartensessel » / EN « dining armchair ». Chaise repas = EN « dining chair ». Toile = « Bespannung » ou « Stoff ». Résine tressée = « Polyrattan-Geflecht » / « synthetic wicker ». Chiné = « meliert » / « melange ». Borne solaire = « Solar-Pollerleuchte » / « solar bollard light ». Sur commande = « auf Bestellung » / « made to order ».
 
 Marque : ${r.marque ?? "(collection)"} — ${r.type} « ${r.handle} »
 
 ${blocs.join("\n\n")}
 
 Réponds UNIQUEMENT avec un objet JSON, sans texte autour :
-{"anomalies":[{"langue":"de|en","champ":"title|body_html|meta_title|meta_description","type":"contresens|nom_perdu|terme_faux|non_traduit|redondance|faute|chiffre|autre","extrait":"passage fautif tel qu'il apparaît","correction":"texte corrigé de ce passage","sure":true|false}]}
-« sure » = true seulement si la correction est mécanique et sans aucun doute. Si tout est correct : {"anomalies":[]}`;
+{"anomalies":[{"langue":"de|en","champ":"title|body_html|meta_title|meta_description","type":"contresens|nom_perdu|terme_faux|non_traduit|redondance|faute|chiffre|autre","extrait":"passage fautif","correction":"ce même passage corrigé"}]}
+RÈGLES POUR « extrait » ET « correction » (elles servent à corriger automatiquement par recherche-remplacement) :
+- « extrait » doit être copié EXACTEMENT, caractère pour caractère, depuis la version DE ou EN ci-dessus (même casse, même ponctuation, mêmes espaces) ;
+- le plus court possible (quelques mots, jamais plus d'une phrase), sans saut de ligne ;
+- « correction » remplace exactement « extrait » et rien d'autre.
+Si tout est correct : {"anomalies":[]}`;
 }
 
 async function relireAvecClaude(r: Ressource, champs: ChampTraduit[]): Promise<Anomalie[]> {
@@ -243,7 +186,9 @@ async function relireAvecClaude(r: Ressource, champs: ChampTraduit[]): Promise<A
       source: "claude",
       extrait,
       correction_proposee: a.correction ? String(a.correction).slice(0, 1000) : null,
-      auto_corrigeable: a.sure === true,
+      // Jamais automatique : une proposition de Claude se valide à la main
+      // (bouton « Appliquer » de la page).
+      auto_corrigeable: false,
     });
   }
   return out;
@@ -271,6 +216,8 @@ export type ResultatSentinelle = {
   non_relues_claude: number;
   anomalies_trouvees: number;
   anomalies_nouvelles: number;
+  auto_correction: boolean;
+  champs_corriges: number;
   erreurs: string[];
 };
 
@@ -288,21 +235,28 @@ type LigneControle = {
   correction_proposee: string | null;
   auto_corrigeable: boolean;
   traduction_maj_at: string | null;
+  statut?: "nouveau" | "corrige";
+  traite_at?: string | null;
 };
 
 const cleDedup = (l: { ressource_id: string; langue: string; champ: string; regle: string; extrait: string | null }) =>
   [l.ressource_id, l.langue, l.champ, l.regle, (l.extrait ?? "").replace(/\s+/g, " ").trim()].join("|");
 
-/** Début du dernier passage terminé sans erreur, sinon il y a 26 h. */
+/**
+ * Fin du dernier passage nocturne / manuel terminé sans erreur (les lots de
+ * rattrapage sont exclus), sinon il y a 26 h. On part de la FIN du passage :
+ * les corrections écrites par la sentinelle elle-même ne sont pas relues.
+ */
 async function depuisDernierPassage(): Promise<string> {
   const { data } = await supabaseAdmin
     .from("seo_traductions_runs")
-    .select("started_at")
+    .select("finished_at, notes")
     .not("finished_at", "is", null)
     .is("erreur", null)
-    .order("started_at", { ascending: false })
-    .limit(1);
-  const dernier = (data as Array<{ started_at: string }> | null)?.[0]?.started_at;
+    .order("finished_at", { ascending: false })
+    .limit(20);
+  const lignes = (data as Array<{ finished_at: string; notes: string | null }> | null) ?? [];
+  const dernier = lignes.find((l) => !(l.notes ?? "").startsWith(PREFIXE_RATTRAPAGE))?.finished_at;
   return dernier ?? new Date(Date.now() - 26 * 3600 * 1000).toISOString();
 }
 
@@ -312,7 +266,8 @@ export async function lancerSentinelle(opts: { depuis?: string; maxClaude?: numb
   const erreurs: string[] = [];
   const res: ResultatSentinelle = {
     run_id: null, depuis, ressources_modifiees: 0, ressources_retraduites: 0,
-    relues_claude: 0, non_relues_claude: 0, anomalies_trouvees: 0, anomalies_nouvelles: 0, erreurs,
+    relues_claude: 0, non_relues_claude: 0, anomalies_trouvees: 0, anomalies_nouvelles: 0,
+    auto_correction: AUTO_CORRECTION, champs_corriges: 0, erreurs,
   };
 
   const { data: run, error: errRun } = await supabaseAdmin
@@ -342,7 +297,7 @@ export async function lancerSentinelle(opts: { depuis?: string; maxClaude?: numb
     });
     for (const r of aControler) {
       for (const c of traductions.get(r.id)!) {
-        for (const a of appliquerRegles({ langue: c.langue, champ: c.champ, fr: c.fr, traduit: c.traduit, marque: r.marque })) {
+        for (const a of appliquerRegles({ langue: c.langue, champ: c.champ, fr: c.fr, traduit: c.traduit, marque: r.marque, collection: r.type === "collection" })) {
           lignes.push(versLigne(r, a, c.majAt));
         }
       }
@@ -363,12 +318,42 @@ export async function lancerSentinelle(opts: { depuis?: string; maxClaude?: numb
         for (const a of trouvees) lignes.push(versLigne(r, a, majAt));
         res.relues_claude++;
       } catch (e) {
-        if (erreurs.length < 10) erreurs.push(`Claude ${r.handle} : ${String(e).slice(0, 200)}`);
+        if (erreurs.length < 10) erreurs.push(`Claude ${r.handle} : ${messageErreur(e).slice(0, 200)}`);
       }
     });
     res.anomalies_trouvees = lignes.length;
 
-    // 5. Dédoublonnage contre la base puis insertion
+    // 5. Correction automatique des règles sûres (si activée)
+    if (AUTO_CORRECTION) {
+      const maintenant = new Date().toISOString();
+      for (const r of aControler) {
+        const items: TraductionAEcrire[] = [];
+        const corrigees = new Set<string>(); // langue|champ|regle
+        for (const c of traductions.get(r.id)!) {
+          const aCorriger = lignes.some((l) => l.ressource_id === r.id && l.langue === c.langue && l.champ === c.champ && l.auto_corrigeable);
+          if (!aCorriger) continue;
+          const { valeur, regles } = appliquerCorrectionsSures(c.traduit, c.langue, { marque: r.marque, fr: c.fr, collection: r.type === "collection" });
+          if (valeur === c.traduit) continue;
+          items.push({ locale: c.langue, key: c.champ, value: valeur, digest: c.digest });
+          for (const rg of regles) corrigees.add(`${c.langue}|${c.champ}|${rg}`);
+        }
+        if (!items.length) continue;
+        try {
+          await ecrireTraductions(r.id, items);
+          res.champs_corriges += items.length;
+          for (const l of lignes) {
+            if (l.ressource_id === r.id && l.auto_corrigeable && corrigees.has(`${l.langue}|${l.champ}|${l.regle}`)) {
+              l.statut = "corrige";
+              l.traite_at = maintenant;
+            }
+          }
+        } catch (e) {
+          if (erreurs.length < 10) erreurs.push(`Correction ${r.handle} : ${messageErreur(e).slice(0, 200)}`);
+        }
+      }
+    }
+
+    // 6. Dédoublonnage contre la base puis insertion
     const dejaVues = new Set<string>();
     const idsTouches = Array.from(new Set(lignes.map((l) => l.ressource_id)));
     for (let i = 0; i < idsTouches.length; i += 50) {
@@ -395,21 +380,23 @@ export async function lancerSentinelle(opts: { depuis?: string; maxClaude?: numb
     }
     res.anomalies_nouvelles = nouvelles.length;
 
-    if (nouvelles.length > 0) {
+    const aTraiter = nouvelles.filter((l) => l.statut !== "corrige").length;
+    if (aTraiter > 0) {
       await createNotificationUnique({
         type: "traductions_anomalies",
-        titre: `🌐 ${nouvelles.length} anomalie(s) de traduction DE / EN`,
-        message: "Sentinelle traductions : voir /dashboard/traductions",
+        titre: `🌐 ${aTraiter} anomalie(s) de traduction DE / EN à traiter`,
+        message: "Relevées par la sentinelle de cette nuit : à relire et valider sur la page Traductions DE / EN.",
       }, 20);
     }
   } catch (e) {
-    erreurFatale = String(e).slice(0, 1000);
+    erreurFatale = messageErreur(e).slice(0, 1000);
   }
 
   const notes = [
     `depuis ${depuis}`,
     `${res.ressources_modifiees} fiches modifiées, ${res.ressources_retraduites} retraduites`,
     `Claude : ${res.relues_claude} relues, ${res.non_relues_claude} hors plafond`,
+    AUTO_CORRECTION ? `correction auto : ${res.champs_corriges} champ(s) corrigé(s)` : "correction auto désactivée",
     ...erreurs,
   ].join(" · ");
   await supabaseAdmin
