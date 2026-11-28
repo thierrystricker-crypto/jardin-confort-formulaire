@@ -59,6 +59,14 @@ export async function POST(request: NextRequest) {
       if (!c.extrait || c.correction_proposee === null) {
         return NextResponse.json({ error: "Pas de correction proposée" }, { status: 422 });
       }
+      // Déjà corrigé (par le rattrapage, à la main…) : on le constate, sans écrire.
+      if (!actuelle.includes(c.extrait) && c.correction_proposee && actuelle.includes(c.correction_proposee)) {
+        await supabaseAdmin
+          .from("seo_traductions_controles")
+          .update({ statut: "corrige", traite_at: new Date().toISOString() })
+          .eq("id", id);
+        return NextResponse.json({ success: true, deja_corrige: true });
+      }
       if (!actuelle.includes(c.extrait)) {
         return NextResponse.json({
           error: "Le passage n'est plus (ou pas) dans la traduction tel quel (balises HTML, texte déjà modifié…) : à corriger à la main dans T Lab ou l'admin Shopify.",
